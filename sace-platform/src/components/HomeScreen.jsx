@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { icon: '🕐', label: 'History',       id: 'history' },
 ]
 
-export default function HomeScreen({ profile, struggleMap, questions, onStartSession, onLeaderboard, onProfile, onSignOut, theme, onToggleTheme }) {
+export default function HomeScreen({ profile, struggleMap, questions, onStartSession, onLeaderboard, onProfile, onSignOut, onChangeSubject, subject, theme, onToggleTheme }) {
   const [activeNav, setActiveNav]           = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile]             = useState(window.innerWidth <= 768)
@@ -84,7 +84,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>⚗️</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1, color: t.text }}>SACE<span style={{ color: t.accent }}>IQ</span></div>
-            <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>Chemistry · Stage 2</div>
+            <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 2'}</div>
           </div>
         </div>
         <ThemeToggle />
@@ -127,7 +127,10 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         ))}
       </nav>
 
-      <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.border}` }}>
+      <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <button onClick={onChangeSubject} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${t.accent}44`, background: 'transparent', color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          ⇄ Change Subject
+        </button>
         <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textFaint, fontSize: 12, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           Sign out
         </button>
@@ -138,7 +141,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
   const MainContent = () => (
     <div style={{ flex: 1, padding: isMobile ? '16px' : '36px 40px', maxWidth: isMobile ? '100%' : 860, margin: '0 auto', width: '100%' }}>
       <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
-      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>SACE Stage 2 · Chemistry · {questions.length} questions</div>
+      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>{subject?.stage || 'Stage 2'} · {subject?.name || 'Chemistry'} · {questions.length} questions</div>
 
       {/* Activity graph */}
       <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '16px', marginBottom: 14, boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
