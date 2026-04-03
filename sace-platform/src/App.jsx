@@ -10,7 +10,7 @@ import ProfileScreen   from './components/ProfileScreen'
 
 // Google Fonts
 const link = document.createElement('link')
-link.href = 'https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap'
+link.href = 'https://fonts.googleapis.com/css2?family=Plus Jakarta Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap'
 link.rel  = 'stylesheet'
 document.head.appendChild(link)
 
@@ -66,7 +66,7 @@ export default function App() {
     <div style={{
       minHeight: '100vh', background: '#070c16',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexDirection: 'column', gap: 16, fontFamily: "'Syne', sans-serif",
+      flexDirection: 'column', gap: 16, fontFamily: "'Plus Jakarta Sans', sans-serif",
     }}>
       <div style={{
         width: 48, height: 48, borderRadius: 14,

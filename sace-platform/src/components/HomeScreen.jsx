@@ -35,7 +35,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
   const c = {
     wrap: {
       minHeight: '100vh', background: '#070c16', color: '#e2e8f0',
-      fontFamily: "'Syne', sans-serif", padding: '20px 16px 40px',
+      fontFamily: "'Plus Jakarta Sans', sans-serif", padding: '20px 16px 40px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       backgroundImage: 'radial-gradient(ellipse at 15% 0%, rgba(20,184,166,0.06) 0%, transparent 50%), radial-gradient(ellipse at 85% 90%, rgba(14,165,233,0.05) 0%, transparent 50%)',
     },
@@ -162,12 +162,12 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           <button className="ghostbtn" onClick={onLeaderboard} style={{
             padding: '11px', borderRadius: 10, border: '1px solid #1e293b',
             background: '#0c1525', color: '#94a3b8', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', fontFamily: "'Syne', sans-serif", transition: 'background 0.2s',
+            cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'background 0.2s',
           }}>🏆 Leaderboard</button>
           <button className="ghostbtn" onClick={onProfile} style={{
             padding: '11px', borderRadius: 10, border: '1px solid #1e293b',
             background: '#0c1525', color: '#94a3b8', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', fontFamily: "'Syne', sans-serif", transition: 'background 0.2s',
+            cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'background 0.2s',
           }}>📊 My Progress</button>
         </div>
 
@@ -176,7 +176,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           width: '100%', padding: '16px', borderRadius: 14, border: 'none',
           background: 'linear-gradient(135deg, #14b8a6 0%, #0ea5e9 100%)',
           color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer',
-          fontFamily: "'Syne', sans-serif", letterSpacing: '0.02em',
+          fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '0.02em',
           boxShadow: '0 10px 36px rgba(20,184,166,0.3)',
           transition: 'transform 0.15s, box-shadow 0.15s',
         }}
@@ -189,7 +189,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         <button onClick={onSignOut} style={{
           marginTop: 10, width: '100%', padding: '10px', borderRadius: 10,
           border: 'none', background: 'transparent', color: '#334155',
-          fontSize: 12, cursor: 'pointer', fontFamily: "'Syne', sans-serif",
+          fontSize: 12, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
         }}>Sign out</button>
       </div>
     </div>

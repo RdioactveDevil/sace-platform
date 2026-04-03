@@ -31,14 +31,14 @@ export default function AuthScreen({ onAuth }) {
     width: '100%', padding: '12px 14px', borderRadius: 10,
     background: '#0c1525', border: '1px solid #1e293b',
     color: '#e2e8f0', fontSize: 14, outline: 'none',
-    fontFamily: "'Syne', sans-serif", boxSizing: 'border-box',
+    fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: 'border-box',
   }
 
   return (
     <div style={{
       minHeight: '100vh', background: '#070c16', display: 'flex',
       alignItems: 'center', justifyContent: 'center', padding: 20,
-      fontFamily: "'Syne', sans-serif",
+      fontFamily: "'Plus Jakarta Sans', sans-serif",
       backgroundImage: 'radial-gradient(ellipse at 30% 20%, rgba(20,184,166,0.07) 0%, transparent 55%)',
     }}>
       <style>{`
@@ -83,7 +83,7 @@ export default function AuthScreen({ onAuth }) {
               background: mode === m ? '#14b8a6' : 'transparent',
               color: mode === m ? '#fff' : '#475569',
               fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              transition: 'all 0.2s', fontFamily: "'Syne', sans-serif",
+              transition: 'all 0.2s', fontFamily: "'Plus Jakarta Sans', sans-serif",
             }}>
               {m === 'signin' ? 'Sign In' : 'Sign Up'}
             </button>
@@ -122,7 +122,7 @@ export default function AuthScreen({ onAuth }) {
           background: loading ? '#1e293b' : 'linear-gradient(135deg, #14b8a6, #0ea5e9)',
           color: loading ? '#475569' : '#fff',
           fontSize: 15, fontWeight: 800, cursor: loading ? 'default' : 'pointer',
-          fontFamily: "'Syne', sans-serif",
+          fontFamily: "'Plus Jakarta Sans', sans-serif",
           boxShadow: loading ? 'none' : '0 8px 24px rgba(20,184,166,0.25)',
           transition: 'all 0.2s',
         }}>

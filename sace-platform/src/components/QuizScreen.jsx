@@ -125,7 +125,7 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
   }
 
   if (!currentQ) return (
-    <div style={{ minHeight: '100vh', background: '#070c16', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: "'Syne', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#070c16', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       Loading questions…
     </div>
   )
@@ -137,7 +137,7 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
   return (
     <div style={{
       minHeight: '100vh', background: '#070c16', color: '#e2e8f0',
-      fontFamily: "'Syne', sans-serif", padding: '20px 16px 40px',
+      fontFamily: "'Plus Jakarta Sans', sans-serif", padding: '20px 16px 40px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       backgroundImage: 'radial-gradient(ellipse at 15% 0%, rgba(20,184,166,0.05) 0%, transparent 50%)',
     }}>
@@ -236,7 +236,7 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
                 padding: '13px 16px', borderRadius: 11,
                 fontSize: 14, fontWeight: 500, textAlign: 'left',
                 cursor: showAns ? 'default' : 'pointer',
-                fontFamily: "'Syne', sans-serif",
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
               }}>
                 <span style={{ marginRight: 10, color: '#334155', fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
                   {String.fromCharCode(65 + i)}.
@@ -292,7 +292,7 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
               flex: 1, padding: '14px', borderRadius: 12, border: 'none',
               background: 'linear-gradient(135deg, #14b8a6, #0ea5e9)',
               color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer',
-              fontFamily: "'Syne', sans-serif",
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
               boxShadow: '0 8px 24px rgba(20,184,166,0.25)',
             }}>
               Next Question →
@@ -301,7 +301,7 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
           <button onClick={onHome} style={{
             padding: '14px 16px', borderRadius: 12, border: '1px solid #1e293b',
             background: 'transparent', color: '#334155', fontSize: 14,
-            cursor: 'pointer', fontFamily: "'Syne', sans-serif",
+            cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
           }}>⌂</button>
         </div>
       </div>
