@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 
@@ -13,7 +13,14 @@ const NAV_ITEMS = [
 export default function HomeScreen({ profile, struggleMap, questions, onStartSession, onLeaderboard, onProfile, onSignOut, theme, onToggleTheme }) {
   const [activeNav, setActiveNav]           = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile]             = useState(window.innerWidth <= 768)
   const t = THEMES[theme]
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
@@ -70,7 +77,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
     </button>
   )
 
-  const Sidebar = () => (
+  const SidebarContent = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bgNav }}>
       <div style={{ padding: '18px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -128,178 +135,178 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
     </div>
   )
 
+  const MainContent = () => (
+    <div style={{ flex: 1, padding: isMobile ? '16px' : '36px 40px', maxWidth: isMobile ? '100%' : 860, margin: '0 auto', width: '100%' }}>
+      <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
+      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>SACE Stage 2 · Chemistry · {questions.length} questions</div>
+
+      {/* Activity graph */}
+      <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '16px', marginBottom: 14, boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {['Week','Month','All'].map((tab, i) => (
+              <button key={tab} style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: i === 0 ? t.accent : 'transparent', color: i === 0 ? '#fff' : t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tab}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: isMobile ? 16 : 24 }}>
+            {[{val:totalAttempts,label:'answered'},{val:`${accuracy}%`,label:'correct'},{val:profile.streak||0,label:'streak'}].map(s => (
+              <div key={s.label} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: t.text }}>{s.val}</div>
+                <div style={{ fontSize: 11, color: t.textMuted }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 50 }}>
+          {days.map((d, i) => (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: '100%', background: activity[i] > 0 ? t.accent : t.border, borderRadius: '4px 4px 0 0', height: activity[i] > 0 ? `${Math.max((activity[i]/maxAct)*38,8)}px` : '4px', transition: 'height 0.6s' }} />
+              <div style={{ fontSize: 10, color: i === 4 ? t.accent : t.textFaint, fontWeight: i === 4 ? 700 : 400 }}>{d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* New session */}
+      <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '16px', boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: t.text }}>New Session</div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', marginBottom: 2 }}>
+            <span style={{ fontSize: 12, color: t.textMuted, flex: 1 }}>All Topics</span>
+            <span style={{ fontSize: 11, color: t.textFaint }}>{questions.length} questions</span>
+          </div>
+          {Object.entries(topicGroups).map(([topic, s]) => {
+            const pctDone = s.total > 0 ? s.attempted / s.total : 0
+            const acc     = s.attempted > 0 ? s.correct / s.attempted : null
+            const dotCol  = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? t.xp : t.danger
+            return (
+              <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 8 }}
+                onMouseEnter={e => e.currentTarget.style.background = t.bgHover}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
+                <span style={{ fontSize: 13, color: t.textSub, flex: 1 }}>{topic}</span>
+                <div style={{ width: 60, background: t.border, borderRadius: 3, height: 4, overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ width: `${pctDone*100}%`, height: '100%', background: t.accent }} />
+                </div>
+                <span style={{ fontSize: 11, color: t.textFaint, width: 36, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        {topStruggles.length > 0 && (
+          <div style={{ background: theme === 'dark' ? '#08111f' : '#fff5f5', border: `1px solid ${theme==='dark'?'rgba(239,68,68,0.15)':'rgba(220,38,38,0.2)'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>⚡ Priority Queue</div>
+            {topStruggles.slice(0,3).map((s, i) => (
+              <div key={s.q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: i < 2 ? `1px solid ${t.border}` : 'none' }}>
+                <span style={{ fontSize: 12, color: t.textSub }}>{s.q.subtopic}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp }}>{Math.round(s.rate*100)}% error</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: `0 8px 28px ${t.accent}40`, transition: 'all 0.15s' }}>
+          Start Adaptive Session →
+        </button>
+      </div>
+    </div>
+  )
+
+  const RightSidebar = () => (
+    <div style={{ width: 280, padding: '36px 24px', borderLeft: `1px solid ${t.border}`, flexShrink: 0 }}>
+      {topStruggles.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Priority Topics</div>
+          <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 14 }}>Hit first in your next session</div>
+          {topStruggles.map((s, i) => (
+            <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ width: 26, height: 26, borderRadius: '50%', background: s.rate > 0.65 ? `${t.danger}22` : `${t.xp}22`, border: `1px solid ${s.rate > 0.65 ? t.danger : t.xp}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{i+1}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
+                <div style={{ fontSize: 11, color: t.textMuted }}>{s.q.topic}</div>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Your Stats</div>
+        {[
+          { label:'Total XP',       val:profile.xp.toLocaleString(), color:t.accent },
+          { label:'Best streak',    val:`${profile.best_streak||0} days 🔥`, color:t.xp },
+          { label:'Questions done', val:totalAttempts, color:t.purple },
+          { label:'Accuracy',       val:`${accuracy}%`, color:accuracy>70?t.success:accuracy>40?t.xp:t.danger },
+        ].map(s => (
+          <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${t.border}` }}>
+            <span style={{ fontSize: 13, color: t.textMuted }}>{s.label}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: theme==='dark'?'rgba(20,184,166,0.06)':'rgba(13,148,136,0.05)', border:`1px solid ${theme==='dark'?'rgba(20,184,166,0.2)':'rgba(13,148,136,0.25)'}`, borderRadius: 12, padding: '16px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: t.accent, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
+        <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>Set a study goal to track your daily progress towards your target ATAR.</div>
+        <button style={{ marginTop: 10, width: '100%', padding: '9px', borderRadius: 8, border: `1px solid ${t.accent}44`, background: 'transparent', color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          Set Study Goal →
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ minHeight: '100vh', background: t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
         @keyframes fadeUp  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
-        .start-btn:hover { opacity:0.9 !important; transform:translateY(-1px) !important; }
-        .desktop-sidebar { display: flex !important; }
-        .desktop-right   { display: block !important; }
-        .main-wrapper    { margin-left: 220px !important; }
-        .mobile-topbar   { display: none !important; }
-        @media (max-width: 768px) {
-          .desktop-sidebar { display: none !important; }
-          .desktop-right   { display: none !important; }
-          .main-wrapper    { margin-left: 0 !important; }
-          .mobile-topbar   { display: flex !important; }
-          .centre-content  { padding: 16px !important; }
-        }
       `}</style>
 
-      {/* Desktop sidebar */}
-      <div className="desktop-sidebar" style={{ width: 220, flexDirection: 'column', position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 50, borderRight: `1px solid ${t.border}` }}>
-        <Sidebar />
-      </div>
+      {/* Desktop sidebar — only on desktop */}
+      {!isMobile && (
+        <div style={{ width: 220, display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 50, borderRight: `1px solid ${t.border}` }}>
+          <SidebarContent />
+        </div>
+      )}
 
       {/* Mobile sidebar overlay */}
-      {mobileMenuOpen && (
+      {isMobile && mobileMenuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
           <div onClick={() => setMobileMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} />
           <div style={{ position: 'absolute', top: 0, left: 0, width: 260, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 201, borderRight: `1px solid ${t.border}` }}>
-            <Sidebar />
+            <SidebarContent />
           </div>
         </div>
       )}
 
       {/* Main */}
-      <div className="main-wrapper" style={{ display: 'flex', minHeight: '100vh', justifyContent: 'space-between' }}>
+      <div style={{ marginLeft: isMobile ? 0 : 220, display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
 
         {/* Mobile top bar */}
-        <div className="mobile-topbar" style={{ position: 'sticky', top: 0, zIndex: 100, background: t.bgNav, borderBottom: `1px solid ${t.border}`, padding: '12px 16px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-          <button onClick={() => setMobileMenuOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {[20,14,20].map((w,i) => <div key={i} style={{ width: w, height: 2, background: t.text, borderRadius: 2 }} />)}
-            </div>
-            <span style={{ fontSize: 16, fontWeight: 800, color: t.text, marginLeft: 6 }}>SACE<span style={{ color: t.accent }}>IQ</span></span>
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ThemeToggle />
-            <span style={{ fontSize: 12, color: t.accent, fontWeight: 700 }}>{profile.xp} XP</span>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>
-              {profile.display_name[0].toUpperCase()}
-            </div>
-          </div>
-        </div>
-
-        {/* Centre content */}
-        <div className="centre-content" style={{ flex: 1, padding: '36px 40px', maxWidth: 860, margin: '0 auto', animation: 'fadeUp 0.4s ease' }}>
-          <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
-          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>SACE Stage 2 · Chemistry · {questions.length} questions</div>
-
-          {/* Activity graph */}
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '20px', marginBottom: 16, boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {['Week','Month','All'].map((tab, i) => (
-                  <button key={tab} style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: i === 0 ? t.accent : 'transparent', color: i === 0 ? '#fff' : t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tab}</button>
-                ))}
+        {isMobile && (
+          <div style={{ position: 'sticky', top: 0, zIndex: 100, background: t.bgNav, borderBottom: `1px solid ${t.border}`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button onClick={() => setMobileMenuOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {[20,14,20].map((w,i) => <div key={i} style={{ width: w, height: 2, background: t.text, borderRadius: 2 }} />)}
               </div>
-              <div style={{ display: 'flex', gap: 24 }}>
-                {[{val:totalAttempts,label:'answered'},{val:`${accuracy}%`,label:'correct'},{val:profile.streak||0,label:'streak'}].map(s => (
-                  <div key={s.label} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>{s.val}</div>
-                    <div style={{ fontSize: 11, color: t.textMuted }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 56 }}>
-              {days.map((d, i) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: '100%', background: activity[i] > 0 ? t.accent : t.border, borderRadius: '4px 4px 0 0', height: activity[i] > 0 ? `${Math.max((activity[i]/maxAct)*44,8)}px` : '4px', transition: 'height 0.6s' }} />
-                  <div style={{ fontSize: 10, color: i === 4 ? t.accent : t.textFaint, fontWeight: i === 4 ? 700 : 400 }}>{d}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* New session */}
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '20px', boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: t.text }}>New Session</div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', marginBottom: 2 }}>
-                <span style={{ fontSize: 12, color: t.textMuted, flex: 1 }}>All Topics</span>
-                <span style={{ fontSize: 11, color: t.textFaint }}>{questions.length} questions</span>
-              </div>
-              {Object.entries(topicGroups).map(([topic, s]) => {
-                const pctDone = s.total > 0 ? s.attempted / s.total : 0
-                const acc     = s.attempted > 0 ? s.correct / s.attempted : null
-                const dotCol  = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? t.xp : t.danger
-                return (
-                  <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, transition: 'background 0.15s', cursor: 'default' }}
-                    onMouseEnter={e => e.currentTarget.style.background = t.bgHover}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
-                    <span style={{ fontSize: 13, color: t.textSub, flex: 1 }}>{topic}</span>
-                    <div style={{ width: 70, background: t.border, borderRadius: 3, height: 4, overflow: 'hidden', flexShrink: 0 }}>
-                      <div style={{ width: `${pctDone*100}%`, height: '100%', background: t.accent }} />
-                    </div>
-                    <span style={{ fontSize: 11, color: t.textFaint, width: 40, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {topStruggles.length > 0 && (
-              <div style={{ background: theme === 'dark' ? '#08111f' : '#fff5f5', border: `1px solid ${theme==='dark'?'rgba(239,68,68,0.15)':'rgba(220,38,38,0.2)'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>⚡ Priority Queue</div>
-                {topStruggles.slice(0,3).map((s, i) => (
-                  <div key={s.q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: i < 2 ? `1px solid ${t.border}` : 'none' }}>
-                    <span style={{ fontSize: 12, color: t.textSub }}>{s.q.subtopic}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp }}>{Math.round(s.rate*100)}% error</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button className="start-btn" onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: `0 8px 28px ${t.accent}40`, transition: 'all 0.15s' }}>
-              Start Adaptive Session →
+              <span style={{ fontSize: 16, fontWeight: 800, color: t.text, marginLeft: 6 }}>SACE<span style={{ color: t.accent }}>IQ</span></span>
             </button>
-          </div>
-        </div>
-
-        {/* Right sidebar — desktop only */}
-        <div className="desktop-right" style={{ width: 280, padding: '36px 24px', borderLeft: `1px solid ${t.border}`, flexShrink: 0 }}>
-          {topStruggles.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Priority Topics</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 14 }}>Hit first in your next session</div>
-              {topStruggles.map((s, i) => (
-                <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${t.border}` }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: s.rate > 0.65 ? `${t.danger}22` : `${t.xp}22`, border: `1px solid ${s.rate > 0.65 ? t.danger : t.xp}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{i+1}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
-                    <div style={{ fontSize: 11, color: t.textMuted }}>{s.q.topic}</div>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Your Stats</div>
-            {[
-              { label:'Total XP',       val:profile.xp.toLocaleString(), color:t.accent },
-              { label:'Best streak',    val:`${profile.best_streak||0} days 🔥`, color:t.xp },
-              { label:'Questions done', val:totalAttempts, color:t.purple },
-              { label:'Accuracy',       val:`${accuracy}%`, color:accuracy>70?t.success:accuracy>40?t.xp:t.danger },
-            ].map(s => (
-              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${t.border}` }}>
-                <span style={{ fontSize: 13, color: t.textMuted }}>{s.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ThemeToggle />
+              <span style={{ fontSize: 12, color: t.accent, fontWeight: 700 }}>{profile.xp} XP</span>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>
+                {profile.display_name[0].toUpperCase()}
               </div>
-            ))}
+            </div>
           </div>
+        )}
 
-          <div style={{ background: theme==='dark'?'rgba(20,184,166,0.06)':'rgba(13,148,136,0.05)', border:`1px solid ${theme==='dark'?'rgba(20,184,166,0.2)':'rgba(13,148,136,0.25)'}`, borderRadius: 12, padding: '16px' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: t.accent, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
-            <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>Set a study goal to track your daily progress towards your target ATAR.</div>
-            <button style={{ marginTop: 10, width: '100%', padding: '9px', borderRadius: 8, border: `1px solid ${t.accent}44`, background: 'transparent', color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Set Study Goal →
-            </button>
-          </div>
+        {/* Content row */}
+        <div style={{ display: 'flex', flex: 1, justifyContent: 'space-between', animation: 'fadeUp 0.4s ease' }}>
+          <MainContent />
+          {!isMobile && <RightSidebar />}
         </div>
       </div>
     </div>
