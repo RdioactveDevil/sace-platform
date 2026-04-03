@@ -11,7 +11,7 @@ const NAV_ITEMS = [
 ]
 
 export default function HomeScreen({ profile, struggleMap, questions, onStartSession, onLeaderboard, onProfile, onSignOut, theme, onToggleTheme }) {
-  const [activeNav, setActiveNav]       = useState('home')
+  const [activeNav, setActiveNav]           = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const t = THEMES[theme]
 
@@ -55,39 +55,23 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
     if (id === 'profile') onProfile()
   }
 
-  // ── Theme toggle switch ──────────────────────────────────────────────────────
   const ThemeToggle = () => (
     <button onClick={onToggleTheme} style={{
-      display: 'flex', alignItems: 'center', gap: 7,
-      padding: '6px 10px', borderRadius: 20,
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '5px 8px', borderRadius: 20,
       border: `1px solid ${t.border}`,
       background: t.bgSubtle, cursor: 'pointer',
       transition: 'all 0.2s', flexShrink: 0,
     }}>
-      <span style={{ fontSize: 13 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
-      {/* Track */}
-      <div style={{
-        width: 34, height: 18, borderRadius: 9,
-        background: theme === 'dark' ? '#1e293b' : '#cbd5e1',
-        position: 'relative', transition: 'background 0.3s',
-      }}>
-        {/* Knob */}
-        <div style={{
-          position: 'absolute', top: 2,
-          left: theme === 'dark' ? 2 : 18,
-          width: 14, height: 14, borderRadius: '50%',
-          background: theme === 'dark' ? t.accent : '#f59e0b',
-          transition: 'left 0.25s cubic-bezier(.4,0,.2,1)',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-        }} />
+      <span style={{ fontSize: 12 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
+      <div style={{ width: 32, height: 17, borderRadius: 9, background: theme === 'dark' ? '#1e293b' : '#cbd5e1', position: 'relative', transition: 'background 0.3s' }}>
+        <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 16, width: 13, height: 13, borderRadius: '50%', background: theme === 'dark' ? t.accent : t.xp, transition: 'left 0.25s cubic-bezier(.4,0,.2,1)', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
       </div>
     </button>
   )
 
-  // ── Sidebar content ──────────────────────────────────────────────────────────
   const Sidebar = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bgNav }}>
-      {/* Logo + theme toggle */}
       <div style={{ padding: '18px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>⚗️</div>
@@ -99,7 +83,6 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         <ThemeToggle />
       </div>
 
-      {/* User card */}
       <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
@@ -119,15 +102,12 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         </div>
       </div>
 
-      {/* Nav items */}
       <nav style={{ flex: 1, padding: '10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(item => (
           <button key={item.id} onClick={() => handleNav(item.id)} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 9,
             border: 'none',
-            background: activeNav === item.id
-              ? theme === 'dark' ? 'rgba(20,184,166,0.12)' : 'rgba(13,148,136,0.08)'
-              : 'transparent',
+            background: activeNav === item.id ? (theme === 'dark' ? 'rgba(20,184,166,0.12)' : 'rgba(13,148,136,0.08)') : 'transparent',
             color: activeNav === item.id ? t.accent : t.textMuted,
             fontSize: 13, fontWeight: activeNav === item.id ? 700 : 500,
             cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -140,7 +120,6 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         ))}
       </nav>
 
-      {/* Sign out */}
       <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.border}` }}>
         <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textFaint, fontSize: 12, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           Sign out
@@ -164,7 +143,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           .desktop-right   { display: none !important; }
           .main-wrapper    { margin-left: 0 !important; }
           .mobile-topbar   { display: flex !important; }
-          .centre-content  { padding: 16px !important; max-width: 100% !important; }
+          .centre-content  { padding: 16px !important; }
         }
       `}</style>
 
@@ -184,7 +163,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
       )}
 
       {/* Main */}
-      <div className="main-wrapper" style={{ display: 'flex', minHeight: '100vh' }}>
+      <div className="main-wrapper" style={{ display: 'flex', minHeight: '100vh', justifyContent: 'space-between' }}>
 
         {/* Mobile top bar */}
         <div className="mobile-topbar" style={{ position: 'sticky', top: 0, zIndex: 100, background: t.bgNav, borderBottom: `1px solid ${t.border}`, padding: '12px 16px', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
@@ -203,12 +182,12 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           </div>
         </div>
 
-        {/* Centre */}
-        <div className="centre-content" style={{ flex: 1, padding: '32px', maxWidth: 800, animation: 'fadeUp 0.4s ease' }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
+        {/* Centre content */}
+        <div className="centre-content" style={{ flex: 1, padding: '36px 40px', maxWidth: 860, margin: '0 auto', animation: 'fadeUp 0.4s ease' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
           <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>SACE Stage 2 · Chemistry · {questions.length} questions</div>
 
-          {/* Activity */}
+          {/* Activity graph */}
           <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '20px', marginBottom: 16, boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', gap: 4 }}>
@@ -238,7 +217,6 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           {/* New session */}
           <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '20px', boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: t.text }}>New Session</div>
-
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', marginBottom: 2 }}>
                 <span style={{ fontSize: 12, color: t.textMuted, flex: 1 }}>All Topics</span>
@@ -282,43 +260,43 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         </div>
 
         {/* Right sidebar — desktop only */}
-        <div className="desktop-right" style={{ width: 260, padding: '32px 20px', borderLeft: `1px solid ${t.border}`, flexShrink: 0 }}>
+        <div className="desktop-right" style={{ width: 280, padding: '36px 24px', borderLeft: `1px solid ${t.border}`, flexShrink: 0 }}>
           {topStruggles.length > 0 && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Priority Topics</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Hit first in your next session</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Priority Topics</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 14 }}>Hit first in your next session</div>
               {topStruggles.map((s, i) => (
                 <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${t.border}` }}>
                   <div style={{ width: 26, height: 26, borderRadius: '50%', background: s.rate > 0.65 ? `${t.danger}22` : `${t.xp}22`, border: `1px solid ${s.rate > 0.65 ? t.danger : t.xp}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{i+1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
                     <div style={{ fontSize: 11, color: t.textMuted }}>{s.q.topic}</div>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: s.rate > 0.65 ? t.danger : t.xp, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
                 </div>
               ))}
             </div>
           )}
 
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 12 }}>Your Stats</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Your Stats</div>
             {[
               { label:'Total XP',       val:profile.xp.toLocaleString(), color:t.accent },
               { label:'Best streak',    val:`${profile.best_streak||0} days 🔥`, color:t.xp },
-              { label:'Questions done', val:totalAttempts,                color:t.purple },
-              { label:'Accuracy',       val:`${accuracy}%`,              color:accuracy>70?t.success:accuracy>40?t.xp:t.danger },
+              { label:'Questions done', val:totalAttempts, color:t.purple },
+              { label:'Accuracy',       val:`${accuracy}%`, color:accuracy>70?t.success:accuracy>40?t.xp:t.danger },
             ].map(s => (
-              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
-                <span style={{ fontSize: 12, color: t.textMuted }}>{s.label}</span>
+              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${t.border}` }}>
+                <span style={{ fontSize: 13, color: t.textMuted }}>{s.label}</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val}</span>
               </div>
             ))}
           </div>
 
-          <div style={{ background: theme==='dark'?'rgba(20,184,166,0.06)':'rgba(13,148,136,0.05)', border: `1px solid ${theme==='dark'?'rgba(20,184,166,0.2)':'rgba(13,148,136,0.25)'}`, borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.accent, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
+          <div style={{ background: theme==='dark'?'rgba(20,184,166,0.06)':'rgba(13,148,136,0.05)', border:`1px solid ${theme==='dark'?'rgba(20,184,166,0.2)':'rgba(13,148,136,0.25)'}`, borderRadius: 12, padding: '16px' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.accent, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
             <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>Set a study goal to track your daily progress towards your target ATAR.</div>
-            <button style={{ marginTop: 10, width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${t.accent}44`, background: 'transparent', color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <button style={{ marginTop: 10, width: '100%', padding: '9px', borderRadius: 8, border: `1px solid ${t.accent}44`, background: 'transparent', color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Set Study Goal →
             </button>
           </div>
