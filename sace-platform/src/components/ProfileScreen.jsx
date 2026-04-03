@@ -32,7 +32,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack 
   return (
     <div style={{
       minHeight: '100vh', background: '#070c16', color: '#e2e8f0',
-      fontFamily: "'Plus Jakarta Sans', sans-serif", padding: '20px 16px 40px',
+      fontFamily: "'Syne', sans-serif", padding: '20px 16px 40px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       backgroundImage: 'radial-gradient(ellipse at 20% 10%, rgba(99,102,241,0.06) 0%, transparent 50%)',
     }}>
@@ -53,7 +53,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack 
           <button onClick={onBack} style={{
             padding: '8px 14px', borderRadius: 8, border: '1px solid #1e293b',
             background: 'transparent', color: '#475569', fontSize: 12,
-            cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
+            cursor: 'pointer', fontFamily: "'Syne', sans-serif",
           }}>← Back</button>
         </div>
 
