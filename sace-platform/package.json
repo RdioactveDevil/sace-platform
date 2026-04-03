@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "npm run build"
+    "build": "react-scripts build",
     "test": "react-scripts test"
   },
   "browserslist": {
