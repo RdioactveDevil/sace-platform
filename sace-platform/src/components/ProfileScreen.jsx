@@ -1,11 +1,12 @@
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
+import { THEMES } from '../lib/theme'
 
-export default function ProfileScreen({ profile, questions, struggleMap, onBack }) {
+export default function ProfileScreen({ profile, questions, struggleMap, onBack, theme }) {
   const { level, pct } = getLevelProgress(profile.xp)
-  const rank = RANKS[Math.min(level, RANKS.length - 1)]
-  const icon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
+  const rank  = RANKS[Math.min(level, RANKS.length - 1)]
+  const rIcon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
+  const t     = THEMES[theme]
 
-  // Build topic-level stats
   const topicStats = {}
   questions.forEach(q => {
     if (!topicStats[q.topic]) topicStats[q.topic] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
@@ -18,10 +19,9 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack 
     }
   })
 
-  // Study plan: worst topics first
   const studyPlan = Object.entries(topicStats)
     .filter(([, s]) => s.attempted > 0)
-    .map(([topic, s]) => ({ topic, rate: s.correct / (s.correct + s.wrong) }))
+    .map(([topic, s]) => ({ topic, rate: s.correct / Math.max(s.correct + s.wrong, 1) }))
     .sort((a, b) => a.rate - b.rate)
     .slice(0, 3)
 
@@ -29,148 +29,182 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack 
   const totalWrong    = Object.values(struggleMap).reduce((s, v) => s + v.wrong, 0)
   const accuracy      = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
 
-  return (
-    <div style={{
-      minHeight: '100vh', background: '#070c16', color: '#e2e8f0',
-      fontFamily: "'Syne', sans-serif", padding: '20px 16px 40px',
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      backgroundImage: 'radial-gradient(ellipse at 20% 10%, rgba(99,102,241,0.06) 0%, transparent 50%)',
-    }}>
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
+  const nextRank = RANKS[Math.min(level + 1, RANKS.length - 1)]
 
-      <div style={{
-        width: '100%', maxWidth: 620,
-        background: 'rgba(12,21,37,0.97)',
-        border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: 18, padding: '22px 22px',
-        animation: 'fadeUp 0.4s ease',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+  return (
+    <div style={{ minHeight: '100vh', background: t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex' }}>
+      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      {/* Left sidebar */}
+      <div style={{ width: 220, background: t.bgNav, borderRight: `1px solid ${t.border}`, position: 'fixed', top: 0, left: 0, height: '100vh', display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+        <div style={{ padding: '18px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>⚗️</div>
           <div>
-            <div style={{ fontSize: 11, color: '#6366f1', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700 }}>Analytics</div>
-            <h2 style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 800 }}>My Progress</h2>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>SACE<span style={{ color: t.accent }}>IQ</span></div>
+            <div style={{ fontSize: 10, color: t.textMuted }}>Chemistry · Stage 2</div>
           </div>
-          <button onClick={onBack} style={{
-            padding: '8px 14px', borderRadius: 8, border: '1px solid #1e293b',
-            background: 'transparent', color: '#475569', fontSize: 12,
-            cursor: 'pointer', fontFamily: "'Syne', sans-serif",
-          }}>← Back</button>
         </div>
 
-        {/* Rank card */}
-        <div style={{
-          background: 'linear-gradient(135deg,rgba(99,102,241,0.1),rgba(14,165,233,0.08))',
-          border: '1px solid rgba(99,102,241,0.25)', borderRadius: 14,
-          padding: '16px 18px', marginBottom: 14,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#818cf8', fontWeight: 700, marginBottom: 3 }}>CURRENT RANK</div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{rank}</div>
-            <div style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>
-              Level {level} · {profile.xp.toLocaleString()} XP
+        {/* Rank card in sidebar */}
+        <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>
+              {profile.display_name[0].toUpperCase()}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{profile.display_name}</div>
+              <div style={{ fontSize: 11, color: t.accent, fontWeight: 600 }}>{rIcon} {rank}</div>
             </div>
           </div>
-          <div style={{ fontSize: 40 }}>{icon}</div>
-        </div>
-
-        {/* XP progress */}
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ background: '#0c1525', borderRadius: 6, height: 7, overflow: 'hidden', border: '1px solid #1e293b' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#6366f1,#14b8a6)', borderRadius: 6, transition: 'width 0.8s' }} />
+          <div style={{ background: t.border, borderRadius: 4, height: 5, overflow: 'hidden', marginBottom: 4 }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${t.accent},${t.accentBlue})`, transition: 'width 0.8s' }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 10, color: t.textMuted }}>Level {level}</span>
+            <span style={{ fontSize: 10, color: t.textFaint }}>{profile.xp} XP</span>
           </div>
         </div>
 
-        {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 18 }}>
+        {/* Quick stats */}
+        <div style={{ padding: '14px 16px', flex: 1 }}>
+          <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Quick Stats</div>
           {[
-            { label: 'Questions', val: totalAttempts },
-            { label: 'Accuracy', val: `${accuracy}%` },
-            { label: 'Best Streak', val: `${profile.best_streak || 0}🔥` },
+            { label: 'Questions', val: totalAttempts, color: t.purple },
+            { label: 'Accuracy',  val: `${accuracy}%`, color: accuracy > 70 ? t.success : accuracy > 40 ? t.xp : t.danger },
+            { label: 'Best Streak', val: `${profile.best_streak || 0} 🔥`, color: t.xp },
           ].map(s => (
-            <div key={s.label} style={{
-              background: '#0c1525', borderRadius: 11, padding: '12px 8px',
-              textAlign: 'center', border: '1px solid #1e293b',
-            }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#e2e8f0', fontFamily: "'JetBrains Mono', monospace" }}>
-                {s.val}
-              </div>
-              <div style={{ fontSize: 10, color: '#475569', marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {s.label}
-              </div>
+            <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: `1px solid ${t.border}` }}>
+              <span style={{ fontSize: 12, color: t.textMuted }}>{s.label}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>{s.val}</span>
             </div>
           ))}
         </div>
 
-        {/* Topic breakdown */}
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, color: '#475569', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 10 }}>
-            Topic Breakdown
-          </div>
-          {Object.entries(topicStats).map(([topic, s]) => {
-            const rate = s.attempted > 0 ? (s.correct / (s.correct + s.wrong)) : null
-            const col   = rate === null ? '#334155' : rate > 0.75 ? '#14b8a6' : rate > 0.45 ? '#f59e0b' : '#ef4444'
-            const label = rate === null ? 'Not started' : rate > 0.75 ? 'Strong' : rate > 0.45 ? 'Developing' : 'Needs work'
-            return (
-              <div key={topic} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 14px', background: '#0c1525', borderRadius: 10,
-                marginBottom: 6, border: '1px solid #1e293b',
-              }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>{topic}</div>
-                  <div style={{ fontSize: 11, color: '#334155', marginTop: 2 }}>
-                    {s.attempted}/{s.total} attempted
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: col }}>{label}</div>
-                  {rate !== null && (
-                    <div style={{ fontSize: 11, color: '#334155' }}>{Math.round(rate * 100)}% correct</div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+        <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.border}` }}>
+          <button onClick={onBack} style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            ← Back to Dashboard
+          </button>
         </div>
+      </div>
 
-        {/* Study plan */}
-        {studyPlan.length > 0 && (
-          <div style={{
-            background: '#08111f',
-            border: '1px solid rgba(239,68,68,0.15)',
-            borderRadius: 14, padding: '14px 16px',
-          }}>
-            <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
-              📚 Recommended Study Plan
-            </div>
-            {studyPlan.map((p, i) => (
-              <div key={p.topic} style={{
-                padding: '9px 0',
-                borderBottom: i < studyPlan.length - 1 ? '1px solid #0c1525' : 'none',
-              }}>
-                <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 700 }}>
-                  {i + 1}. {p.topic}
-                </div>
-                <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.55, marginTop: 3 }}>
-                  {p.rate < 0.4
-                    ? `Re-read your SACE notes on ${p.topic} from scratch before attempting more questions.`
-                    : `Do 5–8 more ${p.topic} questions. Focus on the subtopics flagged in your Priority Queue.`}
-                </div>
+      {/* Main content */}
+      <div style={{ marginLeft: 220, flex: 1, padding: '36px 40px', animation: 'fadeUp 0.4s ease' }}>
+        <div style={{ maxWidth: 860, display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'start' }}>
+
+          {/* Left column */}
+          <div>
+            <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Analytics</div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 24, color: t.text }}>My Progress</h1>
+
+            {/* Rank card */}
+            <div style={{
+              background: theme === 'dark' ? 'linear-gradient(135deg,rgba(99,102,241,0.12),rgba(14,165,233,0.08))' : 'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(14,165,233,0.04))',
+              border: `1px solid ${theme === 'dark' ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.2)'}`,
+              borderRadius: 14, padding: '20px 24px', marginBottom: 20,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, marginBottom: 4 }}>CURRENT RANK</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: t.text }}>{rank}</div>
+                <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Level {level} · {profile.xp.toLocaleString()} XP</div>
+                {nextRank !== rank && (
+                  <div style={{ fontSize: 12, color: t.accent, marginTop: 6 }}>Next: {nextRank} →</div>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+              <div style={{ fontSize: 52 }}>{rIcon}</div>
+            </div>
 
-        {studyPlan.length === 0 && (
-          <div style={{
-            background: '#08111f', border: '1px solid rgba(20,184,166,0.15)',
-            borderRadius: 14, padding: '14px 16px',
-            fontSize: 13, color: '#334155', textAlign: 'center',
-          }}>
-            Complete a few sessions to generate your personalised study plan.
+            {/* XP progress */}
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px', marginBottom: 20, boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>XP Progress</span>
+                <span style={{ fontSize: 12, color: t.textMuted }}>{profile.xp.toLocaleString()} XP</span>
+              </div>
+              <div style={{ background: t.border, borderRadius: 6, height: 8, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${t.accent},${t.accentBlue})`, borderRadius: 6, transition: 'width 0.9s' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                <span style={{ fontSize: 11, color: t.textMuted }}>Level {level}</span>
+                <span style={{ fontSize: 11, color: t.textFaint }}>Level {level + 1}</span>
+              </div>
+            </div>
+
+            {/* Topic breakdown */}
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px', boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Topic Breakdown</div>
+              {Object.entries(topicStats).map(([topic, s]) => {
+                const rate  = s.attempted > 0 ? s.correct / Math.max(s.correct + s.wrong, 1) : null
+                const col   = rate === null ? t.textFaint : rate > 0.75 ? t.success : rate > 0.45 ? t.xp : t.danger
+                const label = rate === null ? 'Not started' : rate > 0.75 ? 'Strong' : rate > 0.45 ? 'Developing' : 'Needs work'
+                const pctW  = s.total > 0 ? (s.attempted / s.total) * 100 : 0
+                return (
+                  <div key={topic} style={{ padding: '12px 0', borderBottom: `1px solid ${t.border}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{topic}</div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{s.attempted}/{s.total} attempted</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: col }}>{label}</div>
+                        {rate !== null && <div style={{ fontSize: 11, color: t.textMuted }}>{Math.round(rate * 100)}% correct</div>}
+                      </div>
+                    </div>
+                    <div style={{ background: t.border, borderRadius: 3, height: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pctW}%`, height: '100%', background: col, borderRadius: 3, transition: 'width 0.6s' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        )}
+
+          {/* Right column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Stats grid */}
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px', boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Your Stats</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { label: 'Total XP',    val: profile.xp.toLocaleString(), color: t.accent },
+                  { label: 'Accuracy',    val: `${accuracy}%`,              color: accuracy > 70 ? t.success : accuracy > 40 ? t.xp : t.danger },
+                  { label: 'Questions',   val: totalAttempts,                color: t.purple },
+                  { label: 'Best Streak', val: `${profile.best_streak || 0}🔥`, color: t.xp },
+                ].map(s => (
+                  <div key={s.label} style={{ background: t.bgSubtle, borderRadius: 10, padding: '12px', border: `1px solid ${t.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.val}</div>
+                    <div style={{ fontSize: 10, color: t.textMuted, marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Study plan */}
+            {studyPlan.length > 0 && (
+              <div style={{ background: theme === 'dark' ? '#08111f' : '#fff8f8', border: `1px solid ${theme === 'dark' ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.15)'}`, borderRadius: 14, padding: '18px 20px', boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>📚 Study Plan</div>
+                <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 14 }}>Focus on these first</div>
+                {studyPlan.map((p, i) => (
+                  <div key={p.topic} style={{ padding: '10px 0', borderBottom: i < studyPlan.length - 1 ? `1px solid ${t.border}` : 'none' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>{i + 1}. {p.topic}</div>
+                    <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.55 }}>
+                      {p.rate < 0.4
+                        ? `Re-read your SACE notes on ${p.topic} from scratch before attempting more questions.`
+                        : `Do 5–8 more ${p.topic} questions to build confidence.`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {studyPlan.length === 0 && (
+              <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px', fontSize: 13, color: t.textMuted, textAlign: 'center', lineHeight: 1.6 }}>
+                Complete a few sessions to generate your personalised study plan.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
