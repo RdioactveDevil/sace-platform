@@ -7,6 +7,7 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const NAV_BG = '#0c1037'
 const NAV_BORDER = 'rgba(255,255,255,0.07)'
+const SIDEBAR_W = 220
 
 const NAV_ITEMS = [
   { icon: '⚡', label: 'Question Bank', id: 'home' },
@@ -19,18 +20,9 @@ const NAV_ITEMS = [
 
 export default function AppLayout({ children, profile, subject, activeScreen, onNav, onChangeSubject, onSignOut, theme, onToggleTheme }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
-
-  useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth <= 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
   const icon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
-  const NAV_MUTED = '#3d5080'
 
   const handleNav = (id) => {
     setMobileMenuOpen(false)
@@ -46,7 +38,7 @@ export default function AppLayout({ children, profile, subject, activeScreen, on
     </button>
   )
 
-  const SidebarContent = () => (
+  const NavContent = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: NAV_BG, fontFamily: FONT_B }}>
       {/* Logo */}
       <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${NAV_BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -55,12 +47,10 @@ export default function AppLayout({ children, profile, subject, activeScreen, on
         </div>
         <ThemeToggle />
       </div>
-
       {/* Subject */}
       <div style={{ padding: '8px 16px', borderBottom: `1px solid ${NAV_BORDER}` }}>
-        <div style={{ fontSize: 10, color: NAV_MUTED }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+        <div style={{ fontSize: 10, color: '#3d5080' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
       </div>
-
       {/* Profile */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${NAV_BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -76,12 +66,11 @@ export default function AppLayout({ children, profile, subject, activeScreen, on
           <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 9, color: NAV_MUTED }}>Level {level}</span>
-          <span style={{ fontSize: 9, color: NAV_MUTED }}>{profile.xp}/{next} XP</span>
+          <span style={{ fontSize: 9, color: '#3d5080' }}>Level {level}</span>
+          <span style={{ fontSize: 9, color: '#3d5080' }}>{profile.xp}/{next} XP</span>
         </div>
       </div>
-
-      {/* Nav */}
+      {/* Nav items */}
       <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(item => (
           <button key={item.id} onClick={() => handleNav(item.id)} style={{
@@ -89,7 +78,7 @@ export default function AppLayout({ children, profile, subject, activeScreen, on
             padding: '9px 12px', borderRadius: 8, border: 'none',
             background: activeScreen === item.id ? 'rgba(241,190,67,0.1)' : 'transparent',
             borderLeft: `2px solid ${activeScreen === item.id ? GOLD : 'transparent'}`,
-            color: activeScreen === item.id ? GOLD : NAV_MUTED,
+            color: activeScreen === item.id ? GOLD : '#3d5080',
             fontSize: 13, fontWeight: activeScreen === item.id ? 700 : 500,
             cursor: 'pointer', fontFamily: FONT_B,
             textAlign: 'left', width: '100%', transition: 'all 0.15s',
@@ -99,13 +88,12 @@ export default function AppLayout({ children, profile, subject, activeScreen, on
           </button>
         ))}
       </nav>
-
       {/* Bottom */}
       <div style={{ padding: '10px 12px', borderTop: `1px solid ${NAV_BORDER}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button onClick={onChangeSubject} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(241,190,67,0.25)', background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
           ⇄ Change Subject
         </button>
-        <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${NAV_BORDER}`, background: 'transparent', color: NAV_MUTED, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
+        <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${NAV_BORDER}`, background: 'transparent', color: '#3d5080', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
           Sign out
         </button>
       </div>
@@ -113,49 +101,67 @@ export default function AppLayout({ children, profile, subject, activeScreen, on
   )
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', fontFamily: FONT_B }}>
+    <div style={{ minHeight: '100vh', fontFamily: FONT_B }}>
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
         *, *::before, *::after { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; }
+
+        /* Sidebar — always visible on desktop */
+        .gf-sidebar {
+          position: fixed;
+          top: 0; left: 0;
+          width: ${SIDEBAR_W}px;
+          height: 100vh;
+          z-index: 50;
+        }
+        /* Content — always offset on desktop */
+        .gf-content {
+          margin-left: ${SIDEBAR_W}px;
+          min-height: 100vh;
+        }
+        /* Mobile topbar — hidden on desktop */
+        .gf-topbar { display: none; }
+
+        @media (max-width: 768px) {
+          .gf-sidebar { display: none; }
+          .gf-content { margin-left: 0; padding-top: 56px; }
+          .gf-topbar { display: flex; }
+        }
       `}</style>
 
       {/* Desktop sidebar */}
-      {!isMobile && (
-        <div style={{ width: 220, flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 50 }}>
-          <SidebarContent />
-        </div>
-      )}
+      <div className="gf-sidebar">
+        <NavContent />
+      </div>
 
-      {/* Mobile sidebar overlay */}
-      {isMobile && mobileMenuOpen && (
+      {/* Mobile overlay sidebar */}
+      {mobileMenuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-          <div onClick={() => setMobileMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} />
+          <div onClick={() => setMobileMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
           <div style={{ position: 'absolute', top: 0, left: 0, width: 260, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 201 }}>
-            <SidebarContent />
+            <NavContent />
           </div>
         </div>
       )}
 
       {/* Mobile topbar */}
-      {isMobile && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, background: NAV_BG, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => setMobileMenuOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {[20, 14, 20].map((w, i) => <div key={i} style={{ width: w, height: 2, background: '#fff', borderRadius: 2 }} />)}
-            </div>
-            <span style={{ fontFamily: FONT_D, fontSize: 16, color: '#fff', marginLeft: 6, letterSpacing: 1 }}>grade<span style={{ color: GOLD }}>farm.</span></span>
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ThemeToggle />
-            <span style={{ fontSize: 12, color: GOLD, fontWeight: 700 }}>{profile.xp} XP</span>
+      <div className="gf-topbar" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, background: NAV_BG, padding: '12px 16px', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={() => setMobileMenuOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {[20, 14, 20].map((w, i) => <div key={i} style={{ width: w, height: 2, background: '#fff', borderRadius: 2 }} />)}
           </div>
+          <span style={{ fontFamily: FONT_D, fontSize: 16, color: '#fff', marginLeft: 6, letterSpacing: 1 }}>grade<span style={{ color: GOLD }}>farm.</span></span>
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle />
+          <span style={{ fontSize: 12, color: GOLD, fontWeight: 700 }}>{profile.xp} XP</span>
         </div>
-      )}
+      </div>
 
-      {/* Main content area */}
-      <div style={{ marginLeft: isMobile ? 0 : 220, paddingTop: isMobile ? 56 : 0, flex: 1, minWidth: 0 }}>
+      {/* Main content */}
+      <div className="gf-content">
         {children}
       </div>
     </div>
