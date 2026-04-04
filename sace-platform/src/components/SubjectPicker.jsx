@@ -126,14 +126,18 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
                 onMouseLeave={() => setHovering(null)}
                 style={{
                   background: isSelected
-                    ? theme === 'dark' ? `rgba(${hexToRgb(subj.color)},0.12)` : `rgba(${hexToRgb(subj.color)},0.08)`
-                    : isHovered
-                      ? t.bgHover
-                      : t.bgCard,
-                  border: `2px solid ${isSelected ? subj.color : t.border}`,
+                    ? theme === 'dark' ? '#1c1d25' : '#ffffff'
+                    : isHovered ? t.bgHover : t.bgCard,
+                  border: isSelected
+                    ? theme === 'dark' ? '2px solid #f1be43' : '2px solid #0c1037'
+                    : `1px solid ${t.border}`,
                   borderRadius: 14, padding: '20px',
                   cursor: 'pointer', transition: 'all 0.15s ease',
-                  boxShadow: isSelected ? `0 4px 20px ${subj.color}30` : theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                  boxShadow: isSelected
+                    ? theme === 'dark'
+                      ? '0 0 0 4px rgba(241,190,67,0.08), 0 4px 20px rgba(0,0,0,0.3)'
+                      : '0 4px 20px rgba(12,16,55,0.14)'
+                    : theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -146,12 +150,12 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
                       fontSize: 20,
                     }}>{subj.icon}</div>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{subj.name}</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: isSelected && theme === 'light' ? '#0c1037' : t.text }}>{subj.name}</div>
                       <div style={{ fontSize: 11, color: subj.color, fontWeight: 700, marginTop: 1 }}>{subj.stage}</div>
                     </div>
                   </div>
                   {isSelected && (
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: subj.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#fff', flexShrink: 0 }}>✓</div>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: theme === 'dark' ? '#f1be43' : '#0c1037', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: theme === 'dark' ? '#0c1037' : '#f1be43', flexShrink: 0 }}>✓</div>
                   )}
                 </div>
 
@@ -160,8 +164,13 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
                   {subj.topics.slice(0, 4).map(topic => (
                     <span key={topic} style={{
                       fontSize: 11, padding: '3px 8px', borderRadius: 6,
-                      background: theme === 'dark' ? '#0c1525' : t.bgSubtle,
-                      border: `1px solid ${t.border}`, color: t.textMuted,
+                      background: isSelected
+                        ? theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'
+                        : theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgSubtle,
+                      border: `1px solid ${isSelected ? (theme === 'dark' ? 'rgba(255,255,255,0.1)' : '#e2e5f0') : t.border}`,
+                      color: isSelected
+                        ? theme === 'dark' ? '#94a3b8' : '#334155'
+                        : t.textMuted,
                     }}>{topic}</span>
                   ))}
                   {subj.topics.length > 4 && (
@@ -213,12 +222,20 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
           style={{
             width: '100%', padding: '16px', borderRadius: 14, border: 'none',
             background: selected
-              ? `linear-gradient(135deg, ${selected.color}, ${t.accentBlue})`
+              ? theme === 'dark'
+                ? 'linear-gradient(135deg,#f1be43,#f9d87a)'
+                : '#0c1037'
               : t.border,
-            color: selected ? '#fff' : t.textFaint,
+            color: selected
+              ? theme === 'dark' ? '#0c1037' : '#f1be43'
+              : t.textFaint,
             fontSize: 15, fontWeight: 800, cursor: selected ? 'pointer' : 'default',
             fontFamily: "'Plus Jakarta Sans', sans-serif",
-            boxShadow: selected ? `0 8px 28px ${selected.color}40` : 'none',
+            boxShadow: selected
+              ? theme === 'dark'
+                ? '0 8px 28px rgba(241,190,67,0.35)'
+                : '0 8px 28px rgba(12,16,55,0.25)'
+              : 'none',
             transition: 'all 0.2s ease',
           }}
         >
