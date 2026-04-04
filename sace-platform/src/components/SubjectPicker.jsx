@@ -78,7 +78,7 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#0c1037', color: t.text,
+      minHeight: '100vh', background: '#f8f9ff', color: '#0c1037',
       fontFamily: "'Plus Jakarta Sans', sans-serif",
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'flex-start', padding: '40px 20px 60px',
@@ -86,7 +86,7 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
     }}>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; background: #0c1037; overflow-x: hidden; }
+        html, body { margin: 0; padding: 0; background: #f8f9ff; overflow-x: hidden; }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.6} }
       `}</style>
@@ -100,17 +100,17 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
           fontSize: 24, margin: '0 auto 16px',
           boxShadow: `0 8px 24px ${t.accent}40`,
         }}>⚗️</div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', color: t.text }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', color: '#0c1037' }}>
           Welcome back, {profile.display_name.split(' ')[0]}
         </h1>
-        <p style={{ fontSize: 15, color: t.textMuted, margin: 0 }}>
+        <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>
           Choose a subject to practise
         </p>
       </div>
 
       {/* Available subjects */}
       <div style={{ width: '100%', maxWidth: 680, animation: 'fadeUp 0.5s ease' }}>
-        <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
           Available Now
         </div>
 
@@ -125,19 +125,13 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
                 onMouseEnter={() => setHovering(subj.id)}
                 onMouseLeave={() => setHovering(null)}
                 style={{
-                  background: isSelected
-                    ? theme === 'dark' ? '#1c1d25' : '#ffffff'
-                    : isHovered ? t.bgHover : t.bgCard,
-                  border: isSelected
-                    ? theme === 'dark' ? '2px solid #f1be43' : '2px solid #0c1037'
-                    : `1px solid ${t.border}`,
+                  background: '#ffffff',
+                  border: isSelected ? '2px solid #0c1037' : '1px solid #e2e5f0',
                   borderRadius: 14, padding: '20px',
                   cursor: 'pointer', transition: 'all 0.15s ease',
                   boxShadow: isSelected
-                    ? theme === 'dark'
-                      ? '0 0 0 4px rgba(241,190,67,0.08), 0 4px 20px rgba(0,0,0,0.3)'
-                      : '0 4px 20px rgba(12,16,55,0.14)'
-                    : theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                    ? '0 4px 20px rgba(12,16,55,0.14)'
+                    : '0 1px 4px rgba(0,0,0,0.06)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -150,12 +144,12 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
                       fontSize: 20,
                     }}>{subj.icon}</div>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: isSelected && theme === 'light' ? '#0c1037' : t.text }}>{subj.name}</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#0c1037' }}>{subj.name}</div>
                       <div style={{ fontSize: 11, color: subj.color, fontWeight: 700, marginTop: 1 }}>{subj.stage}</div>
                     </div>
                   </div>
                   {isSelected && (
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: theme === 'dark' ? '#f1be43' : '#0c1037', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: theme === 'dark' ? '#0c1037' : '#f1be43', flexShrink: 0 }}>✓</div>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#0c1037', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#f1be43', flexShrink: 0 }}>✓</div>
                   )}
                 </div>
 
@@ -164,13 +158,7 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
                   {subj.topics.slice(0, 4).map(topic => (
                     <span key={topic} style={{
                       fontSize: 11, padding: '3px 8px', borderRadius: 6,
-                      background: isSelected
-                        ? theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'
-                        : theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgSubtle,
-                      border: `1px solid ${isSelected ? (theme === 'dark' ? 'rgba(255,255,255,0.1)' : '#e2e5f0') : t.border}`,
-                      color: isSelected
-                        ? theme === 'dark' ? '#94a3b8' : '#334155'
-                        : t.textMuted,
+                      background: '#f1f5f9', border: '1px solid #e2e5f0', color: '#334155',
                     }}>{topic}</span>
                   ))}
                   {subj.topics.length > 4 && (
@@ -180,12 +168,12 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
 
                 {/* Footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: t.textMuted }}>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>
                     {subj.questionCount} questions
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.success }} />
-                    <span style={{ fontSize: 11, color: t.success, fontWeight: 600 }}>Ready</span>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
+                    <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>Ready</span>
                   </div>
                 </div>
               </div>
@@ -194,23 +182,23 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
         </div>
 
         {/* Coming soon */}
-        <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
           Coming Soon
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10, marginBottom: 36, opacity: 0.6 }}>
           {coming.map(subj => (
             <div key={subj.id} style={{
-              background: t.bgCard, border: `1px solid ${t.border}`,
+              background: '#f0f2ff', border: '1px solid #e2e5f0',
               borderRadius: 14, padding: '16px 20px',
               display: 'flex', alignItems: 'center', gap: 14,
-              boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.04)' : 'none',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
             }}>
               <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}15`, border: `1px solid ${subj.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{subj.icon}</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: t.textSub }}>{subj.name}</div>
-                <div style={{ fontSize: 11, color: t.textMuted }}>{subj.stage}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2a5e' }}>{subj.name}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{subj.stage}</div>
               </div>
-              <span style={{ fontSize: 10, background: theme === 'dark' ? '#1e293b' : t.bgSubtle, color: t.textMuted, padding: '3px 8px', borderRadius: 6, border: `1px solid ${t.border}`, fontWeight: 600 }}>SOON</span>
+              <span style={{ fontSize: 10, background: '#e2e5f0', color: '#64748b', padding: '3px 8px', borderRadius: 6, border: '1px solid #d1d5e0', fontWeight: 600 }}>SOON</span>
             </div>
           ))}
         </div>
@@ -221,21 +209,12 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
           disabled={!selected}
           style={{
             width: '100%', padding: '16px', borderRadius: 14, border: 'none',
-            background: selected
-              ? theme === 'dark'
-                ? 'linear-gradient(135deg,#f1be43,#f9d87a)'
-                : '#0c1037'
-              : t.border,
-            color: selected
-              ? theme === 'dark' ? '#0c1037' : '#f1be43'
-              : t.textFaint,
+            background: selected ? '#0c1037' : '#e2e5f0',
+            color: selected ? '#f1be43' : '#94a3b8',
             fontSize: 15, fontWeight: 800, cursor: selected ? 'pointer' : 'default',
             fontFamily: "'Plus Jakarta Sans', sans-serif",
-            boxShadow: selected
-              ? theme === 'dark'
-                ? '0 8px 28px rgba(241,190,67,0.35)'
-                : '0 8px 28px rgba(12,16,55,0.25)'
-              : 'none',
+            boxShadow: selected ? '0 8px 28px rgba(12,16,55,0.25)' : 'none',
+            border: 'none',
             transition: 'all 0.2s ease',
           }}
         >
