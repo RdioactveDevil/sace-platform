@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { signIn, signUp } from '../lib/db'
 
-export default function AuthScreen({ onAuth, theme, onToggleTheme }) {
+export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const [mode, setMode]       = useState('signin') // signin | signup
   const [email, setEmail]     = useState('')
   const [pass, setPass]       = useState('')

@@ -4,13 +4,14 @@ import { THEMES } from '../lib/theme'
 
 const NAV_ITEMS = [
   { icon: '⚡', label: 'Question Bank', id: 'home' },
+  { icon: '🎓', label: 'Learn',         id: 'learn' },
   { icon: '📊', label: 'My Progress',   id: 'profile' },
   { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard' },
   { icon: '📚', label: 'Study Plan',    id: 'study' },
   { icon: '🕐', label: 'History',       id: 'history' },
 ]
 
-export default function HomeScreen({ profile, struggleMap, questions, onStartSession, onLeaderboard, onProfile, onSignOut, onChangeSubject, subject, theme, onToggleTheme }) {
+export default function HomeScreen({ profile, struggleMap, questions, onStartSession, onLeaderboard, onProfile, onLearn, onSignOut, onChangeSubject, subject, theme, onToggleTheme }) {
   const [activeNav, setActiveNav]           = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile]             = useState(window.innerWidth <= 768)
@@ -60,6 +61,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
     setMobileMenuOpen(false)
     if (id === 'leaderboard') onLeaderboard()
     if (id === 'profile') onProfile()
+    if (id === 'learn') onLearn()
   }
 
   const ThemeToggle = () => (

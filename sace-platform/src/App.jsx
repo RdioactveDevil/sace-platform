@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions } from './lib/db'
+import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
+import LearnScreen       from './components/LearnScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
 import ProfileScreen     from './components/ProfileScreen'
 
@@ -13,21 +15,21 @@ link.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400
 link.rel  = 'stylesheet'
 document.head.appendChild(link)
 
-// Map subject ID to the subject name stored in the database
 const SUBJECT_DB_MAP = {
   'chemistry_s1': 'Chemistry Stage 1',
   'chemistry_s2': 'Chemistry',
 }
 
 export default function App() {
-  const [user, setUser]                 = useState(null)
-  const [profile, setProfile]           = useState(null)
-  const [questions, setQuestions]       = useState([])
-  const [struggleMap, setStruggleMap]   = useState({})
-  const [screen, setScreen]             = useState('home')
-  const [loading, setLoading]           = useState(true)
+  const [user, setUser]                       = useState(null)
+  const [profile, setProfile]                 = useState(null)
+  const [questions, setQuestions]             = useState([])
+  const [struggleMap, setStruggleMap]         = useState({})
+  const [screen, setScreen]                   = useState('home')
+  const [loading, setLoading]                 = useState(true)
   const [selectedSubject, setSelectedSubject] = useState(null)
-  const [theme, setTheme]               = useState(() => localStorage.getItem('saceiq-theme') || 'dark')
+  const [showAuth, setShowAuth]               = useState(false)   // show auth modal over landing
+  const [theme, setTheme]                     = useState(() => localStorage.getItem('saceiq-theme') || 'dark')
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -56,6 +58,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     setLoading(true)
+    setShowAuth(false)
     Promise.all([
       getProfile(user.id),
       getStruggleMap(user.id),
@@ -89,30 +92,45 @@ export default function App() {
     setScreen('home')
   }
 
-  const t = theme === 'dark' ? '#070c16' : '#f0f4f8'
   const commonProps = { theme, onToggleTheme: toggleTheme }
 
-  // Loading state
+  // ── LOADING ────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: t, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: theme === 'dark' ? '#070c16' : '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,#14b8a6,#0ea5e9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚗️</div>
       <div style={{ fontSize: 13, color: '#64748b' }}>Loading…</div>
     </div>
   )
 
-  // Not logged in
-  if (!user || !profile) return <AuthScreen {...commonProps} onAuth={() => {}} />
+  // ── NOT LOGGED IN → Landing page (with optional auth overlay) ──────────────
+  if (!user || !profile) {
+    if (showAuth) return (
+      <AuthScreen {...commonProps} onAuth={() => setShowAuth(false)}
+        onBack={() => setShowAuth(false)} />
+    )
+    return (
+      <LandingPage
+        onGetStarted={() => setShowAuth(true)}
+        onSignIn={() => setShowAuth(true)}
+      />
+    )
+  }
 
-  // Logged in but no subject selected
+  // ── LOGGED IN — no subject yet ─────────────────────────────────────────────
   if (!selectedSubject) return (
     <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
   )
 
-  // Subject selected — show app screens
+  // ── APP SCREENS ───────────────────────────────────────────────────────────
   if (screen === 'quiz') return (
     <QuizScreen {...commonProps} profile={profile} setProfile={setProfile}
       questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
       onHome={() => setScreen('home')} />
+  )
+  if (screen === 'learn') return (
+    <LearnScreen {...commonProps} profile={profile} struggleMap={struggleMap}
+      questions={questions} subject={selectedSubject}
+      onBack={() => setScreen('home')} />
   )
   if (screen === 'leaderboard') return (
     <LeaderboardScreen {...commonProps} profile={profile} onBack={() => setScreen('home')} />
@@ -129,6 +147,7 @@ export default function App() {
       onStartSession={() => setScreen('quiz')}
       onLeaderboard={() => setScreen('leaderboard')}
       onProfile={() => setScreen('profile')}
+      onLearn={() => setScreen('learn')}
       onChangeSubject={handleBackToSubjects}
       onSignOut={handleSignOut} />
   )
