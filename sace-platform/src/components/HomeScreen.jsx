@@ -83,9 +83,9 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bgNav }}>
       <div style={{ padding: '18px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>⚗️</div>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🦁</div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1, color: t.text }}>SACE<span style={{ color: t.accent }}>IQ</span></div>
+            <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1, color: t.text }}>gradefarm<span style={{ color: t.accent }}>.</span></div>
             <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 2'}</div>
           </div>
         </div>
@@ -296,7 +296,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {[20,14,20].map((w,i) => <div key={i} style={{ width: w, height: 2, background: t.text, borderRadius: 2 }} />)}
               </div>
-              <span style={{ fontSize: 16, fontWeight: 800, color: t.text, marginLeft: 6 }}>SACE<span style={{ color: t.accent }}>IQ</span></span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: t.text, marginLeft: 6 }}>gradefarm<span style={{ color: t.accent }}>.</span></span>
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <ThemeToggle />

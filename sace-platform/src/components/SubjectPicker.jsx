@@ -7,7 +7,7 @@ const SUBJECTS = [
     name: 'Chemistry',
     stage: 'Stage 1',
     icon: '⚗️',
-    color: '#14b8a6',
+    color: '#f1be43',
     topics: ['Atomic Structure', 'Ionic Bonding', 'Quantities', 'Periodic Table', 'Solutions'],
     questionCount: 50,
     available: true,
@@ -17,7 +17,7 @@ const SUBJECTS = [
     name: 'Chemistry',
     stage: 'Stage 2',
     icon: '⚗️',
-    color: '#0ea5e9',
+    color: '#f9d87a',
     topics: ['Organic Chemistry', 'Redox', 'Equilibrium', 'Acid/Base', 'Electrochemistry'],
     questionCount: 15,
     available: true,
@@ -78,7 +78,7 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: t.bg, color: t.text,
+      minHeight: '100vh', background: '#0c1037', color: t.text,
       fontFamily: "'Plus Jakarta Sans', sans-serif",
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'flex-start', padding: '40px 20px 60px',
@@ -92,7 +92,7 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
       <div style={{ textAlign: 'center', marginBottom: 40, animation: 'fadeUp 0.4s ease' }}>
         <div style={{
           width: 52, height: 52, borderRadius: 14,
-          background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`,
+          background: `linear-gradient(135deg,#f1be43,#f9d87a)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 24, margin: '0 auto 16px',
           boxShadow: `0 8px 24px ${t.accent}40`,
