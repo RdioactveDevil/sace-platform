@@ -41,25 +41,40 @@ function DemoCard() {
   const handle  = (i) => { if (showAns) return; setSelected(i); setShowAns(true) }
 
   return (
-    <div style={{ background: '#080d28', borderRadius: 18, border: `1px solid rgba(241,190,67,0.2)`, padding: 24, width: '100%', maxWidth: 400, boxShadow: `0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(241,190,67,0.08)` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <span style={{ fontSize: 11, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)', padding: '3px 10px', borderRadius: 20, color: GOLD, fontWeight: 700 }}>Organic Chemistry</span>
-        <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, background: 'rgba(239,68,68,0.1)', padding: '3px 9px', borderRadius: 20 }}>⚡ Priority</span>
+    <div style={{
+      background: '#ffffff',
+      borderRadius: 20,
+      padding: 24,
+      width: '100%',
+      maxWidth: 400,
+      boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)',
+    }}>
+      {/* Card header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Organic Chemistry</span>
+        <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20 }}>⚡ Priority</span>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', lineHeight: 1.7, marginBottom: 18 }}>
+
+      {/* Question */}
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>
         What is the IUPAC name for CH₃CH₂CH₂COOH?
       </div>
+
+      {/* Options */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {opts.map((opt, i) => {
-          let bg = 'rgba(255,255,255,0.03)', border = '1px solid rgba(255,255,255,0.08)', color = '#94a3b8'
+          let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', letterBg = '#e2e5f0', letterCol = '#0c1037'
           if (showAns) {
-            if (i === correct)              { bg = 'rgba(16,185,129,0.08)'; border = '1px solid #10b981'; color = '#4ade80' }
-            else if (i === selected)        { bg = 'rgba(239,68,68,0.08)'; border = '1px solid #ef4444'; color = '#f87171' }
-            else                            { color = '#334155' }
-          } else if (selected === i)        { bg = `rgba(241,190,67,0.08)`; border = `1px solid ${GOLD}`; color = GOLD }
+            if (i === correct)         { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; letterBg = '#bbf7d0'; letterCol = '#166534' }
+            else if (i === selected)   { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; letterBg = '#fecaca'; letterCol = '#991b1b' }
+            else                       { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; letterBg = '#f0f0f0'; letterCol = '#9ca3af' }
+          } else if (selected === i)   { bg = '#fefce8'; border = `1px solid ${GOLD}`; color = '#78350f'; letterBg = '#fef3c7'; letterCol = '#92400e' }
           return (
-            <button key={i} onClick={() => handle(i)} style={{ background: bg, border, color, padding: '11px 14px', borderRadius: 9, fontSize: 13, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}>
-              <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            <button key={i} onClick={() => handle(i)} style={{ background: bg, border, color, padding: '11px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
+              onMouseEnter={e => { if (!showAns) e.currentTarget.style.borderColor = GOLD }}
+              onMouseLeave={e => { if (!showAns && selected !== i) e.currentTarget.style.borderColor = '#e2e5f0' }}
+            >
+              <span style={{ width: 26, height: 26, borderRadius: '50%', background: letterBg, color: letterCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                 {showAns && i === correct ? '✓' : showAns && i === selected ? '✗' : String.fromCharCode(65+i)}
               </span>
               {opt}
@@ -67,12 +82,20 @@ function DemoCard() {
           )
         })}
       </div>
+
+      {/* Answer feedback */}
       {showAns && (
-        <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10 }}>
-          <div style={{ fontSize: 12, color: '#4ade80', fontWeight: 700, marginBottom: 4 }}>✓ Correct! +24 XP</div>
-          <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>4 carbons including the carboxyl carbon = butanoic acid.</div>
+        <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
+          <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP</div>
+          <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the one in –COOH. 4 carbons = butanoic acid.</div>
         </div>
       )}
+
+      {/* Branding strip */}
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 11, color: '#9ca3af' }}>gradefarm. · by Titanium Tutoring</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>🔥 3 streak</span>
+      </div>
     </div>
   )
 }
@@ -136,7 +159,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
 
             <h1 style={{ fontFamily: FONT_D, fontSize: 'clamp(38px,5vw,62px)', lineHeight: 1.05, margin: '0 0 20px', color: '#fff', letterSpacing: 1 }}>
               THE STUDY PLATFORM THAT{' '}
-              <span style={{ color: GOLD }}>ACTUALLY ADAPTS</span>{' '}
+              <span style={{ color: GOLD }}>ADAPTS</span>{' '}
               TO YOU.
             </h1>
 
@@ -204,7 +227,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
             {[
               { icon: '🎯', color: GOLD, title: 'Adaptive by design', desc: 'Every session is different. The algorithm tracks your error rate per topic and difficulty, always serving questions where you need them most.' },
-              { icon: '🎓', color: '#a78bfa', title: 'Learn with Titan', desc: 'Our AI tutor explains concepts using real-world analogies — sport, gaming, everyday life. Teaches from your actual class notes.' },
+              { icon: '🎓', color: '#a78bfa', title: 'Learn with Titan AI', desc: 'Our AI tutor explains concepts using real-world analogies — sport, gaming, everyday life. Teaches from your actual class notes.' },
               { icon: '⚡', color: GOLD, title: 'XP & leaderboards', desc: 'Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.' },
               { icon: '📊', color: '#10b981', title: 'Know your gaps', desc: 'After every session, see exactly which topics need work and a personalised study plan to fix them. No guessing what to revise.' },
               { icon: '📄', color: GOLDL, title: 'Your notes, your tutor', desc: "Upload your teacher's slides. Titan reads them and teaches you from your exact school content — not some textbook you've never seen." },
