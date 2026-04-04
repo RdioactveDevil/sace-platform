@@ -87,7 +87,7 @@ function DemoCard() {
       {showAns && (
         <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
           <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP</div>
-          <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the one in –COOH. 4 carbons = butanoic acid.</div>
+          <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the one in –COOH. 4 carbons means we will have the 'but-' prefix and the COOH means its an acid'.</div>
         </div>
       )}
 
