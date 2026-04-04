@@ -216,7 +216,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               { icon: '🎓', color: '#a78bfa', title: 'Learn with Titan AI',        desc: 'Our AI tutor explains concepts using real-world analogies — sport, gaming, everyday life. Teaches from your actual class notes.' },
               { icon: '⚡', color: GOLD,      title: 'XP & leaderboards',          desc: 'Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.' },
               { icon: '📊', color: '#10b981', title: 'Know your gaps',             desc: 'After every session, see exactly which topics need work and a personalised study plan to fix them. No guessing what to revise.' },
-              { icon: '📄', color: GOLDL,     title: 'Your notes, your tutor',     desc: "Upload your teacher's slides. Titan reads them and teaches you from your exact school content — not some textbook you've never seen." },
+              { icon: '📄', color: GOLDL,     title: 'Your notes, your tutor',     desc: "Upload your teacher's slides. Titan AI reads them and teaches you from your exact school content — not some textbook you've never seen." },
               { icon: '🦁', color: GOLD,      title: 'Backed by Titanium Tutoring',desc: 'Questions written and reviewed by real SACE tutors. Actual exam-relevant content aligned to the SACE curriculum.' },
             ].map(f => (
               <div key={f.title} className="fc" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 28, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
