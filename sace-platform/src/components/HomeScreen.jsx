@@ -103,7 +103,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           </div>
         </div>
         <div style={{ background: t.border, borderRadius: 4, height: 5, overflow: 'hidden', marginBottom: 4 }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${t.accent},${t.accentBlue})`, transition: 'width 0.8s' }} />
+          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${t.accent},${t.accentLight})`, transition: 'width 0.8s' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 10, color: t.textMuted }}>Level {level}</span>
@@ -116,12 +116,12 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           <button key={item.id} onClick={() => handleNav(item.id)} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 9,
             border: 'none',
-            background: activeNav === item.id ? `${t.accent}18` : 'transparent',
+            background: activeNav === item.id ? 'rgba(241,190,67,0.12)' : 'transparent',
             color: activeNav === item.id ? t.accent : t.textMuted,
             fontSize: 13, fontWeight: activeNav === item.id ? 700 : 500,
             cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
             textAlign: 'left', width: '100%', transition: 'all 0.15s',
-            borderLeft: activeNav === item.id ? `2px solid ${t.accent}` : '2px solid transparent',
+            borderLeft: activeNav === item.id ? '2px solid #f1be43' : '2px solid transparent',
           }}>
             <span style={{ fontSize: 14 }}>{item.icon}</span>
             {item.label}
@@ -150,7 +150,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', gap: 4 }}>
             {['Week','Month','All'].map((tab, i) => (
-              <button key={tab} style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: i === 0 ? t.accent : 'transparent', color: i === 0 ? '#fff' : t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tab}</button>
+              <button key={tab} style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: i === 0 ? t.accent : 'transparent', color: i === 0 ? (theme === 'dark' ? '#0c1037' : '#fff') : t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tab}</button>
             ))}
           </div>
           <div style={{ display: 'flex', gap: isMobile ? 16 : 24 }}>
@@ -211,7 +211,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           </div>
         )}
 
-        <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${t.accent},${t.accentLight})`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: `0 8px 28px ${t.accent}40`, transition: 'all 0.15s' }}>
+        <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${t.accent},${t.accentLight})`, color: theme === 'dark' ? '#0c1037' : '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: `0 8px 28px rgba(241,190,67,0.4)`, transition: 'all 0.15s' }}>
           Start Adaptive Session →
         </button>
       </div>
