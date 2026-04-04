@@ -83,9 +83,9 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bgNav }}>
       <div style={{ padding: '18px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🦁</div>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.accentLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🦁</div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1, color: t.text }}>gradefarm<span style={{ color: t.accent }}>.</span></div>
+            <div style={{ fontFamily: "'Sifonn Pro', sans-serif", fontSize: 15, lineHeight: 1, color: t.text, letterSpacing: 0.5 }}>grade<span style={{ color: t.accent }}>farm.</span></div>
             <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 2'}</div>
           </div>
         </div>
@@ -94,7 +94,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
 
       <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.accentLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
             {profile.display_name[0].toUpperCase()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -116,7 +116,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           <button key={item.id} onClick={() => handleNav(item.id)} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 9,
             border: 'none',
-            background: activeNav === item.id ? (theme === 'dark' ? 'rgba(20,184,166,0.12)' : 'rgba(13,148,136,0.08)') : 'transparent',
+            background: activeNav === item.id ? `${t.accent}18` : 'transparent',
             color: activeNav === item.id ? t.accent : t.textMuted,
             fontSize: 13, fontWeight: activeNav === item.id ? 700 : 500,
             cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -200,7 +200,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         </div>
 
         {topStruggles.length > 0 && (
-          <div style={{ background: theme === 'dark' ? '#08111f' : '#fff5f5', border: `1px solid ${theme==='dark'?'rgba(239,68,68,0.15)':'rgba(220,38,38,0.2)'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ background: theme === 'dark' ? '#0a0d22' : '#fff9f0', border: `1px solid ${theme==='dark'?'rgba(239,68,68,0.15)':'rgba(220,38,38,0.2)'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>⚡ Priority Queue</div>
             {topStruggles.slice(0,3).map((s, i) => (
               <div key={s.q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: i < 2 ? `1px solid ${t.border}` : 'none' }}>
@@ -211,7 +211,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
           </div>
         )}
 
-        <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${t.accent},${t.accentBlue})`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: `0 8px 28px ${t.accent}40`, transition: 'all 0.15s' }}>
+        <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${t.accent},${t.accentLight})`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: `0 8px 28px ${t.accent}40`, transition: 'all 0.15s' }}>
           Start Adaptive Session →
         </button>
       </div>
@@ -252,7 +252,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
         ))}
       </div>
 
-      <div style={{ background: theme==='dark'?'rgba(20,184,166,0.06)':'rgba(13,148,136,0.05)', border:`1px solid ${theme==='dark'?'rgba(20,184,166,0.2)':'rgba(13,148,136,0.25)'}`, borderRadius: 12, padding: '16px' }}>
+      <div style={{ background: `${t.accent}0a`, border:`1px solid ${t.accent}33`, borderRadius: 12, padding: '16px' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: t.accent, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
         <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>Set a study goal to track your daily progress towards your target ATAR.</div>
         <button style={{ marginTop: 10, width: '100%', padding: '9px', borderRadius: 8, border: `1px solid ${t.accent}44`, background: 'transparent', color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -265,6 +265,7 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
   return (
     <div style={{ minHeight: '100vh', background: t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
+        @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         @keyframes fadeUp  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
       `}</style>
@@ -296,12 +297,12 @@ export default function HomeScreen({ profile, struggleMap, questions, onStartSes
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {[20,14,20].map((w,i) => <div key={i} style={{ width: w, height: 2, background: t.text, borderRadius: 2 }} />)}
               </div>
-              <span style={{ fontSize: 16, fontWeight: 800, color: t.text, marginLeft: 6 }}>gradefarm<span style={{ color: t.accent }}>.</span></span>
+              <span style={{ fontFamily: "'Sifonn Pro', sans-serif", fontSize: 16, color: t.text, marginLeft: 6, letterSpacing: 0.5 }}>grade<span style={{ color: t.accent }}>farm.</span></span>
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <ThemeToggle />
               <span style={{ fontSize: 12, color: t.accent, fontWeight: 700 }}>{profile.xp} XP</span>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.accentLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
             </div>
