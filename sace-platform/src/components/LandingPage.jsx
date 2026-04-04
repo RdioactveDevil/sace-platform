@@ -41,34 +41,22 @@ function DemoCard() {
   const handle  = (i) => { if (showAns) return; setSelected(i); setShowAns(true) }
 
   return (
-    <div style={{
-      background: '#ffffff',
-      borderRadius: 20,
-      padding: 24,
-      width: '100%',
-      maxWidth: 400,
-      boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)',
-    }}>
-      {/* Card header */}
+    <div style={{ background: '#ffffff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Organic Chemistry</span>
         <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20 }}>⚡ Priority</span>
       </div>
-
-      {/* Question */}
       <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>
         What is the IUPAC name for CH₃CH₂CH₂COOH?
       </div>
-
-      {/* Options */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {opts.map((opt, i) => {
           let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', letterBg = '#e2e5f0', letterCol = '#0c1037'
           if (showAns) {
-            if (i === correct)         { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; letterBg = '#bbf7d0'; letterCol = '#166534' }
-            else if (i === selected)   { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; letterBg = '#fecaca'; letterCol = '#991b1b' }
-            else                       { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; letterBg = '#f0f0f0'; letterCol = '#9ca3af' }
-          } else if (selected === i)   { bg = '#fefce8'; border = `1px solid ${GOLD}`; color = '#78350f'; letterBg = '#fef3c7'; letterCol = '#92400e' }
+            if (i === correct)       { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; letterBg = '#bbf7d0'; letterCol = '#166534' }
+            else if (i === selected) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; letterBg = '#fecaca'; letterCol = '#991b1b' }
+            else                     { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; letterBg = '#f0f0f0'; letterCol = '#9ca3af' }
+          } else if (selected === i) { bg = '#fefce8'; border = `1px solid ${GOLD}`; color = '#78350f'; letterBg = '#fef3c7'; letterCol = '#92400e' }
           return (
             <button key={i} onClick={() => handle(i)} style={{ background: bg, border, color, padding: '11px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
               onMouseEnter={e => { if (!showAns) e.currentTarget.style.borderColor = GOLD }}
@@ -82,16 +70,12 @@ function DemoCard() {
           )
         })}
       </div>
-
-      {/* Answer feedback */}
       {showAns && (
         <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
           <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP</div>
-          <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the one in –COOH. 4 carbons means we will have the 'but-' prefix and the COOH means its an acid'.</div>
+          <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the one in –COOH. 4 carbons = butanoic acid.</div>
         </div>
       )}
-
-      {/* Branding strip */}
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, color: '#9ca3af' }}>gradefarm. · by Titanium Tutoring</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>🔥 3 streak</span>
@@ -128,10 +112,12 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
 
       {/* NAV */}
       <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, padding: '0 32px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: scrolled ? 'rgba(12,16,55,0.97)' : 'transparent', borderBottom: scrolled ? '1px solid rgba(241,190,67,0.1)' : 'none', backdropFilter: scrolled ? 'blur(20px)' : 'none', transition: 'all 0.3s ease' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🦁</div>
-          <span style={{ fontFamily: FONT_D, fontSize: 20, color: '#fff', letterSpacing: 1 }}>gradefarm<span style={{ color: GOLD }}>.</span></span>
-          <span style={{ fontSize: 10, color: '#334155', marginLeft: 2 }}>by Titanium Tutoring</span>
+        {/* Logo — no icon, farm in gold */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: 1 }}>
+            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          </span>
+          <span style={{ fontSize: 10, color: '#334155' }}>by Titanium Tutoring</span>
         </div>
 
         <div className="dnav" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
@@ -154,7 +140,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <div style={{ flex: 1, animation: 'fadeUp 0.6s ease' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.25)', borderRadius: 20, padding: '6px 14px', marginBottom: 24 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD }} />
-              <span style={{ fontSize: 12, color: GOLD, fontWeight: 700 }}>Built for SACE Stage 1 & 2</span>
+              <span style={{ fontSize: 12, color: GOLD, fontWeight: 700 }}>Built for Australia, in Australia</span>
             </div>
 
             <h1 style={{ fontFamily: FONT_D, fontSize: 'clamp(38px,5vw,62px)', lineHeight: 1.05, margin: '0 0 20px', color: '#fff', letterSpacing: 1 }}>
@@ -226,12 +212,12 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
             {[
-              { icon: '🎯', color: GOLD, title: 'Adaptive by design', desc: 'Every session is different. The algorithm tracks your error rate per topic and difficulty, always serving questions where you need them most.' },
-              { icon: '🎓', color: '#a78bfa', title: 'Learn with Titan AI', desc: 'Our AI tutor explains concepts using real-world analogies — sport, gaming, everyday life. Teaches from your actual class notes.' },
-              { icon: '⚡', color: GOLD, title: 'XP & leaderboards', desc: 'Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.' },
-              { icon: '📊', color: '#10b981', title: 'Know your gaps', desc: 'After every session, see exactly which topics need work and a personalised study plan to fix them. No guessing what to revise.' },
-              { icon: '📄', color: GOLDL, title: 'Your notes, your tutor', desc: "Upload your teacher's slides. Titan reads them and teaches you from your exact school content — not some textbook you've never seen." },
-              { icon: '🦁', color: GOLD, title: 'Backed by Titanium Tutoring', desc: 'Questions written and reviewed by real SACE tutors. Actual exam-relevant content aligned to the SACE curriculum.' },
+              { icon: '🎯', color: GOLD,      title: 'Adaptive by design',        desc: 'Every session is different. The algorithm tracks your error rate per topic and difficulty, always serving questions where you need them most.' },
+              { icon: '🎓', color: '#a78bfa', title: 'Learn with Titan AI',        desc: 'Our AI tutor explains concepts using real-world analogies — sport, gaming, everyday life. Teaches from your actual class notes.' },
+              { icon: '⚡', color: GOLD,      title: 'XP & leaderboards',          desc: 'Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.' },
+              { icon: '📊', color: '#10b981', title: 'Know your gaps',             desc: 'After every session, see exactly which topics need work and a personalised study plan to fix them. No guessing what to revise.' },
+              { icon: '📄', color: GOLDL,     title: 'Your notes, your tutor',     desc: "Upload your teacher's slides. Titan reads them and teaches you from your exact school content — not some textbook you've never seen." },
+              { icon: '🦁', color: GOLD,      title: 'Backed by Titanium Tutoring',desc: 'Questions written and reviewed by real SACE tutors. Actual exam-relevant content aligned to the SACE curriculum.' },
             ].map(f => (
               <div key={f.title} className="fc" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 28, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: `${f.color}20`, border: `1px solid ${f.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 16 }}>{f.icon}</div>
@@ -251,13 +237,13 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,4vw,44px)', margin: 0, color: '#f1f5f9', letterSpacing: 1 }}>SIMPLE. EFFECTIVE. YOURS.</h2>
           </div>
           {[
-            { num: '01', title: 'Sign up free', desc: 'Create an account in 30 seconds. No credit card, no commitment. Pick your subject and stage.', icon: '✍️' },
-            { num: '02', title: 'Do a session', desc: "Answer adaptive questions. The algorithm starts learning what you know and what you don't from your very first question.", icon: '⚡' },
-            { num: '03', title: 'Get taught by Titan', desc: "Struggling with a topic? Switch to Learn mode. Titan explains it using sport analogies, checks your understanding, and adjusts in real time.", icon: '🎓' },
-            { num: '04', title: 'Watch the gaps close', desc: 'Your struggle profile updates after every session. The Priority Queue shows exactly what to fix next.', icon: '📈' },
+            { num: '01', title: 'Sign up free',          desc: 'Create an account in 30 seconds. No credit card, no commitment. Pick your subject and stage.', icon: '✍️' },
+            { num: '02', title: 'Do a session',           desc: "Answer adaptive questions. The algorithm starts learning what you know and what you don't from your very first question.", icon: '⚡' },
+            { num: '03', title: 'Get taught by Titan',    desc: "Struggling with a topic? Switch to Learn mode. Titan explains it using sport analogies, checks your understanding, and adjusts in real time.", icon: '🎓' },
+            { num: '04', title: 'Watch the gaps close',   desc: 'Your struggle profile updates after every session. The Priority Queue shows exactly what to fix next.', icon: '📈' },
           ].map((step, i) => (
             <div key={i} style={{ display: 'flex', gap: 24, padding: '32px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.05)' : 'none', alignItems: 'flex-start' }}>
-              <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 14, background: `rgba(241,190,67,0.1)`, border: `1px solid rgba(241,190,67,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{step.icon}</div>
+              <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 14, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{step.icon}</div>
               <div>
                 <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>{step.num}</div>
                 <div style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', marginBottom: 6, letterSpacing: 0.5 }}>{step.title.toUpperCase()}</div>
@@ -276,12 +262,12 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <p style={{ fontSize: 16, color: '#64748b', marginBottom: 40 }}>More subjects dropping soon. Stage 1 and Stage 2 covered.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             {[
-              { name: 'Chemistry', stage: 'Stage 1 & 2', icon: '⚗️', color: GOLD, available: true, count: '65 questions' },
-              { name: 'Mathematical Methods', stage: 'Stage 2', icon: '∫', color: '#a78bfa', available: false },
-              { name: 'Physics', stage: 'Stage 2', icon: '⚛️', color: GOLDL, available: false },
-              { name: 'Biology', stage: 'Stage 2', icon: '🧬', color: '#10b981', available: false },
-              { name: 'English Literary Studies', stage: 'Stage 2', icon: '📖', color: '#f87171', available: false },
-              { name: 'Economics', stage: 'Stage 2', icon: '📈', color: GOLD, available: false },
+              { name: 'Chemistry',              stage: 'Stage 1 & 2', icon: '⚗️', color: GOLD,      available: true,  count: '65 questions' },
+              { name: 'Mathematical Methods',   stage: 'Stage 2',     icon: '∫',  color: '#a78bfa', available: false },
+              { name: 'Physics',                stage: 'Stage 2',     icon: '⚛️', color: GOLDL,     available: false },
+              { name: 'Biology',                stage: 'Stage 2',     icon: '🧬', color: '#10b981', available: false },
+              { name: 'English Literary Studies',stage: 'Stage 2',    icon: '📖', color: '#f87171', available: false },
+              { name: 'Economics',              stage: 'Stage 2',     icon: '📈', color: GOLD,      available: false },
             ].map(s => (
               <div key={s.name} onClick={s.available ? onGetStarted : undefined} style={{ padding: '20px 16px', borderRadius: 14, border: `1px solid ${s.available ? 'rgba(241,190,67,0.3)' : 'rgba(255,255,255,0.06)'}`, background: s.available ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.02)', textAlign: 'center', opacity: s.available ? 1 : 0.5, cursor: s.available ? 'pointer' : 'default', transition: 'all 0.15s' }}>
                 <div style={{ fontSize: 26, marginBottom: 8 }}>{s.icon}</div>
@@ -344,11 +330,12 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         </div>
       </section>
 
-      {/* FOOTER */}
+      {/* FOOTER — no icon, farm in gold */}
       <footer style={{ borderTop: '1px solid rgba(241,190,67,0.1)', padding: '28px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 26, height: 26, borderRadius: 7, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>🦁</div>
-          <span style={{ fontFamily: FONT_D, fontSize: 16, color: '#f1f5f9', letterSpacing: 1 }}>gradefarm<span style={{ color: GOLD }}>.</span></span>
+          <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}>
+            <span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          </span>
           <span style={{ fontSize: 11, color: '#334155' }}>by Titanium Tutoring</span>
         </div>
         <div style={{ fontSize: 12, color: '#334155' }}>© 2025 Titanium Tutoring · Adelaide, SA · Per aspera ad astra</div>
