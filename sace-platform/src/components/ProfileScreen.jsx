@@ -137,6 +137,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack,
             </div>
           </div>
         </div>
+      </div>
     </div>
   )
 }
