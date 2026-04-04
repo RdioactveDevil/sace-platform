@@ -251,10 +251,6 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
 
       <div style={{ width: '100%', maxWidth: 520, animation: 'fadeUp 0.4s ease' }}>
         {/* Header */}
-        <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 24, padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-          ← Back
-        </button>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
           <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎓</div>
           <div>
