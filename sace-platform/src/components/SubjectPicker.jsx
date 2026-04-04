@@ -82,8 +82,11 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
       fontFamily: "'Plus Jakarta Sans', sans-serif",
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'flex-start', padding: '40px 20px 60px',
+      boxSizing: 'border-box',
     }}>
       <style>{`
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; background: #0c1037; overflow-x: hidden; }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.6} }
       `}</style>
