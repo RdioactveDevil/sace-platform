@@ -161,6 +161,60 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// ── AppShellScreens — all screens always mounted, toggled via display:none ───
+// This prevents unmount/remount on tab switch — no reload flashes, state preserved
+function AppShellScreens({
+  screen, profile, questions, struggleMap, setStruggleMap, subject,
+  onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme,
+  // learn state
+  phase, setPhase, topic, setTopic, messages, setMessages,
+  interests, setInterests, docContext, setDocContext, docName, setDocName,
+}) {
+  const navigate   = useNavigate()
+  const commonProps = { theme, onToggleTheme }
+  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName }
+  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut }
+  const GOLD = '#f1be43'
+  const FONT_B = "'Plus Jakarta Sans', sans-serif"
+
+  const show = (s) => ({ display: screen === s ? 'block' : 'none' })
+
+  return (
+    <AppShell {...shellProps}>
+      <div style={show('question-bank')}>
+        <HomeScreen {...commonProps}
+          profile={profile} struggleMap={struggleMap}
+          questions={questions} subject={subject}
+          onStartSession={onStartSession} />
+      </div>
+      <div style={show('learn')}>
+        <LearnScreen {...commonProps} {...learnState}
+          profile={profile} struggleMap={struggleMap}
+          questions={questions} subject={subject}
+          onBack={() => navigate('/question-bank')} />
+      </div>
+      <div style={show('leaderboard')}>
+        <LeaderboardScreen {...commonProps} profile={profile} embedded />
+      </div>
+      <div style={show('my-progress')}>
+        <ProfileScreen {...commonProps}
+          profile={profile} questions={questions}
+          struggleMap={struggleMap} embedded />
+      </div>
+      <div style={show('study-plan')}>
+        <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
+          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
+          <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>Study Plan</h1>
+          <p style={{ color: THEMES[theme].textMuted, fontSize: 15 }}>Personalised study schedules based on your quiz performance. Coming soon.</p>
+        </div>
+      </div>
+      <div style={show('history')}>
+        <HistoryScreen {...commonProps} profile={profile} embedded />
+      </div>
+    </AppShell>
+  )
+}
+
 function AppInner() {
   const navigate = useNavigate()
   const [user, setUser]                       = useState(null)
@@ -349,65 +403,54 @@ function AppInner() {
               onHome={() => navigate('/question-bank')} />
       } />
 
-      {/* Dashboard — shell routes, all require login + subject */}
+      {/* All shell routes — single always-mounted AppShell, screens toggled via display */}
       <Route path="/question-bank" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShell {...shellProps}>
-          <HomeScreen {...commonProps}
-            profile={profile} struggleMap={struggleMap}
-            questions={questions} subject={selectedSubject}
-            onStartSession={() => navigate('/quiz')} />
-        </AppShell>
+        <AppShellScreens {...shellProps} screen="question-bank" {...learnState}
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          setStruggleMap={setStruggleMap} subject={selectedSubject}
+          onStartSession={() => navigate('/quiz')} />
       } />
-
       <Route path="/learn" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShell {...shellProps}>
-          <LearnScreen {...commonProps} {...learnState}
-            profile={profile} struggleMap={struggleMap}
-            questions={questions} subject={selectedSubject}
-            onBack={() => navigate('/question-bank')} />
-        </AppShell>
+        <AppShellScreens {...shellProps} screen="learn" {...learnState}
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          setStruggleMap={setStruggleMap} subject={selectedSubject}
+          onStartSession={() => navigate('/quiz')} />
       } />
-
       <Route path="/leaderboard" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShell {...shellProps}>
-          <LeaderboardScreen {...commonProps} profile={profile} embedded />
-        </AppShell>
+        <AppShellScreens {...shellProps} screen="leaderboard" {...learnState}
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          setStruggleMap={setStruggleMap} subject={selectedSubject}
+          onStartSession={() => navigate('/quiz')} />
       } />
-
       <Route path="/my-progress" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShell {...shellProps}>
-          <ProfileScreen {...commonProps}
-            profile={profile} questions={questions}
-            struggleMap={struggleMap} embedded />
-        </AppShell>
+        <AppShellScreens {...shellProps} screen="my-progress" {...learnState}
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          setStruggleMap={setStruggleMap} subject={selectedSubject}
+          onStartSession={() => navigate('/quiz')} />
       } />
-
       <Route path="/study-plan" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShell {...shellProps}>
-          <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>Study Plan</h1>
-            <p style={{ color: THEMES[theme].textMuted, fontSize: 15 }}>Personalised study schedules based on your quiz performance. Coming soon.</p>
-          </div>
-        </AppShell>
+        <AppShellScreens {...shellProps} screen="study-plan" {...learnState}
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          setStruggleMap={setStruggleMap} subject={selectedSubject}
+          onStartSession={() => navigate('/quiz')} />
       } />
-
       <Route path="/history" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShell {...shellProps}>
-          <HistoryScreen {...commonProps} profile={profile} embedded />
-        </AppShell>
+        <AppShellScreens {...shellProps} screen="history" {...learnState}
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          setStruggleMap={setStruggleMap} subject={selectedSubject}
+          onStartSession={() => navigate('/quiz')} />
       } />
 
       {/* Catch-all */}
