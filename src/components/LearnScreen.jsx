@@ -314,34 +314,31 @@ export default function LearnScreen({
       `}</style>
 
       {/* Gold hero header — always visible in chat */}
-      <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.14),rgba(241,190,67,0.05))`, borderBottom: `1px solid rgba(241,190,67,0.2)`, padding: '12px 18px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: theme === 'dark' ? 'rgba(241,190,67,0.1)' : 'rgba(241,190,67,0.15)', borderBottom: `1px solid rgba(241,190,67,0.25)`, padding: '12px 18px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>🎓</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Titan <span style={{ color: GOLD }}>AI</span></div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Teaching: <span style={{ color: GOLD, fontWeight: 600 }}>{topic}</span></div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Titan <span style={{ color: GOLD }}>AI</span></div>
+              <div style={{ fontSize: 11, color: t.textMuted }}>Teaching: <span style={{ color: GOLD, fontWeight: 600 }}>{topic}</span></div>
             </div>
           </div>
-          {/* Style switcher — always accessible */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {STYLE_OPTS.map(opt => {
               const active = interests === opt.id
               return (
-                <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ padding: '5px 10px', borderRadius: 20, border: `1px solid ${active ? GOLD : 'rgba(255,255,255,0.12)'}`, background: active ? GOLD : 'transparent', color: active ? '#0c1037' : 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
+                <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ padding: '5px 10px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? GOLD : 'transparent', color: active ? '#0c1037' : t.textMuted, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
                   {opt.emoji} {opt.label}
                 </button>
               )
             })}
-            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
-            <button onClick={() => setPhase('setup')} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>← Setup</button>
-            <button onClick={onBack} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>Exit</button>
+            <div style={{ width: 1, height: 20, background: t.border, margin: '0 4px' }} />
+            <button onClick={() => setPhase('setup')} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>← Setup</button>
+            <button onClick={onBack} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>Exit</button>
           </div>
         </div>
         {docName && (
-          <div style={{ marginTop: 8, fontSize: 10, color: GOLD, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.2)', padding: '3px 10px', borderRadius: 6, display: 'inline-block' }}>
-            📄 {docName}
-          </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: GOLD, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.2)', padding: '3px 10px', borderRadius: 6, display: 'inline-block' }}>📄 {docName}</div>
         )}
       </div>
 
