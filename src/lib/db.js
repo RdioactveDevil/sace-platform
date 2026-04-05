@@ -91,6 +91,14 @@ export async function recordAnswer(userId, questionId, correct) {
       attempts, wrong, last_seen, next_review
     })
   }
+
+  // Log to answer_log for history screen
+  await supabase.from('answer_log').insert({
+    user_id: userId,
+    question_id: questionId,
+    selected: 0,
+    correct,
+  })
 }
 
 // ─── SESSION ──────────────────────────────────────────────────────────────────

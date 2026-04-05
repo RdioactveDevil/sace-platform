@@ -42,14 +42,14 @@ export default function HistoryScreen({ profile, theme, embedded }) {
       .from('answer_log')
       .select('*')
       .eq('user_id', profile.id)
-      .order('created_at', { ascending: false })
+      .order('answered_at', { ascending: false })
       .limit(300)
 
     // Group into 30-min sessions
     const sessionMap = {}
     ;(answers || []).forEach(a => {
-      const bucket = Math.floor(new Date(a.created_at).getTime() / (30 * 60 * 1000))
-      if (!sessionMap[bucket]) sessionMap[bucket] = { id: String(bucket), date: a.created_at, answers: [], correct: 0, total: 0 }
+      const bucket = Math.floor(new Date(a.answered_at).getTime() / (30 * 60 * 1000))
+      if (!sessionMap[bucket]) sessionMap[bucket] = { id: String(bucket), date: a.answered_at, answers: [], correct: 0, total: 0 }
       sessionMap[bucket].answers.push(a)
       sessionMap[bucket].total++
       if (a.correct) sessionMap[bucket].correct++
@@ -146,7 +146,7 @@ export default function HistoryScreen({ profile, theme, embedded }) {
                               {a.correct ? '✓' : '✗'}
                             </div>
                             <div style={{ flex: 1, fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {a.question_text || `Question ${j + 1}`}
+                              {a.question_text || a.question_id || `Question ${j + 1}`}
                             </div>
                             <div style={{ fontSize: 11, color: a.correct ? t.success : t.danger, fontWeight: 600, flexShrink: 0 }}>
                               {a.correct ? '+XP' : 'Wrong'}
