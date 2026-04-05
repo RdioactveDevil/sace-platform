@@ -154,7 +154,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
-        <div style={{ flex: 1 }}>{children}</div>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
     </div>
   )
@@ -179,7 +179,7 @@ function AppShellScreens({
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-  const show = (s) => ({ display: screen === s ? 'block' : 'none' })
+  const show = (s) => ({ display: screen === s ? 'flex' : 'none', flexDirection: 'column', height: '100%', minHeight: 0 })
 
   return (
     <AppShell {...shellProps}>
