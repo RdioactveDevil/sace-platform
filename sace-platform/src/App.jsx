@@ -268,14 +268,6 @@ export default function App() {
       onHome={() => setScreen('home')} />
   )
 
-  // Learn — full screen, no shell
-  if (screen === 'learn') return (
-    <LearnScreen {...commonProps}
-      profile={profile} struggleMap={struggleMap}
-      questions={questions} subject={selectedSubject}
-      onBack={() => setScreen('home')} />
-  )
-
   const shellProps = {
     ...commonProps,
     profile, subject: selectedSubject,
@@ -284,6 +276,15 @@ export default function App() {
     onChangeSubject: handleChangeSubject,
     onSignOut: handleSignOut,
   }
+
+  if (screen === 'learn') return (
+    <AppShell {...shellProps}>
+      <LearnScreen {...commonProps}
+        profile={profile} struggleMap={struggleMap}
+        questions={questions} subject={selectedSubject}
+        onBack={() => setScreen('home')} />
+    </AppShell>
+  )
 
   if (screen === 'leaderboard') return (
     <AppShell {...shellProps}>
