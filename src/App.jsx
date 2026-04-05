@@ -12,6 +12,7 @@ import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
 import ProfileScreen     from './components/ProfileScreen'
+import HistoryScreen     from './components/HistoryScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -24,7 +25,7 @@ const SUBJECT_DB_MAP = {
 }
 
 const NAV_ITEMS = [
-  { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/question-bank' },
+  { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/home' },
   { icon: '🎓', label: 'Learn',         id: 'learn',        path: '/learn'         },
   { icon: '📊', label: 'My Progress',   id: 'profile',      path: '/my-progress'   },
   { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard',  path: '/leaderboard'   },
@@ -45,7 +46,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#080d28', fontFamily: FONT_B }}>
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span onClick={() => go('/question-bank')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
+        <span onClick={() => go('/home')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
           <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </span>
         <button onClick={onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>
@@ -81,7 +82,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
       <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
         {NAV_ITEMS.map(item => {
-          const active = location.pathname === item.path || (item.path === '/question-bank' && location.pathname === '/')
+          const active = location.pathname === item.path || (item.path === '/home' && location.pathname === '/')
           return (
             <button key={item.id} onClick={() => go(item.path)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
@@ -142,7 +143,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
               <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
               <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
             </button>
-            <span onClick={() => navigate('/question-bank')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
+            <span onClick={() => navigate('/home')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
               <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -232,7 +233,7 @@ function AppInner() {
     const qs = await getQuestions(SUBJECT_DB_MAP[subject.id] || subject.name)
     setQuestions(qs)
     setLoading(false)
-    navigate('/question-bank')
+    navigate('/home')
   }
 
   const handleSignOut = async () => {
@@ -243,14 +244,14 @@ function AppInner() {
     setLearnPhase('setup')
     setLearnMessages([])
     setLearnTopic('')
-    navigate('/')
+    navigate('/home')
   }
 
   const handleChangeSubject = () => {
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
     setQuestions([])
-    navigate('/')
+    navigate('/home')
   }
 
   const commonProps  = { theme, onToggleTheme: toggleTheme }
@@ -291,18 +292,20 @@ function AppInner() {
 
   return (
     <Routes>
+      <Route path="/" element={<Navigate to="/home" replace />} />
+
       {/* Landing */}
-      <Route path="/" element={
+      <Route path="/home" element={
         (!user || !profile)
           ? <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
-          : <Navigate to="/question-bank" replace />
+          : <Navigate to="/home" replace />
       } />
 
       {/* Auth */}
       <Route path="/auth" element={
         (!user || !profile)
-          ? <AuthScreen {...commonProps} onAuth={() => navigate(selectedSubject ? '/question-bank' : '/subject-picker')} onBack={() => navigate('/')} />
-          : <Navigate to="/question-bank" replace />
+          ? <AuthScreen {...commonProps} onAuth={() => navigate(selectedSubject ? '/home' : '/subject-picker')} onBack={() => navigate('/home')} />
+          : <Navigate to="/home" replace />
       } />
 
       {/* Subject picker */}
@@ -317,11 +320,11 @@ function AppInner() {
         <QuizScreen {...commonProps}
           profile={profile} setProfile={setProfile}
           questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
-          onHome={() => navigate('/question-bank')} />
+          onHome={() => navigate('/home')} />
       } />
 
       {/* All shell routes */}
-      <Route path="/question-bank" element={
+      <Route path="/home" element={
         <AppShell {...shellProps}>
           <HomeScreen {...commonProps}
             profile={profile} struggleMap={struggleMap}
@@ -335,7 +338,7 @@ function AppInner() {
           <LearnScreen {...commonProps} {...learnState}
             profile={profile} struggleMap={struggleMap}
             questions={questions} subject={selectedSubject}
-            onBack={() => navigate('/question-bank')} />
+            onBack={() => navigate('/home')} />
         </AppShell>
       } />
 
@@ -365,16 +368,12 @@ function AppInner() {
 
       <Route path="/history" element={
         <AppShell {...shellProps}>
-          <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>History</h1>
-            <p style={{ color: THEMES[theme].textMuted, fontSize: 15 }}>Past quiz sessions and Titan AI lessons. Coming soon.</p>
-          </div>
+          <HistoryScreen {...commonProps} profile={profile} embedded />
         </AppShell>
       } />
 
       {/* Catch-all */}
-      <Route path="*" element={<Navigate to="/question-bank" replace />} />
+      <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )
 }
