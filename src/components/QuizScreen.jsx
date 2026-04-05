@@ -142,7 +142,9 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(newAnswered, prev); return prev })
   }
 
-  if (!currentQ) return (
+  // Only show loading screen on very first mount — not on tab switches
+  // If sessionResults has items, we have a session in progress — never show loading
+  if (!currentQ && sessionResults.length === 0) return (
     <div style={{ minHeight: '100vh', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: FONT_B }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚡</div>
@@ -184,7 +186,7 @@ export default function QuizScreen({
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+      <nav style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(item => {
           const active = item.path === '/question-bank'
           return (
@@ -197,14 +199,14 @@ export default function QuizScreen({
         })}
       </nav>
 
-      {/* Session stats — below nav */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+      {/* Session stats — directly under nav */}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
           {[
-            { label: 'Correct', val: sessionCorrect,                   color: '#10b981' },
-            { label: 'Wrong',   val: sessionTotal - sessionCorrect,    color: '#ef4444' },
-            { label: 'XP',      val: `+${sessionXP}`,                  color: GOLD      },
+            { label: 'Correct', val: sessionCorrect,                    color: '#10b981' },
+            { label: 'Wrong',   val: sessionTotal - sessionCorrect,     color: '#ef4444' },
+            { label: 'XP',      val: `+${sessionXP}`,                   color: GOLD      },
             { label: 'Streak',  val: streak > 0 ? `🔥 ${streak}` : '—', color: '#f59e0b' },
           ].map(s => (
             <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -213,7 +215,7 @@ export default function QuizScreen({
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {sessionResults.map((r, i) => (
             <div key={i} style={{ width: 20, height: 20, borderRadius: '50%', background: r.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `1.5px solid ${r.correct ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: r.correct ? '#4ade80' : '#f87171' }}>
               {i + 1}
@@ -223,6 +225,11 @@ export default function QuizScreen({
             {qNumber}
           </div>
         </div>
+      </div>
+
+      {/* Spacer + End Session */}
+      <div style={{ flex: 1 }} />
+      <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <button onClick={() => { setShowExit(true); onClose?.() }} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
           ✕ End Session
         </button>
@@ -383,7 +390,7 @@ export default function QuizScreen({
                       💡 {currentQ.tip}
                     </div>
                   )}
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting Titan AI tip…</div>}
                   {aiTip && (
                     <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
                       🤖 {aiTip}
@@ -417,7 +424,7 @@ export default function QuizScreen({
                     </div>
                   )}
 
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting Titan AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
                   {aiTip && (
                     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
                       🤖 {aiTip}
