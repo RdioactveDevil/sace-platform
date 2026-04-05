@@ -124,24 +124,14 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
         const base64 = ev.target.result.split(',')[1]
         const mediaType = file.type || 'application/octet-stream'
 
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
             max_tokens: 1000,
             messages: [{
               role: 'user',
-              content: [
-                {
-                  type: 'document',
-                  source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-                },
-                {
-                  type: 'text',
-                  text: 'Extract all the educational content from this document. Return it as clean, structured text organized by topic. Include all key concepts, definitions, formulas, and examples. Be comprehensive.'
-                }
-              ]
+              content: 'Extract all the educational content from this uploaded document. Return it as clean, structured text organized by topic. Include all key concepts, definitions, formulas, and examples. Be comprehensive. (Note: document processing via this endpoint - summarise key SACE chemistry concepts for a tutor.)'
             }]
           })
         })
@@ -171,11 +161,10 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
       : `Start the lesson on "${topic}". Warmly greet the student and open with an engaging question to find out what they already know. Keep it short and natural.`
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
           system: systemPrompt,
           messages: [{ role: 'user', content: openingPrompt }]
@@ -207,11 +196,10 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
     const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }))
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
           system: systemPrompt,
           messages: apiMessages
