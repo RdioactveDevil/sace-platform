@@ -1,7 +1,7 @@
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 
-export default function ProfileScreen({ profile, questions, struggleMap, onBack, theme }) {
+export default function ProfileScreen({ profile, questions, struggleMap, onBack, theme, embedded }) {
   const { level, pct } = getLevelProgress(profile.xp)
   const rank  = RANKS[Math.min(level, RANKS.length - 1)]
   const rIcon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
@@ -31,7 +31,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack,
   const nextRank      = RANKS[Math.min(level + 1, RANKS.length - 1)]
 
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ minHeight: embedded ? 'auto' : '100vh', background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 900, padding: '36px 40px', animation: 'fadeUp 0.4s ease' }}>
@@ -48,7 +48,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack,
                   <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, marginBottom: 4 }}>CURRENT RANK</div>
                   <div style={{ fontSize: 28, fontWeight: 800, color: t.text }}>{rank}</div>
                   <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Level {level} · {profile.xp.toLocaleString()} XP</div>
-                  {nextRank !== rank && <div style={{ fontSize: 12, color: t.accent, marginTop: 6 }}>Next: {nextRank} →</div>}
+                  {nextRank !== rank && <div style={{ fontSize: 12, color: '#f1be43', marginTop: 6 }}>Next: {nextRank} →</div>}
                 </div>
                 <div style={{ fontSize: 52 }}>{rIcon}</div>
               </div>
@@ -60,7 +60,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack,
                   <span style={{ fontSize: 12, color: t.textMuted }}>{profile.xp.toLocaleString()} XP</span>
                 </div>
                 <div style={{ background: t.border, borderRadius: 6, height: 8, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${t.accent},${t.accentBlue})`, borderRadius: 6, transition: 'width 0.9s' }} />
+                  <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#f1be43,#f9d87a)', borderRadius: 6, transition: 'width 0.9s' }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                   <span style={{ fontSize: 11, color: t.textMuted }}>Level {level}</span>
@@ -103,7 +103,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, onBack,
                 <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Your Stats</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {[
-                    { label:'Total XP',    val:profile.xp.toLocaleString(), color:t.accent },
+                    { label:'Total XP',    val:profile.xp.toLocaleString(), color:'#f1be43' },
                     { label:'Accuracy',    val:`${accuracy}%`, color:accuracy>70?t.success:accuracy>40?t.xp:t.danger },
                     { label:'Questions',   val:totalAttempts, color:t.purple },
                     { label:'Best Streak', val:`${profile.best_streak||0}🔥`, color:t.xp },
