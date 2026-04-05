@@ -151,40 +151,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ ...card, padding: '16px 20px' }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: t.text }}>New Session</div>
 
-            <div style={{ marginBottom: 14 }}>
-              {Object.entries(topicGroups).map(([topic, s]) => {
-                const pct    = s.total > 0 ? s.attempted / s.total : 0
-                const acc    = s.attempted > 0 ? s.correct / s.attempted : null
-                const dotCol = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? GOLD : t.danger
-                return (
-                  <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 4px' }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
-                    <span style={{ fontSize: 13, color: t.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</span>
-                    <div style={{ width: 56, background: t.border, borderRadius: 3, height: 3, overflow: 'hidden', flexShrink: 0 }}>
-                      <div style={{ width: `${pct*100}%`, height: '100%', background: GOLD }} />
-                    </div>
-                    <span style={{ fontSize: 11, color: t.textFaint, width: 38, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {topStruggles.length > 0 && (
-              <div style={{ background: theme === 'dark' ? 'rgba(239,68,68,0.06)' : '#fff5f5', border: `1px solid ${theme === 'dark' ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.15)'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>⚡ Priority Queue</div>
-                {topStruggles.slice(0, 3).map((s, i) => (
-                  <div key={s.q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: i < 2 ? `1px solid ${t.border}` : 'none' }}>
-                    <span style={{ fontSize: 13, color: t.textSub, flex: 1, marginRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}% error</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
+            {/* Session action buttons — at the top */}
             {(() => {
               const counts = getQuestionCounts(questions, struggleMap)
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                   {counts.unseen > 0 ? (
                     <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 24px rgba(241,190,67,0.35)` }}>
                       Start Session · {counts.unseen} new question{counts.unseen !== 1 ? 's' : ''} →
@@ -211,6 +182,25 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 </div>
               )
             })()}
+
+            {/* Topic progress — below buttons */}
+            <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 14 }}>
+              {Object.entries(topicGroups).map(([topic, s]) => {
+                const pct    = s.total > 0 ? s.attempted / s.total : 0
+                const acc    = s.attempted > 0 ? s.correct / s.attempted : null
+                const dotCol = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? GOLD : t.danger
+                return (
+                  <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 4px' }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
+                    <span style={{ fontSize: 13, color: t.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</span>
+                    <div style={{ width: 56, background: t.border, borderRadius: 3, height: 3, overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{ width: `${pct*100}%`, height: '100%', background: GOLD }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: t.textFaint, width: 38, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           {/* Mobile-only cards — shown below session card on small screens */}
