@@ -46,24 +46,24 @@ export function computeWeights(questions, struggleMap) {
  *
  * Within the eligible pool, adaptive weighting still applies.
  */
-export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new') {
+export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new', subtopics = []) {
+  // Apply subtopic filter first
+  const questionPool = subtopics.length > 0 ? questions.filter(q => subtopics.includes(q.subtopic)) : questions
+
   // Filter by mode
   let pool
   if (mode === 'new') {
-    // Unseen = never attempted at all (no entry in struggleMap or attempts === 0)
-    pool = questions.filter(q => {
+    pool = questionPool.filter(q => {
       const s = struggleMap[q.id]
       return (!s || s.attempts === 0) && !sessionAnsweredIds.includes(q.id)
     })
   } else if (mode === 'wrong') {
-    // Wrong = has at least one wrong answer
-    pool = questions.filter(q => {
+    pool = questionPool.filter(q => {
       const s = struggleMap[q.id]
       return s && s.wrong > 0 && !sessionAnsweredIds.includes(q.id)
     })
   } else {
-    // 'all' mode — skip only within current session
-    pool = questions.filter(q => !sessionAnsweredIds.includes(q.id))
+    pool = questionPool.filter(q => !sessionAnsweredIds.includes(q.id))
   }
 
   if (!pool.length) return null  // caller handles this
@@ -87,10 +87,11 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
 /**
  * Count unseen, wrong, and total questions for session start UI.
  */
-export function getQuestionCounts(questions, struggleMap) {
-  const unseen = questions.filter(q => !struggleMap[q.id] || struggleMap[q.id].attempts === 0).length
-  const wrong  = questions.filter(q => struggleMap[q.id]?.wrong > 0).length
-  return { unseen, wrong, total: questions.length }
+export function getQuestionCounts(questions, struggleMap, subtopics = []) {
+  const pool   = subtopics.length > 0 ? questions.filter(q => subtopics.includes(q.subtopic)) : questions
+  const unseen = pool.filter(q => !struggleMap[q.id] || struggleMap[q.id].attempts === 0).length
+  const wrong  = pool.filter(q => struggleMap[q.id]?.wrong > 0).length
+  return { unseen, wrong, total: pool.length }
 }
 
 /**

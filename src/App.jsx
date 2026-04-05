@@ -117,7 +117,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
   const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: t.bg }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
 
       {!isMobile && (
@@ -165,7 +165,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 // This prevents unmount/remount on tab switch — no reload flashes, state preserved
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
-  onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme,
+  onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
@@ -252,6 +252,7 @@ function AppInner() {
   const [quizAiTip,       setQuizAiTip]       = useState('')
   const [quizLoadingTip,  setQuizLoadingTip]  = useState(false)
   const [quizMode,        setQuizMode]        = useState('new')
+  const [quizSubtopics,   setQuizSubtopics]   = useState([])
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -321,6 +322,7 @@ function AppInner() {
     setQuizQNumber(1)
     setQuizSessionXP(0)
     setQuizMode('new')
+    setQuizSubtopics([])
     navigate('/home')
   }
 
@@ -344,6 +346,7 @@ function AppInner() {
     sessionAnswered: quizAnswered, setSessionAnswered: setQuizAnswered,
     qNumber: quizQNumber,      setQNumber: setQuizQNumber,
     quizMode,                  setQuizMode,
+    quizSubtopics,             setQuizSubtopics,
     aiTip: quizAiTip,          setAiTip: setQuizAiTip,
     loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
   }
@@ -415,7 +418,7 @@ function AppInner() {
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={() => navigate('/quiz')} />
+          onStartSession={(opts) => { if(opts?.mode) setQuizMode(opts.mode); if(opts?.subtopics) setQuizSubtopics(opts.subtopics || []); navigate('/quiz') }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
     </Routes>
   )

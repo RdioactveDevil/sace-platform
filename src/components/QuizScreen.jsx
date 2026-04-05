@@ -36,6 +36,7 @@ export default function QuizScreen({
   aiTip:           _aiTip,           setAiTip,
   loadingTip:      _loadingTip,      setLoadingTip,
   quizMode:        _quizMode,        setQuizMode,
+  quizSubtopics:   _quizSubtopics,
 }) {
   const t = THEMES[theme]
 
@@ -69,12 +70,13 @@ export default function QuizScreen({
   const aiTip           = _aiTip           ?? ''
   const loadingTip      = _loadingTip      ?? false
   const quizMode        = _quizMode        ?? 'new'
+  const quizSubtopics   = _quizSubtopics   ?? []
 
   const navigate    = useNavigate()
   const location    = useLocation()
 
-  const loadNext = useCallback((answered, map, mode = 'new') => {
-    const q = selectNextQuestion(questions, map, answered, mode)
+  const loadNext = useCallback((answered, map, mode = 'new', subtopics = []) => {
+    const q = selectNextQuestion(questions, map, answered, mode, subtopics)
     if (!q) {
       setFinished(true)
       return
@@ -96,7 +98,7 @@ export default function QuizScreen({
     // Only load first question if no session in progress
     if (!_currentQ) {
       init()
-      loadNext([], struggleMap, 'new')
+      loadNext([], struggleMap, 'new', quizSubtopics)
     }
   }, [])
 
@@ -151,7 +153,7 @@ export default function QuizScreen({
     const newAnswered = [...sessionAnswered, currentQ.id]
     setSessionAnswered(newAnswered)
     setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode); return prev })
+    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, quizSubtopics); return prev })
   }
 
   const counts = getQuestionCounts(questions, struggleMap)
@@ -165,7 +167,7 @@ export default function QuizScreen({
       setQNumber(1)
       setSessionXP(0)
       setFinished(false)
-      loadNext([], struggleMap, mode)
+      loadNext([], struggleMap, mode, quizSubtopics)
     }
     return (
       <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
