@@ -81,8 +81,11 @@ export default function QuizScreen({
     async function init() {
       await createSession(profile.id, 'Chemistry')
     }
-    init()
-    loadNext([], struggleMap)
+    // Only load first question if no session in progress
+    if (!_currentQ) {
+      init()
+      loadNext([], struggleMap)
+    }
   }, [])
 
   const handleAnswer = async (idx) => {
@@ -180,35 +183,6 @@ export default function QuizScreen({
         </div>
       </div>
 
-      {/* Session stats */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
-          {[
-            { label: 'Correct', val: sessionCorrect,              color: '#10b981' },
-            { label: 'Wrong',   val: sessionTotal - sessionCorrect, color: '#ef4444' },
-            { label: 'XP',      val: `+${sessionXP}`,             color: GOLD      },
-            { label: 'Streak',  val: streak > 0 ? `🔥${streak}` : '—', color: '#f59e0b' },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.val}</div>
-              <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-        {/* Question bubbles */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {sessionResults.map((r, i) => (
-            <div key={i} style={{ width: 20, height: 20, borderRadius: '50%', background: r.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `1.5px solid ${r.correct ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: r.correct ? '#4ade80' : '#f87171' }}>
-              {i + 1}
-            </div>
-          ))}
-          <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(241,190,67,0.2)', border: `1.5px solid ${GOLD}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: GOLD }}>
-            {qNumber}
-          </div>
-        </div>
-      </div>
-
       {/* Nav */}
       <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
         {NAV_ITEMS.map(item => {
@@ -223,7 +197,32 @@ export default function QuizScreen({
         })}
       </nav>
 
-      <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+      {/* Session stats — below nav */}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+        <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
+          {[
+            { label: 'Correct', val: sessionCorrect,                   color: '#10b981' },
+            { label: 'Wrong',   val: sessionTotal - sessionCorrect,    color: '#ef4444' },
+            { label: 'XP',      val: `+${sessionXP}`,                  color: GOLD      },
+            { label: 'Streak',  val: streak > 0 ? `🔥 ${streak}` : '—', color: '#f59e0b' },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.val}</div>
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
+          {sessionResults.map((r, i) => (
+            <div key={i} style={{ width: 20, height: 20, borderRadius: '50%', background: r.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `1.5px solid ${r.correct ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: r.correct ? '#4ade80' : '#f87171' }}>
+              {i + 1}
+            </div>
+          ))}
+          <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(241,190,67,0.2)', border: `1.5px solid ${GOLD}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: GOLD }}>
+            {qNumber}
+          </div>
+        </div>
         <button onClick={() => { setShowExit(true); onClose?.() }} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
           ✕ End Session
         </button>
@@ -384,7 +383,7 @@ export default function QuizScreen({
                       💡 {currentQ.tip}
                     </div>
                   )}
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting Titan AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
                   {aiTip && (
                     <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
                       🤖 {aiTip}
@@ -418,7 +417,7 @@ export default function QuizScreen({
                     </div>
                   )}
 
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting Titan AI tip…</div>}
                   {aiTip && (
                     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
                       🤖 {aiTip}
