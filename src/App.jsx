@@ -164,13 +164,15 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 // ── AppShellScreens — all screens always mounted, toggled via display:none ───
 // This prevents unmount/remount on tab switch — no reload flashes, state preserved
 function AppShellScreens({
-  screen, profile, questions, struggleMap, setStruggleMap, subject,
+  profile, questions, struggleMap, setStruggleMap, subject,
   onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
 }) {
   const navigate   = useNavigate()
+  const location   = useLocation()
+  const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName }
   const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut }
@@ -403,58 +405,15 @@ function AppInner() {
               onHome={() => navigate('/question-bank')} />
       } />
 
-      {/* All shell routes — single always-mounted AppShell, screens toggled via display */}
-      <Route path="/question-bank" element={
+      {/* Single shell route — AppShellScreens stays mounted across ALL tab switches */}
+      <Route path="/*" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShellScreens {...shellProps} screen="question-bank" {...learnState}
+        <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
           onStartSession={() => navigate('/quiz')} />
       } />
-      <Route path="/learn" element={
-        !(user && profile) ? <Navigate to="/home" replace /> :
-        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShellScreens {...shellProps} screen="learn" {...learnState}
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={() => navigate('/quiz')} />
-      } />
-      <Route path="/leaderboard" element={
-        !(user && profile) ? <Navigate to="/home" replace /> :
-        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShellScreens {...shellProps} screen="leaderboard" {...learnState}
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={() => navigate('/quiz')} />
-      } />
-      <Route path="/my-progress" element={
-        !(user && profile) ? <Navigate to="/home" replace /> :
-        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShellScreens {...shellProps} screen="my-progress" {...learnState}
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={() => navigate('/quiz')} />
-      } />
-      <Route path="/study-plan" element={
-        !(user && profile) ? <Navigate to="/home" replace /> :
-        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShellScreens {...shellProps} screen="study-plan" {...learnState}
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={() => navigate('/quiz')} />
-      } />
-      <Route path="/history" element={
-        !(user && profile) ? <Navigate to="/home" replace /> :
-        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        <AppShellScreens {...shellProps} screen="history" {...learnState}
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={() => navigate('/quiz')} />
-      } />
-
-      {/* Catch-all */}
-      <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )
 }
