@@ -1,101 +1,71 @@
 import { useState, useEffect, useRef } from 'react'
 import { THEMES } from '../lib/theme'
-import { supabase } from '../lib/supabase'
 
-// ─── DOCUMENT UPLOAD & PROCESSING ─────────────────────────────────────────────
-async function extractTextFromFile(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = (e) => resolve(e.target.result)
-    if (file.type === 'text/plain') {
-      reader.readAsText(file)
-    } else {
-      // For pptx/docx we read as base64 and send to Claude to extract
-      reader.readAsDataURL(file)
-    }
-  })
-}
+const GOLD   = '#f1be43'
+const GOLDL  = '#f9d87a'
+const NAVY   = '#0c1037'
+const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-// ─── TUTOR SYSTEM PROMPT ──────────────────────────────────────────────────────
-function buildSystemPrompt(profile, topic, docContext, struggleTopics, interests = 'sport') {
+// ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
+function buildSystemPrompt(profile, topic, docContext, struggleTopics, interests) {
   const struggleList = struggleTopics.length > 0
     ? struggleTopics.map(s => `${s.subtopic} (${Math.round(s.rate * 100)}% error rate)`).join(', ')
     : 'No specific weaknesses identified yet'
 
   const analogyGuide = {
-    sport: 'Use sport analogies — AFL, cricket, soccer, basketball. Think of reactions as plays, molecules as players, energy as fitness, equilibrium as a tied game.',
-    gaming: 'Use gaming analogies — think of reactions as quests, molecules as characters, energy as health points, equilibrium as a balanced match.',
-    music: 'Use music analogies — think of reactions as songs, molecules as instruments, energy as volume, equilibrium as harmony.',
+    sport:  'Use sport analogies — AFL, cricket, soccer, basketball. Reactions = plays, molecules = players, energy = fitness, equilibrium = a tied game.',
+    gaming: 'Use gaming analogies — reactions = quests, molecules = characters, energy = health points, equilibrium = a balanced match.',
+    music:  'Use music analogies — reactions = songs, molecules = instruments, energy = volume, equilibrium = harmony.',
   }
 
-  return `You are Titan, a SACE tutor for ${profile.display_name}. You work for Titanium Tutoring.
+  return `You are Titan AI, a SACE tutor for ${profile.display_name}. You work for Titanium Tutoring (gradefarm.).
 
 STUDENT PROFILE:
 - Name: ${profile.display_name.split(' ')[0]}
-- Current topic: ${topic || 'General Chemistry'}
+- Topic today: ${topic || 'General Chemistry'}
 - Known weaknesses: ${struggleList}
-- Preferred analogy style: ${interests}
+- Analogy style: ${interests}
 
 YOUR PERSONALITY:
-- Warm, encouraging, never condescending or robotic
-- You feel like a cool older student who genuinely gets it and wants to help
-- You celebrate wins: "Yes! Exactly right." "That's it — you've got it."
-- When wrong: never say "wrong" — say "almost, think about it this way..." or "close! the key thing you're missing is..."
-- You're patient. If they don't get it, you try a completely different angle.
-- You occasionally use light humour to keep things engaging
+- Warm, encouraging, never condescending
+- You feel like a cool older student who genuinely gets it
+- Celebrate wins: "Yes! Exactly right." "That's it!"
+- When wrong: never say "wrong" — say "almost, think about it this way..."
+- Patient — if they don't get it, try a completely different angle
 
 YOUR TEACHING METHOD:
-- NEVER start with a formula. Always start with a story, scenario or question.
-- Ask questions constantly — never lecture more than 2-3 sentences without checking in
-- Break every complex idea into the smallest possible steps
+- NEVER start with a formula. Always start with a story or scenario
+- Ask questions constantly — never lecture more than 2–3 sentences without checking in
 - ${analogyGuide[interests] || analogyGuide.sport}
 - Use "imagine..." and "picture this..." to set up scenarios
 - After explaining, always ask: "Does that click? Want me to try a different way?"
-- Celebrate every correct answer, even partial ones
+- Keep responses short — 3–4 sentences max, then ask something
+- Use **bold** for key terms when first introduced
 
-REAL-WORLD TEACHING EXAMPLES:
-- pH scale → "Think of it like the AFL injury scale. 0 is the most brutal injury possible (strongest acid), 14 is basically uninjured (strongest base), 7 is neutral — no injury. Each level is 10× worse than the last."
-- Moles → "A mole is like a team roster. You don't say 'I have 6,020,000,000,000,000,000,000,000 atoms' just like you don't say 'I have 1 player per atom'. You say 1 mole — like saying '1 team'."
-- Ionic bonding → "Metal atoms are like that generous teammate who always gives away the ball (electrons). Non-metals are the selfish ones who always want the ball. Ionic bonding is when the generous one finally gives it up and both are happy."
-- Equilibrium → "It's like a game that never ends but stays at a draw. Both teams keep scoring but the scoreline never changes — that's dynamic equilibrium."
+DOCUMENT CONTEXT (teach from this if provided):
+${docContext || 'No document uploaded — use general SACE curriculum knowledge.'}
 
-LESSON STRUCTURE:
-1. Start by finding out what they already know ("Before we dive in, what do you already know about X?")
-2. Hook them with a real-world scenario
-3. Build the concept step by step, checking in constantly
-4. Give a worked example together ("Let's do this one together")
-5. Give them one to try solo ("Your turn — have a go")
-6. Summarise the key points in dot points at the end
-
-DOCUMENT CONTEXT (this is their actual school material — teach from this):
-${docContext || 'No document uploaded yet — use general SACE curriculum knowledge for this topic.'}
-
-IMPORTANT:
-- Keep responses conversational and not too long — 3-5 sentences max per turn, then ask something
-- Use line breaks generously to avoid walls of text
-- If they ask something off-topic, say "Good question — let's park that for now and come back once we nail this"
-- Always end your turn with either a question or an invitation to respond
-- Format key terms in **bold** when first introduced`
+IMPORTANT: Always end your turn with a question or invitation to respond.`
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function LearnScreen({ profile, struggleMap, questions, subject, onBack, theme }) {
   const t = THEMES[theme]
 
-  const [phase, setPhase]             = useState('setup') // setup | chat
-  const [topic, setTopic]             = useState('')
-  const [messages, setMessages]       = useState([])
-  const [input, setInput]             = useState('')
-  const [loading, setLoading]         = useState(false)
-  const [docContext, setDocContext]    = useState('')
-  const [docName, setDocName]         = useState('')
+  const [phase, setPhase]           = useState('setup')
+  const [topic, setTopic]           = useState('')
+  const [messages, setMessages]     = useState([])
+  const [input, setInput]           = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [docContext, setDocContext]  = useState('')
+  const [docName, setDocName]       = useState('')
   const [uploadingDoc, setUploadingDoc] = useState(false)
-  const [interests, setInterests]     = useState('sport')
+  const [interests, setInterests]   = useState('sport')
+
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
   const fileRef   = useRef(null)
 
-  // Build struggle list from quiz data
   const struggleTopics = Object.entries(struggleMap)
     .map(([qid, s]) => {
       const q = questions.find(x => x.id === qid)
@@ -110,324 +80,342 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Handle document upload
+  // Document upload
   const handleDocUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
     setUploadingDoc(true)
     setDocName(file.name)
-
     try {
-      // Send file to Claude to extract text content
       const reader = new FileReader()
       reader.onload = async (ev) => {
-        const base64 = ev.target.result.split(',')[1]
-        const mediaType = file.type || 'application/octet-stream'
-
-        const res = await fetch('/api/chat', {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
             max_tokens: 1000,
             messages: [{
               role: 'user',
-              content: 'Extract all the educational content from this uploaded document. Return it as clean, structured text organized by topic. Include all key concepts, definitions, formulas, and examples. Be comprehensive. (Note: document processing via this endpoint - summarise key SACE chemistry concepts for a tutor.)'
+              content: [
+                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ev.target.result.split(',')[1] } },
+                { type: 'text', text: 'Extract all educational content from this document. Return clean structured text organised by topic. Include all key concepts, definitions, formulas and examples.' }
+              ]
             }]
           })
         })
-
         const data = await res.json()
-        const extracted = data.content?.[0]?.text || ''
-        setDocContext(extracted.slice(0, 8000)) // limit context size
+        setDocContext((data.content?.[0]?.text || '').slice(0, 8000))
         setUploadingDoc(false)
       }
       reader.readAsDataURL(file)
-    } catch (err) {
-      console.error(err)
+    } catch {
       setUploadingDoc(false)
     }
   }
 
-  // Start the lesson
+  // Start lesson
   const startLesson = async () => {
     if (!topic.trim()) return
     setPhase('chat')
     setLoading(true)
-
     const systemPrompt = buildSystemPrompt(profile, topic, docContext, struggleTopics, interests)
-
-    const openingPrompt = struggleTopics.length > 0 && struggleTopics[0]
-      ? `Start the lesson. The student's biggest weakness is "${struggleTopics[0].subtopic}". Begin by warmly greeting them, acknowledging what they want to learn (${topic}), and opening with an engaging question to find out what they already know. Keep it short and natural.`
-      : `Start the lesson on "${topic}". Warmly greet the student and open with an engaging question to find out what they already know. Keep it short and natural.`
-
+    const openingPrompt = `Start the lesson on "${topic}". Warmly greet ${profile.display_name.split(' ')[0]} and open with a short engaging question to find out what they already know. Keep it brief and natural.`
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: openingPrompt }]
-        })
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
       })
       const data = await res.json()
-      const reply = data.content?.[0]?.text || "Hey! Let's get started. What do you already know about this topic?"
-
-      setMessages([{ role: 'assistant', content: reply, timestamp: Date.now() }])
-    } catch (err) {
-      setMessages([{ role: 'assistant', content: "Hey! I'm Titan, your SACE tutor. Let's dive in — what do you already know about this topic?", timestamp: Date.now() }])
+      setMessages([{ role: 'assistant', content: data.content?.[0]?.text || "Hey! Let's dive in. What do you already know about this topic?" }])
+    } catch {
+      setMessages([{ role: 'assistant', content: "Hey! I'm Titan AI, your SACE tutor. What do you already know about this topic?" }])
     }
     setLoading(false)
     setTimeout(() => inputRef.current?.focus(), 100)
   }
 
-  // Send a message
+  // Send message
   const sendMessage = async () => {
     if (!input.trim() || loading) return
-    const userMsg = { role: 'user', content: input.trim(), timestamp: Date.now() }
+    const userMsg = { role: 'user', content: input.trim() }
     const newMessages = [...messages, userMsg]
     setMessages(newMessages)
     setInput('')
     setLoading(true)
-
-    const systemPrompt = buildSystemPrompt(profile, topic, docContext, struggleTopics, interests)
-
-    // Build conversation history for API
-    const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }))
-
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: apiMessages
+          model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+          system: buildSystemPrompt(profile, topic, docContext, struggleTopics, interests),
+          messages: newMessages.map(m => ({ role: m.role, content: m.content }))
         })
       })
       const data = await res.json()
-      const reply = data.content?.[0]?.text || "Let me think about that differently..."
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, timestamp: Date.now() }])
+      setMessages(prev => [...prev, { role: 'assistant', content: data.content?.[0]?.text || "Let me try a different approach..." }])
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I had a connection issue. Can you try again?", timestamp: Date.now() }])
+      setMessages(prev => [...prev, { role: 'assistant', content: "Connection issue — try again?" }])
     }
     setLoading(false)
     setTimeout(() => inputRef.current?.focus(), 100)
   }
 
-  // Format message text — bold, line breaks
-  const formatMessage = (text) => {
-    return text.split('\n').map((line, i) => {
-      const parts = line.split(/\*\*(.*?)\*\*/g)
-      return (
-        <span key={i}>
-          {parts.map((part, j) =>
-            j % 2 === 1
-              ? <strong key={j} style={{ color: t.text, fontWeight: 700 }}>{part}</strong>
-              : part
-          )}
-          {i < text.split('\n').length - 1 && <br />}
-        </span>
-      )
-    })
-  }
+  // Format bold + line breaks
+  const formatMessage = (text) => text.split('\n').map((line, i) => (
+    <span key={i}>
+      {line.split(/\*\*(.*?)\*\*/g).map((part, j) =>
+        j % 2 === 1 ? <strong key={j} style={{ color: t.text, fontWeight: 700 }}>{part}</strong> : part
+      )}
+      {i < text.split('\n').length - 1 && <br />}
+    </span>
+  ))
 
-  // ── SETUP SCREEN ────────────────────────────────────────────────────────────
+  const STYLE_OPTS = [
+    { id: 'sport',  emoji: '🏈', label: 'Sport',  desc: 'AFL, cricket' },
+    { id: 'gaming', emoji: '🎮', label: 'Gaming', desc: 'RPGs, strategy' },
+    { id: 'music',  emoji: '🎵', label: 'Music',  desc: 'beats, harmony' },
+  ]
+
+  // ── SETUP PHASE ─────────────────────────────────────────────────────────────
   if (phase === 'setup') return (
-    <div style={{ minHeight: '100vh', background: t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}>
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    <div style={{ color: t.text, fontFamily: FONT_B }}>
+      <style>{`
+        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        .ls-wrap { display:flex; min-height:calc(100vh - 64px); }
+        .ls-sidebar { width:260px; flex-shrink:0; padding:28px 24px; border-right:1px solid rgba(255,255,255,0.07); display:flex; flex-direction:column; gap:16px; background:#080d28; }
+        .ls-main { flex:1; padding:28px 32px; }
+        @media(max-width:860px){
+          .ls-wrap { flex-direction:column; }
+          .ls-sidebar { width:100%; border-right:none; border-bottom:1px solid rgba(255,255,255,0.07); padding:16px; gap:12px; }
+          .ls-main { padding:16px; }
+        }
+        input::placeholder{color:#334155;}
+        input:focus{border-color:${GOLD} !important; outline:none;}
+        textarea:focus{border-color:${GOLD} !important; outline:none;}
+      `}</style>
 
-      <div style={{ width: '100%', maxWidth: 520, animation: 'fadeUp 0.4s ease' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎓</div>
+      {/* Gold hero header */}
+      <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.12),rgba(241,190,67,0.04))`, borderBottom: `1px solid rgba(241,190,67,0.2)`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎓</div>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
+        </div>
+      </div>
+
+      <div className="ls-wrap">
+
+        {/* Sidebar — weak topics */}
+        <div className="ls-sidebar">
           <div>
-            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: t.text }}>Learn with Titan</h1>
-            <p style={{ margin: 0, fontSize: 13, color: t.textMuted }}>Your personal SACE tutor</p>
-          </div>
-        </div>
-
-        {struggleTopics.length > 0 && (
-          <div style={{ background: theme === 'dark' ? 'rgba(239,68,68,0.06)' : '#fff5f5', border: `1px solid ${theme === 'dark' ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.15)'}`, borderRadius: 12, padding: '12px 16px', marginTop: 16, marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>⚡ Titan suggests tackling these first</div>
-            {struggleTopics.slice(0, 3).map(s => (
-              <button key={s.subtopic} onClick={() => setTopic(s.subtopic)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', marginBottom: 4, borderRadius: 8, border: `1px solid ${t.border}`, background: topic === s.subtopic ? `${t.accent}15` : t.bgCard, color: topic === s.subtopic ? t.accent : t.textSub, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif', transition: 'all 0.15s'" }}>
-                {s.subtopic} <span style={{ color: t.danger, fontSize: 11, marginLeft: 6 }}>{Math.round(s.rate * 100)}% error rate</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Topic input */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: t.text, display: 'block', marginBottom: 8 }}>
-            What do you want to learn today?
-          </label>
-          <input
-            value={topic}
-            onChange={e => setTopic(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && startLesson()}
-            placeholder="e.g. pH calculations, Ionic bonding, The mole..."
-            style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: 'none', boxSizing: 'border-box' }}
-          />
-        </div>
-
-        {/* Teaching style */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: t.text, display: 'block', marginBottom: 8 }}>
-            How should Titan explain things?
-          </label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[{ id: 'sport', label: '🏈 Sport', desc: 'AFL, cricket, soccer' }, { id: 'gaming', label: '🎮 Gaming', desc: 'RPGs, strategy' }, { id: 'music', label: '🎵 Music', desc: 'beats, harmony' }].map(opt => (
-              <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ flex: 1, padding: '10px 8px', borderRadius: 10, border: `2px solid ${interests === opt.id ? t.accent : t.border}`, background: interests === opt.id ? `${t.accent}12` : t.bgCard, color: interests === opt.id ? t.accent : t.textMuted, fontSize: 12, fontWeight: interests === opt.id ? 700 : 500, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s', textAlign: 'center' }}>
-                <div>{opt.label}</div>
-                <div style={{ fontSize: 10, marginTop: 2, opacity: 0.7 }}>{opt.desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Document upload */}
-        <div style={{ marginBottom: 24 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: t.text, display: 'block', marginBottom: 8 }}>
-            Upload your class notes (optional)
-          </label>
-          <div
-            onClick={() => fileRef.current?.click()}
-            style={{ border: `2px dashed ${docContext ? t.accent : t.border}`, borderRadius: 12, padding: '16px', textAlign: 'center', cursor: 'pointer', background: docContext ? `${t.accent}08` : 'transparent', transition: 'all 0.2s' }}
-          >
-            {uploadingDoc ? (
-              <div style={{ color: t.textMuted, fontSize: 13 }}>Processing document…</div>
-            ) : docContext ? (
-              <div>
-                <div style={{ fontSize: 20, marginBottom: 4 }}>✅</div>
-                <div style={{ fontSize: 13, color: t.accent, fontWeight: 600 }}>{docName}</div>
-                <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>Titan will teach from your notes</div>
+            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>⚡ Titan suggests</div>
+            {struggleTopics.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {struggleTopics.slice(0, 4).map(s => (
+                  <button key={s.subtopic} onClick={() => setTopic(s.subtopic)} style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: `1px solid ${topic === s.subtopic ? GOLD : 'rgba(255,255,255,0.1)'}`, background: topic === s.subtopic ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.04)', cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: topic === s.subtopic ? GOLD : '#e2e8f0', marginBottom: 2 }}>{s.subtopic}</div>
+                    <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>{Math.round(s.rate * 100)}% error rate</div>
+                  </button>
+                ))}
               </div>
             ) : (
-              <div>
-                <div style={{ fontSize: 24, marginBottom: 4 }}>📄</div>
-                <div style={{ fontSize: 13, color: t.textMuted }}>Click to upload PDF, PPTX or DOCX</div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Titan will teach from your actual class content</div>
-              </div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6 }}>Do some quiz sessions first — Titan will suggest your weakest topics here.</div>
             )}
           </div>
-          <input ref={fileRef} type="file" accept=".pdf,.pptx,.docx,.txt" onChange={handleDocUpload} style={{ display: 'none' }} />
+
+          {/* Upload */}
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600, marginBottom: 8 }}>UPLOAD CLASS NOTES</div>
+            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${docContext ? GOLD : 'rgba(255,255,255,0.12)'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: docContext ? 'rgba(241,190,67,0.06)' : 'transparent', transition: 'all 0.2s' }}>
+              {uploadingDoc ? (
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Processing…</div>
+              ) : docContext ? (
+                <>
+                  <div style={{ fontSize: 18, marginBottom: 4 }}>✅</div>
+                  <div style={{ fontSize: 11, color: GOLD, fontWeight: 600 }}>{docName.slice(0, 24)}{docName.length > 24 ? '…' : ''}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>Titan will teach from your notes</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>📄</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>PDF, PPTX or DOCX</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>optional</div>
+                </>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept=".pdf,.pptx,.docx,.txt" onChange={handleDocUpload} style={{ display: 'none' }} />
+          </div>
         </div>
 
-        <button
-          onClick={startLesson}
-          disabled={!topic.trim() || uploadingDoc}
-          style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: topic.trim() && !uploadingDoc ? `linear-gradient(135deg,${t.accent},${t.accentBlue})` : t.border, color: topic.trim() ? '#fff' : t.textFaint, fontSize: 15, fontWeight: 800, cursor: topic.trim() ? 'pointer' : 'default', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: topic.trim() ? `0 8px 28px ${t.accent}40` : 'none', transition: 'all 0.2s' }}
-        >
-          Start Learning →
-        </button>
+        {/* Main — topic + style + start */}
+        <div className="ls-main">
+          <div style={{ maxWidth: 540 }}>
+
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: 8 }}>
+              What do you want to learn today?
+            </label>
+            <input
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && startLesson()}
+              placeholder="e.g. pH calculations, Ionic bonding, The mole..."
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.05)', color: '#f1f5f9', fontSize: 14, fontFamily: FONT_B, boxSizing: 'border-box', marginBottom: 20 }}
+            />
+
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: 10 }}>
+              How should Titan AI explain things?
+            </label>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 28 }}>
+              {STYLE_OPTS.map(opt => {
+                const active = interests === opt.id
+                return (
+                  <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, border: `2px solid ${active ? GOLD : 'rgba(255,255,255,0.1)'}`, background: active ? GOLD : 'rgba(255,255,255,0.04)', color: active ? '#0c1037' : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>{opt.emoji}</div>
+                    <div>{opt.label}</div>
+                    <div style={{ fontSize: 10, marginTop: 2, fontWeight: 500, opacity: 0.75 }}>{opt.desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+
+            <button onClick={startLesson} disabled={!topic.trim() || uploadingDoc} style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: topic.trim() && !uploadingDoc ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.08)', color: topic.trim() ? '#0c1037' : 'rgba(255,255,255,0.3)', fontSize: 15, fontWeight: 800, cursor: topic.trim() ? 'pointer' : 'default', fontFamily: FONT_B, boxShadow: topic.trim() ? `0 8px 28px rgba(241,190,67,0.35)` : 'none', transition: 'all 0.2s' }}>
+              Start lesson with Titan AI →
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
 
-  // ── CHAT / LESSON SCREEN ────────────────────────────────────────────────────
+  // ── CHAT PHASE ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100vh', background: t.bg, color: t.text, fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 0px)', color: t.text, fontFamily: FONT_B }}>
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        .msg-bubble { animation: fadeUp 0.25s ease; }
+        .msg-in { animation: fadeUp 0.2s ease; }
+        .ls-chat-desktop { display:flex; flex:1; min-height:0; }
+        .ls-chat-aside { width:220px; flex-shrink:0; border-right:1px solid rgba(255,255,255,0.07); padding:16px; background:#080d28; display:flex; flex-direction:column; gap:12px; overflow-y:auto; }
+        .ls-chat-body { flex:1; display:flex; flex-direction:column; min-width:0; }
+        @media(max-width:860px){
+          .ls-chat-desktop { flex-direction:column; }
+          .ls-chat-aside { display:none; }
+        }
       `}</style>
 
-      {/* Top bar */}
-      <div style={{ background: t.bgNav, borderBottom: `1px solid ${t.border}`, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setPhase('setup')} style={{ background: 'transparent', border: 'none', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", padding: 0 }}>←</button>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🎓</div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Titan</div>
-            <div style={{ fontSize: 11, color: t.accent }}>Teaching: {topic}</div>
+      {/* Gold hero header — always visible in chat */}
+      <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.14),rgba(241,190,67,0.05))`, borderBottom: `1px solid rgba(241,190,67,0.2)`, padding: '12px 18px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>🎓</div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Titan <span style={{ color: GOLD }}>AI</span></div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Teaching: <span style={{ color: GOLD, fontWeight: 600 }}>{topic}</span></div>
+            </div>
+          </div>
+          {/* Style switcher — always accessible */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {STYLE_OPTS.map(opt => {
+              const active = interests === opt.id
+              return (
+                <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ padding: '5px 10px', borderRadius: 20, border: `1px solid ${active ? GOLD : 'rgba(255,255,255,0.12)'}`, background: active ? GOLD : 'transparent', color: active ? '#0c1037' : 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
+                  {opt.emoji} {opt.label}
+                </button>
+              )
+            })}
+            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+            <button onClick={() => setPhase('setup')} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>← Setup</button>
+            <button onClick={onBack} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>Exit</button>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {docName && <span style={{ fontSize: 11, background: `${t.accent}15`, color: t.accent, padding: '3px 8px', borderRadius: 6, border: `1px solid ${t.accent}30` }}>📄 {docName.slice(0, 20)}{docName.length > 20 ? '…' : ''}</span>}
-          <button onClick={onBack} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Exit</button>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {messages.map((msg, i) => (
-          <div key={i} className="msg-bubble" style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-end' }}>
-
-            {msg.role === 'assistant' && (
-              <div style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>🎓</div>
-            )}
-
-            <div style={{
-              maxWidth: '72%',
-              padding: '12px 16px',
-              borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-              background: msg.role === 'user'
-                ? `linear-gradient(135deg,${t.accent},${t.accentBlue})`
-                : theme === 'dark' ? '#0c1525' : '#fff',
-              color: msg.role === 'user' ? '#fff' : t.text,
-              fontSize: 14, lineHeight: 1.7,
-              border: msg.role === 'user' ? 'none' : `1px solid ${t.border}`,
-              boxShadow: theme === 'light' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
-            }}>
-              {formatMessage(msg.content)}
-            </div>
-
-            {msg.role === 'user' && (
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                {profile.display_name[0].toUpperCase()}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Typing indicator */}
-        {loading && (
-          <div className="msg-bubble" style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg,${t.accent},${t.purple})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>🎓</div>
-            <div style={{ padding: '14px 18px', borderRadius: '18px 18px 18px 4px', background: theme === 'dark' ? '#0c1525' : '#fff', border: `1px solid ${t.border}`, display: 'flex', gap: 5, alignItems: 'center' }}>
-              {[0,1,2].map(i => (
-                <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: t.accent, animation: 'pulse 1.2s ease infinite', animationDelay: `${i * 0.2}s` }} />
-              ))}
-            </div>
+        {docName && (
+          <div style={{ marginTop: 8, fontSize: 10, color: GOLD, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.2)', padding: '3px 10px', borderRadius: 6, display: 'inline-block' }}>
+            📄 {docName}
           </div>
         )}
-
-        <div ref={bottomRef} />
       </div>
 
-      {/* Quick reply suggestions */}
-      {messages.length > 0 && messages.length < 4 && !loading && (
-        <div style={{ padding: '0 20px 10px', display: 'flex', gap: 8, overflowX: 'auto' }}>
-          {["I don't understand yet", "Can you give an example?", "I think I get it!", "Try a different analogy"].map(suggestion => (
-            <button key={suggestion} onClick={() => { setInput(suggestion); setTimeout(() => { setInput(''); sendMessage() }, 0) }}
-              style={{ padding: '7px 14px', borderRadius: 20, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textSub, fontSize: 12, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {suggestion}
+      <div className="ls-chat-desktop">
+
+        {/* Desktop aside — quick suggestions + weak topics */}
+        <div className="ls-chat-aside">
+          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Quick replies</div>
+          {["I don't get it", "Give me an example", "I think I get it!", "Different analogy"].map(s => (
+            <button key={s} onClick={() => { const msg = { role: 'user', content: s }; setMessages(prev => [...prev, msg]); setLoading(true); fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:buildSystemPrompt(profile,topic,docContext,struggleTopics,interests),messages:[...messages,msg].map(m=>({role:m.role,content:m.content}))})}).then(r=>r.json()).then(d=>{setMessages(prev=>[...prev,{role:'assistant',content:d.content?.[0]?.text||'Let me try differently...'}]);setLoading(false)}).catch(()=>setLoading(false)) }}
+              style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%' }}>
+              {s}
             </button>
           ))}
+          {struggleTopics.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>Your weak spots</div>
+              {struggleTopics.slice(0, 3).map(s => (
+                <div key={s.subtopic} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.15)', background: 'rgba(239,68,68,0.05)', fontSize: 11 }}>
+                  <div style={{ color: '#fca5a5', fontWeight: 600 }}>{s.subtopic}</div>
+                  <div style={{ color: '#ef4444', fontSize: 10, marginTop: 2 }}>{Math.round(s.rate * 100)}% error</div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
-      )}
 
-      {/* Input bar */}
-      <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.border}`, background: t.bgNav, display: 'flex', gap: 10, alignItems: 'flex-end', flexShrink: 0 }}>
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-          placeholder="Type your answer or question…"
-          rows={1}
-          style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", outline: 'none', resize: 'none', maxHeight: 120, overflowY: 'auto', lineHeight: 1.5 }}
-        />
-        <button
-          onClick={sendMessage}
-          disabled={!input.trim() || loading}
-          style={{ width: 44, height: 44, borderRadius: 12, border: 'none', background: input.trim() && !loading ? `linear-gradient(135deg,${t.accent},${t.accentBlue})` : t.border, color: '#fff', fontSize: 18, cursor: input.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
-        >
-          ↑
-        </button>
+        {/* Chat body */}
+        <div className="ls-chat-body">
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {messages.map((msg, i) => (
+              <div key={i} className="msg-in" style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 8, alignItems: 'flex-end' }}>
+                {msg.role === 'assistant' && (
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>🎓</div>
+                )}
+                <div style={{ maxWidth: '75%', padding: '11px 14px', borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: msg.role === 'user' ? `linear-gradient(135deg,${GOLD},${GOLDL})` : theme === 'dark' ? '#0c1525' : '#fff', color: msg.role === 'user' ? '#0c1037' : t.text, fontSize: 14, lineHeight: 1.7, border: msg.role === 'user' ? 'none' : `1px solid ${t.border}`, fontWeight: msg.role === 'user' ? 600 : 400 }}>
+                  {formatMessage(msg.content)}
+                </div>
+                {msg.role === 'user' && (
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+                    {profile.display_name[0].toUpperCase()}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {loading && (
+              <div className="msg-in" style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>🎓</div>
+                <div style={{ padding: '12px 16px', borderRadius: '16px 16px 16px 4px', background: theme === 'dark' ? '#0c1525' : '#fff', border: `1px solid ${t.border}`, display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, animation: 'pulse 1.2s ease infinite', animationDelay: `${i*0.2}s` }} />)}
+                </div>
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Mobile quick replies */}
+          {messages.length > 0 && messages.length < 5 && !loading && (
+            <div style={{ padding: '0 16px 8px', display: 'flex', gap: 6, overflowX: 'auto' }}>
+              {["I don't get it", "Example?", "Got it!", "Different analogy"].map(s => (
+                <button key={s} onClick={() => { setInput(s); setTimeout(() => sendMessage(), 50) }} style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${t.border}`, background: t.bgCard || '#111a4a', color: 'rgba(255,255,255,0.5)', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div style={{ padding: '10px 16px', borderTop: `1px solid rgba(255,255,255,0.07)`, background: '#080d28', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
+            <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }} placeholder="Type your answer or question…" rows={1}
+              style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: `1px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.06)', color: '#f1f5f9', fontSize: 14, fontFamily: FONT_B, outline: 'none', resize: 'none', maxHeight: 100, lineHeight: 1.5 }} />
+            <button onClick={sendMessage} disabled={!input.trim() || loading}
+              style={{ width: 40, height: 40, borderRadius: 10, border: 'none', background: input.trim() && !loading ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.08)', color: input.trim() ? '#0c1037' : 'rgba(255,255,255,0.3)', fontSize: 16, fontWeight: 800, cursor: input.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
+              ↑
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
