@@ -182,6 +182,20 @@ function AppInner() {
   const [learnDocContext, setLearnDocContext]  = useState('')
   const [learnDocName,    setLearnDocName]    = useState('')
 
+  // Lifted Quiz state — persists across tab switches
+  const [quizQ,           setQuizQ]           = useState(null)
+  const [quizSelected,    setQuizSelected]    = useState(null)
+  const [quizShowAns,     setQuizShowAns]     = useState(false)
+  const [quizCorrect,     setQuizCorrect]     = useState(null)
+  const [quizEarnedXP,    setQuizEarnedXP]    = useState(0)
+  const [quizStreak,      setQuizStreak]      = useState(0)
+  const [quizSessionXP,   setQuizSessionXP]   = useState(0)
+  const [quizResults,     setQuizResults]     = useState([])
+  const [quizAnswered,    setQuizAnswered]     = useState([])
+  const [quizQNumber,     setQuizQNumber]     = useState(1)
+  const [quizAiTip,       setQuizAiTip]       = useState('')
+  const [quizLoadingTip,  setQuizLoadingTip]  = useState(false)
+
   const toggleTheme = () => {
     setTheme(prev => {
       const next = prev === 'dark' ? 'light' : 'dark'
@@ -244,6 +258,11 @@ function AppInner() {
     setLearnPhase('setup')
     setLearnMessages([])
     setLearnTopic('')
+    setQuizQ(null)
+    setQuizResults([])
+    setQuizAnswered([])
+    setQuizQNumber(1)
+    setQuizSessionXP(0)
     navigate('/home')
   }
 
@@ -255,6 +274,21 @@ function AppInner() {
   }
 
   const commonProps  = { theme, onToggleTheme: toggleTheme }
+  const quizState = {
+    currentQ: quizQ,           setCurrentQ: setQuizQ,
+    selected: quizSelected,    setSelected: setQuizSelected,
+    showAns: quizShowAns,      setShowAns: setQuizShowAns,
+    correct: quizCorrect,      setCorrect: setQuizCorrect,
+    earnedXP: quizEarnedXP,    setEarnedXP: setQuizEarnedXP,
+    streak: quizStreak,        setStreak: setQuizStreak,
+    sessionXP: quizSessionXP,  setSessionXP: setQuizSessionXP,
+    sessionResults: quizResults, setSessionResults: setQuizResults,
+    sessionAnswered: quizAnswered, setSessionAnswered: setQuizAnswered,
+    qNumber: quizQNumber,      setQNumber: setQuizQNumber,
+    aiTip: quizAiTip,          setAiTip: setQuizAiTip,
+    loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
+  }
+
   const learnState   = {
     phase: learnPhase,       setPhase: setLearnPhase,
     topic: learnTopic,       setTopic: setLearnTopic,
@@ -309,7 +343,7 @@ function AppInner() {
       <Route path="/quiz" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
-          : <QuizScreen {...commonProps}
+          : <QuizScreen {...commonProps} {...quizState}
               profile={profile} setProfile={setProfile}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')} />

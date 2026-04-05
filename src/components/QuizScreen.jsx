@@ -19,32 +19,64 @@ const NAV_ITEMS = [
   { icon: '🕐', label: 'History',       path: '/history'       },
 ]
 
-export default function QuizScreen({ profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark' }) {
+export default function QuizScreen({
+  profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
+  // Lifted state from App — persists across tab switches
+  currentQ,        setCurrentQ,
+  selected,        setSelected,
+  showAns,         setShowAns,
+  correct,         setCorrect,
+  earnedXP,        setEarnedXP,
+  streak,          setStreak,
+  sessionXP,       setSessionXP,
+  sessionResults,  setSessionResults,
+  sessionAnswered, setSessionAnswered,
+  qNumber,         setQNumber,
+  aiTip,           setAiTip,
+  loadingTip,      setLoadingTip,
+}) {
   const t = THEMES[theme]
 
-  const [sessionAnswered, setSessionAnswered] = useState([])
-  const [sessionResults,  setSessionResults]  = useState([])
-  const [currentQ,        setCurrentQ]        = useState(null)
-  const [selected,        setSelected]        = useState(null)
-  const [showAns,         setShowAns]         = useState(false)
-  const [streak,          setStreak]          = useState(profile.streak || 0)
-  const [sessionXP,       setSessionXP]       = useState(0)
-  const [floatXP,         setFloatXP]         = useState(null)
-  const [aiTip,           setAiTip]           = useState('')
-  const [loadingTip,      setLoadingTip]      = useState(false)
-  const [correct,         setCorrect]         = useState(null)
-  const [earnedXP,        setEarnedXP]        = useState(0)
-  const [showExit,        setShowExit]        = useState(false)
-  const [qNumber,         setQNumber]         = useState(1)
-  const [menuOpen,        setMenuOpen]        = useState(false)
-  const [isMobile,        setIsMobile]        = useState(window.innerWidth < 860)
+  // Local transient state — fine to reset
+  const [floatXP,   setFloatXP]   = useState(null)
+  const [showExit,  setShowExit]  = useState(false)
+  const [menuOpen,  setMenuOpen]  = useState(false)
+  const [isMobile,  setIsMobile]  = useState(window.innerWidth < 860)
   const startTime = useRef(null)
+
+  // Provide defaults if props are undefined (first mount before App sets them)
+  const _currentQ        = currentQ        ?? null
+  const _selected        = selected        ?? null
+  const _showAns         = showAns         ?? false
+  const _correct         = correct         ?? null
+  const _earnedXP        = earnedXP        ?? 0
+  const _streak          = streak          ?? (profile.streak || 0)
+  const _sessionXP       = sessionXP       ?? 0
+  const _sessionResults  = sessionResults  ?? []
+  const _sessionAnswered = sessionAnswered ?? []
+  const _qNumber         = qNumber         ?? 1
+  const _aiTip           = aiTip           ?? ''
+  const _loadingTip      = loadingTip      ?? false
 
   useEffect(() => {
     const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
+
+  // Use _ prefixed safe defaults everywhere in render
+  const currentQ        = _currentQ
+  const selected        = _selected
+  const showAns         = _showAns
+  const correct         = _correct
+  const earnedXP        = _earnedXP
+  const streak          = _streak
+  const sessionXP       = _sessionXP
+  const sessionResults  = _sessionResults
+  const sessionAnswered = _sessionAnswered
+  const qNumber         = _qNumber
+  const aiTip           = _aiTip
+  const loadingTip      = _loadingTip
 
   const loadNext = useCallback((answered, map) => {
     const q = selectNextQuestion(questions, map, answered)
@@ -345,15 +377,9 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
               {/* Next button + flag tags — below white card, always visible after answering */}
               {showAns && (
                 <div style={{ animation: 'popIn 0.2s ease' }}>
-                  <button onClick={nextQ} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)`, marginBottom: 10 }}>
+                  <button onClick={nextQ} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)` }}>
                     Next Question →
                   </button>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingLeft: 2 }}>
-                    <span style={{ fontSize: 11, color: '#475569' }}>Flag:</span>
-                    {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
-                      <button key={tag} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
-                    ))}
-                  </div>
                 </div>
               )}
 
@@ -381,9 +407,9 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
             </div>
           </div>
 
-          {/* RIGHT — dark explanation panel, equal width, desktop only */}
+          {/* RIGHT — dark explanation panel, fixed 340px, desktop only */}
           {!isMobile && (
-            <div style={{ flex: 1, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
               {!showAns ? (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
                   <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>💡</div>
