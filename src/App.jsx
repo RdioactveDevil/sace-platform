@@ -251,6 +251,7 @@ function AppInner() {
   const [quizQNumber,     setQuizQNumber]     = useState(1)
   const [quizAiTip,       setQuizAiTip]       = useState('')
   const [quizLoadingTip,  setQuizLoadingTip]  = useState(false)
+  const [quizMode,        setQuizMode]        = useState('new')
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -319,6 +320,7 @@ function AppInner() {
     setQuizAnswered([])
     setQuizQNumber(1)
     setQuizSessionXP(0)
+    setQuizMode('new')
     navigate('/home')
   }
 
@@ -341,6 +343,7 @@ function AppInner() {
     sessionResults: quizResults, setSessionResults: setQuizResults,
     sessionAnswered: quizAnswered, setSessionAnswered: setQuizAnswered,
     qNumber: quizQNumber,      setQNumber: setQuizQNumber,
+    quizMode,                  setQuizMode,
     aiTip: quizAiTip,          setAiTip: setQuizAiTip,
     loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
   }

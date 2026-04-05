@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { selectNextQuestion, calcXP, getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
+import { selectNextQuestion, calcXP, getLevelProgress, getQuestionCounts, RANKS, RANK_ICONS } from '../lib/engine'
 import { recordAnswer, addXP, createSession } from '../lib/db'
 import { THEMES } from '../lib/theme'
 
@@ -35,6 +35,7 @@ export default function QuizScreen({
   qNumber:         _qNumber,         setQNumber,
   aiTip:           _aiTip,           setAiTip,
   loadingTip:      _loadingTip,      setLoadingTip,
+  quizMode:        _quizMode,        setQuizMode,
 }) {
   const t = THEMES[theme]
 
@@ -43,6 +44,7 @@ export default function QuizScreen({
   const [showExit,  setShowExit]  = useState(false)
   const [menuOpen,  setMenuOpen]  = useState(false)
   const [isMobile,  setIsMobile]  = useState(window.innerWidth < 860)
+  const [finished,  setFinished]  = useState(false)
   const startTime = useRef(null)
 
 
@@ -66,12 +68,18 @@ export default function QuizScreen({
   const qNumber         = _qNumber         ?? 1
   const aiTip           = _aiTip           ?? ''
   const loadingTip      = _loadingTip      ?? false
+  const quizMode        = _quizMode        ?? 'new'
 
   const navigate    = useNavigate()
   const location    = useLocation()
 
-  const loadNext = useCallback((answered, map) => {
-    const q = selectNextQuestion(questions, map, answered)
+  const loadNext = useCallback((answered, map, mode = 'new') => {
+    const q = selectNextQuestion(questions, map, answered, mode)
+    if (!q) {
+      setFinished(true)
+      return
+    }
+    setFinished(false)
     setCurrentQ(q)
     setSelected(null)
     setShowAns(false)
@@ -88,7 +96,7 @@ export default function QuizScreen({
     // Only load first question if no session in progress
     if (!_currentQ) {
       init()
-      loadNext([], struggleMap)
+      loadNext([], struggleMap, 'new')
     }
   }, [])
 
@@ -143,11 +151,62 @@ export default function QuizScreen({
     const newAnswered = [...sessionAnswered, currentQ.id]
     setSessionAnswered(newAnswered)
     setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(newAnswered, prev); return prev })
+    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode); return prev })
   }
 
-  // Only show loading screen on very first mount — not on tab switches
-  // If sessionResults has items, we have a session in progress — never show loading
+  const counts = getQuestionCounts(questions, struggleMap)
+
+  // Finished screen — no more questions in current mode
+  if (finished || (!currentQ && sessionResults.length > 0)) {
+    const startMode = (mode) => {
+      setQuizMode(mode)
+      setSessionAnswered([])
+      setSessionResults([])
+      setQNumber(1)
+      setSessionXP(0)
+      setFinished(false)
+      loadNext([], struggleMap, mode)
+    }
+    return (
+      <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
+          <div style={{ fontFamily: FONT_D, fontSize: 28, color: '#fff', letterSpacing: 1, marginBottom: 8 }}>
+            {quizMode === 'new' ? "ALL CAUGHT UP!" : quizMode === 'wrong' ? "WRONGS REVIEWED!" : "SESSION COMPLETE!"}
+          </div>
+          <div style={{ fontSize: 15, color: '#64748b', lineHeight: 1.7, marginBottom: 8 }}>
+            {quizMode === 'new'
+              ? "You've attempted every question on gradefarm. right now — more are being added soon."
+              : "Great work reviewing those questions."}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 32 }}>
+            <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#4ade80' }}>
+              +{sessionXP} XP this session
+            </div>
+            <div style={{ background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.25)', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: GOLD }}>
+              {sessionResults.filter(r => r.correct).length}/{sessionResults.length} correct
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+            {counts.wrong > 0 && (
+              <button onClick={() => startMode('wrong')} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                Re-attempt {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''} →
+              </button>
+            )}
+            <button onClick={() => startMode('all')} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+              Repeat all questions
+            </button>
+            <button onClick={onHome} style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid rgba(241,190,67,0.3)`, background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+              ← Back to Question Bank
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // First load
   if (!currentQ && sessionResults.length === 0) return (
     <div style={{ minHeight: '100vh', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: FONT_B }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>

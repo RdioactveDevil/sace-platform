@@ -1,4 +1,5 @@
 import { THEMES } from '../lib/theme'
+import { getQuestionCounts } from '../lib/engine'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -88,8 +89,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   )
 
   return (
-    <div style={{ color: t.text, fontFamily: FONT_B }}>
+    <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease' }}>
       <style>{`
+        @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         .hs-wrap  { display: flex; align-items: flex-start; }
         .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; }
         .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; }
@@ -179,9 +181,36 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               </div>
             )}
 
-            <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 24px rgba(241,190,67,0.35)` }}>
-              Start Adaptive Session →
-            </button>
+            {(() => {
+              const counts = getQuestionCounts(questions, struggleMap)
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {counts.unseen > 0 ? (
+                    <button onClick={onStartSession} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 24px rgba(241,190,67,0.35)` }}>
+                      Start Session · {counts.unseen} new question{counts.unseen !== 1 ? 's' : ''} →
+                    </button>
+                  ) : (
+                    <div style={{ padding: '14px 16px', borderRadius: 12, background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#f5f6ff', border: `1px solid ${t.border}`, textAlign: 'center' }}>
+                      <div style={{ fontSize: 20, marginBottom: 6 }}>🎉</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>All questions attempted!</div>
+                      <div style={{ fontSize: 12, color: t.textMuted }}>More questions coming soon.</div>
+                    </div>
+                  )}
+                  {counts.wrong > 0 && (
+                    <button onClick={onStartSession} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', color: t.danger, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                      data-mode="wrong">
+                      Re-attempt {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                  {counts.unseen === 0 && (
+                    <button onClick={onStartSession} style={{ width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+                      data-mode="all">
+                      Repeat all questions
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Mobile-only cards — shown below session card on small screens */}

@@ -38,19 +38,43 @@ export function computeWeights(questions, struggleMap) {
 
 /**
  * Pick the next question using weighted random selection.
- * Top 5 by weight are eligible — adds variety while keeping focus.
+ * 
+ * mode:
+ *   'new'    — only unseen questions (attempts === 0). Returns null if all done.
+ *   'wrong'  — only questions answered wrong at least once
+ *   'all'    — all questions including already-seen (original repeat behaviour)
+ *
+ * Within the eligible pool, adaptive weighting still applies.
  */
-export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds) {
-  const eligible = questions.filter(q => !sessionAnsweredIds.includes(q.id))
-  if (!eligible.length) return questions[Math.floor(Math.random() * questions.length)]
+export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new') {
+  // Filter by mode
+  let pool
+  if (mode === 'new') {
+    // Unseen = never attempted at all (no entry in struggleMap or attempts === 0)
+    pool = questions.filter(q => {
+      const s = struggleMap[q.id]
+      return (!s || s.attempts === 0) && !sessionAnsweredIds.includes(q.id)
+    })
+  } else if (mode === 'wrong') {
+    // Wrong = has at least one wrong answer
+    pool = questions.filter(q => {
+      const s = struggleMap[q.id]
+      return s && s.wrong > 0 && !sessionAnsweredIds.includes(q.id)
+    })
+  } else {
+    // 'all' mode — skip only within current session
+    pool = questions.filter(q => !sessionAnsweredIds.includes(q.id))
+  }
 
-  const weights = computeWeights(eligible, struggleMap)
+  if (!pool.length) return null  // caller handles this
+
+  const weights = computeWeights(pool, struggleMap)
   weights.sort((a, b) => b.weight - a.weight)
 
   // Top 5, weighted random pick
-  const top     = weights.slice(0, Math.min(5, weights.length))
-  const total   = top.reduce((s, w) => s + w.weight, 0)
-  let   rand    = Math.random() * total
+  const top   = weights.slice(0, Math.min(5, weights.length))
+  const total = top.reduce((s, w) => s + w.weight, 0)
+  let   rand  = Math.random() * total
 
   for (const w of top) {
     rand -= w.weight
@@ -58,6 +82,15 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds) {
   }
 
   return questions.find(q => q.id === top[0].id)
+}
+
+/**
+ * Count unseen, wrong, and total questions for session start UI.
+ */
+export function getQuestionCounts(questions, struggleMap) {
+  const unseen = questions.filter(q => !struggleMap[q.id] || struggleMap[q.id].attempts === 0).length
+  const wrong  = questions.filter(q => struggleMap[q.id]?.wrong > 0).length
+  return { unseen, wrong, total: questions.length }
 }
 
 /**
