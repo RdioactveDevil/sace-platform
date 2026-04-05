@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { THEMES } from '../lib/theme'
+import { supabase } from '../lib/supabase'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -66,6 +67,7 @@ export default function LearnScreen({
   const [input, setInput]               = useState('')
   const [loading, setLoading]           = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [sessionId, setSessionId]       = useState(null)
 
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
@@ -133,7 +135,17 @@ export default function LearnScreen({
         body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
       })
       const data = await res.json()
-      setMessages([{ role: 'assistant', content: data.content?.[0]?.text || "Hey! Let's dive in. What do you already know about this topic?" }])
+      const firstMsg = { role: 'assistant', content: data.content?.[0]?.text || "Hey! Let's dive in. What do you already know about this topic?" }
+      setMessages([firstMsg])
+      // Create session in Supabase
+      try {
+        const { data: sess } = await supabase
+          .from('learn_sessions')
+          .insert({ user_id: profile.id, topic, interests, messages: [firstMsg] })
+          .select('id')
+          .single()
+        if (sess?.id) setSessionId(sess.id)
+      } catch {}
     } catch {
       setMessages([{ role: 'assistant', content: "Hey! I'm Titan AI, your SACE tutor. What do you already know about this topic?" }])
     }
@@ -160,7 +172,17 @@ export default function LearnScreen({
         })
       })
       const data = await res.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: data.content?.[0]?.text || "Let me try a different approach..." }])
+      setMessages(prev => {
+        const updated = [...prev, { role: 'assistant', content: data.content?.[0]?.text || "Let me try a different approach..." }]
+        // Update session in Supabase
+        if (sessionId) {
+          supabase.from('learn_sessions')
+            .update({ messages: updated, updated_at: new Date().toISOString() })
+            .eq('id', sessionId)
+            .then(() => {})
+        }
+        return updated
+      })
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: "Connection issue — try again?" }])
     }
