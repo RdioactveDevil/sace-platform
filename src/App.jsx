@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions } from './lib/db'
 import { THEMES } from './lib/theme'
@@ -23,23 +24,28 @@ const SUBJECT_DB_MAP = {
 }
 
 const NAV_ITEMS = [
-  { icon: '⚡', label: 'Question Bank', id: 'home'        },
-  { icon: '🎓', label: 'Learn',         id: 'learn'       },
-  { icon: '📊', label: 'My Progress',   id: 'profile'     },
-  { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard' },
-  { icon: '📚', label: 'Study Plan',    id: 'study'       },
-  { icon: '🕐', label: 'History',       id: 'history'     },
+  { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/question-bank' },
+  { icon: '🎓', label: 'Learn',         id: 'learn',        path: '/learn'         },
+  { icon: '📊', label: 'My Progress',   id: 'profile',      path: '/my-progress'   },
+  { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard',  path: '/leaderboard'   },
+  { icon: '📚', label: 'Study Plan',    id: 'study',        path: '/study-plan'    },
+  { icon: '🕐', label: 'History',       id: 'history',      path: '/history'       },
 ]
 
-function SidebarContent({ profile, subject, activeScreen, onNav, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
+  const navigate  = useNavigate()
+  const location  = useLocation()
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
   const icon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
 
+  const go = (path) => { navigate(path); onClose?.() }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#080d28', fontFamily: FONT_B }}>
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1 }}>
+        <span onClick={() => go('/question-bank')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
           <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </span>
         <button onClick={onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>
@@ -75,9 +81,9 @@ function SidebarContent({ profile, subject, activeScreen, onNav, onChangeSubject
 
       <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
         {NAV_ITEMS.map(item => {
-          const active = activeScreen === item.id
+          const active = location.pathname === item.path || (item.path === '/question-bank' && location.pathname === '/')
           return (
-            <button key={item.id} onClick={() => { onNav(item.id); onClose?.() }}
+            <button key={item.id} onClick={() => go(item.path)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
               {item.label}
@@ -94,38 +100,31 @@ function SidebarContent({ profile, subject, activeScreen, onNav, onChangeSubject
   )
 }
 
-function AppShell({ children, profile, subject, activeScreen, onNav, onChangeSubject, onSignOut, theme, onToggleTheme }) {
+// ── AppShell ──────────────────────────────────────────────────────────────────
+function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    const h = () => {
-      setIsMobile(window.innerWidth < 860)
-      if (window.innerWidth >= 860) setMenuOpen(false)
-    }
+    const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const sProps = { profile, subject, activeScreen, onNav, onChangeSubject, onSignOut, theme, onToggleTheme }
+  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
-      <style>{`
-        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
-        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-      `}</style>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
 
-      {/* Desktop sidebar — only visible >= 860px */}
       {!isMobile && (
         <div style={{ width: 228, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
           <SidebarContent {...sProps} />
         </div>
       )}
 
-      {/* Mobile overlay */}
       {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
@@ -135,10 +134,7 @@ function AppShell({ children, profile, subject, activeScreen, onNav, onChangeSub
         </div>
       )}
 
-      {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, animation: 'fadeUp 0.35s ease' }}>
-
-        {/* Mobile top bar */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {isMobile && (
           <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#080d28', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -146,36 +142,44 @@ function AppShell({ children, profile, subject, activeScreen, onNav, onChangeSub
               <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
               <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
             </button>
-            <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1 }}>
+            <span onClick={() => navigate('/question-bank')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
               <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15 }}>
-                {theme === 'dark' ? '🌙' : '☀️'}
-              </button>
+              <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15 }}>{theme === 'dark' ? '🌙' : '☀️'}</button>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
             </div>
           </div>
         )}
-
         <div style={{ flex: 1 }}>{children}</div>
       </div>
     </div>
   )
 }
 
-export default function App() {
+// ── Main App ──────────────────────────────────────────────────────────────────
+function AppInner() {
+  const navigate = useNavigate()
   const [user, setUser]                       = useState(null)
   const [profile, setProfile]                 = useState(null)
   const [questions, setQuestions]             = useState([])
   const [struggleMap, setStruggleMap]         = useState({})
-  const [screen, setScreen]                   = useState('home')
   const [loading, setLoading]                 = useState(true)
-  const [selectedSubject, setSelectedSubject] = useState(null)
+  const [selectedSubject, setSelectedSubject] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gf-subject')) || null } catch { return null }
+  })
   const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
+
+  // Lifted Learn state — survives route changes
+  const [learnPhase,      setLearnPhase]      = useState('setup')
+  const [learnTopic,      setLearnTopic]      = useState('')
+  const [learnMessages,   setLearnMessages]   = useState([])
+  const [learnInterests,  setLearnInterests]  = useState('sport')
+  const [learnDocContext, setLearnDocContext]  = useState('')
+  const [learnDocName,    setLearnDocName]    = useState('')
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -213,35 +217,52 @@ export default function App() {
       .catch(() => setLoading(false))
   }, [user])
 
+  // Reload questions if subject was persisted but questions are empty
+  useEffect(() => {
+    if (!selectedSubject || questions.length > 0) return
+    getQuestions(SUBJECT_DB_MAP[selectedSubject.id] || selectedSubject.name)
+      .then(qs => setQuestions(qs))
+      .catch(() => {})
+  }, [selectedSubject])
+
   const handleSelectSubject = async (subject) => {
     setLoading(true)
     setSelectedSubject(subject)
+    localStorage.setItem('gf-subject', JSON.stringify(subject))
     const qs = await getQuestions(SUBJECT_DB_MAP[subject.id] || subject.name)
     setQuestions(qs)
     setLoading(false)
-    setScreen('home')
+    navigate('/question-bank')
   }
 
   const handleSignOut = async () => {
     await signOut()
-    setScreen('home')
     setSelectedSubject(null)
+    localStorage.removeItem('gf-subject')
     setQuestions([])
+    setLearnPhase('setup')
+    setLearnMessages([])
+    setLearnTopic('')
+    navigate('/')
   }
 
   const handleChangeSubject = () => {
     setSelectedSubject(null)
+    localStorage.removeItem('gf-subject')
     setQuestions([])
-    setScreen('home')
+    navigate('/')
   }
 
-  const handleNav = (id) => {
-    if (['home','learn','profile','leaderboard'].includes(id)) setScreen(id)
+  const commonProps  = { theme, onToggleTheme: toggleTheme }
+  const learnState   = {
+    phase: learnPhase,       setPhase: setLearnPhase,
+    topic: learnTopic,       setTopic: setLearnTopic,
+    messages: learnMessages, setMessages: setLearnMessages,
+    interests: learnInterests, setInterests: setLearnInterests,
+    docContext: learnDocContext, setDocContext: setLearnDocContext,
+    docName: learnDocName,   setDocName: setLearnDocName,
   }
 
-  const commonProps = { theme, onToggleTheme: toggleTheme }
-
-  // Loading
   if (loading) return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: FONT_B }}>
       <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🦁</div>
@@ -251,59 +272,117 @@ export default function App() {
 
   // Not logged in
   if (!user || !profile) {
-    if (showAuth) return <AuthScreen {...commonProps} onAuth={() => setShowAuth(false)} onBack={() => setShowAuth(false)} />
-    return <LandingPage onGetStarted={() => setShowAuth(true)} onSignIn={() => setShowAuth(true)} />
+    return null // Routes below handle this
   }
 
-  // No subject
-  if (!selectedSubject) return (
-    <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
-  )
-
-  // Quiz — full screen, no shell
-  if (screen === 'quiz') return (
-    <QuizScreen {...commonProps}
-      profile={profile} setProfile={setProfile}
-      questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
-      onHome={() => setScreen('home')} />
-  )
+  // No subject selected — redirect to picker
+  if (!selectedSubject && !window.location.pathname.includes('subject-picker')) {
+    navigate('/subject-picker')
+    return null
+  }
 
   const shellProps = {
     ...commonProps,
-    profile, subject: selectedSubject,
-    activeScreen: screen,
-    onNav: handleNav,
+    profile,
+    subject: selectedSubject,
     onChangeSubject: handleChangeSubject,
     onSignOut: handleSignOut,
   }
 
-  if (screen === 'learn') return (
-    <AppShell {...shellProps}>
-      <LearnScreen {...commonProps}
-        profile={profile} struggleMap={struggleMap}
-        questions={questions} subject={selectedSubject}
-        onBack={() => setScreen('home')} />
-    </AppShell>
-  )
-
-  if (screen === 'leaderboard') return (
-    <AppShell {...shellProps}>
-      <LeaderboardScreen {...commonProps} profile={profile} embedded />
-    </AppShell>
-  )
-
-  if (screen === 'profile') return (
-    <AppShell {...shellProps}>
-      <ProfileScreen {...commonProps} profile={profile} questions={questions} struggleMap={struggleMap} embedded />
-    </AppShell>
-  )
-
   return (
-    <AppShell {...shellProps}>
-      <HomeScreen {...commonProps}
-        profile={profile} struggleMap={struggleMap}
-        questions={questions} subject={selectedSubject}
-        onStartSession={() => setScreen('quiz')} />
-    </AppShell>
+    <Routes>
+      {/* Landing */}
+      <Route path="/" element={
+        (!user || !profile)
+          ? <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
+          : <Navigate to="/question-bank" replace />
+      } />
+
+      {/* Auth */}
+      <Route path="/auth" element={
+        (!user || !profile)
+          ? <AuthScreen {...commonProps} onAuth={() => navigate(selectedSubject ? '/question-bank' : '/subject-picker')} onBack={() => navigate('/')} />
+          : <Navigate to="/question-bank" replace />
+      } />
+
+      {/* Subject picker */}
+      <Route path="/subject-picker" element={
+        <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
+      } />
+
+
+
+      {/* Quiz — full screen, no shell */}
+      <Route path="/quiz" element={
+        <QuizScreen {...commonProps}
+          profile={profile} setProfile={setProfile}
+          questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
+          onHome={() => navigate('/question-bank')} />
+      } />
+
+      {/* All shell routes */}
+      <Route path="/question-bank" element={
+        <AppShell {...shellProps}>
+          <HomeScreen {...commonProps}
+            profile={profile} struggleMap={struggleMap}
+            questions={questions} subject={selectedSubject}
+            onStartSession={() => navigate('/quiz')} />
+        </AppShell>
+      } />
+
+      <Route path="/learn" element={
+        <AppShell {...shellProps}>
+          <LearnScreen {...commonProps} {...learnState}
+            profile={profile} struggleMap={struggleMap}
+            questions={questions} subject={selectedSubject}
+            onBack={() => navigate('/question-bank')} />
+        </AppShell>
+      } />
+
+      <Route path="/leaderboard" element={
+        <AppShell {...shellProps}>
+          <LeaderboardScreen {...commonProps} profile={profile} embedded />
+        </AppShell>
+      } />
+
+      <Route path="/my-progress" element={
+        <AppShell {...shellProps}>
+          <ProfileScreen {...commonProps}
+            profile={profile} questions={questions}
+            struggleMap={struggleMap} embedded />
+        </AppShell>
+      } />
+
+      <Route path="/study-plan" element={
+        <AppShell {...shellProps}>
+          <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
+            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
+            <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>Study Plan</h1>
+            <p style={{ color: THEMES[theme].textMuted, fontSize: 15 }}>Personalised study schedules based on your quiz performance. Coming soon.</p>
+          </div>
+        </AppShell>
+      } />
+
+      <Route path="/history" element={
+        <AppShell {...shellProps}>
+          <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
+            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
+            <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>History</h1>
+            <p style={{ color: THEMES[theme].textMuted, fontSize: 15 }}>Past quiz sessions and Titan AI lessons. Coming soon.</p>
+          </div>
+        </AppShell>
+      } />
+
+      {/* Catch-all */}
+      <Route path="*" element={<Navigate to="/question-bank" replace />} />
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
+    </BrowserRouter>
   )
 }
