@@ -43,6 +43,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       subtopicGroups[q.subtopic].wrong += s.wrong
     }
   })
+  // Ensure subtopicGroups has total for all subtopics
+  // (already done above — total incremented for every question)
 
   const totalAttempts = Object.values(struggleMap).reduce((s, v) => s + v.attempts, 0)
   const totalWrong    = Object.values(struggleMap).reduce((s, v) => s + v.wrong, 0)
@@ -104,22 +106,22 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   )
 
   return (
-    <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease' }}>
+    <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .hs-wrap  { display: flex; align-items: flex-start; }
-        .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; }
-        .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; }
+        .hs-wrap  { display: flex; align-items: flex-start; height: 100%; }
+        .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; height: 100%; overflow-y: auto; }
+        .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; height: 100%; overflow-y: auto; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         @media (max-width: 860px) {
-          .hs-wrap  { display: block; }
-          .hs-main  { padding: 18px 14px; }
+          .hs-wrap  { display: block; height: auto; }
+          .hs-main  { padding: 18px 14px; height: auto; overflow-y: visible; }
           .hs-right { display: none; }
           .hs-mobile-cards { display: flex; }
         }
       `}</style>
 
-      <div className="hs-wrap">
+      <div className="hs-wrap" style={{ flex: 1, minHeight: 0 }}>
 
         {/* ── MAIN COLUMN ── */}
         <div className="hs-main">
@@ -227,55 +229,106 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             </div>
           </div>
 
-          {/* Subtopic picker — appears below New Session when filter is open */}
-          {showSubtopicPicker && (
-            <div style={{ ...card, padding: '16px 20px' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Filter by subtopic</div>
+          {/* Subtopic picker — tree style */}
+          {showSubtopicPicker && (() => {
+            // All subtopics selected = none explicitly chosen
+            const allMode = selectedSubtopics.length === 0
 
-              {/* Quick select row */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-                <button onClick={() => setSelectedSubtopics([])}
-                  style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: `1px solid ${selectedSubtopics.length === 0 ? GOLD : t.border}`, background: selectedSubtopics.length === 0 ? 'rgba(241,190,67,0.12)' : 'transparent', color: selectedSubtopics.length === 0 ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B }}>
-                  All
-                </button>
-                {Object.keys(topicGroups).map(topic => {
-                  const subs = questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i)
-                  const allSelected = subs.every(s => selectedSubtopics.includes(s))
-                  return (
-                    <button key={topic} onClick={() => setSelectedSubtopics(allSelected ? selectedSubtopics.filter(s => !subs.includes(s)) : [...new Set([...selectedSubtopics, ...subs])])}
-                      style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${allSelected ? GOLD : t.border}`, background: allSelected ? 'rgba(241,190,67,0.12)' : 'transparent', color: allSelected ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>
-                      {topic.split(' ')[0]}
+            const toggleTopic = (topic) => {
+              const subs = questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i)
+              const allSel = subs.every(s => selectedSubtopics.includes(s))
+              if (allMode) {
+                // Was in "all" mode — deselect this topic by selecting everything else
+                const allSubs = Object.keys(topicGroups).flatMap(t => questions.filter(q => q.topic === t).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i))
+                setSelectedSubtopics(allSubs.filter(s => !subs.includes(s)))
+              } else if (allSel) {
+                setSelectedSubtopics(prev => prev.filter(s => !subs.includes(s)))
+              } else {
+                setSelectedSubtopics(prev => [...new Set([...prev, ...subs])])
+              }
+            }
+
+            const toggleSub = (sub) => {
+              if (allMode) {
+                // Was "all" — now select everything except this one
+                const allSubs = Object.keys(topicGroups).flatMap(t => questions.filter(q => q.topic === t).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i))
+                setSelectedSubtopics(allSubs.filter(s => s !== sub))
+              } else {
+                setSelectedSubtopics(prev => prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub])
+              }
+            }
+
+            return (
+              <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+                {/* Header */}
+                <div style={{ padding: '12px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Filter by topic</span>
+                  {!allMode && (
+                    <button onClick={() => setSelectedSubtopics([])}
+                      style={{ fontSize: 11, color: GOLD, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B }}>
+                      Clear filter
                     </button>
-                  )
-                })}
-              </div>
+                  )}
+                </div>
 
-              {/* Subtopics grouped by topic — scrollable */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 220, overflowY: 'auto' }}>
-                {Object.entries(topicGroups).map(([topic]) => (
-                  <div key={topic}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{topic}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                      {questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i).map(sub => {
-                        const active = selectedSubtopics.includes(sub)
-                        const sg = subtopicGroups[sub] || {}
-                        const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
-                        return (
-                          <button key={sub} onClick={() => setSelectedSubtopics(prev =>
-                            prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub]
-                          )}
-                            style={{ fontSize: 11, fontWeight: active ? 700 : 500, padding: '5px 10px', borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.12)' : t.bgCard, color: active ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.12s' }}>
-                            {sub}
-                            {errRate !== null && errRate > 0 && <span style={{ fontSize: 9, color: t.danger }}>⚡{errRate}%</span>}
-                          </button>
-                        )
-                      })}
-                    </div>
+                {/* All row */}
+                <div onClick={() => setSelectedSubtopics([])}
+                  style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', cursor: 'pointer', background: allMode ? 'rgba(241,190,67,0.07)' : 'transparent', borderBottom: `1px solid ${t.border}` }}>
+                  <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${allMode ? GOLD : t.border}`, background: allMode ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {allMode && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
                   </div>
-                ))}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: allMode ? GOLD : t.text, flex: 1 }}>All Topics</span>
+                  <span style={{ fontSize: 12, color: t.textMuted }}>
+                    {Object.values(struggleMap).filter(s => s.attempts > 0).length} / {questions.length}
+                  </span>
+                </div>
+
+                {/* Topic rows with subtopic children */}
+                <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+                  {Object.entries(topicGroups).map(([topic, tg]) => {
+                    const subs = questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i)
+                    const topicSel = allMode || subs.every(s => selectedSubtopics.includes(s))
+                    const topicPartial = !allMode && subs.some(s => selectedSubtopics.includes(s)) && !topicSel
+
+                    return (
+                      <div key={topic}>
+                        {/* Topic row */}
+                        <div onClick={() => toggleTopic(topic)}
+                          style={{ display: 'flex', alignItems: 'center', padding: '9px 16px', cursor: 'pointer', borderBottom: `1px solid ${t.border}` }}>
+                          <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${topicSel ? GOLD : topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {topicSel && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                            {topicPartial && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: topicSel ? t.text : t.textMuted, flex: 1 }}>{topic}</span>
+                          <span style={{ fontSize: 12, color: t.textMuted }}>{tg.attempted} / {tg.total}</span>
+                        </div>
+
+                        {/* Subtopic rows */}
+                        {subs.map(sub => {
+                          const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
+                          const subSel = allMode || selectedSubtopics.includes(sub)
+                          const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
+                          return (
+                            <div key={sub} onClick={() => toggleSub(sub)}
+                              style={{ display: 'flex', alignItems: 'center', padding: '7px 16px 7px 40px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
+                              <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {subSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                              </div>
+                              <span style={{ fontSize: 12, color: subSel ? t.text : t.textMuted, flex: 1 }}>{sub}</span>
+                              {errRate !== null && errRate > 0 && (
+                                <span style={{ fontSize: 10, color: t.danger, fontWeight: 700, marginRight: 8 }}>⚡{errRate}%</span>
+                              )}
+                              <span style={{ fontSize: 11, color: t.textMuted }}>{sg.attempted} / {sg.total}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Mobile-only cards — shown below session card on small screens */}
           <div className="hs-mobile-cards">
