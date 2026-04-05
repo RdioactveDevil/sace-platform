@@ -306,15 +306,15 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
           <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
         </div>
 
-        {/* Question + explanation layout */}
+        {/* Question + explanation layout — equal 50/50 columns desktop, single col mobile */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'auto' : 'hidden' }}>
 
-          {/* Centre — white question card */}
-          <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '100%', maxWidth: 560, animation: 'fadeUp 0.3s ease' }}>
+          {/* LEFT — white question card + next button + flag tags below */}
+          <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
 
               {/* White card: question + options only */}
-              <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)' }}>
+              <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)', marginBottom: showAns ? 14 : 0 }}>
                 <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
                   {currentQ.question}
                 </div>
@@ -342,83 +342,83 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
                 </div>
               </div>
 
-              {/* Mobile explanation — shown below card on small screens */}
-              {isMobile && showAns && (
-                <div style={{ marginTop: 16, animation: 'popIn 0.25s ease' }}>
-                  <div style={{ background: NAVYD, borderRadius: 14, padding: '18px', border: '1px solid rgba(255,255,255,0.07)' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
-                      {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
-                    <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 10 }}>{currentQ.solution}</div>
-                    {currentQ.tip && (
-                      <div style={{ padding: '9px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65, marginBottom: 10 }}>
-                        💡 {currentQ.tip}
-                      </div>
-                    )}
-                    {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 8 }}>Getting AI tip…</div>}
-                    {aiTip && (
-                      <div style={{ padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 10 }}>
-                        🤖 {aiTip}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
-                      <span style={{ fontSize: 10, color: '#475569' }}>Flag:</span>
-                      {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
-                        <button key={tag} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 10, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
-                      ))}
-                    </div>
-                    <button onClick={nextQ} style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                      Next Question →
-                    </button>
+              {/* Next button + flag tags — below white card, always visible after answering */}
+              {showAns && (
+                <div style={{ animation: 'popIn 0.2s ease' }}>
+                  <button onClick={nextQ} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)`, marginBottom: 10 }}>
+                    Next Question →
+                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingLeft: 2 }}>
+                    <span style={{ fontSize: 11, color: '#475569' }}>Flag:</span>
+                    {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
+                      <button key={tag} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
+                    ))}
                   </div>
+                </div>
+              )}
+
+              {/* Mobile explanation — below next button on small screens */}
+              {isMobile && showAns && (
+                <div style={{ marginTop: 14, background: NAVYD, borderRadius: 14, padding: '18px', border: '1px solid rgba(255,255,255,0.07)', animation: 'popIn 0.25s ease' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
+                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>{currentQ.solution}</div>
+                  {currentQ.tip && (
+                    <div style={{ marginTop: 10, padding: '9px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65 }}>
+                      💡 {currentQ.tip}
+                    </div>
+                  )}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting Titan AI tip…</div>}
+                  {aiTip && (
+                    <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
+                      🤖 {aiTip}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Right explanation panel — desktop only */}
+          {/* RIGHT — dark explanation panel, equal width, desktop only */}
           {!isMobile && (
-            <div style={{ width: 280, flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '28px 20px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
               {!showAns ? (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>💡</div>
-                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.65 }}>Select an answer to see the explanation</div>
+                  <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>💡</div>
+                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.65, maxWidth: 200 }}>Select an answer to see the explanation</div>
                 </div>
               ) : (
-                <div style={{ animation: 'popIn 0.25s ease' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 18, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
+                <div style={{ animation: 'popIn 0.25s ease', maxWidth: 500 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 20, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 13, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
                     {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
                   </div>
 
-                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Explanation</div>
-                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 14 }}>{currentQ.solution}</div>
+                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Explanation</div>
+                  <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.8, marginBottom: 16 }}>{currentQ.solution}</div>
 
                   {currentQ.tip && (
-                    <div style={{ padding: '10px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65, marginBottom: 14 }}>
+                    <div style={{ padding: '12px 14px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16 }}>
                       💡 {currentQ.tip}
                     </div>
                   )}
 
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 10 }}>Getting AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
                   {aiTip && (
-                    <div style={{ padding: '10px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 14 }}>
+                    <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
                       🤖 {aiTip}
                     </div>
                   )}
 
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
-                        <button key={tag} style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
+                        <button key={tag} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
                       ))}
                     </div>
                   </div>
-
-                  <button onClick={nextQ} style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)` }}>
-                    Next Question →
-                  </button>
                 </div>
               )}
             </div>
