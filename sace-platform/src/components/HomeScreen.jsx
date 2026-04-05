@@ -42,20 +42,67 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     boxShadow: theme === 'light' ? '0 2px 12px rgba(12,16,55,0.07)' : '0 2px 12px rgba(0,0,0,0.25)',
   }
 
+  // Shared cards rendered in both mobile (inline) and desktop (right panel)
+  const PriorityCard = () => topStruggles.length > 0 ? (
+    <div style={{ ...card, padding: '16px 18px' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 2 }}>Priority Topics</div>
+      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Hit first in your next session</div>
+      {topStruggles.map((s, i) => (
+        <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${t.danger}15`, border: `1px solid ${t.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: t.danger, flexShrink: 0 }}>{i+1}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
+            <div style={{ fontSize: 10, color: t.textMuted }}>{s.q.topic}</div>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  const StatsCard = () => (
+    <div style={{ ...card, padding: '16px 18px' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Your Stats</div>
+      {[
+        { label: 'Total XP',       val: profile.xp.toLocaleString(),         color: GOLD },
+        { label: 'Best streak',    val: `${profile.best_streak||0} days 🔥`, color: GOLD },
+        { label: 'Questions done', val: totalAttempts,                        color: t.text },
+        { label: 'Accuracy',       val: `${accuracy}%`,                      color: accuracy > 70 ? t.success : accuracy > 40 ? GOLD : t.danger },
+      ].map(s => (
+        <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
+          <span style={{ fontSize: 13, color: t.textMuted }}>{s.label}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val}</span>
+        </div>
+      ))}
+    </div>
+  )
+
+  const SprintCard = () => (
+    <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
+      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set a study goal to track your daily progress.</div>
+      <button style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
+        Set Study Goal →
+      </button>
+    </div>
+  )
+
   return (
     <div style={{ color: t.text, fontFamily: FONT_B }}>
       <style>{`
-        .hs-layout { display: flex; align-items: flex-start; }
-        .hs-main   { flex: 1; min-width: 0; padding: 32px 32px; }
-        .hs-right  { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; }
+        .hs-wrap  { display: flex; align-items: flex-start; }
+        .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; }
+        .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; }
+        .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         @media (max-width: 860px) {
-          .hs-layout { display: block; }
-          .hs-main   { padding: 18px 14px; }
-          .hs-right  { display: none; }
+          .hs-wrap  { display: block; }
+          .hs-main  { padding: 18px 14px; }
+          .hs-right { display: none; }
+          .hs-mobile-cards { display: flex; }
         }
       `}</style>
 
-      <div className="hs-layout">
+      <div className="hs-wrap">
 
         {/* ── MAIN COLUMN ── */}
         <div className="hs-main">
@@ -77,8 +124,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               </div>
               <div style={{ display: 'flex', gap: 20 }}>
                 {[
-                  { val: totalAttempts,  label: 'answered' },
-                  { val: `${accuracy}%`, label: 'correct'  },
+                  { val: totalAttempts,   label: 'answered' },
+                  { val: `${accuracy}%`,  label: 'correct'  },
                   { val: profile.streak || 0, label: 'streak' },
                 ].map(s => (
                   <div key={s.label} style={{ textAlign: 'center' }}>
@@ -137,52 +184,22 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             </button>
           </div>
 
+          {/* Mobile-only cards — shown below session card on small screens */}
+          <div className="hs-mobile-cards">
+            <PriorityCard />
+            <StatsCard />
+            <SprintCard />
+          </div>
+
         </div>
 
-        {/* ── RIGHT PANEL (hidden on mobile via CSS) ── */}
+        {/* ── RIGHT PANEL — desktop only ── */}
         <div className="hs-right">
-
-          {topStruggles.length > 0 && (
-            <div style={{ ...card, padding: '16px 18px' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 2 }}>Priority Topics</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Hit first in your next session</div>
-              {topStruggles.map((s, i) => (
-                <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
-                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${t.danger}15`, border: `1px solid ${t.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: t.danger, flexShrink: 0 }}>{i+1}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
-                    <div style={{ fontSize: 10, color: t.textMuted }}>{s.q.topic}</div>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ ...card, padding: '16px 18px' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Your Stats</div>
-            {[
-              { label: 'Total XP',       val: profile.xp.toLocaleString(),         color: GOLD },
-              { label: 'Best streak',    val: `${profile.best_streak||0} days 🔥`, color: GOLD },
-              { label: 'Questions done', val: totalAttempts,                        color: t.text },
-              { label: 'Accuracy',       val: `${accuracy}%`,                      color: accuracy > 70 ? t.success : accuracy > 40 ? GOLD : t.danger },
-            ].map(s => (
-              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
-                <span style={{ fontSize: 13, color: t.textMuted }}>{s.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
-            <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set a study goal to track your daily progress.</div>
-            <button style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
-              Set Study Goal →
-            </button>
-          </div>
-
+          <PriorityCard />
+          <StatsCard />
+          <SprintCard />
         </div>
+
       </div>
     </div>
   )
