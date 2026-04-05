@@ -185,25 +185,25 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
       <style>{`
         @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        .ls-wrap { display:flex; min-height:calc(100vh - 64px); }
-        .ls-sidebar { width:260px; flex-shrink:0; padding:28px 24px; border-right:1px solid rgba(255,255,255,0.07); display:flex; flex-direction:column; gap:16px; background:#080d28; }
-        .ls-main { flex:1; padding:28px 32px; }
+        .ls-wrap { display:flex; min-height:calc(100vh - 80px); }
+        .ls-sidebar { width:260px; flex-shrink:0; padding:24px 20px; border-right:1px solid ${t.border}; display:flex; flex-direction:column; gap:16px; background:${t.bgNav}; }
+        .ls-main { flex:1; padding:28px 32px; background:${t.bg}; }
         @media(max-width:860px){
           .ls-wrap { flex-direction:column; }
-          .ls-sidebar { width:100%; border-right:none; border-bottom:1px solid rgba(255,255,255,0.07); padding:16px; gap:12px; }
+          .ls-sidebar { width:100%; border-right:none; border-bottom:1px solid ${t.border}; padding:16px; gap:12px; }
           .ls-main { padding:16px; }
         }
-        input::placeholder{color:#334155;}
+        input::placeholder{color:${t.textFaint};}
         input:focus{border-color:${GOLD} !important; outline:none;}
         textarea:focus{border-color:${GOLD} !important; outline:none;}
       `}</style>
 
       {/* Gold hero header */}
-      <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.12),rgba(241,190,67,0.04))`, borderBottom: `1px solid rgba(241,190,67,0.2)`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.15),rgba(241,190,67,0.06))`, borderBottom: `1px solid rgba(241,190,67,0.25)`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎓</div>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
+          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 1 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
         </div>
       </div>
 
@@ -216,34 +216,34 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
             {struggleTopics.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {struggleTopics.slice(0, 4).map(s => (
-                  <button key={s.subtopic} onClick={() => setTopic(s.subtopic)} style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: `1px solid ${topic === s.subtopic ? GOLD : 'rgba(255,255,255,0.1)'}`, background: topic === s.subtopic ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.04)', cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: topic === s.subtopic ? GOLD : '#e2e8f0', marginBottom: 2 }}>{s.subtopic}</div>
-                    <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>{Math.round(s.rate * 100)}% error rate</div>
+                  <button key={s.subtopic} onClick={() => setTopic(s.subtopic)} style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: `1px solid ${topic === s.subtopic ? GOLD : t.border}`, background: topic === s.subtopic ? 'rgba(241,190,67,0.12)' : t.bgCard, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: topic === s.subtopic ? GOLD : t.text, marginBottom: 2 }}>{s.subtopic}</div>
+                    <div style={{ fontSize: 10, color: t.danger, fontWeight: 600 }}>{Math.round(s.rate * 100)}% error rate</div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6 }}>Do some quiz sessions first — Titan will suggest your weakest topics here.</div>
+              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>Do some quiz sessions first — Titan will suggest your weakest topics here.</div>
             )}
           </div>
 
           {/* Upload */}
           <div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600, marginBottom: 8 }}>UPLOAD CLASS NOTES</div>
-            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${docContext ? GOLD : 'rgba(255,255,255,0.12)'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: docContext ? 'rgba(241,190,67,0.06)' : 'transparent', transition: 'all 0.2s' }}>
+            <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 600, marginBottom: 8 }}>UPLOAD CLASS NOTES</div>
+            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${docContext ? GOLD : t.border}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: docContext ? 'rgba(241,190,67,0.06)' : 'transparent', transition: 'all 0.2s' }}>
               {uploadingDoc ? (
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Processing…</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>Processing…</div>
               ) : docContext ? (
                 <>
                   <div style={{ fontSize: 18, marginBottom: 4 }}>✅</div>
                   <div style={{ fontSize: 11, color: GOLD, fontWeight: 600 }}>{docName.slice(0, 24)}{docName.length > 24 ? '…' : ''}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>Titan will teach from your notes</div>
+                  <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>Titan will teach from your notes</div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: 20, marginBottom: 4 }}>📄</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>PDF, PPTX or DOCX</div>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>optional</div>
+                  <div style={{ fontSize: 11, color: t.textMuted }}>PDF, PPTX or DOCX</div>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>optional</div>
                 </>
               )}
             </div>
@@ -255,7 +255,7 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
         <div className="ls-main">
           <div style={{ maxWidth: 540 }}>
 
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: t.text, display: 'block', marginBottom: 8 }}>
               What do you want to learn today?
             </label>
             <input
@@ -263,17 +263,17 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
               onChange={e => setTopic(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && startLesson()}
               placeholder="e.g. pH calculations, Ionic bonding, The mole..."
-              style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.05)', color: '#f1f5f9', fontSize: 14, fontFamily: FONT_B, boxSizing: 'border-box', marginBottom: 20 }}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontFamily: FONT_B, boxSizing: 'border-box', marginBottom: 20 }}
             />
 
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: t.text, display: 'block', marginBottom: 10 }}>
               How should Titan AI explain things?
             </label>
             <div style={{ display: 'flex', gap: 10, marginBottom: 28 }}>
               {STYLE_OPTS.map(opt => {
                 const active = interests === opt.id
                 return (
-                  <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, border: `2px solid ${active ? GOLD : 'rgba(255,255,255,0.1)'}`, background: active ? GOLD : 'rgba(255,255,255,0.04)', color: active ? '#0c1037' : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', textAlign: 'center' }}>
+                  <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, border: `2px solid ${active ? GOLD : t.border}`, background: active ? GOLD : t.bgCard, color: active ? '#0c1037' : t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', textAlign: 'center' }}>
                     <div style={{ fontSize: 18, marginBottom: 4 }}>{opt.emoji}</div>
                     <div>{opt.label}</div>
                     <div style={{ fontSize: 10, marginTop: 2, fontWeight: 500, opacity: 0.75 }}>{opt.desc}</div>
@@ -282,7 +282,7 @@ export default function LearnScreen({ profile, struggleMap, questions, subject, 
               })}
             </div>
 
-            <button onClick={startLesson} disabled={!topic.trim() || uploadingDoc} style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: topic.trim() && !uploadingDoc ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.08)', color: topic.trim() ? '#0c1037' : 'rgba(255,255,255,0.3)', fontSize: 15, fontWeight: 800, cursor: topic.trim() ? 'pointer' : 'default', fontFamily: FONT_B, boxShadow: topic.trim() ? `0 8px 28px rgba(241,190,67,0.35)` : 'none', transition: 'all 0.2s' }}>
+            <button onClick={startLesson} disabled={!topic.trim() || uploadingDoc} style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: topic.trim() && !uploadingDoc ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.border, color: topic.trim() ? '#0c1037' : t.textFaint, fontSize: 15, fontWeight: 800, cursor: topic.trim() ? 'pointer' : 'default', fontFamily: FONT_B, boxShadow: topic.trim() ? `0 8px 28px rgba(241,190,67,0.35)` : 'none', transition: 'all 0.2s' }}>
               Start lesson with Titan AI →
             </button>
           </div>
