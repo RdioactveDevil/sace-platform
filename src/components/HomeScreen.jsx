@@ -196,85 +196,86 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               )
             })()}
 
-            {/* Subtopic picker */}
-            <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Topics</div>
-                  <div style={{ fontSize: 11, color: t.textMuted }}>
-                    {selectedSubtopics.length === 0 ? 'All topics selected' : `${selectedSubtopics.length} topic${selectedSubtopics.length !== 1 ? 's' : ''} selected`}
-                  </div>
-                </div>
+            {/* Topic progress + filter */}
+            <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: t.textMuted }}>
+                  {selectedSubtopics.length === 0 ? 'All topics' : `${selectedSubtopics.length} subtopic${selectedSubtopics.length !== 1 ? 's' : ''} selected`}
+                </span>
                 <button onClick={() => setShowSubtopicPicker(p => !p)}
-                  style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: `1px solid ${t.border}`, background: showSubtopicPicker ? GOLD : 'transparent', color: showSubtopicPicker ? '#0c1037' : t.textMuted, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
-                  {showSubtopicPicker ? 'Done' : 'Filter'}
+                  style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 6, border: `1px solid ${showSubtopicPicker ? GOLD : t.border}`, background: showSubtopicPicker ? 'rgba(241,190,67,0.12)' : 'transparent', color: showSubtopicPicker ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B }}>
+                  {showSubtopicPicker ? 'Done ✓' : 'Filter topics'}
                 </button>
               </div>
 
-              {showSubtopicPicker ? (
-                // Subtopic picker — grouped by topic
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 280, overflowY: 'auto' }}>
-                  {/* Select all / clear */}
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => setSelectedSubtopics([])}
-                      style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: `1px solid ${t.border}`, background: selectedSubtopics.length === 0 ? GOLD : 'transparent', color: selectedSubtopics.length === 0 ? '#0c1037' : t.textMuted, cursor: 'pointer', fontFamily: FONT_B }}>
-                      All topics
-                    </button>
-                    {Object.keys(topicGroups).map(topic => (
-                      <button key={topic} onClick={() => {
-                        const subs = questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i)
-                        setSelectedSubtopics(subs)
-                      }}
-                        style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>
-                        {topic}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Individual subtopics */}
-                  {Object.entries(topicGroups).map(([topic, _]) => (
-                    <div key={topic}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{topic}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i).map(sub => {
-                          const active = selectedSubtopics.includes(sub)
-                          const sg = subtopicGroups[sub] || {}
-                          const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
-                          return (
-                            <button key={sub} onClick={() => setSelectedSubtopics(prev =>
-                              prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub]
-                            )}
-                              style={{ fontSize: 11, fontWeight: active ? 700 : 500, padding: '5px 10px', borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.12)' : t.bgCard, color: active ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.12s' }}>
-                              {sub}
-                              {errRate !== null && errRate > 0 && <span style={{ fontSize: 9, color: active ? '#f87171' : t.danger }}>⚡{errRate}%</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
+              {/* Compact progress bars — always visible */}
+              {Object.entries(topicGroups).map(([topic, s]) => {
+                const pct    = s.total > 0 ? s.attempted / s.total : 0
+                const acc    = s.attempted > 0 ? s.correct / s.attempted : null
+                const dotCol = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? GOLD : t.danger
+                return (
+                  <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
+                    <span style={{ fontSize: 12, color: t.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</span>
+                    <div style={{ width: 48, background: t.border, borderRadius: 3, height: 3, overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{ width: `${pct*100}%`, height: '100%', background: GOLD }} />
                     </div>
-                  ))}
-                </div>
-              ) : (
-                // Compact topic progress view
-                <div>
-                  {Object.entries(topicGroups).map(([topic, s]) => {
-                    const pct    = s.total > 0 ? s.attempted / s.total : 0
-                    const acc    = s.attempted > 0 ? s.correct / s.attempted : null
-                    const dotCol = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? GOLD : t.danger
-                    return (
-                      <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 4px' }}>
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
-                        <span style={{ fontSize: 13, color: t.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</span>
-                        <div style={{ width: 56, background: t.border, borderRadius: 3, height: 3, overflow: 'hidden', flexShrink: 0 }}>
-                          <div style={{ width: `${pct*100}%`, height: '100%', background: GOLD }} />
-                        </div>
-                        <span style={{ fontSize: 11, color: t.textFaint, width: 38, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                    <span style={{ fontSize: 10, color: t.textFaint, width: 32, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
+
+          {/* Subtopic picker — appears below New Session when filter is open */}
+          {showSubtopicPicker && (
+            <div style={{ ...card, padding: '16px 20px' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Filter by subtopic</div>
+
+              {/* Quick select row */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                <button onClick={() => setSelectedSubtopics([])}
+                  style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: `1px solid ${selectedSubtopics.length === 0 ? GOLD : t.border}`, background: selectedSubtopics.length === 0 ? 'rgba(241,190,67,0.12)' : 'transparent', color: selectedSubtopics.length === 0 ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B }}>
+                  All
+                </button>
+                {Object.keys(topicGroups).map(topic => {
+                  const subs = questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i)
+                  const allSelected = subs.every(s => selectedSubtopics.includes(s))
+                  return (
+                    <button key={topic} onClick={() => setSelectedSubtopics(allSelected ? selectedSubtopics.filter(s => !subs.includes(s)) : [...new Set([...selectedSubtopics, ...subs])])}
+                      style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${allSelected ? GOLD : t.border}`, background: allSelected ? 'rgba(241,190,67,0.12)' : 'transparent', color: allSelected ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>
+                      {topic.split(' ')[0]}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Subtopics grouped by topic — scrollable */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 220, overflowY: 'auto' }}>
+                {Object.entries(topicGroups).map(([topic]) => (
+                  <div key={topic}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{topic}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i).map(sub => {
+                        const active = selectedSubtopics.includes(sub)
+                        const sg = subtopicGroups[sub] || {}
+                        const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
+                        return (
+                          <button key={sub} onClick={() => setSelectedSubtopics(prev =>
+                            prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub]
+                          )}
+                            style={{ fontSize: 11, fontWeight: active ? 700 : 500, padding: '5px 10px', borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.12)' : t.bgCard, color: active ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.12s' }}>
+                            {sub}
+                            {errRate !== null && errRate > 0 && <span style={{ fontSize: 9, color: t.danger }}>⚡{errRate}%</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Mobile-only cards — shown below session card on small screens */}
           <div className="hs-mobile-cards">
