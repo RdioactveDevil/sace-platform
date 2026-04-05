@@ -49,18 +49,42 @@ IMPORTANT: Always end your turn with a question or invitation to respond.`
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function LearnScreen({ profile, struggleMap, questions, subject, onBack, theme }) {
+export default function LearnScreen({
+  profile, struggleMap, questions, subject, onBack, theme,
+  // Lifted state from App — persists across tab switches
+  phase:        phaseProp,    setPhase:    setPhaseParent,
+  topic:        topicProp,    setTopic:    setTopicParent,
+  messages:     msgsProp,     setMessages: setMsgsParent,
+  interests:    intProp,      setInterests:setIntParent,
+  docContext:   docCtxProp,   setDocContext:setDocCtxParent,
+  docName:      docNameProp,  setDocName:  setDocNameParent,
+}) {
   const t = THEMES[theme]
 
-  const [phase, setPhase]           = useState('setup')
-  const [topic, setTopic]           = useState('')
-  const [messages, setMessages]     = useState([])
-  const [input, setInput]           = useState('')
-  const [loading, setLoading]       = useState(false)
-  const [docContext, setDocContext]  = useState('')
-  const [docName, setDocName]       = useState('')
+  // Use lifted state if provided, otherwise fall back to local state
+  const [phaseLocal,    setPhaseLocal]    = useState('setup')
+  const [topicLocal,    setTopicLocal]    = useState('')
+  const [msgsLocal,     setMsgsLocal]     = useState([])
+  const [intLocal,      setIntLocal]      = useState('sport')
+  const [docCtxLocal,   setDocCtxLocal]   = useState('')
+  const [docNameLocal,  setDocNameLocal]  = useState('')
+
+  const phase      = phaseProp      ?? phaseLocal
+  const setPhase   = setPhaseParent ?? setPhaseLocal
+  const topic      = topicProp      ?? topicLocal
+  const setTopic   = setTopicParent ?? setTopicLocal
+  const messages   = msgsProp       ?? msgsLocal
+  const setMessages= setMsgsParent  ?? setMsgsLocal
+  const interests  = intProp        ?? intLocal
+  const setInterests = setIntParent ?? setIntLocal
+  const docContext = docCtxProp     ?? docCtxLocal
+  const setDocContext = setDocCtxParent ?? setDocCtxLocal
+  const docName    = docNameProp    ?? docNameLocal
+  const setDocName = setDocNameParent ?? setDocNameLocal
+
+  const [input, setInput]               = useState('')
+  const [loading, setLoading]           = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
-  const [interests, setInterests]   = useState('sport')
 
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
