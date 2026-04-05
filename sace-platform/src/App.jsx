@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions } from './lib/db'
+import { THEMES } from './lib/theme'
+import Sidebar           from './components/Sidebar'
 import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
@@ -10,10 +12,7 @@ import LearnScreen       from './components/LearnScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
 import ProfileScreen     from './components/ProfileScreen'
 
-const link = document.createElement('link')
-link.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap'
-link.rel  = 'stylesheet'
-document.head.appendChild(link)
+const SIDEBAR_W = 220
 
 const SUBJECT_DB_MAP = {
   'chemistry_s1': 'Chemistry Stage 1',
@@ -28,7 +27,7 @@ export default function App() {
   const [screen, setScreen]                   = useState('home')
   const [loading, setLoading]                 = useState(true)
   const [selectedSubject, setSelectedSubject] = useState(null)
-  const [showAuth, setShowAuth]               = useState(false)   // show auth modal over landing
+  const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('saceiq-theme') || 'dark')
 
   const toggleTheme = () => {
@@ -39,9 +38,13 @@ export default function App() {
     })
   }
 
+  const t = THEMES[theme]
+
   useEffect(() => {
-    document.body.style.background = theme === 'dark' ? '#070c16' : '#f0f4f8'
-  }, [theme])
+    document.body.style.background = t.bg
+    document.body.style.margin = '0'
+    document.body.style.padding = '0'
+  }, [theme, t.bg])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -58,22 +61,15 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     setLoading(true)
-    setShowAuth(false)
-    Promise.all([
-      getProfile(user.id),
-      getStruggleMap(user.id),
-    ]).then(([prof, map]) => {
-      setProfile(prof)
-      setStruggleMap(map)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    Promise.all([getProfile(user.id), getStruggleMap(user.id)])
+      .then(([prof, map]) => { setProfile(prof); setStruggleMap(map); setLoading(false) })
+      .catch(() => setLoading(false))
   }, [user])
 
   const handleSelectSubject = async (subject) => {
     setLoading(true)
     setSelectedSubject(subject)
-    const dbSubject = SUBJECT_DB_MAP[subject.id] || subject.name
-    const qs = await getQuestions(dbSubject)
+    const qs = await getQuestions(SUBJECT_DB_MAP[subject.id] || subject.name)
     setQuestions(qs)
     setLoading(false)
     setScreen('home')
@@ -86,69 +82,78 @@ export default function App() {
     setQuestions([])
   }
 
-  const handleBackToSubjects = () => {
-    setSelectedSubject(null)
-    setQuestions([])
-    setScreen('home')
+  const handleNav = (id) => {
+    if (['home','learn','profile','leaderboard'].includes(id)) setScreen(id)
   }
 
-  const commonProps = { theme, onToggleTheme: toggleTheme }
+  const sidebarProps = {
+    profile,
+    subject: selectedSubject,
+    activeScreen: screen,
+    onNav: handleNav,
+    onChangeSubject: () => { setSelectedSubject(null); setQuestions([]) },
+    onSignOut: handleSignOut,
+    theme,
+    onToggleTheme: toggleTheme,
+  }
 
-  // ── LOADING ────────────────────────────────────────────────────────────────
+  // Loading
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: theme === 'dark' ? '#070c16' : '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,#14b8a6,#0ea5e9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚗️</div>
+    <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,#f1be43,#f9d87a)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🦁</div>
       <div style={{ fontSize: 13, color: '#64748b' }}>Loading…</div>
     </div>
   )
 
-  // ── NOT LOGGED IN → Landing page (with optional auth overlay) ──────────────
+  // Not logged in
   if (!user || !profile) {
-    if (showAuth) return (
-      <AuthScreen {...commonProps} onAuth={() => setShowAuth(false)}
-        onBack={() => setShowAuth(false)} />
-    )
-    return (
-      <LandingPage
-        onGetStarted={() => setShowAuth(true)}
-        onSignIn={() => setShowAuth(true)}
-      />
-    )
+    if (showAuth) return <AuthScreen theme={theme} onToggleTheme={toggleTheme} onAuth={() => setShowAuth(false)} onBack={() => setShowAuth(false)} />
+    return <LandingPage onGetStarted={() => setShowAuth(true)} onSignIn={() => setShowAuth(true)} />
   }
 
-  // ── LOGGED IN — no subject yet ─────────────────────────────────────────────
+  // No subject selected
   if (!selectedSubject) return (
-    <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
+    <SubjectPicker theme={theme} onToggleTheme={toggleTheme} profile={profile} onSelect={handleSelectSubject} />
   )
 
-  // ── APP SCREENS ───────────────────────────────────────────────────────────
+  // Quiz — full screen, no sidebar
   if (screen === 'quiz') return (
-    <QuizScreen {...commonProps} profile={profile} setProfile={setProfile}
+    <QuizScreen theme={theme} onToggleTheme={toggleTheme}
+      profile={profile} setProfile={setProfile}
       questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
       onHome={() => setScreen('home')} />
   )
-  if (screen === 'learn') return (
-    <LearnScreen {...commonProps} profile={profile} struggleMap={struggleMap}
-      questions={questions} subject={selectedSubject}
-      onBack={() => setScreen('home')} />
-  )
-  if (screen === 'leaderboard') return (
-    <LeaderboardScreen {...commonProps} profile={profile} onBack={() => setScreen('home')} />
-  )
-  if (screen === 'profile') return (
-    <ProfileScreen {...commonProps} profile={profile} questions={questions}
-      struggleMap={struggleMap} onBack={() => setScreen('home')} />
-  )
+
+  // All other screens — sidebar + content side by side
+  const renderScreen = () => {
+    if (screen === 'learn') return (
+      <LearnScreen theme={theme} onToggleTheme={toggleTheme}
+        profile={profile} struggleMap={struggleMap}
+        questions={questions} subject={selectedSubject}
+        onBack={() => setScreen('home')} />
+    )
+    if (screen === 'leaderboard') return (
+      <LeaderboardScreen theme={theme} profile={profile} onBack={() => setScreen('home')} />
+    )
+    if (screen === 'profile') return (
+      <ProfileScreen theme={theme} profile={profile}
+        questions={questions} struggleMap={struggleMap} onBack={() => setScreen('home')} />
+    )
+    return (
+      <HomeScreen theme={theme} onToggleTheme={toggleTheme}
+        profile={profile} struggleMap={struggleMap} questions={questions}
+        subject={selectedSubject} onStartSession={() => setScreen('quiz')} />
+    )
+  }
 
   return (
-    <HomeScreen {...commonProps}
-      profile={profile} struggleMap={struggleMap} questions={questions}
-      subject={selectedSubject}
-      onStartSession={() => setScreen('quiz')}
-      onLeaderboard={() => setScreen('leaderboard')}
-      onProfile={() => setScreen('profile')}
-      onLearn={() => setScreen('learn')}
-      onChangeSubject={handleBackToSubjects}
-      onSignOut={handleSignOut} />
+    <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
+      {/* Sidebar — rendered directly, always visible */}
+      <Sidebar {...sidebarProps} />
+      {/* Content — offset by sidebar width */}
+      <div style={{ marginLeft: SIDEBAR_W, flex: 1, minWidth: 0 }}>
+        {renderScreen()}
+      </div>
+    </div>
   )
 }
