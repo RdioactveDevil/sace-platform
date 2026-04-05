@@ -94,7 +94,7 @@ export default function LearnScreen({
     try {
       const reader = new FileReader()
       reader.onload = async (ev) => {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -127,7 +127,7 @@ export default function LearnScreen({
     const systemPrompt = buildSystemPrompt(profile, topic, docContext, struggleTopics, interests)
     const openingPrompt = `Start the lesson on "${topic}". Warmly greet ${profile.display_name.split(' ')[0]} and open with a short engaging question to find out what they already know. Keep it brief and natural.`
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
@@ -150,7 +150,7 @@ export default function LearnScreen({
     setInput('')
     setLoading(true)
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -351,7 +351,7 @@ export default function LearnScreen({
         <div className="ls-chat-aside">
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Quick replies</div>
           {["I don't get it", "Give me an example", "I think I get it!", "Different analogy"].map(s => (
-            <button key={s} onClick={() => { const msg = { role: 'user', content: s }; setMessages(prev => [...prev, msg]); setLoading(true); fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:buildSystemPrompt(profile,topic,docContext,struggleTopics,interests),messages:[...messages,msg].map(m=>({role:m.role,content:m.content}))})}).then(r=>r.json()).then(d=>{setMessages(prev=>[...prev,{role:'assistant',content:d.content?.[0]?.text||'Let me try differently...'}]);setLoading(false)}).catch(()=>setLoading(false)) }}
+            <button key={s} onClick={() => { const msg = { role: 'user', content: s }; setMessages(prev => [...prev, msg]); setLoading(true); fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:buildSystemPrompt(profile,topic,docContext,struggleTopics,interests),messages:[...messages,msg].map(m=>({role:m.role,content:m.content}))})}).then(r=>r.json()).then(d=>{setMessages(prev=>[...prev,{role:'assistant',content:d.content?.[0]?.text||'Let me try differently...'}]);setLoading(false)}).catch(()=>setLoading(false)) }}
               style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%' }}>
               {s}
             </button>
