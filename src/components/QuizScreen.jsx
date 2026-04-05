@@ -306,80 +306,123 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
           <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
         </div>
 
-        {/* Question + explanation area */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '16px' : '32px 40px', gap: 24 }}>
+        {/* Question + explanation layout */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'auto' : 'hidden' }}>
 
-          {/* White question card */}
-          <div style={{ width: '100%', maxWidth: 560, animation: 'fadeUp 0.3s ease' }}>
-            <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)' }}>
+          {/* Centre — white question card */}
+          <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: '100%', maxWidth: 560, animation: 'fadeUp 0.3s ease' }}>
 
-              {/* Question text */}
-              <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
-                {currentQ.question}
+              {/* White card: question + options only */}
+              <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)' }}>
+                <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
+                  {currentQ.question}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {currentQ.options.map((opt, i) => {
+                    const isCorrectOpt  = i === currentQ.answer_index
+                    const isSelectedOpt = i === selected
+                    let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lCol = '#0c1037'
+                    if (showAns) {
+                      if (isCorrectOpt)                    { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lCol = '#166534' }
+                      else if (isSelectedOpt && !correct)  { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lCol = '#991b1b' }
+                      else                                 { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lCol = '#9ca3af' }
+                    }
+                    return (
+                      <button key={i} onClick={() => handleAnswer(i)}
+                        className={showAns ? '' : 'qopt'}
+                        style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.13s' }}>
+                        <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                          {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
+                        </span>
+                        {opt}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
-              {/* Options */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: showAns ? 20 : 0 }}>
-                {currentQ.options.map((opt, i) => {
-                  const isCorrectOpt = i === currentQ.answer_index
-                  const isSelectedOpt = i === selected
-                  let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lCol = '#0c1037'
-                  if (showAns) {
-                    if (isCorrectOpt)                { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lCol = '#166534' }
-                    else if (isSelectedOpt && !correct) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lCol = '#991b1b' }
-                    else                             { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lCol = '#9ca3af' }
-                  }
-                  return (
-                    <button key={i} onClick={() => handleAnswer(i)}
-                      className={showAns ? '' : 'qopt'}
-                      style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.13s' }}>
-                      <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                        {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
-                      </span>
-                      {opt}
+              {/* Mobile explanation — shown below card on small screens */}
+              {isMobile && showAns && (
+                <div style={{ marginTop: 16, animation: 'popIn 0.25s ease' }}>
+                  <div style={{ background: NAVYD, borderRadius: 14, padding: '18px', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
+                      {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
+                    <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 10 }}>{currentQ.solution}</div>
+                    {currentQ.tip && (
+                      <div style={{ padding: '9px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65, marginBottom: 10 }}>
+                        💡 {currentQ.tip}
+                      </div>
+                    )}
+                    {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 8 }}>Getting AI tip…</div>}
+                    {aiTip && (
+                      <div style={{ padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 10 }}>
+                        🤖 {aiTip}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
+                      <span style={{ fontSize: 10, color: '#475569' }}>Flag:</span>
+                      {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
+                        <button key={tag} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 10, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
+                      ))}
+                    </div>
+                    <button onClick={nextQ} style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                      Next Question →
                     </button>
-                  )
-                })}
-              </div>
-
-              {/* Result + explanation inside card */}
-              {showAns && (
-                <div style={{ animation: 'popIn 0.25s ease' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 14, background: correct ? '#f0fdf4' : '#fef2f2', border: `1px solid ${correct ? '#86efac' : '#fca5a5'}`, fontSize: 13, fontWeight: 700, color: correct ? '#166534' : '#991b1b' }}>
-                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
-                  </div>
-
-                  <div style={{ fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Explanation</div>
-                  <div style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.75, marginBottom: currentQ.tip || aiTip ? 12 : 0 }}>{currentQ.solution}</div>
-
-                  {currentQ.tip && (
-                    <div style={{ padding: '10px 14px', background: '#fefce8', borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: '#78350f', lineHeight: 1.65, marginBottom: aiTip || loadingTip ? 10 : 0 }}>
-                      💡 {currentQ.tip}
-                    </div>
-                  )}
-
-                  {loadingTip && <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginBottom: 8 }}>Getting AI tip…</div>}
-                  {aiTip && (
-                    <div style={{ padding: '10px 14px', background: '#f0f0ff', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#4338ca', lineHeight: 1.65 }}>
-                      🤖 {aiTip}
-                    </div>
-                  )}
-
-                  <button onClick={nextQ} style={{ marginTop: 18, width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.35)` }}>
-                    Next Question →
-                  </button>
-
-                  {/* Flag */}
-                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: '#9ca3af' }}>Flag:</span>
-                    {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
-                      <button key={tag} style={{ padding: '3px 9px', borderRadius: 6, border: '1px solid #e5e7eb', background: 'transparent', color: '#9ca3af', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
-                    ))}
                   </div>
                 </div>
               )}
             </div>
           </div>
+
+          {/* Right explanation panel — desktop only */}
+          {!isMobile && (
+            <div style={{ width: 280, flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '28px 20px', display: 'flex', flexDirection: 'column' }}>
+              {!showAns ? (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>💡</div>
+                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.65 }}>Select an answer to see the explanation</div>
+                </div>
+              ) : (
+                <div style={{ animation: 'popIn 0.25s ease' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 18, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
+                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+                  </div>
+
+                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Explanation</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 14 }}>{currentQ.solution}</div>
+
+                  {currentQ.tip && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65, marginBottom: 14 }}>
+                      💡 {currentQ.tip}
+                    </div>
+                  )}
+
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 10 }}>Getting AI tip…</div>}
+                  {aiTip && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 14 }}>
+                      🤖 {aiTip}
+                    </div>
+                  )}
+
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
+                        <button key={tag} style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button onClick={nextQ} style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)` }}>
+                    Next Question →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
