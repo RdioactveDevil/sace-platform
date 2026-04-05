@@ -271,17 +271,6 @@ function AppInner() {
     </div>
   )
 
-  // Not logged in
-  if (!user || !profile) {
-    return null // Routes below handle this
-  }
-
-  // No subject selected — redirect to picker
-  if (!selectedSubject && !window.location.pathname.includes('subject-picker')) {
-    navigate('/subject-picker')
-    return null
-  }
-
   const shellProps = {
     ...commonProps,
     profile,
@@ -292,39 +281,44 @@ function AppInner() {
 
   return (
     <Routes>
+      {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
 
-      {/* Landing */}
+      {/* Landing page — public */}
       <Route path="/home" element={
-        (!user || !profile)
-          ? <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
-          : <Navigate to="/home" replace />
+        (user && profile)
+          ? <Navigate to="/question-bank" replace />
+          : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
       } />
 
-      {/* Auth */}
+      {/* Auth — public */}
       <Route path="/auth" element={
-        (!user || !profile)
-          ? <AuthScreen {...commonProps} onAuth={() => navigate(selectedSubject ? '/home' : '/subject-picker')} onBack={() => navigate('/home')} />
-          : <Navigate to="/home" replace />
+        (user && profile)
+          ? <Navigate to="/question-bank" replace />
+          : <AuthScreen {...commonProps} onAuth={() => navigate('/subject-picker')} onBack={() => navigate('/home')} />
       } />
 
-      {/* Subject picker */}
+      {/* Subject picker — logged in only */}
       <Route path="/subject-picker" element={
-        <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
       } />
-
-
 
       {/* Quiz — full screen, no shell */}
       <Route path="/quiz" element={
-        <QuizScreen {...commonProps}
-          profile={profile} setProfile={setProfile}
-          questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
-          onHome={() => navigate('/home')} />
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <QuizScreen {...commonProps}
+              profile={profile} setProfile={setProfile}
+              questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
+              onHome={() => navigate('/question-bank')} />
       } />
 
-      {/* All shell routes */}
-      <Route path="/home" element={
+      {/* Dashboard — shell routes, all require login + subject */}
+      <Route path="/question-bank" element={
+        !(user && profile) ? <Navigate to="/home" replace /> :
+        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         <AppShell {...shellProps}>
           <HomeScreen {...commonProps}
             profile={profile} struggleMap={struggleMap}
@@ -334,21 +328,27 @@ function AppInner() {
       } />
 
       <Route path="/learn" element={
+        !(user && profile) ? <Navigate to="/home" replace /> :
+        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         <AppShell {...shellProps}>
           <LearnScreen {...commonProps} {...learnState}
             profile={profile} struggleMap={struggleMap}
             questions={questions} subject={selectedSubject}
-            onBack={() => navigate('/home')} />
+            onBack={() => navigate('/question-bank')} />
         </AppShell>
       } />
 
       <Route path="/leaderboard" element={
+        !(user && profile) ? <Navigate to="/home" replace /> :
+        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         <AppShell {...shellProps}>
           <LeaderboardScreen {...commonProps} profile={profile} embedded />
         </AppShell>
       } />
 
       <Route path="/my-progress" element={
+        !(user && profile) ? <Navigate to="/home" replace /> :
+        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         <AppShell {...shellProps}>
           <ProfileScreen {...commonProps}
             profile={profile} questions={questions}
@@ -357,6 +357,8 @@ function AppInner() {
       } />
 
       <Route path="/study-plan" element={
+        !(user && profile) ? <Navigate to="/home" replace /> :
+        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         <AppShell {...shellProps}>
           <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
             <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
@@ -367,6 +369,8 @@ function AppInner() {
       } />
 
       <Route path="/history" element={
+        !(user && profile) ? <Navigate to="/home" replace /> :
+        !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         <AppShell {...shellProps}>
           <HistoryScreen {...commonProps} profile={profile} embedded />
         </AppShell>
