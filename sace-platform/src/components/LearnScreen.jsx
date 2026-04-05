@@ -185,7 +185,8 @@ export default function LearnScreen({
   ]
 
   // ── SETUP PHASE ─────────────────────────────────────────────────────────────
-  if (phase === 'setup') return (
+  // Guard: if phase is undefined (props not passed yet), show setup
+  if (!phase || phase === 'setup') return (
     <div style={{ color: t.text, fontFamily: FONT_B }}>
       <style>{`
         @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
