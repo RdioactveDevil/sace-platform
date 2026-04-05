@@ -1,24 +1,50 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { selectNextQuestion, calcXP, getLevelProgress } from '../lib/engine'
-import { recordAnswer, addXP, createSession, updateSession } from '../lib/db'
+import { selectNextQuestion, calcXP, getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
+import { recordAnswer, addXP, createSession } from '../lib/db'
+import { THEMES } from '../lib/theme'
 
-export default function QuizScreen({ profile, setProfile, questions, struggleMap, setStruggleMap, onHome }) {
-  const [sessionAnswered, setSessionAnswered]   = useState([])
-  const [sessionResults, setSessionResults]     = useState([])
-  const [currentQ, setCurrentQ]                 = useState(null)
-  const [selected, setSelected]                 = useState(null)
-  const [showAns, setShowAns]                   = useState(false)
-  const [streak, setStreak]                     = useState(profile.streak || 0)
-  const [sessionXP, setSessionXP]               = useState(0)
-  const [floatXP, setFloatXP]                   = useState(null)
-  const [sessionId, setSessionId]               = useState(null)
-  const [aiTip, setAiTip]                       = useState('')
-  const [loadingTip, setLoadingTip]             = useState(false)
-  const [correct, setCorrect]                   = useState(null)
-  const [earnedXP, setEarnedXP]                 = useState(0)
-  const [showExit, setShowExit]                 = useState(false)
-  const [qNumber, setQNumber]                   = useState(1)
+const GOLD   = '#f1be43'
+const GOLDL  = '#f9d87a'
+const NAVY   = '#0c1037'
+const NAVYD  = '#080d28'
+const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
+
+const NAV_ITEMS = [
+  { icon: '⚡', label: 'Question Bank', path: '/question-bank' },
+  { icon: '🎓', label: 'Learn',         path: '/learn'         },
+  { icon: '📊', label: 'My Progress',   path: '/my-progress'   },
+  { icon: '🏆', label: 'Leaderboard',   path: '/leaderboard'   },
+  { icon: '📚', label: 'Study Plan',    path: '/study-plan'    },
+  { icon: '🕐', label: 'History',       path: '/history'       },
+]
+
+export default function QuizScreen({ profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark' }) {
+  const t = THEMES[theme]
+
+  const [sessionAnswered, setSessionAnswered] = useState([])
+  const [sessionResults,  setSessionResults]  = useState([])
+  const [currentQ,        setCurrentQ]        = useState(null)
+  const [selected,        setSelected]        = useState(null)
+  const [showAns,         setShowAns]         = useState(false)
+  const [streak,          setStreak]          = useState(profile.streak || 0)
+  const [sessionXP,       setSessionXP]       = useState(0)
+  const [floatXP,         setFloatXP]         = useState(null)
+  const [aiTip,           setAiTip]           = useState('')
+  const [loadingTip,      setLoadingTip]      = useState(false)
+  const [correct,         setCorrect]         = useState(null)
+  const [earnedXP,        setEarnedXP]        = useState(0)
+  const [showExit,        setShowExit]        = useState(false)
+  const [qNumber,         setQNumber]         = useState(1)
+  const [menuOpen,        setMenuOpen]        = useState(false)
+  const [isMobile,        setIsMobile]        = useState(window.innerWidth < 860)
   const startTime = useRef(null)
+
+  useEffect(() => {
+    const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
 
   const loadNext = useCallback((answered, map) => {
     const q = selectNextQuestion(questions, map, answered)
@@ -33,8 +59,7 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
 
   useEffect(() => {
     async function init() {
-      const s = await createSession(profile.id, 'Chemistry')
-      setSessionId(s.id)
+      await createSession(profile.id, 'Chemistry')
     }
     init()
     loadNext([], struggleMap)
@@ -71,12 +96,11 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
     if (!isCorrect) {
       setLoadingTip(true)
       try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
+            max_tokens: 200,
             system: 'You are a SACE Chemistry tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.',
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }]
           })
@@ -96,177 +120,266 @@ export default function QuizScreen({ profile, setProfile, questions, struggleMap
   }
 
   if (!currentQ) return (
-    <div style={{ minHeight: '100vh', background: '#070c16', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      Loading…
+    <div style={{ minHeight: '100vh', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: FONT_B }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚡</div>
+        <div style={{ fontSize: 13 }}>Loading questions…</div>
+      </div>
     </div>
   )
 
-  const { pct } = getLevelProgress(profile.xp)
-  const isStruggle = (struggleMap[currentQ.id]?.wrong ?? 0) >= 2
+  const { pct, level } = getLevelProgress(profile.xp)
+  const rank           = RANKS[Math.min(level, RANKS.length - 1)]
+  const isStruggle     = (struggleMap[currentQ.id]?.wrong ?? 0) >= 2
   const sessionCorrect = sessionResults.filter(r => r.correct).length
   const sessionTotal   = sessionResults.length
+  const accuracy       = sessionTotal > 0 ? Math.round((sessionCorrect / sessionTotal) * 100) : null
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#070c16', color: '#e2e8f0', fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
-      <style>{`
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-80px) scale(1.4)} }
-        @keyframes popIn   { 0%{transform:scale(0.94);opacity:0} 100%{transform:scale(1);opacity:1} }
-        .opt:hover { border-color: #14b8a6 !important; background: rgba(20,184,166,0.05) !important; }
-        .opt { transition: all 0.14s ease !important; cursor: pointer; }
-        .exit-btn:hover { border-color: #ef4444 !important; color: #f87171 !important; }
-        @media (max-width: 900px) {
-          .quiz-layout { grid-template-columns: 1fr !important; }
-          .sidebar-left { display: none !important; }
-          .sidebar-right { display: none !important; }
-        }
-      `}</style>
+  // ── Sidebar content (shared between desktop + mobile drawer) ─────────────
+  const SidebarContent = ({ onClose }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: NAVYD, fontFamily: FONT_B }}>
+      <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }} onClick={() => { onHome(); onClose?.() }}>
+          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+        </span>
+      </div>
 
-      {floatXP && (
-        <div style={{ position: 'fixed', top: '35%', left: '50%', transform: 'translateX(-50%)', fontSize: 32, fontWeight: 800, color: '#14b8a6', animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999, textShadow: '0 0 24px rgba(20,184,166,0.8)' }}>
-          +{floatXP} XP
-        </div>
-      )}
-
-      {showExit && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: '#0c1525', border: '1px solid #334155', borderRadius: 16, padding: '32px', maxWidth: 360, width: '90%', textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
-            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>End this session?</div>
-            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-              You've earned <span style={{ color: '#14b8a6', fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Keep going</button>
-              <button onClick={onHome} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#ef4444', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>End session</button>
-            </div>
+      {/* User + XP */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: NAVYD, flexShrink: 0 }}>
+            {profile.display_name[0].toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</div>
+            <div style={{ fontSize: 10, color: GOLD, fontWeight: 600 }}>{RANK_ICONS[Math.min(level, RANK_ICONS.length-1)]} {rank}</div>
           </div>
         </div>
-      )}
+        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
+        </div>
+      </div>
 
-      {/* Top bar */}
-      <div style={{ background: '#0a1020', borderBottom: '1px solid #1e293b', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
-        <button className="exit-btn" onClick={() => setShowExit(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
-          ← End Session
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {streak >= 2 && <span style={{ fontSize: 13, color: '#f59e0b', fontWeight: 700 }}>🔥 {streak} streak</span>}
-          <span style={{ fontSize: 13, color: '#14b8a6', fontWeight: 700 }}>+{sessionXP} XP</span>
-          <div style={{ width: 100, background: '#1e293b', borderRadius: 4, height: 5, overflow: 'hidden' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#14b8a6,#0ea5e9)', transition: 'width 0.8s' }} />
+      {/* Session stats */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+        <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
+          {[
+            { label: 'Correct', val: sessionCorrect,              color: '#10b981' },
+            { label: 'Wrong',   val: sessionTotal - sessionCorrect, color: '#ef4444' },
+            { label: 'XP',      val: `+${sessionXP}`,             color: GOLD      },
+            { label: 'Streak',  val: streak > 0 ? `🔥${streak}` : '—', color: '#f59e0b' },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.val}</div>
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        {/* Question bubbles */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {sessionResults.map((r, i) => (
+            <div key={i} style={{ width: 20, height: 20, borderRadius: '50%', background: r.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `1.5px solid ${r.correct ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: r.correct ? '#4ade80' : '#f87171' }}>
+              {i + 1}
+            </div>
+          ))}
+          <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(241,190,67,0.2)', border: `1.5px solid ${GOLD}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: GOLD }}>
+            {qNumber}
           </div>
         </div>
       </div>
 
-      {/* Three column layout */}
-      <div className="quiz-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr 260px', maxWidth: 1200, margin: '0 auto', width: '100%', alignItems: 'start' }}>
-
-        {/* LEFT sidebar */}
-        <div className="sidebar-left" style={{ padding: '28px 16px', borderRight: '1px solid #1e293b', minHeight: 'calc(100vh - 57px)', position: 'sticky', top: 57 }}>
-          <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16 }}>Session</div>
-
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ width: 68, height: 68, borderRadius: '50%', margin: '0 auto 8px', border: `4px solid ${sessionTotal === 0 ? '#1e293b' : sessionCorrect / sessionTotal >= 0.6 ? '#10b981' : '#ef4444'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontSize: 17, fontWeight: 800 }}>{sessionTotal === 0 ? '—' : `${Math.round(sessionCorrect / sessionTotal * 100)}%`}</div>
-            </div>
-            <div style={{ fontSize: 11, color: '#475569' }}>{sessionTotal} answered</div>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 20 }}>
-            {sessionResults.map((r, i) => (
-              <div key={i} style={{ width: 26, height: 26, borderRadius: '50%', background: r.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `2px solid ${r.correct ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: r.correct ? '#4ade80' : '#f87171' }}>
-                {i + 1}
-              </div>
-            ))}
-            <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(20,184,166,0.15)', border: '2px solid #14b8a6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#14b8a6' }}>
-              {qNumber}
-            </div>
-          </div>
-
-          {[{ label: 'Correct', val: sessionCorrect, color: '#10b981' }, { label: 'Incorrect', val: sessionTotal - sessionCorrect, color: '#ef4444' }, { label: 'XP', val: sessionXP, color: '#14b8a6' }].map(s => (
-            <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#0c1525', borderRadius: 8, border: '1px solid #1e293b', marginBottom: 6 }}>
-              <span style={{ fontSize: 12, color: '#475569' }}>{s.label}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>{s.val}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* CENTRE — Question */}
-        <div style={{ padding: '36px 40px', animation: 'fadeUp 0.3s ease' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Question {qNumber}</span>
-            <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#334155', display: 'inline-block' }} />
-            <span style={{ fontSize: 12, background: 'rgba(20,184,166,0.1)', padding: '3px 10px', borderRadius: 20, color: '#14b8a6', fontWeight: 700, border: '1px solid rgba(20,184,166,0.2)' }}>{currentQ.subtopic}</span>
-            <span style={{ fontSize: 12, color: '#475569' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
-            {isStruggle && <span style={{ fontSize: 11, background: 'rgba(239,68,68,0.1)', padding: '3px 9px', borderRadius: 20, color: '#f87171', fontWeight: 700, border: '1px solid rgba(239,68,68,0.2)' }}>⚡ Priority</span>}
-          </div>
-
-          <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.8, color: '#f1f5f9', marginBottom: 30 }}>
-            {currentQ.question}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-            {currentQ.options.map((opt, i) => {
-              let bg = 'transparent', border = '1px solid #334155', color = '#cbd5e1'
-              if (showAns) {
-                if (i === currentQ.answer_index)     { bg = 'rgba(16,185,129,0.08)'; border = '1px solid #10b981'; color = '#4ade80' }
-                else if (i === selected && !correct) { bg = 'rgba(239,68,68,0.08)'; border = '1px solid #ef4444'; color = '#f87171' }
-                else                                 { color = '#334155' }
-              }
-              return (
-                <button key={i} className={showAns ? '' : 'opt'} onClick={() => handleAnswer(i)} style={{ background: bg, border, color, padding: '14px 18px', borderRadius: 10, fontSize: 15, fontWeight: 500, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: showAns ? (i === currentQ.answer_index ? 'rgba(16,185,129,0.2)' : i === selected ? 'rgba(239,68,68,0.2)' : '#1e293b') : '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#64748b' }}>
-                    {showAns && i === currentQ.answer_index ? '✓' : showAns && i === selected ? '✗' : String.fromCharCode(65 + i)}
-                  </span>
-                  {opt}
-                </button>
-              )
-            })}
-          </div>
-
-          {showAns && (
-            <button onClick={nextQ} style={{ padding: '14px 32px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #14b8a6, #0ea5e9)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: '0 8px 24px rgba(20,184,166,0.25)' }}>
-              Next Question →
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+        {NAV_ITEMS.map(item => {
+          const active = item.path === '/question-bank'
+          return (
+            <button key={item.path} onClick={() => { onHome(); onClose?.() }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
+              <span style={{ fontSize: 15 }}>{item.icon}</span>
+              {item.label}
             </button>
-          )}
+          )
+        })}
+      </nav>
+
+      <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+        <button onClick={() => { setShowExit(true); onClose?.() }} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
+          ✕ End Session
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, display: 'flex' }}>
+      <style>{`
+        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
+        @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
+        @keyframes popIn   { 0%{transform:scale(0.95);opacity:0} 100%{transform:scale(1);opacity:1} }
+        @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
+        .qopt { transition: all 0.13s ease; cursor: pointer; }
+        .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
+      `}</style>
+
+      {/* Float XP */}
+      {floatXP && (
+        <div style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', fontSize: 30, fontWeight: 800, color: GOLD, animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999 }}>
+          +{floatXP} XP
+        </div>
+      )}
+
+      {/* Exit modal */}
+      {showExit && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
+          <div style={{ background: '#111a4a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18, padding: '32px', maxWidth: 340, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease' }}>
+            <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 8 }}>End this session?</div>
+            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.65 }}>
+              You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>Keep going</button>
+              <button onClick={onHome} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#ef4444', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End session</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile drawer */}
+      {isMobile && menuOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
+          <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 260, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 1000 }}>
+            <SidebarContent onClose={() => setMenuOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      {!isMobile && (
+        <div style={{ width: 228, flexShrink: 0, height: '100vh', position: 'sticky', top: 0, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
+          <SidebarContent />
+        </div>
+      )}
+
+      {/* Main content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+
+        {/* Mobile topbar */}
+        {isMobile && (
+          <div style={{ background: NAVYD, borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
+              <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
+              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
+            </button>
+            <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}>
+              <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+            </span>
+            <button onClick={() => setShowExit(true)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>End</button>
+          </div>
+        )}
+
+        {/* Gold header bar */}
+        <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
+            <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
+            {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20 }}>⚡ Priority</span>}
+            <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
+            {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
+            <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
+            {!isMobile && (
+              <button onClick={() => setShowExit(true)} style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End Session</button>
+            )}
+          </div>
         </div>
 
-        {/* RIGHT sidebar */}
-        <div className="sidebar-right" style={{ padding: '28px 16px', borderLeft: '1px solid #1e293b', minHeight: 'calc(100vh - 57px)', position: 'sticky', top: 57 }}>
-          {!showAns ? (
-            <div style={{ color: '#334155', fontSize: 13, textAlign: 'center', marginTop: 60, lineHeight: 1.7 }}>
-              Select an answer to see the explanation and tips
-            </div>
-          ) : (
-            <div style={{ animation: 'popIn 0.25s ease' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 20, marginBottom: 18, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 13, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
-                {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+        {/* XP level bar */}
+        <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
+        </div>
+
+        {/* Question + explanation area */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '16px' : '32px 40px', gap: 24 }}>
+
+          {/* White question card */}
+          <div style={{ width: '100%', maxWidth: 560, animation: 'fadeUp 0.3s ease' }}>
+            <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)' }}>
+
+              {/* Question text */}
+              <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
+                {currentQ.question}
               </div>
 
-              <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Explanation</div>
-              <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 14 }}>{currentQ.solution}</div>
-
-              {currentQ.tip && (
-                <div style={{ padding: '10px 12px', background: 'rgba(20,184,166,0.06)', borderRadius: 8, borderLeft: '3px solid #14b8a6', fontSize: 12, color: '#5eead4', lineHeight: 1.65, marginBottom: 14 }}>
-                  💡 {currentQ.tip}
-                </div>
-              )}
-
-              {loadingTip && <div style={{ fontSize: 12, color: '#334155', fontStyle: 'italic', marginBottom: 10 }}>Getting AI tip…</div>}
-              {aiTip && (
-                <div style={{ padding: '10px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: 8, borderLeft: '3px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 18 }}>
-                  🤖 {aiTip}
-                </div>
-              )}
-
-              <div style={{ fontSize: 11, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
-                  <button key={tag} style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #1e293b', background: 'transparent', color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tag}</button>
-                ))}
+              {/* Options */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: showAns ? 20 : 0 }}>
+                {currentQ.options.map((opt, i) => {
+                  const isCorrectOpt = i === currentQ.answer_index
+                  const isSelectedOpt = i === selected
+                  let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lCol = '#0c1037'
+                  if (showAns) {
+                    if (isCorrectOpt)                { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lCol = '#166534' }
+                    else if (isSelectedOpt && !correct) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lCol = '#991b1b' }
+                    else                             { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lCol = '#9ca3af' }
+                  }
+                  return (
+                    <button key={i} onClick={() => handleAnswer(i)}
+                      className={showAns ? '' : 'qopt'}
+                      style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.13s' }}>
+                      <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                        {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
+                      </span>
+                      {opt}
+                    </button>
+                  )
+                })}
               </div>
+
+              {/* Result + explanation inside card */}
+              {showAns && (
+                <div style={{ animation: 'popIn 0.25s ease' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 14, background: correct ? '#f0fdf4' : '#fef2f2', border: `1px solid ${correct ? '#86efac' : '#fca5a5'}`, fontSize: 13, fontWeight: 700, color: correct ? '#166534' : '#991b1b' }}>
+                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+                  </div>
+
+                  <div style={{ fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Explanation</div>
+                  <div style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.75, marginBottom: currentQ.tip || aiTip ? 12 : 0 }}>{currentQ.solution}</div>
+
+                  {currentQ.tip && (
+                    <div style={{ padding: '10px 14px', background: '#fefce8', borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: '#78350f', lineHeight: 1.65, marginBottom: aiTip || loadingTip ? 10 : 0 }}>
+                      💡 {currentQ.tip}
+                    </div>
+                  )}
+
+                  {loadingTip && <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginBottom: 8 }}>Getting AI tip…</div>}
+                  {aiTip && (
+                    <div style={{ padding: '10px 14px', background: '#f0f0ff', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#4338ca', lineHeight: 1.65 }}>
+                      🤖 {aiTip}
+                    </div>
+                  )}
+
+                  <button onClick={nextQ} style={{ marginTop: 18, width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.35)` }}>
+                    Next Question →
+                  </button>
+
+                  {/* Flag */}
+                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>Flag:</span>
+                    {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
+                      <button key={tag} style={{ padding: '3px 9px', borderRadius: 6, border: '1px solid #e5e7eb', background: 'transparent', color: '#9ca3af', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
