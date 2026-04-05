@@ -49,39 +49,20 @@ IMPORTANT: Always end your turn with a question or invitation to respond.`
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+// All persistent state lives in App.jsx and is passed as props.
+// LearnScreen owns nothing persistent — this is what survives navigation.
 export default function LearnScreen({
   profile, struggleMap, questions, subject, onBack, theme,
-  // Lifted state from App — persists across tab switches
-  phase:        phaseProp,    setPhase:    setPhaseParent,
-  topic:        topicProp,    setTopic:    setTopicParent,
-  messages:     msgsProp,     setMessages: setMsgsParent,
-  interests:    intProp,      setInterests:setIntParent,
-  docContext:   docCtxProp,   setDocContext:setDocCtxParent,
-  docName:      docNameProp,  setDocName:  setDocNameParent,
+  phase,       setPhase,
+  topic,       setTopic,
+  messages,    setMessages,
+  interests,   setInterests,
+  docContext,  setDocContext,
+  docName,     setDocName,
 }) {
   const t = THEMES[theme]
 
-  // Use lifted state if provided, otherwise fall back to local state
-  const [phaseLocal,    setPhaseLocal]    = useState('setup')
-  const [topicLocal,    setTopicLocal]    = useState('')
-  const [msgsLocal,     setMsgsLocal]     = useState([])
-  const [intLocal,      setIntLocal]      = useState('sport')
-  const [docCtxLocal,   setDocCtxLocal]   = useState('')
-  const [docNameLocal,  setDocNameLocal]  = useState('')
-
-  const phase      = phaseProp      ?? phaseLocal
-  const setPhase   = setPhaseParent ?? setPhaseLocal
-  const topic      = topicProp      ?? topicLocal
-  const setTopic   = setTopicParent ?? setTopicLocal
-  const messages   = msgsProp       ?? msgsLocal
-  const setMessages= setMsgsParent  ?? setMsgsLocal
-  const interests  = intProp        ?? intLocal
-  const setInterests = setIntParent ?? setIntLocal
-  const docContext = docCtxProp     ?? docCtxLocal
-  const setDocContext = setDocCtxParent ?? setDocCtxLocal
-  const docName    = docNameProp    ?? docNameLocal
-  const setDocName = setDocNameParent ?? setDocNameLocal
-
+  // Truly transient — fine to reset on unmount
   const [input, setInput]               = useState('')
   const [loading, setLoading]           = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
