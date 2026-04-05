@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { selectNextQuestion, calcXP, getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { recordAnswer, addXP, createSession } from '../lib/db'
 import { THEMES } from '../lib/theme'
@@ -65,6 +66,9 @@ export default function QuizScreen({
   const qNumber         = _qNumber         ?? 1
   const aiTip           = _aiTip           ?? ''
   const loadingTip      = _loadingTip      ?? false
+
+  const navigate    = useNavigate()
+  const location    = useLocation()
 
   const loadNext = useCallback((answered, map) => {
     const q = selectNextQuestion(questions, map, answered)
@@ -188,10 +192,10 @@ export default function QuizScreen({
       {/* Nav */}
       <nav style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(item => {
-          const active = item.path === '/question-bank'
+          const active = location.pathname === item.path || (item.path === '/question-bank' && location.pathname === '/quiz')
           return (
-            <button key={item.path} onClick={() => { onHome(); onClose?.() }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
+            <button key={item.path} onClick={() => { navigate(item.path); onClose?.() }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'all 0.15s' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
               {item.label}
             </button>
@@ -390,7 +394,7 @@ export default function QuizScreen({
                       💡 {currentQ.tip}
                     </div>
                   )}
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting Titan AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
                   {aiTip && (
                     <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
                       🤖 {aiTip}
