@@ -22,18 +22,18 @@ const NAV_ITEMS = [
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
   // Lifted state from App — persists across tab switches
-  currentQ,        setCurrentQ,
-  selected,        setSelected,
-  showAns,         setShowAns,
-  correct,         setCorrect,
-  earnedXP,        setEarnedXP,
-  streak,          setStreak,
-  sessionXP,       setSessionXP,
-  sessionResults,  setSessionResults,
-  sessionAnswered, setSessionAnswered,
-  qNumber,         setQNumber,
-  aiTip,           setAiTip,
-  loadingTip,      setLoadingTip,
+  currentQ:        _currentQ,        setCurrentQ,
+  selected:        _selected,        setSelected,
+  showAns:         _showAns,         setShowAns,
+  correct:         _correct,         setCorrect,
+  earnedXP:        _earnedXP,        setEarnedXP,
+  streak:          _streak,          setStreak,
+  sessionXP:       _sessionXP,       setSessionXP,
+  sessionResults:  _sessionResults,  setSessionResults,
+  sessionAnswered: _sessionAnswered, setSessionAnswered,
+  qNumber:         _qNumber,         setQNumber,
+  aiTip:           _aiTip,           setAiTip,
+  loadingTip:      _loadingTip,      setLoadingTip,
 }) {
   const t = THEMES[theme]
 
@@ -44,19 +44,7 @@ export default function QuizScreen({
   const [isMobile,  setIsMobile]  = useState(window.innerWidth < 860)
   const startTime = useRef(null)
 
-  // Provide defaults if props are undefined (first mount before App sets them)
-  const _currentQ        = currentQ        ?? null
-  const _selected        = selected        ?? null
-  const _showAns         = showAns         ?? false
-  const _correct         = correct         ?? null
-  const _earnedXP        = earnedXP        ?? 0
-  const _streak          = streak          ?? (profile.streak || 0)
-  const _sessionXP       = sessionXP       ?? 0
-  const _sessionResults  = sessionResults  ?? []
-  const _sessionAnswered = sessionAnswered ?? []
-  const _qNumber         = qNumber         ?? 1
-  const _aiTip           = aiTip           ?? ''
-  const _loadingTip      = loadingTip      ?? false
+
 
   useEffect(() => {
     const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
@@ -64,19 +52,19 @@ export default function QuizScreen({
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  // Use _ prefixed safe defaults everywhere in render
-  const currentQ        = _currentQ
-  const selected        = _selected
-  const showAns         = _showAns
-  const correct         = _correct
-  const earnedXP        = _earnedXP
-  const streak          = _streak
-  const sessionXP       = _sessionXP
-  const sessionResults  = _sessionResults
-  const sessionAnswered = _sessionAnswered
-  const qNumber         = _qNumber
-  const aiTip           = _aiTip
-  const loadingTip      = _loadingTip
+  // Resolve safe defaults
+  const currentQ        = _currentQ        ?? null
+  const selected        = _selected        ?? null
+  const showAns         = _showAns         ?? false
+  const correct         = _correct         ?? null
+  const earnedXP        = _earnedXP        ?? 0
+  const streak          = _streak          ?? (profile.streak || 0)
+  const sessionXP       = _sessionXP       ?? 0
+  const sessionResults  = _sessionResults  ?? []
+  const sessionAnswered = _sessionAnswered ?? []
+  const qNumber         = _qNumber         ?? 1
+  const aiTip           = _aiTip           ?? ''
+  const loadingTip      = _loadingTip      ?? false
 
   const loadNext = useCallback((answered, map) => {
     const q = selectNextQuestion(questions, map, answered)
