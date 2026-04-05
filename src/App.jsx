@@ -25,7 +25,7 @@ const SUBJECT_DB_MAP = {
 }
 
 const NAV_ITEMS = [
-  { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/home' },
+  { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/question-bank' },
   { icon: '🎓', label: 'Learn',         id: 'learn',        path: '/learn'         },
   { icon: '📊', label: 'My Progress',   id: 'profile',      path: '/my-progress'   },
   { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard',  path: '/leaderboard'   },
