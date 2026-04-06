@@ -244,7 +244,18 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   )
 
   return (
-    <div style={{ minHeight: embedded ? 'auto' : '100vh', background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: FONT_B }}>
+    <div
+      style={{
+        height: embedded ? 'auto' : '100%',
+        minHeight: 0,
+        background: embedded ? 'transparent' : t.bg,
+        color: t.text,
+        fontFamily: FONT_B,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
       <style>{`
         @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         .ps-wrap { display: flex; flex-direction: column; gap: 16px; padding: 32px 32px; animation: fadeUp 0.4s ease; }
@@ -260,20 +271,29 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           .ps-study-grid { grid-template-columns: 1fr; }
         }
       `}</style>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: embedded ? 'visible' : 'auto',
+          overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '28px 32px 0' }}>Analytics</div>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, padding: '4px 32px 20px' }}>My Progress</h1>
 
-      <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '28px 32px 0' }}>Analytics</div>
-      <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, padding: '4px 32px 20px' }}>My Progress</h1>
+        <div className="ps-wrap">
+          <XPCard />
 
-      <div className="ps-wrap">
-        <XPCard />
+          <div className="ps-summary-grid">
+            <RankCard />
+            <StatsCard />
+          </div>
 
-        <div className="ps-summary-grid">
-          <RankCard />
-          <StatsCard />
+          <StudyPlanCard />
+          <TopicsCard />
         </div>
-
-        <StudyPlanCard />
-        <TopicsCard />
       </div>
     </div>
   )
