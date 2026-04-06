@@ -116,12 +116,17 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 
   const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
 
-  // Mobile: natural scroll, no height constraints at all
-  if (isMobile) return (
-    <div style={{ minHeight: '100vh', background: t.bg }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: t.bg }}>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}`}</style>
 
-      {menuOpen && (
+      {!isMobile && (
+        <div style={{ width: 228, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
+          <SidebarContent {...sProps} />
+        </div>
+      )}
+
+      {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
           <div style={{ position: 'absolute', top: 0, left: 0, width: 260, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
@@ -130,37 +135,25 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
         </div>
       )}
 
-      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#080d28', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
-          <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
-          <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
-        </button>
-        <span onClick={() => navigate('/question-bank')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
-          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15 }}>{theme === 'dark' ? '🌙' : '☀️'}</button>
-          <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28' }}>
-            {profile.display_name[0].toUpperCase()}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {isMobile && (
+          <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#080d28', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
+              <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
+              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
+            </button>
+            <span onClick={() => navigate('/home')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
+              <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15 }}>{theme === 'dark' ? '🌙' : '☀️'}</button>
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28' }}>
+                {profile.display_name[0].toUpperCase()}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-
-      <div>{children}</div>
-    </div>
-  )
-
-  // Desktop: fixed height with internal scrolling
-  return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: t.bg }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
-
-      <div style={{ width: 228, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
-        <SidebarContent {...sProps} />
-      </div>
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflow: 'hidden' }}>
+        )}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
     </div>
@@ -208,7 +201,9 @@ function AppShellScreens({
       <div style={show('my-progress')}>
         <ProfileScreen {...commonProps}
           profile={profile} questions={questions}
-          struggleMap={struggleMap} embedded />
+          struggleMap={struggleMap} embedded
+          onStartSession={onStartSession}
+          onOpenLearn={(topic) => { setLearnTopic(topic); navigate('/learn') }} />
       </div>
       <div style={show('study-plan')}>
         <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
