@@ -311,19 +311,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
-            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>{topicEntries.length} topics · {questions.length} questions</div>
-              </div>
-              {!isAllTopicsSelected && (
-                <button
-                  onClick={() => setSelectedSubtopics(null)}
-                  style={{ padding: '7px 12px', borderRadius: 10, border: `1px solid rgba(241,190,67,0.35)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
-                >
-                  Done ✓
-                </button>
-              )}
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>{topicEntries.length} topics · {questions.length} questions</div>
             </div>
 
             <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)}
