@@ -209,17 +209,17 @@ export default function LearnScreen({
   // ── SETUP PHASE ─────────────────────────────────────────────────────────────
   // Guard: if phase is undefined (props not passed yet), show setup
   if (!phase || phase === 'setup') return (
-    <div style={{ color: t.text, fontFamily: FONT_B }}>
+    <div style={{ color: t.text, fontFamily: FONT_B, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        .ls-wrap { display:flex; min-height:calc(100vh - 80px); }
-        .ls-sidebar { width:260px; flex-shrink:0; padding:24px 20px; border-right:1px solid ${t.border}; display:flex; flex-direction:column; gap:16px; background:${t.bgNav}; }
-        .ls-main { flex:1; padding:28px 32px; background:${t.bg}; }
+.ls-wrap { display:flex; flex:1; min-height:0; overflow:hidden; }
+.ls-sidebar { width:260px; flex-shrink:0; padding:24px 20px; border-right:1px solid ${t.border}; display:flex; flex-direction:column; gap:16px; background:${t.bgNav}; overflow-y:auto; }
+.ls-main { flex:1; padding:28px 32px; background:${t.bg}; overflow-y:auto; min-width:0; }
         @media(max-width:860px){
-          .ls-wrap { flex-direction:column; }
-          .ls-sidebar { width:100%; border-right:none; border-bottom:1px solid ${t.border}; padding:16px; gap:12px; }
-          .ls-main { padding:16px; }
+          .ls-wrap { flex-direction:column; overflow:visible; }
+          .ls-sidebar { width:100%; border-right:none; border-bottom:1px solid ${t.border}; padding:16px; gap:12px; overflow:visible; }
+          .ls-main { padding:16px; overflow-y:visible; }
         }
         input::placeholder{color:${t.textFaint};}
         input:focus{border-color:${GOLD} !important; outline:none;}
@@ -321,7 +321,7 @@ export default function LearnScreen({
 
   // ── CHAT PHASE ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 0px)', color: t.text, fontFamily: FONT_B }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, overflow: 'hidden' }}>
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}

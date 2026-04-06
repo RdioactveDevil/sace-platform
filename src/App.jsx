@@ -203,7 +203,11 @@ function AppShellScreens({
           profile={profile} questions={questions}
           struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
-          onOpenLearn={(topic) => { setLearnTopic(topic); navigate('/learn') }} />
+          onOpenLearn={(nextTopic) => {
+            if (nextTopic) setTopic(nextTopic)
+            setPhase('setup')
+            navigate('/learn')
+          }} />
       </div>
       <div style={show('study-plan')}>
         <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
@@ -302,12 +306,10 @@ function AppInner() {
   }, [selectedSubject])
 
   const handleSelectSubject = async (subject) => {
-    if (!bootstrapped) setLoading(true)
     setSelectedSubject(subject)
     localStorage.setItem('gf-subject', JSON.stringify(subject))
     const qs = await getQuestions(SUBJECT_DB_MAP[subject.id] || subject.name)
     setQuestions(qs)
-    setLoading(false)
     navigate('/home')
   }
 
