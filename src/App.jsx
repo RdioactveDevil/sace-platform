@@ -226,6 +226,7 @@ function AppInner() {
   const [questions, setQuestions]             = useState([])
   const [struggleMap, setStruggleMap]         = useState({})
   const [loading, setLoading]                 = useState(true)
+  const [bootstrapped, setBootstrapped]       = useState(false)
   const [selectedSubject, setSelectedSubject] = useState(() => {
     try { return JSON.parse(localStorage.getItem('gf-subject')) || null } catch { return null }
   })
@@ -275,11 +276,11 @@ function AppInner() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      if (!session?.user) setLoading(false)
+      if (!session?.user) { setLoading(false); setBootstrapped(true) }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (!session?.user) { setProfile(null); setLoading(false) }
+      if (!session?.user) { setProfile(null); setLoading(false); setBootstrapped(true) }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -288,8 +289,8 @@ function AppInner() {
     if (!user) return
     setLoading(true)
     Promise.all([getProfile(user.id), getStruggleMap(user.id)])
-      .then(([prof, map]) => { setProfile(prof); setStruggleMap(map); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then(([prof, map]) => { setProfile(prof); setStruggleMap(map); setLoading(false); setBootstrapped(true) })
+      .catch(() => { setLoading(false); setBootstrapped(true) })
   }, [user])
 
   // Reload questions if subject was persisted but questions are empty
@@ -301,7 +302,7 @@ function AppInner() {
   }, [selectedSubject])
 
   const handleSelectSubject = async (subject) => {
-    setLoading(true)
+    if (!bootstrapped) setLoading(true)
     setSelectedSubject(subject)
     localStorage.setItem('gf-subject', JSON.stringify(subject))
     const qs = await getQuestions(SUBJECT_DB_MAP[subject.id] || subject.name)
@@ -362,7 +363,7 @@ function AppInner() {
     docName: learnDocName,   setDocName: setLearnDocName,
   }
 
-  if (loading) return (
+  if (!bootstrapped && loading) return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: FONT_B }}>
       <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🦁</div>
       <div style={{ fontSize: 13, color: '#64748b' }}>Loading…</div>
