@@ -114,9 +114,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         @media (max-width: 860px) {
-          .hs-wrap  { display: block; flex: none; min-height: auto; height: auto; }
-          .hs-main  { padding: 18px 14px; height: auto; overflow-y: visible; }
-          .hs-right { display: none; }
+          .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }
+          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px; }
+          .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
         }
       `}</style>

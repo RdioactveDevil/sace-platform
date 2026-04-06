@@ -118,7 +118,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: t.bg }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}`}</style>
 
       {!isMobile && (
         <div style={{ width: 228, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
@@ -179,7 +179,7 @@ function AppShellScreens({
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-  const show = (s) => ({ display: screen === s ? 'flex' : 'none', flexDirection: 'column', height: '100%', minHeight: 0 })
+  const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }
 
   return (
     <AppShell {...shellProps}>
