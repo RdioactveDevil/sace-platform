@@ -117,7 +117,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
   const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: t.bg }}>
+    <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: t.bg }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}`}</style>
 
       {!isMobile && (
@@ -135,7 +135,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100vh' : 0, overflow: isMobile ? 'visible' : 'hidden' }}>
         {isMobile && (
           <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#080d28', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -154,7 +154,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
+        <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
     </div>
   )
@@ -179,7 +179,7 @@ function AppShellScreens({
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-  const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }
+  const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'visible' } : { display: 'none' }
 
   return (
     <AppShell {...shellProps}>
