@@ -1,60 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
-import { supabase } from '../lib/supabase'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const DESKTOP_GAP = 24
-
-function startOfDayLocal(dateLike) {
-  const d = new Date(dateLike)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function addDays(dateLike, days) {
-  const d = new Date(dateLike)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
-function sameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
   const [selectedSubtopics, setSelectedSubtopics] = useState(null) // null = all, [] = none, [..] = filtered
-  const [showSubtopicPicker, setShowSubtopicPicker] = useState(false)
-  const [activityTab, setActivityTab] = useState('Week')
-  const [answerLog, setAnswerLog] = useState([])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadActivity() {
-      if (!profile?.id) {
-        if (!cancelled) setAnswerLog([])
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('answer_log')
-        .select('question_id, answered_at')
-        .eq('user_id', profile.id)
-        .order('answered_at', { ascending: false })
-        .limit(5000)
-
-      if (!cancelled) {
-        setAnswerLog(error || !data ? [] : data)
-      }
-    }
-
-    loadActivity()
-    return () => { cancelled = true }
-  }, [profile?.id])
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {
@@ -65,15 +19,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     return filtered
   }, [struggleMap, questionIds])
 
-  const filteredAnswerLog = useMemo(() => {
-    if (!Array.isArray(answerLog)) return []
-    return answerLog.filter(a => questionIds.has(a.question_id))
-  }, [answerLog, questionIds])
-
   const topicGroups = {}
   const subtopicGroups = {}
   questions.forEach(q => {
-    if (!topicGroups[q.topic]) topicGroups[q.topic] = { total: 0, attempted: 0, correct: 0 }
+    if (!topicGroups[q.topic]) topicGroups[q.topic] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
     topicGroups[q.topic].total++
 
     if (!subtopicGroups[q.subtopic]) subtopicGroups[q.subtopic] = { topic: q.topic, total: 0, attempted: 0, wrong: 0 }
@@ -83,11 +32,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     if (s && s.attempts > 0) {
       topicGroups[q.topic].attempted++
       topicGroups[q.topic].correct += (s.attempts - s.wrong)
+      topicGroups[q.topic].wrong += s.wrong
       subtopicGroups[q.subtopic].attempted++
       subtopicGroups[q.subtopic].wrong += s.wrong
     }
   })
 
+  const topicEntries = Object.entries(topicGroups)
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
   const isAllTopicsSelected = selectedSubtopics === null
   const hasNoTopicsSelected = Array.isArray(selectedSubtopics) && selectedSubtopics.length === 0
@@ -98,7 +49,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const fullCounts = getQuestionCounts(questions, currentStruggleMap)
   const filteredCounts = getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
-  const attemptedQuestionCount = questions.filter(q => (currentStruggleMap[q.id]?.attempts || 0) > 0).length
 
   const selectedTopicsSummary = isAllTopicsSelected
     ? 'All topics'
@@ -119,70 +69,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const totalAttempts = Object.values(currentStruggleMap).reduce((s, v) => s + (v.attempts || 0), 0)
   const totalWrong = Object.values(currentStruggleMap).reduce((s, v) => s + (v.wrong || 0), 0)
   const accuracy = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
-
-  const graphData = useMemo(() => {
-    const today = startOfDayLocal(new Date())
-
-    if (activityTab === 'Week') {
-      const start = addDays(today, -6)
-      const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-      const days = Array.from({ length: 7 }, (_, i) => {
-        const date = addDays(start, i)
-        const count = filteredAnswerLog.reduce((sum, row) => {
-          if (!row?.answered_at) return sum
-          const answered = startOfDayLocal(row.answered_at)
-          return sameDay(answered, date) ? sum + 1 : sum
-        }, 0)
-        return {
-          label: labels[i],
-          count,
-          isToday: sameDay(date, today),
-        }
-      })
-      return { items: days, max: Math.max(1, ...days.map(d => d.count)) }
-    }
-
-    if (activityTab === 'Month') {
-      const start = addDays(today, -29)
-      const buckets = Array.from({ length: 5 }, (_, i) => ({
-        label: i === 4 ? 'Now' : `W${i + 1}`,
-        count: 0,
-        isToday: i === 4,
-      }))
-
-      filteredAnswerLog.forEach(row => {
-        if (!row?.answered_at) return
-        const answered = startOfDayLocal(row.answered_at)
-        if (answered < start || answered > today) return
-        const diffDays = Math.floor((answered - start) / 86400000)
-        const bucketIndex = Math.min(4, Math.floor(diffDays / 7))
-        buckets[bucketIndex].count += 1
-      })
-
-      return { items: buckets, max: Math.max(1, ...buckets.map(d => d.count)) }
-    }
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const monthBuckets = Array.from({ length: 6 }, (_, i) => {
-      const date = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1)
-      return {
-        label: months[date.getMonth()],
-        month: date.getMonth(),
-        year: date.getFullYear(),
-        count: 0,
-        isToday: date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear(),
-      }
-    })
-
-    filteredAnswerLog.forEach(row => {
-      if (!row?.answered_at) return
-      const answered = new Date(row.answered_at)
-      const bucket = monthBuckets.find(m => m.month === answered.getMonth() && m.year === answered.getFullYear())
-      if (bucket) bucket.count += 1
-    })
-
-    return { items: monthBuckets, max: Math.max(1, ...monthBuckets.map(d => d.count)) }
-  }, [activityTab, filteredAnswerLog])
+  const days = ['M','T','W','T','F','S','S']
+  const activity = [0,0,0,0,totalAttempts,0,0]
+  const maxAct = Math.max(...activity, 1)
 
   const card = {
     background: t.bgCard,
@@ -304,13 +193,22 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     setSelectedSubtopics(prev => prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub])
   }
 
+  const topicStatusColor = (topic) => {
+    const tg = topicGroups[topic]
+    if (!tg || tg.attempted === 0) return GOLD
+    const rate = tg.wrong / tg.attempted
+    if (rate >= 0.5) return t.danger
+    if (rate >= 0.25) return GOLD
+    return t.success
+  }
+
   return (
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .hs-wrap  { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: ${DESKTOP_GAP}px; align-items: start; flex: 1; min-height: 0; }
-        .hs-main  { min-width: 0; padding: 32px 12px 32px 32px; margin-right: -12px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-        .hs-right { min-width: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: visible; height: 100%; box-sizing: border-box; }
+        .hs-wrap  { display: flex; align-items: flex-start; flex: 1; min-height: 0; }
+        .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; padding-right: 12px; }
+        .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
         @media (max-width: 1100px) {
@@ -318,7 +216,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         }
         @media (max-width: 860px) {
           .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }
-          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; margin-right: 0 !important; }
+          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; }
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
         }
@@ -333,13 +231,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                {['Week','Month','All'].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActivityTab(tab)}
-                    style={{ padding: '5px 14px', borderRadius: 20, border: 'none', background: activityTab === tab ? GOLD : 'transparent', color: activityTab === tab ? '#0c1037' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
-                  >
+              <div style={{ display: 'flex', gap: 5 }}>
+                {['Week','Month','All'].map((tab, i) => (
+                  <button key={tab} style={{ padding: '5px 14px', borderRadius: 20, border: 'none', background: i === 0 ? GOLD : 'transparent', color: i === 0 ? '#0c1037' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                     {tab}
                   </button>
                 ))}
@@ -358,10 +252,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 48 }}>
-              {graphData.items.map((d, i) => (
-                <div key={`${d.label}-${i}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: '100%', background: d.count > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: d.count > 0 ? `${Math.max((d.count / graphData.max) * 38, 8)}px` : '3px' }} />
-                  <div style={{ fontSize: 10, color: d.isToday ? GOLD : t.textFaint, fontWeight: d.isToday ? 700 : 400 }}>{d.label}</div>
+              {days.map((d, i) => (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                  <div style={{ width: '100%', background: activity[i] > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: activity[i] > 0 ? `${Math.max((activity[i]/maxAct)*38, 8)}px` : '3px' }} />
+                  <div style={{ fontSize: 10, color: i === 4 ? GOLD : t.textFaint, fontWeight: i === 4 ? 700 : 400 }}>{d}</div>
                 </div>
               ))}
             </div>
@@ -373,177 +267,150 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               {fullCounts.unseen > 0 ? (
                 renderActionButton({
                   label: `Start Session · ${fullCounts.unseen} new question${fullCounts.unseen !== 1 ? 's' : ''} →`,
-                  onClick: () => onStartSession({ mode: 'new', subtopics: null }),
                   variant: 'primary',
+                  onClick: () => onStartSession({ mode: 'new', subtopics: [] }),
                 })
               ) : (
-                <div style={{ padding: '14px 16px', borderRadius: 12, background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#f5f6ff', border: `1px solid ${t.border}`, textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, marginBottom: 6 }}>🎉</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>All questions attempted!</div>
+                <div style={{ borderRadius: 12, padding: '20px 16px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f6f7fc', border: `1px solid ${t.border}`, textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, marginBottom: 6 }}>🎉</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>All questions attempted!</div>
                   <div style={{ fontSize: 12, color: t.textMuted }}>Use the options below to review and repeat.</div>
                 </div>
               )}
 
               {fullCounts.wrong > 0 && renderActionButton({
                 label: `Re-attempt ${fullCounts.wrong} wrong answer${fullCounts.wrong !== 1 ? 's' : ''}`,
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: null }),
                 variant: 'danger',
-                small: true,
+                onClick: () => onStartSession({ mode: 'wrong', subtopics: [] }),
               })}
 
-              {fullCounts.unseen === 0 && renderActionButton({
+              {fullCounts.attempted > 0 && renderActionButton({
                 label: 'Repeat all questions',
-                onClick: () => onStartSession({ mode: 'all', subtopics: null }),
-                variant: 'secondary',
-                small: true,
+                onClick: () => onStartSession({ mode: 'all', subtopics: [] }),
+              })}
+            </div>
+          </div>
+
+          <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>{topicEntries.length} topics · {questions.length} questions</div>
+              </div>
+              {!isAllTopicsSelected && (
+                <button
+                  onClick={() => setSelectedSubtopics(null)}
+                  style={{ padding: '7px 12px', borderRadius: 10, border: `1px solid rgba(241,190,67,0.35)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                >
+                  Done ✓
+                </button>
+              )}
+            </div>
+
+            <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : null)}
+              style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: isAllTopicsSelected ? 'rgba(241,190,67,0.07)' : 'transparent', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${isAllTopicsSelected ? GOLD : t.border}`, background: isAllTopicsSelected ? GOLD : 'transparent', marginRight: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isAllTopicsSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 800, color: isAllTopicsSelected ? GOLD : t.text, flex: 1 }}>All Topics</span>
+              <span style={{ fontSize: 13, color: t.textMuted }}>{questions.length}/{questions.length}</span>
+            </div>
+
+            <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+              {topicEntries.map(([topic, tg]) => {
+                const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
+                const topicSel = isAllTopicsSelected || subs.every(s => selectedSubtopics.includes(s))
+                const topicPartial = !isAllTopicsSelected && subs.some(s => selectedSubtopics.includes(s)) && !topicSel
+                const accent = topicStatusColor(topic)
+                const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
+
+                return (
+                  <div key={topic}>
+                    <div onClick={() => toggleTopic(topic)}
+                      style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', marginRight: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {topicSel && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                        {topicPartial && !topicSel && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
+                      </div>
+
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, marginRight: 12, flexShrink: 0 }} />
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</div>
+                          <div style={{ fontSize: 13, color: t.textMuted, flexShrink: 0 }}>{tg.attempted}/{tg.total}</div>
+                        </div>
+                        <div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ flex: 1, height: 4, borderRadius: 999, background: t.border, overflow: 'hidden' }}>
+                            <div style={{ width: `${topicPct}%`, height: '100%', background: GOLD, borderRadius: 999 }} />
+                          </div>
+                          <div style={{ fontSize: 11, color: t.textFaint, minWidth: 34, textAlign: 'right' }}>{topicPct}%</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {subs.map(sub => {
+                      const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
+                      const subSel = isAllTopicsSelected || selectedSubtopics.includes(sub)
+                      const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
+                      return (
+                        <div key={sub} onClick={() => toggleSub(sub)}
+                          style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 52px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
+                          <div style={{ width: 14, height: 14, borderRadius: 4, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {subSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize: 12, color: subSel ? t.text : t.textMuted, flex: 1 }}>{sub}</span>
+                          {errRate !== null && errRate > 0 && (
+                            <span style={{ fontSize: 10, color: t.danger, fontWeight: 700, marginRight: 8 }}>⚡ {errRate}%</span>
+                          )}
+                          <span style={{ fontSize: 11, color: t.textMuted }}>{sg.attempted}/{sg.total}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
               })}
             </div>
           </div>
 
           <div style={{ ...card, padding: '16px 20px' }}>
-            <div style={{ borderBottom: `1px solid ${t.border}`, paddingBottom: 12, marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: t.textMuted }}>
-                  {isAllTopicsSelected ? 'All topics' : hasNoTopicsSelected ? 'No topics selected' : `${selectedSubtopics.length} subtopic${selectedSubtopics.length !== 1 ? 's' : ''} selected`}
-                </span>
-                <button
-                  onClick={() => setShowSubtopicPicker(p => !p)}
-                  style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 6, border: `1px solid ${showSubtopicPicker ? GOLD : t.border}`, background: showSubtopicPicker ? 'rgba(241,190,67,0.12)' : 'transparent', color: showSubtopicPicker ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B }}
-                >
-                  {showSubtopicPicker ? 'Done ✓' : 'Filter topics'}
-                </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Selected for next session</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
+                  {isAllTopicsSelected ? allSubtopics.length : selectedSubtopics.length} subtopic{(isAllTopicsSelected ? allSubtopics.length : selectedSubtopics.length) !== 1 ? 's' : ''} selected
+                </div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{selectedTopicsSummary}</div>
               </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: GOLD }}>{selectedQuestionTotal}</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>questions included</div>
+              </div>
+            </div>
 
-              {Object.entries(topicGroups).map(([topic, s]) => {
-                const pct = s.total > 0 ? s.attempted / s.total : 0
-                const acc = s.attempted > 0 ? s.correct / s.attempted : null
-                const dotCol = acc === null ? t.textFaint : acc > 0.7 ? t.success : acc > 0.4 ? GOLD : t.danger
-                return (
-                  <div key={topic} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: dotCol }} />
-                    <span style={{ fontSize: 12, color: t.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</span>
-                    <div style={{ width: 48, background: t.border, borderRadius: 3, height: 3, overflow: 'hidden', flexShrink: 0 }}>
-                      <div style={{ width: `${pct*100}%`, height: '100%', background: GOLD }} />
-                    </div>
-                    <span style={{ fontSize: 10, color: t.textFaint, width: 32, textAlign: 'right', flexShrink: 0 }}>{s.attempted}/{s.total}</span>
-                  </div>
-                )
+            <div className="hs-selected-actions">
+              {renderActionButton({
+                label: `Start selected session · ${filteredCounts.unseen} new`,
+                variant: 'primary',
+                disabled: hasNoTopicsSelected || filteredCounts.unseen === 0,
+                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics }),
+              })}
+              {renderActionButton({
+                label: `Re-attempt wrong · ${filteredCounts.wrong}`,
+                variant: 'danger',
+                disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
+                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics }),
+              })}
+              {renderActionButton({
+                label: 'Repeat selected',
+                disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
+                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics }),
               })}
             </div>
 
-            {showSubtopicPicker && (
-              <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
-                <div style={{ padding: '12px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Filter by topic</span>
-                  {!isAllTopicsSelected && (
-                    <button
-                      onClick={() => setSelectedSubtopics(null)}
-                      style={{ fontSize: 11, color: GOLD, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B }}
-                    >
-                      Clear filter
-                    </button>
-                  )}
-                </div>
-
-                <div
-                  onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : null)}
-                  style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', cursor: 'pointer', background: isAllTopicsSelected ? 'rgba(241,190,67,0.07)' : 'transparent', borderBottom: `1px solid ${t.border}` }}
-                >
-                  <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${isAllTopicsSelected ? GOLD : t.border}`, background: isAllTopicsSelected ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {isAllTopicsSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: isAllTopicsSelected ? GOLD : t.text, flex: 1 }}>All Topics</span>
-                  <span style={{ fontSize: 12, color: t.textMuted }}>{attemptedQuestionCount} / {questions.length}</span>
-                </div>
-
-                <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-                  {Object.entries(topicGroups).map(([topic, tg]) => {
-                    const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
-                    const topicSel = isAllTopicsSelected || subs.every(s => selectedSubtopics.includes(s))
-                    const topicPartial = !isAllTopicsSelected && subs.some(s => selectedSubtopics.includes(s)) && !topicSel
-
-                    return (
-                      <div key={topic}>
-                        <div
-                          onClick={() => toggleTopic(topic)}
-                          style={{ display: 'flex', alignItems: 'center', padding: '9px 16px', cursor: 'pointer', borderBottom: `1px solid ${t.border}` }}
-                        >
-                          <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {topicSel && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                            {topicPartial && !topicSel && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
-                          </div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: topicSel ? t.text : t.textMuted, flex: 1 }}>{topic}</span>
-                          <span style={{ fontSize: 12, color: t.textMuted }}>{tg.attempted} / {tg.total}</span>
-                        </div>
-
-                        {subs.map(sub => {
-                          const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
-                          const subSel = isAllTopicsSelected || selectedSubtopics.includes(sub)
-                          const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
-                          return (
-                            <div
-                              key={sub}
-                              onClick={() => toggleSub(sub)}
-                              style={{ display: 'flex', alignItems: 'center', padding: '7px 16px 7px 40px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}
-                            >
-                              <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {subSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                              </div>
-                              <span style={{ fontSize: 12, color: subSel ? t.text : t.textMuted, flex: 1 }}>{sub}</span>
-                              {errRate !== null && errRate > 0 && (
-                                <span style={{ fontSize: 10, color: t.danger, fontWeight: 700, marginRight: 8 }}>⚡{errRate}%</span>
-                              )}
-                              <span style={{ fontSize: 11, color: t.textMuted }}>{sg.attempted} / {sg.total}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+            {hasNoTopicsSelected && (
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>Select at least one topic to start a session.</div>
             )}
-
-            <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : '#fffaf0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Selected for next session</div>
-                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 4 }}>
-                    {isAllTopicsSelected ? `${allSubtopics.length} subtopics selected` : hasNoTopicsSelected ? '0 subtopics selected' : `${selectedSubtopics.length} subtopic${selectedSubtopics.length !== 1 ? 's' : ''} selected`}
-                  </div>
-                  <div style={{ fontSize: 12, color: hasNoTopicsSelected ? t.danger : t.textMuted }}>
-                    {selectedTopicsSummary}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: GOLD }}>{selectedQuestionTotal}</div>
-                  <div style={{ fontSize: 11, color: t.textMuted }}>questions included</div>
-                </div>
-              </div>
-
-              <div className="hs-selected-actions">
-                {renderActionButton({
-                  label: hasNoTopicsSelected
-                    ? 'Select at least one topic'
-                    : `Start selected session · ${filteredCounts.unseen} new`,
-                  onClick: () => onStartSession({ mode: 'new', subtopics: selectedSubtopics }),
-                  variant: 'primary',
-                  disabled: hasNoTopicsSelected,
-                })}
-                {renderActionButton({
-                  label: `Re-attempt wrong${filteredCounts.wrong > 0 ? ` · ${filteredCounts.wrong}` : ''}`,
-                  onClick: () => onStartSession({ mode: 'wrong', subtopics: selectedSubtopics }),
-                  variant: 'danger',
-                  disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
-                })}
-                {renderActionButton({
-                  label: 'Repeat selected',
-                  onClick: () => onStartSession({ mode: 'all', subtopics: selectedSubtopics }),
-                  variant: 'secondary',
-                  disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
-                })}
-              </div>
-            </div>
           </div>
 
           <div className="hs-mobile-cards">
