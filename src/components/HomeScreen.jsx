@@ -197,9 +197,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .hs-wrap  { display: flex; align-items: flex-start; flex: 1; min-height: 0; }
-        .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-        .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-wrap  { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: 24px; align-items: start; flex: 1; min-height: 0; }
+        .hs-main  { min-width: 0; padding: 32px 0 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-right { min-width: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
         @media (max-width: 1100px) {
