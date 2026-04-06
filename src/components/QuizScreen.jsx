@@ -70,7 +70,7 @@ export default function QuizScreen({
   const aiTip           = _aiTip           ?? ''
   const loadingTip      = _loadingTip      ?? false
   const quizMode        = _quizMode        ?? 'new'
-  const quizSubtopics   = _quizSubtopics   ?? []
+  const quizSubtopics   = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
 
   const navigate    = useNavigate()
   const location    = useLocation()
@@ -78,6 +78,7 @@ export default function QuizScreen({
   const loadNext = useCallback((answered, map, mode = 'new', subtopics = []) => {
     const q = selectNextQuestion(questions, map, answered, mode, subtopics)
     if (!q) {
+      console.log('NO QUESTIONS FOUND', { mode, subtopics, answeredCount: answered.length })
       setFinished(true)
       return
     }
@@ -98,7 +99,7 @@ export default function QuizScreen({
     // Only load first question if no session in progress
     if (!_currentQ) {
       init()
-      loadNext([], struggleMap, 'new', quizSubtopics)
+      loadNext([], struggleMap, quizMode, quizSubtopics)
     }
   }, [])
 
@@ -156,7 +157,7 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, quizSubtopics); return prev })
   }
 
-  const counts = getQuestionCounts(questions, struggleMap)
+  const counts = getQuestionCounts(questions, struggleMap, quizSubtopics)
 
   // Finished screen — no more questions in current mode
   if (finished || (!currentQ && sessionResults.length > 0)) {

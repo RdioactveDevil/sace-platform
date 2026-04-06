@@ -423,7 +423,25 @@ function AppInner() {
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={(opts) => { if(opts?.mode) setQuizMode(opts.mode); if(opts?.subtopics) setQuizSubtopics(opts.subtopics || []); navigate('/quiz') }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
+          onStartSession={(opts) => {
+            const nextMode = opts?.mode || 'new'
+            const nextSubtopics = Array.isArray(opts?.subtopics) ? opts.subtopics : []
+            setQuizMode(nextMode)
+            setQuizSubtopics(nextSubtopics)
+            setQuizQ(null)
+            setQuizSelected(null)
+            setQuizShowAns(false)
+            setQuizCorrect(null)
+            setQuizEarnedXP(0)
+            setQuizStreak(profile?.streak || 0)
+            setQuizSessionXP(0)
+            setQuizResults([])
+            setQuizAnswered([])
+            setQuizQNumber(1)
+            setQuizAiTip('')
+            setQuizLoadingTip(false)
+            navigate('/quiz')
+          }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
     </Routes>
   )

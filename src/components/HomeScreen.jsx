@@ -8,7 +8,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
-  const [selectedSubtopics, setSelectedSubtopics] = useState(null) // null = all, [] = none, [..] = filtered
+  const [selectedSubtopics, setSelectedSubtopics] = useState([]) // [] = none selected by default
   const [expandedTopics, setExpandedTopics] = useState(() => new Set())
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
@@ -41,20 +41,22 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const topicEntries = Object.entries(topicGroups)
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
-  const isAllTopicsSelected = selectedSubtopics === null
-  const hasNoTopicsSelected = Array.isArray(selectedSubtopics) && selectedSubtopics.length === 0
-  const effectiveSubtopics = isAllTopicsSelected ? [] : selectedSubtopics
-  const selectedQuestionTotal = isAllTopicsSelected
-    ? questions.length
-    : questions.filter(q => selectedSubtopics?.includes(q.subtopic)).length
+  const hasNoTopicsSelected = selectedSubtopics.length === 0
+  const isAllTopicsSelected = allSubtopics.length > 0 && selectedSubtopics.length === allSubtopics.length
+  const effectiveSubtopics = selectedSubtopics
+  const selectedQuestionTotal = hasNoTopicsSelected
+    ? 0
+    : questions.filter(q => selectedSubtopics.includes(q.subtopic)).length
 
   const fullCounts = getQuestionCounts(questions, currentStruggleMap)
-  const filteredCounts = getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
+  const filteredCounts = hasNoTopicsSelected
+    ? { unseen: 0, wrong: 0, total: 0 }
+    : getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
 
-  const selectedTopicsSummary = isAllTopicsSelected
-    ? 'All topics'
-    : hasNoTopicsSelected
-      ? 'No topics selected'
+  const selectedTopicsSummary = hasNoTopicsSelected
+    ? 'No topics selected'
+    : isAllTopicsSelected
+      ? 'All topics'
       : [...new Set(questions.filter(q => selectedSubtopics.includes(q.subtopic)).map(q => q.topic))].join(', ')
 
   const topStruggles = Object.entries(currentStruggleMap)
@@ -173,24 +175,17 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const toggleTopic = (topic) => {
     const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
-    const allSel = !isAllTopicsSelected && subs.every(s => selectedSubtopics.includes(s))
+    const allSel = subs.every(s => selectedSubtopics.includes(s))
 
-    if (isAllTopicsSelected) {
-      setSelectedSubtopics(allSubtopics.filter(s => !subs.includes(s)))
-      return
-    }
     if (allSel) {
       setSelectedSubtopics(prev => prev.filter(s => !subs.includes(s)))
       return
     }
-    setSelectedSubtopics(prev => [...new Set([...(prev || []), ...subs])])
+
+    setSelectedSubtopics(prev => [...new Set([...prev, ...subs])])
   }
 
   const toggleSub = (sub) => {
-    if (isAllTopicsSelected) {
-      setSelectedSubtopics(allSubtopics.filter(s => s !== sub))
-      return
-    }
     setSelectedSubtopics(prev => prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub])
   }
 
@@ -331,7 +326,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               )}
             </div>
 
-            <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : null)}
+            <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)}
               style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: isAllTopicsSelected ? 'rgba(241,190,67,0.07)' : 'transparent', borderBottom: `1px solid ${t.border}` }}>
               <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${isAllTopicsSelected ? GOLD : t.border}`, background: isAllTopicsSelected ? GOLD : 'transparent', marginRight: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {isAllTopicsSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
@@ -343,8 +338,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <div style={{ maxHeight: 520, overflowY: 'auto' }}>
               {topicEntries.map(([topic, tg]) => {
                 const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
-                const topicSel = isAllTopicsSelected || subs.every(s => selectedSubtopics.includes(s))
-                const topicPartial = !isAllTopicsSelected && subs.some(s => selectedSubtopics.includes(s)) && !topicSel
+                const topicSel = subs.every(s => selectedSubtopics.includes(s))
+                const topicPartial = subs.some(s => selectedSubtopics.includes(s)) && !topicSel
                 const accent = topicStatusColor(topic)
                 const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
                 const isExpanded = expandedTopics.has(topic)
@@ -385,7 +380,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
                     {isExpanded && subs.map(sub => {
                       const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
-                      const subSel = isAllTopicsSelected || selectedSubtopics.includes(sub)
+                      const subSel = selectedSubtopics.includes(sub)
                       const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
                       return (
                         <div key={sub} onClick={() => toggleSub(sub)}
