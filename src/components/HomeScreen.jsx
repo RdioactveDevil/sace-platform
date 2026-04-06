@@ -8,7 +8,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
-  const [selectedSubtopics, setSelectedSubtopics] = useState([]) // empty = all
+  const [selectedSubtopics, setSelectedSubtopics] = useState(null) // null = all, [] = none, [..] = filtered
   const [showSubtopicPicker, setShowSubtopicPicker] = useState(false)
 
   const topStruggles = Object.entries(struggleMap)
@@ -45,6 +45,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   })
   // Ensure subtopicGroups has total for all subtopics
   // (already done above — total incremented for every question)
+
+
+  const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
+  const isAllTopicsSelected = selectedSubtopics === null
+  const hasNoTopicsSelected = !isAllTopicsSelected && selectedSubtopics.length === 0
+  const effectiveSubtopics = isAllTopicsSelected ? [] : selectedSubtopics
+  const filteredCounts = getQuestionCounts(questions, struggleMap, effectiveSubtopics)
 
   const totalAttempts = Object.values(struggleMap).reduce((s, v) => s + v.attempts, 0)
   const totalWrong    = Object.values(struggleMap).reduce((s, v) => s + v.wrong, 0)
@@ -106,7 +113,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   )
 
   return (
-    <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         .hs-wrap  { display: flex; align-items: flex-start; flex: 1; min-height: 0; }
@@ -114,9 +121,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         @media (max-width: 860px) {
-          .hs-wrap  { display: block; height: auto; overflow: visible; }
-          .hs-main  { height: auto; overflow-y: visible; padding: 18px 14px; }
-          .hs-right { display: none; }
+          .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }
+          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px; }
+          .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
         }
       `}</style>
@@ -170,12 +177,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
             {/* Session action buttons — at the top */}
             {(() => {
-              const counts = getQuestionCounts(questions, struggleMap)
+              const counts = filteredCounts
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                   {counts.unseen > 0 ? (
-                    <button onClick={() => onStartSession({ mode: 'new', subtopics: selectedSubtopics })} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 24px rgba(241,190,67,0.35)` }}>
-                      Start Session · {(selectedSubtopics.length === 0 ? counts.unseen : questions.filter(q => selectedSubtopics.includes(q.subtopic) && (!struggleMap[q.id] || struggleMap[q.id].attempts === 0)).length)} new question{counts.unseen !== 1 ? 's' : ''}{selectedSubtopics.length > 0 ? ' (filtered)' : ''} →
+                    <button onClick={() => !hasNoTopicsSelected && onStartSession({ mode: 'new', subtopics: effectiveSubtopics })} style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 24px rgba(241,190,67,0.35)` }}>
+                      Start Session · {counts.unseen} new question{counts.unseen !== 1 ? 's' : ''}{!isAllTopicsSelected ? ' (filtered)' : ''} →
                     </button>
                   ) : (
                     <div style={{ padding: '14px 16px', borderRadius: 12, background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#f5f6ff', border: `1px solid ${t.border}`, textAlign: 'center' }}>
@@ -185,12 +192,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                     </div>
                   )}
                   {counts.wrong > 0 && (
-                    <button onClick={() => onStartSession({ mode: 'wrong', subtopics: selectedSubtopics })} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', color: t.danger, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                    <button onClick={() => !hasNoTopicsSelected && onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics })} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', color: t.danger, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                       Re-attempt {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''}
                     </button>
                   )}
                   {counts.unseen === 0 && (
-                    <button onClick={() => onStartSession({ mode: 'all', subtopics: selectedSubtopics })} style={{ width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
+                    <button onClick={() => !hasNoTopicsSelected && onStartSession({ mode: 'all', subtopics: effectiveSubtopics })} style={{ width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
                       Repeat all questions
                     </button>
                   )}
@@ -202,7 +209,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ fontSize: 12, color: t.textMuted }}>
-                  {selectedSubtopics.length === 0 ? 'All topics' : `${selectedSubtopics.length} subtopic${selectedSubtopics.length !== 1 ? 's' : ''} selected`}
+                  {isAllTopicsSelected ? 'All topics' : hasNoTopicsSelected ? 'No topics selected' : `${selectedSubtopics.length} subtopic${selectedSubtopics.length !== 1 ? 's' : ''} selected`}
                 </span>
                 <button onClick={() => setShowSubtopicPicker(p => !p)}
                   style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 6, border: `1px solid ${showSubtopicPicker ? GOLD : t.border}`, background: showSubtopicPicker ? 'rgba(241,190,67,0.12)' : 'transparent', color: showSubtopicPicker ? GOLD : t.textMuted, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -232,11 +239,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           {/* Subtopic picker — tree style */}
           {showSubtopicPicker && (() => {
             // All subtopics selected = none explicitly chosen
-            const allMode = selectedSubtopics.length === 0
+            const allMode = isAllTopicsSelected
 
             const toggleTopic = (topic) => {
               const subs = questions.filter(q => q.topic === topic).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i)
-              const allSel = subs.every(s => selectedSubtopics.includes(s))
+              const allSel = !allMode && subs.every(s => selectedSubtopics.includes(s))
               if (allMode) {
                 // Was in "all" mode — deselect this topic by selecting everything else
                 const allSubs = Object.keys(topicGroups).flatMap(t => questions.filter(q => q.topic === t).map(q => q.subtopic).filter((v,i,a) => a.indexOf(v) === i))
@@ -264,7 +271,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 <div style={{ padding: '12px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Filter by topic</span>
                   {!allMode && (
-                    <button onClick={() => setSelectedSubtopics([])}
+                    <button onClick={() => setSelectedSubtopics(null)}
                       style={{ fontSize: 11, color: GOLD, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B }}>
                       Clear filter
                     </button>
@@ -272,7 +279,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 </div>
 
                 {/* All row */}
-                <div onClick={() => setSelectedSubtopics([])}
+                <div onClick={() => setSelectedSubtopics(allMode ? [] : null)}
                   style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', cursor: 'pointer', background: allMode ? 'rgba(241,190,67,0.07)' : 'transparent', borderBottom: `1px solid ${t.border}` }}>
                   <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${allMode ? GOLD : t.border}`, background: allMode ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {allMode && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
