@@ -129,16 +129,16 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const PriorityCard = () => topStruggles.length > 0 ? (
     <div style={{ ...card, padding: '16px 18px' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 2 }}>Priority Topics</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 2 }}>Priority Topics</div>
       <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Hit first in your next session</div>
       {topStruggles.map((s, i) => (
         <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
           <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${t.danger}15`, border: `1px solid ${t.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: t.danger, flexShrink: 0 }}>{i+1}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
             <div style={{ fontSize: 10, color: t.textMuted }}>{s.q.topic}</div>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
         </div>
       ))}
     </div>
@@ -146,7 +146,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const StatsCard = () => (
     <div style={{ ...card, padding: '16px 18px' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Your Stats</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 12 }}>Your Stats</div>
       {[
         { label: 'Total XP',       val: profile.xp.toLocaleString(),         color: GOLD },
         { label: 'Best streak',    val: `${profile.best_streak||0} days 🔥`, color: GOLD },
@@ -154,8 +154,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         { label: 'Accuracy',       val: `${accuracy}%`,                      color: accuracy > 70 ? t.success : accuracy > 40 ? GOLD : t.danger },
       ].map(s => (
         <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
-          <span style={{ fontSize: 13, color: t.textMuted }}>{s.label}</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val}</span>
+          <span style={{ fontSize: 15, color: t.textMuted }}>{s.label}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.val}</span>
         </div>
       ))}
     </div>
@@ -163,8 +163,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const SprintCard = () => (
     <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
-      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set a study goal to track your daily progress.</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
+      <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set a study goal to track your daily progress.</div>
       <button style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
         Set Study Goal →
       </button>
@@ -216,17 +216,22 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .hs-wrap  { display: flex; align-items: flex-start; flex: 1; min-height: 0; }
-        .hs-main  { flex: 1; min-width: 0; padding: 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; padding-right: 12px; }
-        .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-wrap  { display: flex; align-items: flex-start; gap: 24px; flex: 1; min-height: 0; }
+        .hs-main  { flex: 1; min-width: 0; max-width: 980px; padding: 32px 24px 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-right { width: 328px; flex-shrink: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
         .hs-topic-grid { display: grid; grid-template-columns: minmax(280px, 340px) 180px 56px; align-items: center; column-gap: 18px; width: 100%; }
         .hs-topic-track { width: 180px; height: 4px; border-radius: 999px; overflow: hidden; justify-self: start; }
+        @media (max-width: 1240px) {
+          .hs-main  { max-width: none; padding-right: 16px; }
+          .hs-right { width: 300px; padding-right: 24px; }
+        }
         @media (max-width: 1100px) {
           .hs-selected-actions { grid-template-columns: 1fr; }
           .hs-topic-grid { grid-template-columns: minmax(220px, 1fr) 140px 48px; column-gap: 14px; }
           .hs-topic-track { width: 140px; }
+          .hs-right { width: 280px; padding-right: 20px; }
         }
         @media (max-width: 860px) {
           .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }

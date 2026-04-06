@@ -85,7 +85,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           const active = location.pathname === item.path || (item.path === '/home' && location.pathname === '/')
           return (
             <button key={item.id} onClick={() => go(item.path)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
               {item.label}
             </button>
@@ -121,7 +121,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}`}</style>
 
       {!isMobile && (
-        <div style={{ width: 228, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
+        <div style={{ width: 252, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
           <SidebarContent {...sProps} />
         </div>
       )}
@@ -129,7 +129,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
       {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'absolute', top: 0, left: 0, width: 260, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
             <SidebarContent {...sProps} onClose={() => setMenuOpen(false)} />
           </div>
         </div>
