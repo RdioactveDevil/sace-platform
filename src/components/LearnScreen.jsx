@@ -255,37 +255,42 @@ export default function LearnScreen({
       <style>{`
         @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        .ls-wrap { display:grid; grid-template-columns:minmax(0, 1fr) 252px; gap:24px; flex:1; min-height:0; overflow:hidden; }
-        .ls-main { padding:28px 0 28px 28px; background:${t.bg}; overflow-y:auto; min-width:0; }
-        .ls-sidebar { width:252px; justify-self:end; padding:24px 20px; border-left:1px solid ${t.border}; display:flex; flex-direction:column; gap:16px; background:${t.bgNav}; overflow-y:auto; }
+        .ls-wrap { display:grid; grid-template-columns:minmax(0, 1fr) 252px; gap:0; flex:1; min-height:0; overflow:hidden; align-items:stretch; }
+        .ls-main { min-width:0; padding:28px 32px; background:${t.bg}; overflow-y:auto; display:flex; justify-content:center; }
+        .ls-main-inner { width:100%; max-width:760px; }
+        .ls-sidebar { width:252px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; padding:24px 20px; border-left:1px solid ${t.border}; display:flex; flex-direction:column; gap:16px; background:${t.bgNav}; overflow-y:auto; }
         @media(max-width:1100px){
-          .ls-wrap { grid-template-columns:minmax(0, 1fr) 232px; gap:18px; }
+          .ls-wrap { grid-template-columns:minmax(0, 1fr) 232px; }
           .ls-sidebar { width:232px; }
+          .ls-main { padding:24px 24px 28px; }
+          .ls-main-inner { max-width:700px; }
         }
         @media(max-width:860px){
           .ls-wrap { display:flex; flex-direction:column; overflow:visible; }
-          .ls-main { padding:16px; overflow-y:visible; }
-          .ls-sidebar { width:100%; justify-self:auto; border-left:none; border-top:1px solid ${t.border}; padding:16px; gap:12px; overflow:visible; order:2; }
+          .ls-main { padding:16px; overflow-y:visible; display:block; }
+          .ls-main-inner { max-width:none; }
+          .ls-sidebar { width:100%; justify-self:auto; align-self:auto; min-height:auto; border-left:none; border-top:1px solid ${t.border}; padding:16px; gap:12px; overflow:visible; order:2; }
         }
         input::placeholder{color:${t.textFaint};}
         input:focus{border-color:${GOLD} !important; outline:none;}
         textarea:focus{border-color:${GOLD} !important; outline:none;}
       `}</style>
 
-      <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.15),rgba(241,190,67,0.06))`, borderBottom: `1px solid rgba(241,190,67,0.25)`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎓</div>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
-          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 1 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
-        </div>
-      </div>
-
       <div className="ls-wrap">
         <div className="ls-main">
-          <div style={{ maxWidth: 620 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: t.text, display: 'block', marginBottom: 8 }}>
-              What do you want to learn today?
-            </label>
+          <div className="ls-main-inner">
+            <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.15),rgba(241,190,67,0.06))`, border: `1px solid rgba(241,190,67,0.25)`, borderRadius: 18, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎓</div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 1 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
+              </div>
+            </div>
+
+            <div style={{ maxWidth: 700, width: '100%', margin: '0 auto' }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: t.text, display: 'block', marginBottom: 8 }}>
+                What do you want to learn today?
+              </label>
             <input
               value={topic}
               onChange={e => setTopic(e.target.value)}
@@ -313,6 +318,7 @@ export default function LearnScreen({
             <button onClick={startLesson} disabled={!topic.trim() || uploadingDoc} style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: topic.trim() && !uploadingDoc ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.border, color: topic.trim() ? '#0c1037' : t.textFaint, fontSize: 15, fontWeight: 800, cursor: topic.trim() && !uploadingDoc ? 'pointer' : 'default', fontFamily: FONT_B, boxShadow: topic.trim() && !uploadingDoc ? `0 8px 28px rgba(241,190,67,0.35)` : 'none', transition: 'all 0.2s' }}>
               Start lesson with Titan AI →
             </button>
+          </div>
           </div>
         </div>
 
@@ -366,7 +372,7 @@ export default function LearnScreen({
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         .msg-in { animation: fadeUp 0.2s ease; }
         .ls-chat-desktop { display:grid; grid-template-columns:minmax(0, 1fr) 252px; gap:24px; flex:1; min-height:0; }
-        .ls-chat-aside { width:252px; justify-self:end; border-left:1px solid rgba(255,255,255,0.07); padding:16px 18px; background:#080d28; display:flex; flex-direction:column; gap:12px; overflow-y:auto; }
+        .ls-chat-aside { width:252px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; border-left:1px solid rgba(255,255,255,0.07); padding:16px 18px; background:#080d28; display:flex; flex-direction:column; gap:12px; overflow-y:auto; }
         .ls-chat-body { min-width:0; display:flex; flex-direction:column; min-height:0; }
         @media(max-width:1100px){
           .ls-chat-desktop { grid-template-columns:minmax(0, 1fr) 232px; gap:18px; }
