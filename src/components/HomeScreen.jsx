@@ -1,15 +1,60 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
+import { supabase } from '../lib/supabase'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const DESKTOP_GAP = 24
+
+function startOfDayLocal(dateLike) {
+  const d = new Date(dateLike)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function addDays(dateLike, days) {
+  const d = new Date(dateLike)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
   const [selectedSubtopics, setSelectedSubtopics] = useState(null) // null = all, [] = none, [..] = filtered
   const [showSubtopicPicker, setShowSubtopicPicker] = useState(false)
+  const [activityTab, setActivityTab] = useState('Week')
+  const [answerLog, setAnswerLog] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadActivity() {
+      if (!profile?.id) {
+        if (!cancelled) setAnswerLog([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('answer_log')
+        .select('question_id, answered_at')
+        .eq('user_id', profile.id)
+        .order('answered_at', { ascending: false })
+        .limit(5000)
+
+      if (!cancelled) {
+        setAnswerLog(error || !data ? [] : data)
+      }
+    }
+
+    loadActivity()
+    return () => { cancelled = true }
+  }, [profile?.id])
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {
@@ -19,6 +64,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     })
     return filtered
   }, [struggleMap, questionIds])
+
+  const filteredAnswerLog = useMemo(() => {
+    if (!Array.isArray(answerLog)) return []
+    return answerLog.filter(a => questionIds.has(a.question_id))
+  }, [answerLog, questionIds])
 
   const topicGroups = {}
   const subtopicGroups = {}
@@ -69,9 +119,70 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const totalAttempts = Object.values(currentStruggleMap).reduce((s, v) => s + (v.attempts || 0), 0)
   const totalWrong = Object.values(currentStruggleMap).reduce((s, v) => s + (v.wrong || 0), 0)
   const accuracy = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
-  const days = ['M','T','W','T','F','S','S']
-  const activity = [0,0,0,0,totalAttempts,0,0]
-  const maxAct = Math.max(...activity, 1)
+
+  const graphData = useMemo(() => {
+    const today = startOfDayLocal(new Date())
+
+    if (activityTab === 'Week') {
+      const start = addDays(today, -6)
+      const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const date = addDays(start, i)
+        const count = filteredAnswerLog.reduce((sum, row) => {
+          if (!row?.answered_at) return sum
+          const answered = startOfDayLocal(row.answered_at)
+          return sameDay(answered, date) ? sum + 1 : sum
+        }, 0)
+        return {
+          label: labels[i],
+          count,
+          isToday: sameDay(date, today),
+        }
+      })
+      return { items: days, max: Math.max(1, ...days.map(d => d.count)) }
+    }
+
+    if (activityTab === 'Month') {
+      const start = addDays(today, -29)
+      const buckets = Array.from({ length: 5 }, (_, i) => ({
+        label: i === 4 ? 'Now' : `W${i + 1}`,
+        count: 0,
+        isToday: i === 4,
+      }))
+
+      filteredAnswerLog.forEach(row => {
+        if (!row?.answered_at) return
+        const answered = startOfDayLocal(row.answered_at)
+        if (answered < start || answered > today) return
+        const diffDays = Math.floor((answered - start) / 86400000)
+        const bucketIndex = Math.min(4, Math.floor(diffDays / 7))
+        buckets[bucketIndex].count += 1
+      })
+
+      return { items: buckets, max: Math.max(1, ...buckets.map(d => d.count)) }
+    }
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthBuckets = Array.from({ length: 6 }, (_, i) => {
+      const date = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1)
+      return {
+        label: months[date.getMonth()],
+        month: date.getMonth(),
+        year: date.getFullYear(),
+        count: 0,
+        isToday: date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear(),
+      }
+    })
+
+    filteredAnswerLog.forEach(row => {
+      if (!row?.answered_at) return
+      const answered = new Date(row.answered_at)
+      const bucket = monthBuckets.find(m => m.month === answered.getMonth() && m.year === answered.getFullYear())
+      if (bucket) bucket.count += 1
+    })
+
+    return { items: monthBuckets, max: Math.max(1, ...monthBuckets.map(d => d.count)) }
+  }, [activityTab, filteredAnswerLog])
 
   const card = {
     background: t.bgCard,
@@ -197,9 +308,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .hs-wrap  { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: 24px; align-items: start; flex: 1; min-height: 0; }
-        .hs-main  { min-width: 0; padding: 32px 0 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-        .hs-right { min-width: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-wrap  { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: ${DESKTOP_GAP}px; align-items: start; flex: 1; min-height: 0; }
+        .hs-main  { min-width: 0; padding: 32px 12px 32px 32px; margin-right: -12px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-right { min-width: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: visible; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
         @media (max-width: 1100px) {
@@ -207,7 +318,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         }
         @media (max-width: 860px) {
           .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }
-          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px; }
+          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; margin-right: 0 !important; }
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
         }
@@ -222,9 +333,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 5 }}>
-                {['Week','Month','All'].map((tab, i) => (
-                  <button key={tab} style={{ padding: '5px 14px', borderRadius: 20, border: 'none', background: i === 0 ? GOLD : 'transparent', color: i === 0 ? '#0c1037' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {['Week','Month','All'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActivityTab(tab)}
+                    style={{ padding: '5px 14px', borderRadius: 20, border: 'none', background: activityTab === tab ? GOLD : 'transparent', color: activityTab === tab ? '#0c1037' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                  >
                     {tab}
                   </button>
                 ))}
@@ -243,10 +358,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 48 }}>
-              {days.map((d, i) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: '100%', background: activity[i] > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: activity[i] > 0 ? `${Math.max((activity[i]/maxAct)*38, 8)}px` : '3px' }} />
-                  <div style={{ fontSize: 10, color: i === 4 ? GOLD : t.textFaint, fontWeight: i === 4 ? 700 : 400 }}>{d}</div>
+              {graphData.items.map((d, i) => (
+                <div key={`${d.label}-${i}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                  <div style={{ width: '100%', background: d.count > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: d.count > 0 ? `${Math.max((d.count / graphData.max) * 38, 8)}px` : '3px' }} />
+                  <div style={{ fontSize: 10, color: d.isToday ? GOLD : t.textFaint, fontWeight: d.isToday ? 700 : 400 }}>{d.label}</div>
                 </div>
               ))}
             </div>
@@ -410,7 +525,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 {renderActionButton({
                   label: hasNoTopicsSelected
                     ? 'Select at least one topic'
-                    : `Start selected session · ${filteredCounts.unseen} new${filteredCounts.unseen !== 1 ? '' : ''}`,
+                    : `Start selected session · ${filteredCounts.unseen} new`,
                   onClick: () => onStartSession({ mode: 'new', subtopics: selectedSubtopics }),
                   variant: 'primary',
                   disabled: hasNoTopicsSelected,
