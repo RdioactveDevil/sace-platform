@@ -9,6 +9,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
   const [selectedSubtopics, setSelectedSubtopics] = useState(null) // null = all, [] = none, [..] = filtered
+  const [expandedTopics, setExpandedTopics] = useState(() => new Set())
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {
@@ -193,6 +194,15 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     setSelectedSubtopics(prev => prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub])
   }
 
+  const toggleExpanded = (topic) => {
+    setExpandedTopics(prev => {
+      const next = new Set(prev)
+      if (next.has(topic)) next.delete(topic)
+      else next.add(topic)
+      return next
+    })
+  }
+
   const topicStatusColor = (topic) => {
     const tg = topicGroups[topic]
     if (!tg || tg.attempted === 0) return GOLD
@@ -211,6 +221,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         .hs-right { width: 260px; flex-shrink: 0; padding: 32px 28px 32px 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+        .hs-topic-row-grid { display: grid; grid-template-columns: minmax(220px, auto) minmax(140px, 1fr) 52px; align-items: center; gap: 12px; }
         @media (max-width: 1100px) {
           .hs-selected-actions { grid-template-columns: 1fr; }
         }
@@ -219,6 +230,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; }
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
+        }
+        @media (max-width: 700px) {
+          .hs-topic-row-grid { grid-template-columns: minmax(0, 1fr) 90px 42px !important; gap: 8px !important; }
         }
       `}</style>
 
@@ -323,39 +337,49 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 const topicPartial = !isAllTopicsSelected && subs.some(s => selectedSubtopics.includes(s)) && !topicSel
                 const accent = topicStatusColor(topic)
                 const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
+                const isExpanded = expandedTopics.has(topic)
 
                 return (
                   <div key={topic}>
-                    <div onClick={() => toggleTopic(topic)}
-                      style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: `1px solid ${t.border}` }}>
-                      <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', marginRight: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${t.border}`, gap: 12 }}
+                    >
+                      <div
+                        onClick={() => toggleTopic(topic)}
+                        style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      >
                         {topicSel && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
                         {topicPartial && !topicSel && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
                       </div>
 
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, marginRight: 12, flexShrink: 0 }} />
+                      <button
+                        onClick={() => toggleExpanded(topic)}
+                        aria-label={isExpanded ? `Collapse ${topic}` : `Expand ${topic}`}
+                        style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer', color: t.textMuted, fontSize: 14, lineHeight: 1, width: 14, flexShrink: 0 }}
+                      >
+                        {isExpanded ? '▾' : '▸'}
+                      </button>
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</div>
-                          <div style={{ fontSize: 13, color: t.textMuted, flexShrink: 0 }}>{tg.attempted}/{tg.total}</div>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+
+                      <div className="hs-topic-row-grid" style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {topic} <span style={{ color: t.textMuted, fontWeight: 600 }}>({tg.attempted}/{tg.total})</span>
                         </div>
-                        <div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ flex: 1, height: 4, borderRadius: 999, background: t.border, overflow: 'hidden' }}>
-                            <div style={{ width: `${topicPct}%`, height: '100%', background: GOLD, borderRadius: 999 }} />
-                          </div>
-                          <div style={{ fontSize: 11, color: t.textFaint, minWidth: 34, textAlign: 'right' }}>{topicPct}%</div>
+                        <div style={{ height: 4, borderRadius: 999, background: t.border, overflow: 'hidden', minWidth: 0 }}>
+                          <div style={{ width: `${topicPct}%`, height: '100%', background: GOLD, borderRadius: 999 }} />
                         </div>
+                        <div style={{ fontSize: 11, color: t.textFaint, textAlign: 'right' }}>{topicPct}%</div>
                       </div>
                     </div>
 
-                    {subs.map(sub => {
+                    {isExpanded && subs.map(sub => {
                       const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
                       const subSel = isAllTopicsSelected || selectedSubtopics.includes(sub)
                       const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
                       return (
                         <div key={sub} onClick={() => toggleSub(sub)}
-                          style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 52px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
+                          style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 64px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
                           <div style={{ width: 14, height: 14, borderRadius: 4, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {subSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
                           </div>
