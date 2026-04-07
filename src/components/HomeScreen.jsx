@@ -233,11 +233,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; }
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
-          .hs-topic-grid { grid-template-columns: 1fr; row-gap: 8px; }
-          .hs-topic-track { width: 120px; }
+          .hs-topic-grid { grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 0; align-items: center; }
+          .hs-topic-track { display: none !important; }
         }
         @media (max-width: 560px) {
-          .hs-topic-track { width: 100px; }
+          .hs-topic-grid { grid-template-columns: minmax(0, 1fr) auto; }
         }
       `}</style>
 
