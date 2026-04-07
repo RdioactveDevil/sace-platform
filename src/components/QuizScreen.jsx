@@ -64,6 +64,8 @@ function createLocalFallbackVariants(parentQuestion) {
   const correctAnswer = options[correctIndex] || ''
 
   return Array.from({ length: 3 }, (_, index) => ({
+    id: `local_fallback__${parentQuestion.id}__${Date.now()}__${index}`,
+    variant_record_id: `local_fallback__${parentQuestion.id}__${index}`,
     question: `${parentQuestion.question} (Reinforcement check ${index + 1})`,
     options,
     answer_index: correctIndex,
@@ -74,6 +76,9 @@ function createLocalFallbackVariants(parentQuestion) {
     solution: parentQuestion.solution || `The correct answer remains ${correctAnswer}. Focus on the same concept again.`,
     tip: parentQuestion.tip || 'Use the explanation you just saw, then check the key concept again.',
     variant_type: `fallback_${index + 1}`,
+    parent_question_id: parentQuestion.id,
+    source: 'ai_generated',
+    is_variant: true,
   }))
 }
 
@@ -113,16 +118,30 @@ async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
   return extractJsonArray(rawText)
 }
 
+function normalizeVariantRecord(parentQuestion, variant, index = 0) {
+  return {
+    ...variant,
+    id: variant.id || variant.variant_record_id || `variant__${parentQuestion.id}__${Date.now()}__${index}`,
+    variant_record_id: variant.variant_record_id || variant.id || `variant__${parentQuestion.id}__${index}`,
+    parent_question_id: variant.parent_question_id || parentQuestion.id,
+    concept_tag: variant.concept_tag || parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion),
+    topic: variant.topic || parentQuestion.topic,
+    subtopic: variant.subtopic || parentQuestion.subtopic,
+    difficulty: Math.max(1, Math.min(5, Number(variant.difficulty || parentQuestion.difficulty || 1))),
+    options: Array.isArray(variant.options) ? variant.options : (parentQuestion.options || []),
+    source: variant.source || 'prebuilt',
+    is_variant: true,
+  }
+}
+
 function RemediationChip({ remediationMode, remediationStreak, remediationTarget, remediationStatus, remediationSource }) {
   if (!remediationMode) return null
 
-  const statusText = remediationStatus === 'complete'
-    ? 'Concept stability restored. Returning to quiz.'
-    : remediationStatus === 'generating'
-      ? 'Building the next mastery check.'
-      : remediationStatus === 'analysing'
-        ? 'Analysing your response pattern.'
-        : 'We detected a weak concept. You need 3 correct in a row to continue.'
+  const statusText = remediationStatus === 'generating'
+    ? 'Generating more similar questions for this same concept.'
+    : remediationStatus === 'complete'
+      ? 'Mastery confirmed. Returning to the main quiz.'
+      : 'You are in targeted reinforcement for this concept. Get 3 correct in a row to continue.'
 
   return (
     <div style={{
@@ -172,75 +191,48 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
   )
 }
 
-function TransitionOverlay({ status, onDismiss }) {
+function StatusToast({ status }) {
   if (!status || status === 'idle' || status === 'activated') return null
 
-  const title = status === 'analysing'
-    ? 'Analysing error pattern'
-    : status === 'generating'
-      ? 'Generating similar questions'
-      : 'Remediation Complete'
-
-  const subtitle = status === 'analysing'
-    ? 'Preparing the next mastery check.'
-    : status === 'generating'
-      ? 'Building targeted reinforcement for the same concept.'
-      : '3 correct in a row achieved. Returning to quiz.'
-
-  const accent = status === 'complete' ? '#10b981' : GOLD
+  const isComplete = status === 'complete'
+  const title = isComplete ? 'Remediation Complete' : 'Generating Similar Questions'
+  const subtitle = isComplete
+    ? 'Concept recovered. Returning to the main quiz.'
+    : 'Preparing more same-concept reinforcement.'
 
   return (
-    <div onClick={status === 'complete' ? onDismiss : undefined} style={{
+    <div style={{
       position: 'fixed',
-      inset: 0,
+      top: 20,
+      right: 20,
       zIndex: 2000,
-      background: 'rgba(0,0,0,0.72)',
-      backdropFilter: 'blur(6px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
+      width: 320,
+      maxWidth: 'calc(100vw - 32px)',
+      borderRadius: 16,
+      background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
+      border: `1px solid ${isComplete ? 'rgba(16,185,129,0.35)' : 'rgba(241,190,67,0.24)'}`,
+      boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
+      padding: '14px 16px',
+      animation: 'popIn 0.18s ease',
     }}>
-      <div style={{
-        width: '100%',
-        maxWidth: 420,
-        borderRadius: 22,
-        background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
-        border: `1px solid ${status === 'complete' ? 'rgba(16,185,129,0.35)' : 'rgba(241,190,67,0.24)'}`,
-        boxShadow: '0 30px 70px rgba(0,0,0,0.4)',
-        padding: '28px 26px',
-        textAlign: 'center',
-      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
-          width: 62,
-          height: 62,
-          margin: '0 auto 16px',
-          borderRadius: 18,
+          width: 40,
+          height: 40,
+          borderRadius: 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 30,
-          background: status === 'complete' ? 'rgba(16,185,129,0.12)' : 'rgba(241,190,67,0.12)',
-          border: `1px solid ${status === 'complete' ? 'rgba(16,185,129,0.25)' : 'rgba(241,190,67,0.22)'}`,
+          fontSize: 20,
+          background: isComplete ? 'rgba(16,185,129,0.12)' : 'rgba(241,190,67,0.12)',
+          border: `1px solid ${isComplete ? 'rgba(16,185,129,0.22)' : 'rgba(241,190,67,0.18)'}`,
         }}>
-          {status === 'complete' ? '✅' : '🧠'}
+          {isComplete ? '✅' : '🧠'}
         </div>
-        <div style={{ fontFamily: FONT_D, fontSize: 24, color: '#fff', letterSpacing: 0.8, marginBottom: 10 }}>{title}</div>
-        <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.7 }}>{subtitle}</div>
-        {status !== 'complete' && (
-          <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center', gap: 6 }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: accent,
-                animation: 'pulse 1.15s ease infinite',
-                animationDelay: `${i * 0.18}s`,
-              }} />
-            ))}
-          </div>
-        )}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>{title}</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, marginTop: 2 }}>{subtitle}</div>
+        </div>
       </div>
     </div>
   )
@@ -362,8 +354,6 @@ export default function QuizScreen({
 
   const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = []) => {
     const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
-    setRemediationStatus('analysing')
-    await sleep(900)
     setRemediationStatus('generating')
 
     let generated = []
@@ -377,23 +367,28 @@ export default function QuizScreen({
       generated = createLocalFallbackVariants(parentQuestion)
     }
 
+    const normalizedGenerated = generated.map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index))
+
     try {
       const saved = await insertGeneratedQuestionVariants(parentQuestion, generated)
-      const queue = buildRemediationQueue({ generatedVariants: saved, excludeIds: existingUsedIds, limit: 5 })
+      const savedNormalized = (saved || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index))
+      const queue = buildRemediationQueue({
+        generatedVariants: savedNormalized,
+        excludeIds: existingUsedIds,
+        limit: 5,
+      }).map(v => ({ ...v, is_variant: true, source: v.source || 'ai_generated' }))
+
       setRemediationSource('generated')
       setRemediationStatus('activated')
       setRemediationQueue(queue)
       return queue
     } catch {
-      const fallback = generated.map((variant, index) => ({
-        ...variant,
-        id: `generated_local__${parentQuestion.id}__${Date.now()}__${index}`,
-        variant_record_id: `generated_local__${parentQuestion.id}__${index}`,
-        parent_question_id: parentQuestion.id,
-        source: 'ai_generated',
-        is_variant: true,
-      }))
-      const queue = buildRemediationQueue({ generatedVariants: fallback, excludeIds: existingUsedIds, limit: 5 })
+      const queue = buildRemediationQueue({
+        generatedVariants: normalizedGenerated,
+        excludeIds: existingUsedIds,
+        limit: 5,
+      }).map(v => ({ ...v, is_variant: true, source: v.source || 'ai_generated' }))
+
       setRemediationSource('generated')
       setRemediationStatus('activated')
       setRemediationQueue(queue)
@@ -405,6 +400,7 @@ export default function QuizScreen({
     if (!parentQuestion) return
 
     const conceptTag = parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion)
+
     setRemediationMode(true)
     setRemediationStreak(0)
     setRemediationTarget(3)
@@ -416,13 +412,13 @@ export default function QuizScreen({
     setRemediationUsedIds([])
 
     try {
-      const { directVariants, conceptVariants } = await getRemediationVariants(parentQuestion, { excludeIds: [] })
+      const { directVariants, conceptVariants } = await getRemediationVariants(parentQuestion.id, conceptTag, [])
       let queue = buildRemediationQueue({
-        directVariants,
-        conceptVariants,
+        directVariants: (directVariants || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index)),
+        conceptVariants: (conceptVariants || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index)),
         excludeIds: [],
         limit: 5,
-      })
+      }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
 
       if (!queue.length) {
         queue = await generateRemediationQueue(parentQuestion, [])
@@ -454,12 +450,11 @@ export default function QuizScreen({
       init()
       loadNext([], struggleMap, quizMode, quizSubtopics)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap])
 
   useEffect(() => {
     if (remediationStatus !== 'complete') return
-    const timeout = setTimeout(() => setRemediationStatus('activated'), 1200)
+    const timeout = setTimeout(() => setRemediationStatus('activated'), 1400)
     return () => clearTimeout(timeout)
   }, [remediationStatus, setRemediationStatus])
 
@@ -494,9 +489,11 @@ export default function QuizScreen({
 
     if (isRemediationQuestion) {
       try { await incrementQuestionVariantUsage(currentQ.variant_record_id) } catch {}
+
       if (isCorrect) {
         const nextMastery = remediationStreak + 1
         setRemediationStreak(nextMastery)
+
         if (nextMastery >= remediationTarget) {
           const bonus = getRemediationCompletionBonus()
           try {
@@ -561,7 +558,7 @@ export default function QuizScreen({
     const [nextVariant, ...rest] = queue
     setRemediationQueue(rest)
     setRemediationUsedIds(prev => [...new Set([...prev, nextVariant.variant_record_id || nextVariant.id])])
-    setDisplayQuestion(nextVariant)
+    setDisplayQuestion({ ...nextVariant, is_variant: true })
     return true
   }
 
@@ -569,6 +566,7 @@ export default function QuizScreen({
     if (!currentQ) return
 
     const remediationPendingEntry = remediationMode && !currentQ.is_variant && remediationOriginalQ?.id === currentQ.id
+
     if (remediationPendingEntry) {
       const answered = sessionAnswered.includes(currentQ.id) ? sessionAnswered : [...sessionAnswered, currentQ.id]
       setSessionAnswered(answered)
@@ -757,7 +755,6 @@ export default function QuizScreen({
         @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
         @keyframes popIn   { 0%{transform:scale(0.95);opacity:0} 100%{transform:scale(1);opacity:1} }
         @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
-        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.35} }
         .qopt { transition: all 0.13s ease; cursor: pointer; }
         .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
       `}</style>
@@ -768,7 +765,7 @@ export default function QuizScreen({
         </div>
       )}
 
-      <TransitionOverlay status={remediationStatus === 'activated' ? null : remediationStatus} onDismiss={() => setRemediationStatus('activated')} />
+      <StatusToast status={remediationStatus === 'complete' || remediationStatus === 'generating' ? remediationStatus : null} />
 
       {showExit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
