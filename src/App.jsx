@@ -260,6 +260,16 @@ function AppInner() {
   const [quizLoadingTip,  setQuizLoadingTip]  = useState(false)
   const [quizMode,        setQuizMode]        = useState('new')
   const [quizSubtopics,   setQuizSubtopics]   = useState([])
+  const [quizRemediationMode,      setQuizRemediationMode]      = useState(false)
+  const [quizRemediationStreak,    setQuizRemediationStreak]    = useState(0)
+  const [quizRemediationTarget,    setQuizRemediationTarget]    = useState(3)
+  const [quizRemediationQueue,     setQuizRemediationQueue]     = useState([])
+  const [quizRemediationStatus,    setQuizRemediationStatus]    = useState('idle')
+  const [quizRemediationSource,    setQuizRemediationSource]    = useState('prebuilt')
+  const [quizRemediationConcept,   setQuizRemediationConcept]   = useState(null)
+  const [quizRemediationParentId,  setQuizRemediationParentId]  = useState(null)
+  const [quizRemediationOriginalQ, setQuizRemediationOriginalQ] = useState(null)
+  const [quizRemediationUsedIds,   setQuizRemediationUsedIds]   = useState([])
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -328,6 +338,16 @@ function AppInner() {
     setQuizSessionXP(0)
     setQuizMode('new')
     setQuizSubtopics([])
+    setQuizRemediationMode(false)
+    setQuizRemediationStreak(0)
+    setQuizRemediationTarget(3)
+    setQuizRemediationQueue([])
+    setQuizRemediationStatus('idle')
+    setQuizRemediationSource('prebuilt')
+    setQuizRemediationConcept(null)
+    setQuizRemediationParentId(null)
+    setQuizRemediationOriginalQ(null)
+    setQuizRemediationUsedIds([])
     navigate('/home')
   }
 
@@ -335,6 +355,27 @@ function AppInner() {
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
     setQuestions([])
+    setQuizQ(null)
+    setQuizSelected(null)
+    setQuizShowAns(false)
+    setQuizCorrect(null)
+    setQuizEarnedXP(0)
+    setQuizResults([])
+    setQuizAnswered([])
+    setQuizQNumber(1)
+    setQuizSessionXP(0)
+    setQuizMode('new')
+    setQuizSubtopics([])
+    setQuizRemediationMode(false)
+    setQuizRemediationStreak(0)
+    setQuizRemediationTarget(3)
+    setQuizRemediationQueue([])
+    setQuizRemediationStatus('idle')
+    setQuizRemediationSource('prebuilt')
+    setQuizRemediationConcept(null)
+    setQuizRemediationParentId(null)
+    setQuizRemediationOriginalQ(null)
+    setQuizRemediationUsedIds([])
     navigate('/home')
   }
 
@@ -354,6 +395,16 @@ function AppInner() {
     quizSubtopics,             setQuizSubtopics,
     aiTip: quizAiTip,          setAiTip: setQuizAiTip,
     loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
+    remediationMode: quizRemediationMode,           setRemediationMode: setQuizRemediationMode,
+    remediationStreak: quizRemediationStreak,       setRemediationStreak: setQuizRemediationStreak,
+    remediationTarget: quizRemediationTarget,       setRemediationTarget: setQuizRemediationTarget,
+    remediationQueue: quizRemediationQueue,         setRemediationQueue: setQuizRemediationQueue,
+    remediationStatus: quizRemediationStatus,       setRemediationStatus: setQuizRemediationStatus,
+    remediationSource: quizRemediationSource,       setRemediationSource: setQuizRemediationSource,
+    remediationConcept: quizRemediationConcept,     setRemediationConcept: setQuizRemediationConcept,
+    remediationParentId: quizRemediationParentId,   setRemediationParentId: setQuizRemediationParentId,
+    remediationOriginalQ: quizRemediationOriginalQ, setRemediationOriginalQ: setQuizRemediationOriginalQ,
+    remediationUsedIds: quizRemediationUsedIds,     setRemediationUsedIds: setQuizRemediationUsedIds,
   }
 
   const learnState   = {
@@ -440,6 +491,16 @@ function AppInner() {
             setQuizQNumber(1)
             setQuizAiTip('')
             setQuizLoadingTip(false)
+            setQuizRemediationMode(false)
+            setQuizRemediationStreak(0)
+            setQuizRemediationTarget(3)
+            setQuizRemediationQueue([])
+            setQuizRemediationStatus('idle')
+            setQuizRemediationSource('prebuilt')
+            setQuizRemediationConcept(null)
+            setQuizRemediationParentId(null)
+            setQuizRemediationOriginalQ(null)
+            setQuizRemediationUsedIds([])
             navigate('/quiz')
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />

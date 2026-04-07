@@ -1,13 +1,31 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { selectNextQuestion, calcXP, getLevelProgress, getQuestionCounts, RANKS, RANK_ICONS } from '../lib/engine'
-import { recordAnswer, addXP, createSession } from '../lib/db'
+import {
+  selectNextQuestion,
+  calcXP,
+  calcRemediationXP,
+  getRemediationCompletionBonus,
+  getLevelProgress,
+  getQuestionCounts,
+  getQuestionConceptTag,
+  buildRemediationQueue,
+  RANKS,
+  RANK_ICONS,
+} from '../lib/engine'
+import {
+  recordAnswer,
+  addXP,
+  createSession,
+  getRemediationVariants,
+  insertGeneratedQuestionVariants,
+  incrementQuestionVariantUsage,
+} from '../lib/db'
 import { THEMES } from '../lib/theme'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
-const NAVY   = '#0c1037'
-const NAVYD  = '#080d28'
+const GOLD = '#f1be43'
+const GOLDL = '#f9d87a'
+const NAVY = '#0c1037'
+const NAVYD = '#080d28'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
@@ -20,35 +38,249 @@ const NAV_ITEMS = [
   { icon: '🕐', label: 'History',       path: '/history'       },
 ]
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+function extractJsonArray(text = '') {
+  try {
+    const parsed = JSON.parse(text)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {}
+
+  const start = text.indexOf('[')
+  const end = text.lastIndexOf(']')
+  if (start === -1 || end === -1 || end <= start) return []
+
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1))
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function createLocalFallbackVariants(parentQuestion) {
+  const correctIndex = parentQuestion.answer_index ?? 0
+  const options = Array.isArray(parentQuestion.options) ? parentQuestion.options : []
+  const correctAnswer = options[correctIndex] || ''
+
+  return Array.from({ length: 3 }, (_, index) => ({
+    question: `${parentQuestion.question} (Reinforcement check ${index + 1})`,
+    options,
+    answer_index: correctIndex,
+    difficulty: Math.max(1, Math.min(5, Number(parentQuestion.difficulty || 1))),
+    topic: parentQuestion.topic,
+    subtopic: parentQuestion.subtopic,
+    concept_tag: parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion),
+    solution: parentQuestion.solution || `The correct answer remains ${correctAnswer}. Focus on the same concept again.`,
+    tip: parentQuestion.tip || 'Use the explanation you just saw, then check the key concept again.',
+    variant_type: `fallback_${index + 1}`,
+  }))
+}
+
+async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
+  const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+  const system = [
+    'You are generating remediation MCQs for a SACE Chemistry student.',
+    'Return only a valid JSON array containing exactly 3 objects.',
+    'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
+    'Each options array must contain exactly 4 strings.',
+    'Keep the same underlying concept, but vary wording, values, or structure.',
+    'Do not include markdown or commentary outside the JSON array.',
+  ].join(' ')
+
+  const user = [
+    `Topic: ${parentQuestion.topic}`,
+    `Subtopic: ${parentQuestion.subtopic}`,
+    `Concept tag: ${conceptTag}`,
+    `Original question: ${parentQuestion.question}`,
+    `Correct answer: ${correctAnswer}`,
+    `Original solution: ${parentQuestion.solution}`,
+    'Generate 3 targeted remediation questions that test the same concept but are not copies.',
+  ].join('\n')
+
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      max_tokens: 1200,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  })
+
+  const data = await res.json()
+  const rawText = data?.content?.[0]?.text || ''
+  return extractJsonArray(rawText)
+}
+
+function RemediationChip({ remediationMode, remediationStreak, remediationTarget, remediationStatus, remediationSource }) {
+  if (!remediationMode) return null
+
+  const statusText = remediationStatus === 'complete'
+    ? 'Concept stability restored. Returning to quiz.'
+    : remediationStatus === 'generating'
+      ? 'Building the next mastery check.'
+      : remediationStatus === 'analysing'
+        ? 'Analysing your response pattern.'
+        : 'We detected a weak concept. You need 3 correct in a row to continue.'
+
+  return (
+    <div style={{
+      marginBottom: 14,
+      padding: '14px 16px',
+      borderRadius: 16,
+      background: 'linear-gradient(135deg, rgba(8,13,40,0.92), rgba(12,16,55,0.94))',
+      border: '1px solid rgba(241,190,67,0.22)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 12px',
+            borderRadius: 999,
+            background: 'rgba(241,190,67,0.09)',
+            border: '1px solid rgba(241,190,67,0.28)',
+            color: GOLD,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}>
+            ⚡ Remediation Mode
+          </span>
+          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+            {remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}
+          </span>
+        </div>
+        <span style={{
+          padding: '5px 11px',
+          borderRadius: 999,
+          background: remediationStatus === 'complete' ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${remediationStatus === 'complete' ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}`,
+          color: remediationStatus === 'complete' ? '#4ade80' : '#e2e8f0',
+          fontSize: 12,
+          fontWeight: 700,
+        }}>
+          Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 10, lineHeight: 1.6 }}>{statusText}</div>
+    </div>
+  )
+}
+
+function TransitionOverlay({ status, onDismiss }) {
+  if (!status || status === 'idle' || status === 'activated') return null
+
+  const title = status === 'analysing'
+    ? 'Analysing error pattern'
+    : status === 'generating'
+      ? 'Generating similar questions'
+      : 'Remediation Complete'
+
+  const subtitle = status === 'analysing'
+    ? 'Preparing the next mastery check.'
+    : status === 'generating'
+      ? 'Building targeted reinforcement for the same concept.'
+      : '3 correct in a row achieved. Returning to quiz.'
+
+  const accent = status === 'complete' ? '#10b981' : GOLD
+
+  return (
+    <div onClick={status === 'complete' ? onDismiss : undefined} style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 2000,
+      background: 'rgba(0,0,0,0.72)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 420,
+        borderRadius: 22,
+        background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
+        border: `1px solid ${status === 'complete' ? 'rgba(16,185,129,0.35)' : 'rgba(241,190,67,0.24)'}`,
+        boxShadow: '0 30px 70px rgba(0,0,0,0.4)',
+        padding: '28px 26px',
+        textAlign: 'center',
+      }}>
+        <div style={{
+          width: 62,
+          height: 62,
+          margin: '0 auto 16px',
+          borderRadius: 18,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 30,
+          background: status === 'complete' ? 'rgba(16,185,129,0.12)' : 'rgba(241,190,67,0.12)',
+          border: `1px solid ${status === 'complete' ? 'rgba(16,185,129,0.25)' : 'rgba(241,190,67,0.22)'}`,
+        }}>
+          {status === 'complete' ? '✅' : '🧠'}
+        </div>
+        <div style={{ fontFamily: FONT_D, fontSize: 24, color: '#fff', letterSpacing: 0.8, marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.7 }}>{subtitle}</div>
+        {status !== 'complete' && (
+          <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center', gap: 6 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: accent,
+                animation: 'pulse 1.15s ease infinite',
+                animationDelay: `${i * 0.18}s`,
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
-  // Lifted state from App — persists across tab switches
-  currentQ:        _currentQ,        setCurrentQ,
-  selected:        _selected,        setSelected,
-  showAns:         _showAns,         setShowAns,
-  correct:         _correct,         setCorrect,
-  earnedXP:        _earnedXP,        setEarnedXP,
-  streak:          _streak,          setStreak,
-  sessionXP:       _sessionXP,       setSessionXP,
-  sessionResults:  _sessionResults,  setSessionResults,
+  currentQ: _currentQ, setCurrentQ,
+  selected: _selected, setSelected,
+  showAns: _showAns, setShowAns,
+  correct: _correct, setCorrect,
+  earnedXP: _earnedXP, setEarnedXP,
+  streak: _streak, setStreak,
+  sessionXP: _sessionXP, setSessionXP,
+  sessionResults: _sessionResults, setSessionResults,
   sessionAnswered: _sessionAnswered, setSessionAnswered,
-  qNumber:         _qNumber,         setQNumber,
-  aiTip:           _aiTip,           setAiTip,
-  loadingTip:      _loadingTip,      setLoadingTip,
-  quizMode:        _quizMode,        setQuizMode,
-  quizSubtopics:   _quizSubtopics,
+  qNumber: _qNumber, setQNumber,
+  aiTip: _aiTip, setAiTip,
+  loadingTip: _loadingTip, setLoadingTip,
+  quizMode: _quizMode, setQuizMode,
+  quizSubtopics: _quizSubtopics,
+  remediationMode: _remediationMode, setRemediationMode,
+  remediationStreak: _remediationStreak, setRemediationStreak,
+  remediationTarget: _remediationTarget, setRemediationTarget,
+  remediationQueue: _remediationQueue, setRemediationQueue,
+  remediationStatus: _remediationStatus, setRemediationStatus,
+  remediationSource: _remediationSource, setRemediationSource,
+  remediationConcept: _remediationConcept, setRemediationConcept,
+  remediationParentId: _remediationParentId, setRemediationParentId,
+  remediationOriginalQ: _remediationOriginalQ, setRemediationOriginalQ,
+  remediationUsedIds: _remediationUsedIds, setRemediationUsedIds,
 }) {
   const t = THEMES[theme]
 
-  // Local transient state — fine to reset
-  const [floatXP,   setFloatXP]   = useState(null)
-  const [showExit,  setShowExit]  = useState(false)
-  const [menuOpen,  setMenuOpen]  = useState(false)
-  const [isMobile,  setIsMobile]  = useState(window.innerWidth < 860)
-  const [finished,  setFinished]  = useState(false)
+  const [floatXP, setFloatXP] = useState(null)
+  const [showExit, setShowExit] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
+  const [finished, setFinished] = useState(false)
   const startTime = useRef(null)
-
-
 
   useEffect(() => {
     const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
@@ -56,32 +288,35 @@ export default function QuizScreen({
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  // Resolve safe defaults
-  const currentQ        = _currentQ        ?? null
-  const selected        = _selected        ?? null
-  const showAns         = _showAns         ?? false
-  const correct         = _correct         ?? null
-  const earnedXP        = _earnedXP        ?? 0
-  const streak          = _streak          ?? (profile.streak || 0)
-  const sessionXP       = _sessionXP       ?? 0
-  const sessionResults  = _sessionResults  ?? []
+  const currentQ = _currentQ ?? null
+  const selected = _selected ?? null
+  const showAns = _showAns ?? false
+  const correct = _correct ?? null
+  const earnedXP = _earnedXP ?? 0
+  const streak = _streak ?? (profile.streak || 0)
+  const sessionXP = _sessionXP ?? 0
+  const sessionResults = _sessionResults ?? []
   const sessionAnswered = _sessionAnswered ?? []
-  const qNumber         = _qNumber         ?? 1
-  const aiTip           = _aiTip           ?? ''
-  const loadingTip      = _loadingTip      ?? false
-  const quizMode        = _quizMode        ?? 'new'
-  const quizSubtopics   = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
+  const qNumber = _qNumber ?? 1
+  const aiTip = _aiTip ?? ''
+  const loadingTip = _loadingTip ?? false
+  const quizMode = _quizMode ?? 'new'
+  const quizSubtopics = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
+  const remediationMode = _remediationMode ?? false
+  const remediationStreak = _remediationStreak ?? 0
+  const remediationTarget = _remediationTarget ?? 3
+  const remediationQueue = Array.isArray(_remediationQueue) ? _remediationQueue : []
+  const remediationStatus = _remediationStatus ?? 'idle'
+  const remediationSource = _remediationSource ?? 'prebuilt'
+  const remediationConcept = _remediationConcept ?? null
+  const remediationParentId = _remediationParentId ?? null
+  const remediationOriginalQ = _remediationOriginalQ ?? null
+  const remediationUsedIds = Array.isArray(_remediationUsedIds) ? _remediationUsedIds : []
 
-  const navigate    = useNavigate()
-  const location    = useLocation()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  const loadNext = useCallback((answered, map, mode = 'new', subtopics = []) => {
-    const q = selectNextQuestion(questions, map, answered, mode, subtopics)
-    if (!q) {
-      console.log('NO QUESTIONS FOUND', { mode, subtopics, answeredCount: answered.length })
-      setFinished(true)
-      return
-    }
+  const setDisplayQuestion = useCallback((q) => {
     setFinished(false)
     setCurrentQ(q)
     setSelected(null)
@@ -90,24 +325,154 @@ export default function QuizScreen({
     setEarnedXP(0)
     setAiTip('')
     startTime.current = Date.now()
-  }, [questions])
+  }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns])
+
+  const loadNext = useCallback((answered, map, mode = 'new', subtopics = []) => {
+    const q = selectNextQuestion(questions, map, answered, mode, subtopics)
+    if (!q) {
+      setFinished(true)
+      return
+    }
+    setDisplayQuestion(q)
+  }, [questions, setDisplayQuestion])
+
+  const clearRemediation = useCallback(() => {
+    setRemediationMode(false)
+    setRemediationStreak(0)
+    setRemediationTarget(3)
+    setRemediationQueue([])
+    setRemediationStatus('idle')
+    setRemediationSource('prebuilt')
+    setRemediationConcept(null)
+    setRemediationParentId(null)
+    setRemediationOriginalQ(null)
+    setRemediationUsedIds([])
+  }, [
+    setRemediationConcept,
+    setRemediationMode,
+    setRemediationOriginalQ,
+    setRemediationParentId,
+    setRemediationQueue,
+    setRemediationSource,
+    setRemediationStatus,
+    setRemediationStreak,
+    setRemediationTarget,
+    setRemediationUsedIds,
+  ])
+
+  const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = []) => {
+    const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
+    setRemediationStatus('analysing')
+    await sleep(900)
+    setRemediationStatus('generating')
+
+    let generated = []
+    try {
+      generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag)
+    } catch {
+      generated = []
+    }
+
+    if (!generated.length) {
+      generated = createLocalFallbackVariants(parentQuestion)
+    }
+
+    try {
+      const saved = await insertGeneratedQuestionVariants(parentQuestion, generated)
+      const queue = buildRemediationQueue({ generatedVariants: saved, excludeIds: existingUsedIds, limit: 5 })
+      setRemediationSource('generated')
+      setRemediationStatus('activated')
+      setRemediationQueue(queue)
+      return queue
+    } catch {
+      const fallback = generated.map((variant, index) => ({
+        ...variant,
+        id: `generated_local__${parentQuestion.id}__${Date.now()}__${index}`,
+        variant_record_id: `generated_local__${parentQuestion.id}__${index}`,
+        parent_question_id: parentQuestion.id,
+        source: 'ai_generated',
+        is_variant: true,
+      }))
+      const queue = buildRemediationQueue({ generatedVariants: fallback, excludeIds: existingUsedIds, limit: 5 })
+      setRemediationSource('generated')
+      setRemediationStatus('activated')
+      setRemediationQueue(queue)
+      return queue
+    }
+  }, [setRemediationQueue, setRemediationSource, setRemediationStatus])
+
+  const enterRemediation = useCallback(async (parentQuestion) => {
+    if (!parentQuestion) return
+
+    const conceptTag = parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion)
+    setRemediationMode(true)
+    setRemediationStreak(0)
+    setRemediationTarget(3)
+    setRemediationStatus('activated')
+    setRemediationSource('prebuilt')
+    setRemediationConcept(conceptTag)
+    setRemediationParentId(parentQuestion.id)
+    setRemediationOriginalQ(parentQuestion)
+    setRemediationUsedIds([])
+
+    try {
+      const { directVariants, conceptVariants } = await getRemediationVariants(parentQuestion, { excludeIds: [] })
+      let queue = buildRemediationQueue({
+        directVariants,
+        conceptVariants,
+        excludeIds: [],
+        limit: 5,
+      })
+
+      if (!queue.length) {
+        queue = await generateRemediationQueue(parentQuestion, [])
+      } else {
+        setRemediationQueue(queue)
+      }
+    } catch {
+      await generateRemediationQueue(parentQuestion, [])
+    }
+  }, [
+    generateRemediationQueue,
+    setRemediationConcept,
+    setRemediationMode,
+    setRemediationOriginalQ,
+    setRemediationParentId,
+    setRemediationQueue,
+    setRemediationSource,
+    setRemediationStatus,
+    setRemediationStreak,
+    setRemediationTarget,
+    setRemediationUsedIds,
+  ])
 
   useEffect(() => {
     async function init() {
-      await createSession(profile.id, 'Chemistry')
+      try { await createSession(profile.id, 'Chemistry') } catch {}
     }
-    // Only load first question if no session in progress
     if (!_currentQ) {
       init()
       loadNext([], struggleMap, quizMode, quizSubtopics)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (remediationStatus !== 'complete') return
+    const timeout = setTimeout(() => setRemediationStatus('activated'), 1200)
+    return () => clearTimeout(timeout)
+  }, [remediationStatus, setRemediationStatus])
 
   const handleAnswer = async (idx) => {
     if (showAns || !currentQ) return
+
+    const isRemediationQuestion = !!currentQ.is_variant
     const isCorrect = idx === currentQ.answer_index
-    const xpEarned  = calcXP(isCorrect, currentQ.difficulty, streak)
+    const xpEarned = isRemediationQuestion
+      ? calcRemediationXP(isCorrect, currentQ.difficulty)
+      : calcXP(isCorrect, currentQ.difficulty, streak)
     const newStreak = isCorrect ? streak + 1 : 0
+    const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
 
     setSelected(idx)
     setShowAns(true)
@@ -115,21 +480,52 @@ export default function QuizScreen({
     setEarnedXP(xpEarned)
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic }])
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, remediation: isRemediationQuestion }])
 
     if (isCorrect) {
       setFloatXP(xpEarned)
       setTimeout(() => setFloatXP(null), 1400)
     }
 
+    try {
+      const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
+      setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
+    } catch {}
+
+    if (isRemediationQuestion) {
+      try { await incrementQuestionVariantUsage(currentQ.variant_record_id) } catch {}
+      if (isCorrect) {
+        const nextMastery = remediationStreak + 1
+        setRemediationStreak(nextMastery)
+        if (nextMastery >= remediationTarget) {
+          const bonus = getRemediationCompletionBonus()
+          try {
+            const newXP = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
+            setProfile(p => ({ ...p, xp: newXP }))
+            setSessionXP(s => s + bonus)
+          } catch {}
+          setRemediationStatus('complete')
+        }
+      } else {
+        setRemediationStreak(0)
+      }
+      return
+    }
+
     setStruggleMap(prev => {
       const old = prev[currentQ.id] ?? { attempts: 0, wrong: 0 }
-      return { ...prev, [currentQ.id]: { ...old, attempts: old.attempts + 1, wrong: old.wrong + (isCorrect ? 0 : 1), last_seen: new Date().toISOString() } }
+      return {
+        ...prev,
+        [currentQ.id]: {
+          ...old,
+          attempts: old.attempts + 1,
+          wrong: old.wrong + (isCorrect ? 0 : 1),
+          last_seen: new Date().toISOString(),
+        },
+      }
     })
 
-    await recordAnswer(profile.id, currentQ.id, isCorrect)
-    const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
-    setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
+    await recordAnswer(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
 
     if (!isCorrect) {
       setLoadingTip(true)
@@ -140,17 +536,63 @@ export default function QuizScreen({
           body: JSON.stringify({
             max_tokens: 200,
             system: 'You are a SACE Chemistry tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.',
-            messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }]
-          })
+            messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
+          }),
         })
         const d = await res.json()
         setAiTip(d.content?.[0]?.text || '')
-      } catch { setAiTip('') }
+      } catch {
+        setAiTip('')
+      }
       setLoadingTip(false)
+      await enterRemediation(currentQ)
     }
   }
 
-  const nextQ = () => {
+  const loadNextRemediationQuestion = async () => {
+    let queue = remediationQueue
+
+    if (!queue.length && remediationOriginalQ) {
+      queue = await generateRemediationQueue(remediationOriginalQ, remediationUsedIds)
+    }
+
+    if (!queue.length) return false
+
+    const [nextVariant, ...rest] = queue
+    setRemediationQueue(rest)
+    setRemediationUsedIds(prev => [...new Set([...prev, nextVariant.variant_record_id || nextVariant.id])])
+    setDisplayQuestion(nextVariant)
+    return true
+  }
+
+  const nextQ = async () => {
+    if (!currentQ) return
+
+    const remediationPendingEntry = remediationMode && !currentQ.is_variant && remediationOriginalQ?.id === currentQ.id
+    if (remediationPendingEntry) {
+      const answered = sessionAnswered.includes(currentQ.id) ? sessionAnswered : [...sessionAnswered, currentQ.id]
+      setSessionAnswered(answered)
+      const loaded = await loadNextRemediationQuestion()
+      if (!loaded) {
+        clearRemediation()
+        setQNumber(n => n + 1)
+        setStruggleMap(prev => { loadNext(answered, prev, quizMode, quizSubtopics); return prev })
+      }
+      return
+    }
+
+    if (remediationMode && currentQ.is_variant) {
+      if (remediationStatus === 'complete') {
+        clearRemediation()
+        setQNumber(n => n + 1)
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
+        return
+      }
+
+      await loadNextRemediationQuestion()
+      return
+    }
+
     const newAnswered = [...sessionAnswered, currentQ.id]
     setSessionAnswered(newAnswered)
     setQNumber(n => n + 1)
@@ -159,7 +601,6 @@ export default function QuizScreen({
 
   const counts = getQuestionCounts(questions, struggleMap, quizSubtopics)
 
-  // Finished screen — no more questions in current mode
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode) => {
       setQuizMode(mode)
@@ -167,22 +608,24 @@ export default function QuizScreen({
       setSessionResults([])
       setQNumber(1)
       setSessionXP(0)
+      clearRemediation()
       setFinished(false)
       loadNext([], struggleMap, mode, quizSubtopics)
     }
+
     return (
       <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
           <div style={{ fontFamily: FONT_D, fontSize: 28, color: '#fff', letterSpacing: 1, marginBottom: 8 }}>
-            {quizMode === 'new' ? "ALL CAUGHT UP!" : quizMode === 'wrong' ? "WRONGS REVIEWED!" : "SESSION COMPLETE!"}
+            {quizMode === 'new' ? 'ALL CAUGHT UP!' : quizMode === 'wrong' ? 'WRONGS REVIEWED!' : 'SESSION COMPLETE!'}
           </div>
           <div style={{ fontSize: 15, color: '#64748b', lineHeight: 1.7, marginBottom: 8 }}>
             {quizMode === 'new'
               ? "You've attempted every question on gradefarm. right now — more are being added soon."
-              : "Great work reviewing those questions."}
+              : 'Great work reviewing those questions.'}
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 32 }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 32, flexWrap: 'wrap' }}>
             <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#4ade80' }}>
               +{sessionXP} XP this session
             </div>
@@ -200,7 +643,7 @@ export default function QuizScreen({
             <button onClick={() => startMode('all')} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
               Repeat all questions
             </button>
-            <button onClick={onHome} style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid rgba(241,190,67,0.3)`, background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+            <button onClick={onHome} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(241,190,67,0.3)', background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
               ← Back to Question Bank
             </button>
           </div>
@@ -209,24 +652,35 @@ export default function QuizScreen({
     )
   }
 
-  // First load
-  if (!currentQ && sessionResults.length === 0) return (
-    <div style={{ minHeight: '100vh', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: FONT_B }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚡</div>
-        <div style={{ fontSize: 13 }}>Loading questions…</div>
+  if (!currentQ && sessionResults.length === 0) {
+    return (
+      <div style={{ minHeight: '100vh', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: FONT_B }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚡</div>
+          <div style={{ fontSize: 13 }}>Loading questions…</div>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const { pct, level } = getLevelProgress(profile.xp)
-  const rank           = RANKS[Math.min(level, RANKS.length - 1)]
-  const isStruggle     = (struggleMap[currentQ.id]?.wrong ?? 0) >= 2
+  const rank = RANKS[Math.min(level, RANKS.length - 1)]
+  const baseQuestionId = remediationMode && remediationParentId ? remediationParentId : currentQ.id
+  const isStruggle = (struggleMap[baseQuestionId]?.wrong ?? 0) >= 2
   const sessionCorrect = sessionResults.filter(r => r.correct).length
-  const sessionTotal   = sessionResults.length
-  const accuracy       = sessionTotal > 0 ? Math.round((sessionCorrect / sessionTotal) * 100) : null
+  const sessionTotal = sessionResults.length
+  const accuracy = sessionTotal > 0 ? Math.round((sessionCorrect / sessionTotal) * 100) : null
+  const inRemediationQuestion = remediationMode && !!currentQ?.is_variant
+  const remediationPendingEntry = remediationMode && !currentQ?.is_variant && remediationOriginalQ?.id === currentQ?.id
 
-  // ── Sidebar content (shared between desktop + mobile drawer) ─────────────
+  const nextButtonLabel = remediationPendingEntry
+    ? 'Start Remediation →'
+    : inRemediationQuestion && remediationStatus === 'complete'
+      ? 'Return to Quiz →'
+      : inRemediationQuestion
+        ? 'Next Similar Question →'
+        : 'Next Question →'
+
   const SidebarContent = ({ onClose }) => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: NAVYD, fontFamily: FONT_B }}>
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -235,7 +689,6 @@ export default function QuizScreen({
         </span>
       </div>
 
-      {/* User + XP */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: NAVYD, flexShrink: 0 }}>
@@ -243,7 +696,7 @@ export default function QuizScreen({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</div>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 600 }}>{RANK_ICONS[Math.min(level, RANK_ICONS.length-1)]} {rank}</div>
+            <div style={{ fontSize: 10, color: GOLD, fontWeight: 600 }}>{RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]} {rank}</div>
           </div>
         </div>
         <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
@@ -251,13 +704,11 @@ export default function QuizScreen({
         </div>
       </div>
 
-      {/* Nav */}
       <nav style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(item => {
           const active = location.pathname === item.path || (item.path === '/question-bank' && location.pathname === '/quiz')
           return (
-            <button key={item.path} onClick={() => { navigate(item.path); onClose?.() }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'all 0.15s' }}>
+            <button key={item.path} onClick={() => { navigate(item.path); onClose?.() }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'all 0.15s' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
               {item.label}
             </button>
@@ -265,35 +716,30 @@ export default function QuizScreen({
         })}
       </nav>
 
-      {/* Session stats — directly under nav */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
           {[
-            { label: 'Correct', val: sessionCorrect,                    color: '#10b981' },
-            { label: 'Wrong',   val: sessionTotal - sessionCorrect,     color: '#ef4444' },
-            { label: 'XP',      val: `+${sessionXP}`,                   color: GOLD      },
+            { label: 'Correct', val: sessionCorrect,                color: '#10b981' },
+            { label: 'Wrong',   val: sessionTotal - sessionCorrect, color: '#ef4444' },
+            { label: 'XP',      val: `+${sessionXP}`,               color: GOLD      },
             { label: 'Streak',  val: streak > 0 ? `🔥 ${streak}` : '—', color: '#f59e0b' },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.val}</div>
-              <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{s.label}</div>
+          ].map(stat => (
+            <div key={stat.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: stat.color }}>{stat.val}</div>
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{stat.label}</div>
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {sessionResults.map((r, i) => (
-            <div key={i} style={{ width: 20, height: 20, borderRadius: '50%', background: r.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `1.5px solid ${r.correct ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: r.correct ? '#4ade80' : '#f87171' }}>
-              {i + 1}
-            </div>
-          ))}
-          <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(241,190,67,0.2)', border: `1.5px solid ${GOLD}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: GOLD }}>
-            {qNumber}
+        {remediationMode && (
+          <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.2)', background: 'rgba(241,190,67,0.06)' }}>
+            <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Remediation</div>
+            <div style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 700 }}>Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}</div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Spacer + End Session */}
       <div style={{ flex: 1 }} />
       <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <button onClick={() => { setShowExit(true); onClose?.() }} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -311,18 +757,19 @@ export default function QuizScreen({
         @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
         @keyframes popIn   { 0%{transform:scale(0.95);opacity:0} 100%{transform:scale(1);opacity:1} }
         @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
+        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.35} }
         .qopt { transition: all 0.13s ease; cursor: pointer; }
         .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
       `}</style>
 
-      {/* Float XP */}
       {floatXP && (
         <div style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', fontSize: 30, fontWeight: 800, color: GOLD, animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999 }}>
           +{floatXP} XP
         </div>
       )}
 
-      {/* Exit modal */}
+      <TransitionOverlay status={remediationStatus === 'activated' ? null : remediationStatus} onDismiss={() => setRemediationStatus('activated')} />
+
       {showExit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
           <div style={{ background: '#111a4a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18, padding: '32px', maxWidth: 340, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease' }}>
@@ -339,7 +786,6 @@ export default function QuizScreen({
         </div>
       )}
 
-      {/* Mobile drawer */}
       {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
@@ -349,17 +795,13 @@ export default function QuizScreen({
         </div>
       )}
 
-      {/* Desktop sidebar */}
       {!isMobile && (
         <div style={{ width: 228, flexShrink: 0, height: '100vh', position: 'sticky', top: 0, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
           <SidebarContent />
         </div>
       )}
 
-      {/* Main content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-
-        {/* Mobile topbar */}
         {isMobile && (
           <div style={{ background: NAVYD, borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -374,16 +816,16 @@ export default function QuizScreen({
           </div>
         )}
 
-        {/* Gold header bar */}
         <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
             <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
             {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20 }}>⚡ Priority</span>}
+            {inRemediationQuestion && <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: 'rgba(255,255,255,0.2)', padding: '2px 9px', borderRadius: 20 }}>Remediation</span>}
             <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
             {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
             <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
@@ -393,37 +835,37 @@ export default function QuizScreen({
           </div>
         </div>
 
-        {/* XP level bar */}
         <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }}>
           <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
         </div>
 
-        {/* Question + explanation layout — equal 50/50 columns desktop, single col mobile */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'auto' : 'hidden' }}>
-
-          {/* LEFT — white question card + next button + flag tags below */}
           <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{ width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
+              <RemediationChip
+                remediationMode={remediationMode}
+                remediationStreak={remediationStreak}
+                remediationTarget={remediationTarget}
+                remediationStatus={remediationStatus}
+                remediationSource={remediationSource}
+              />
 
-              {/* White card: question + options only */}
               <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)', marginBottom: showAns ? 14 : 0 }}>
                 <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
                   {currentQ.question}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {currentQ.options.map((opt, i) => {
-                    const isCorrectOpt  = i === currentQ.answer_index
+                    const isCorrectOpt = i === currentQ.answer_index
                     const isSelectedOpt = i === selected
                     let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lCol = '#0c1037'
                     if (showAns) {
-                      if (isCorrectOpt)                    { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lCol = '#166534' }
-                      else if (isSelectedOpt && !correct)  { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lCol = '#991b1b' }
-                      else                                 { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lCol = '#9ca3af' }
+                      if (isCorrectOpt) { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lCol = '#166534' }
+                      else if (isSelectedOpt && !correct) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lCol = '#991b1b' }
+                      else { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lCol = '#9ca3af' }
                     }
                     return (
-                      <button key={i} onClick={() => handleAnswer(i)}
-                        className={showAns ? '' : 'qopt'}
-                        style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.13s' }}>
+                      <button key={i} onClick={() => handleAnswer(i)} className={showAns ? '' : 'qopt'} style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.13s' }}>
                         <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                           {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
                         </span>
@@ -434,16 +876,14 @@ export default function QuizScreen({
                 </div>
               </div>
 
-              {/* Next button + flag tags — below white card, always visible after answering */}
               {showAns && (
                 <div style={{ animation: 'popIn 0.2s ease' }}>
                   <button onClick={nextQ} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)` }}>
-                    Next Question →
+                    {nextButtonLabel}
                   </button>
                 </div>
               )}
 
-              {/* Mobile explanation — below next button on small screens */}
               {isMobile && showAns && (
                 <div style={{ marginTop: 14, background: NAVYD, borderRadius: 14, padding: '18px', border: '1px solid rgba(255,255,255,0.07)', animation: 'popIn 0.25s ease' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
@@ -462,12 +902,17 @@ export default function QuizScreen({
                       🤖 {aiTip}
                     </div>
                   )}
+                  {remediationMode && (
+                    <div style={{ marginTop: 10, padding: '10px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: 10, border: '1px solid rgba(241,190,67,0.16)' }}>
+                      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Remediation</div>
+                      <div style={{ fontSize: 12, color: '#e2e8f0' }}>Mastery streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* RIGHT — dark explanation panel, fixed 340px, desktop only */}
           {!isMobile && (
             <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
               {!showAns ? (
@@ -494,6 +939,18 @@ export default function QuizScreen({
                   {aiTip && (
                     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
                       🤖 {aiTip}
+                    </div>
+                  )}
+
+                  {remediationMode && (
+                    <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(241,190,67,0.06)', borderRadius: 12, border: '1px solid rgba(241,190,67,0.16)' }}>
+                      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Remediation State</div>
+                      <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 700, marginBottom: 4 }}>Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}</div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                        {remediationStatus === 'complete'
+                          ? 'Mastery confirmed. Return to the main quiz when you are ready.'
+                          : 'This concept is temporarily locked until you answer 3 similar questions correctly in a row.'}
+                      </div>
                     </div>
                   )}
 

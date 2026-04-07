@@ -1,10 +1,16 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- SACE PLATFORM — Supabase Schema
--- Run this entire file in your Supabase SQL Editor (supabase.com → SQL Editor)
+-- GRADEFARM / SACE PLATFORM — SUPABASE SCHEMA (IDEMPOTENT)
+-- Safe to re-run on an existing database
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- 1. USER PROFILES
--- Extends Supabase auth.users with display name, XP, streaks etc.
+-- =========================
+-- EXTENSIONS
+-- =========================
+create extension if not exists pgcrypto;
+
+-- =========================
+-- PROFILES
+-- =========================
 create table if not exists public.profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default 'Student',
@@ -17,12 +23,15 @@ create table if not exists public.profiles (
   created_at   timestamptz default now()
 );
 
--- Auto-create profile when user signs up
 create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger
+language plpgsql
+security definer
+as $$
 begin
   insert into public.profiles (id, display_name)
-  values (new.id, coalesce(new.raw_user_meta_data->>'display_name', 'Student'));
+  values (new.id, coalesce(new.raw_user_meta_data->>'display_name', 'Student'))
+  on conflict (id) do nothing;
   return new;
 end;
 $$;
@@ -32,25 +41,66 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- 2. QUESTIONS
--- Pre-generated question bank (you populate this from past papers)
+-- =========================
+-- QUESTIONS
+-- =========================
 create table if not exists public.questions (
-  id           text primary key,          -- e.g. "chem_001"
+  id           text primary key,
   subject      text not null default 'Chemistry',
-  topic        text not null,             -- e.g. "Organic Chemistry"
-  subtopic     text not null,             -- e.g. "Functional Groups"
+  topic        text not null,
+  subtopic     text not null,
+  concept_tag  text,
   difficulty   integer not null check (difficulty between 1 and 5),
   question     text not null,
-  options      jsonb not null,            -- ["A","B","C","D"]
-  answer_index integer not null,          -- 0-based
+  options      jsonb not null,
+  answer_index integer not null,
   solution     text not null,
   tip          text,
-  sace_code    text,                      -- e.g. "OC1" for SACE descriptor
+  sace_code    text,
   created_at   timestamptz default now()
 );
 
--- 3. STRUGGLE PROFILES
--- One row per user per question — the core adaptive engine
+alter table public.questions
+  add column if not exists concept_tag text;
+
+create index if not exists idx_questions_subject on public.questions(subject);
+create index if not exists idx_questions_topic on public.questions(topic);
+create index if not exists idx_questions_subtopic on public.questions(subtopic);
+create index if not exists idx_questions_concept_tag on public.questions(concept_tag);
+
+-- =========================
+-- QUESTION VARIANTS (REMEDIATION)
+-- =========================
+create table if not exists public.question_variants (
+  id                 uuid primary key default gen_random_uuid(),
+  parent_question_id text not null references public.questions(id) on delete cascade,
+  variant_type       text not null default 'direct',
+  subject            text not null default 'Chemistry',
+  topic              text not null,
+  subtopic           text not null,
+  concept_tag        text,
+  difficulty         integer not null check (difficulty between 1 and 5),
+  question           text not null,
+  options            jsonb not null,
+  answer_index       integer not null,
+  solution           text not null,
+  tip                text,
+  source             text not null default 'prebuilt',
+  usage_count        integer not null default 0,
+  last_seen_at       timestamptz,
+  created_at         timestamptz default now(),
+  constraint question_variants_source_check check (source in ('prebuilt', 'ai_generated')),
+  constraint question_variants_variant_type_check check (variant_type in ('direct', 'concept', 'generated'))
+);
+
+create index if not exists idx_qv_parent_question_id on public.question_variants(parent_question_id);
+create index if not exists idx_qv_concept_tag on public.question_variants(concept_tag);
+create index if not exists idx_qv_source on public.question_variants(source);
+create index if not exists idx_qv_usage_count on public.question_variants(usage_count);
+
+-- =========================
+-- STRUGGLE PROFILES
+-- =========================
 create table if not exists public.struggle_profiles (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references public.profiles(id) on delete cascade,
@@ -58,153 +108,325 @@ create table if not exists public.struggle_profiles (
   attempts     integer not null default 0,
   wrong        integer not null default 0,
   last_seen    timestamptz default now(),
-  next_review  timestamptz default now(), -- spaced repetition target date
+  next_review  timestamptz default now(),
   unique(user_id, question_id)
 );
 
--- 4. SESSIONS
--- Each practice session, for analytics and weekly summaries
+create index if not exists idx_struggle_user_id on public.struggle_profiles(user_id);
+create index if not exists idx_struggle_question_id on public.struggle_profiles(question_id);
+
+-- =========================
+-- SESSIONS
+-- =========================
 create table if not exists public.sessions (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid not null references public.profiles(id) on delete cascade,
-  subject      text not null default 'Chemistry',
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null references public.profiles(id) on delete cascade,
+  subject             text not null default 'Chemistry',
   questions_attempted integer default 0,
   questions_correct   integer default 0,
-  xp_earned    integer default 0,
-  started_at   timestamptz default now(),
-  ended_at     timestamptz
+  xp_earned           integer default 0,
+  started_at          timestamptz default now(),
+  ended_at            timestamptz
 );
 
--- 5. ANSWER LOG
--- Every individual answer, for detailed analytics later
+create index if not exists idx_sessions_user_id on public.sessions(user_id);
+
+-- =========================
+-- ANSWER LOG
+-- =========================
 create table if not exists public.answer_log (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid not null references public.profiles(id) on delete cascade,
-  session_id   uuid references public.sessions(id) on delete cascade,
-  question_id  text not null,
-  selected     integer not null,
-  correct      boolean not null,
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references public.profiles(id) on delete cascade,
+  session_id    uuid references public.sessions(id) on delete cascade,
+  question_id   text not null,
+  selected      integer not null,
+  correct       boolean not null,
   time_taken_ms integer,
-  answered_at  timestamptz default now()
+  answered_at   timestamptz default now()
 );
 
--- ─── ROW LEVEL SECURITY ───────────────────────────────────────────────────────
+create index if not exists idx_answer_log_user_id on public.answer_log(user_id);
+create index if not exists idx_answer_log_session_id on public.answer_log(session_id);
+create index if not exists idx_answer_log_question_id on public.answer_log(question_id);
+
+-- =========================
+-- LEARN SESSIONS
+-- =========================
+create table if not exists public.learn_sessions (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  topic      text not null,
+  interests  text default 'sport',
+  messages   jsonb not null default '[]'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_learn_sessions_user_id on public.learn_sessions(user_id);
+
+-- =========================
+-- RPC FUNCTIONS
+-- =========================
+create or replace function public.increment_xp(uid uuid, amount integer)
+returns integer
+language plpgsql
+security definer
+as $$
+declare
+  new_xp integer;
+begin
+  update public.profiles
+  set xp = coalesce(xp, 0) + coalesce(amount, 0)
+  where id = uid
+  returning xp into new_xp;
+
+  return coalesce(new_xp, 0);
+end;
+$$;
+
+create or replace function public.increment_variant_usage(vid uuid)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  update public.question_variants
+  set
+    usage_count = coalesce(usage_count, 0) + 1,
+    last_seen_at = now()
+  where id = vid;
+end;
+$$;
+
+-- =========================
+-- RLS
+-- =========================
 alter table public.profiles enable row level security;
+alter table public.questions enable row level security;
+alter table public.question_variants enable row level security;
 alter table public.struggle_profiles enable row level security;
 alter table public.sessions enable row level security;
 alter table public.answer_log enable row level security;
+alter table public.learn_sessions enable row level security;
 
--- Profiles: users can read all (for leaderboard), only update own
-create policy "profiles_read_all"   on public.profiles for select using (true);
-create policy "profiles_update_own" on public.profiles for update using (auth.uid() = id);
+-- PROFILES
+drop policy if exists "profiles_read_all" on public.profiles;
+create policy "profiles_read_all"
+  on public.profiles
+  for select
+  using (true);
 
--- Struggle profiles: only own data
-create policy "struggle_own" on public.struggle_profiles
-  for all using (auth.uid() = user_id);
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own"
+  on public.profiles
+  for update
+  using (auth.uid() = id);
 
--- Sessions: only own data
-create policy "sessions_own" on public.sessions
-  for all using (auth.uid() = user_id);
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own"
+  on public.profiles
+  for insert
+  with check (auth.uid() = id);
 
--- Answer log: only own data
-create policy "answers_own" on public.answer_log
-  for all using (auth.uid() = user_id);
+-- QUESTIONS
+drop policy if exists "questions_read_all" on public.questions;
+create policy "questions_read_all"
+  on public.questions
+  for select
+  using (true);
 
--- Questions: everyone can read
-alter table public.questions enable row level security;
-create policy "questions_read_all" on public.questions for select using (true);
+-- QUESTION VARIANTS
+drop policy if exists "question_variants_read_all" on public.question_variants;
+create policy "question_variants_read_all"
+  on public.question_variants
+  for select
+  using (true);
 
--- ─── LEADERBOARD VIEW ────────────────────────────────────────────────────────
+drop policy if exists "question_variants_insert_authenticated" on public.question_variants;
+create policy "question_variants_insert_authenticated"
+  on public.question_variants
+  for insert
+  with check (auth.uid() is not null);
+
+drop policy if exists "question_variants_update_authenticated" on public.question_variants;
+create policy "question_variants_update_authenticated"
+  on public.question_variants
+  for update
+  using (auth.uid() is not null);
+
+-- STRUGGLE PROFILES
+drop policy if exists "struggle_own" on public.struggle_profiles;
+create policy "struggle_own"
+  on public.struggle_profiles
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- SESSIONS
+drop policy if exists "sessions_own" on public.sessions;
+create policy "sessions_own"
+  on public.sessions
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- ANSWER LOG
+drop policy if exists "answers_own" on public.answer_log;
+create policy "answers_own"
+  on public.answer_log
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- LEARN SESSIONS
+drop policy if exists "learn_sessions_own" on public.learn_sessions;
+create policy "learn_sessions_own"
+  on public.learn_sessions
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- =========================
+-- LEADERBOARD VIEW
+-- =========================
 create or replace view public.leaderboard as
-  select
-    id,
-    display_name,
-    school,
-    xp,
-    level,
-    streak,
-    rank() over (order by xp desc) as position
-  from public.profiles
-  order by xp desc
-  limit 100;
+select
+  id,
+  display_name,
+  school,
+  xp,
+  level,
+  streak,
+  rank() over (order by xp desc) as position
+from public.profiles
+order by xp desc
+limit 100;
 
--- ─── SAMPLE CHEMISTRY QUESTIONS ──────────────────────────────────────────────
--- Starter bank — replace/extend with your past-paper extractions
-insert into public.questions (id, topic, subtopic, difficulty, question, options, answer_index, solution, tip, sace_code)
+-- =========================
+-- SAMPLE QUESTIONS
+-- =========================
+insert into public.questions
+  (id, subject, topic, subtopic, concept_tag, difficulty, question, options, answer_index, solution, tip, sace_code)
 values
-('chem_001','Atomic Theory','Electronic Configuration',1,
- 'What is the electronic configuration of a neutral carbon atom?',
- '["1s² 2s² 2p²","1s² 2s² 2p⁴","1s² 2s¹ 2p³","1s² 2s² 2p⁶"]',
- 0,'Carbon has 6 electrons. Fill orbitals in order: 1s²(2) 2s²(2) 2p²(2).','Remember the Aufbau principle: fill lowest energy orbitals first.','AT1'),
+  (
+    'chem_001',
+    'Chemistry',
+    'Atomic Theory',
+    'Electronic Configuration',
+    'chemistry|atomic theory|electronic configuration',
+    1,
+    'What is the electronic configuration of a neutral carbon atom?',
+    '["1s² 2s² 2p²","1s² 2s² 2p⁴","1s² 2s¹ 2p³","1s² 2s² 2p⁶"]'::jsonb,
+    0,
+    'Carbon has 6 electrons. Fill orbitals in order: 1s², 2s², 2p².',
+    'Remember the Aufbau principle: fill lowest energy orbitals first.',
+    'AT1'
+  ),
+  (
+    'chem_004',
+    'Chemistry',
+    'Acid/Base Chemistry',
+    'pH Calculations',
+    'chemistry|acid/base chemistry|ph calculations',
+    3,
+    'What is the pH of a 0.01 mol/L HCl solution?',
+    '["1","2","3","7"]'::jsonb,
+    1,
+    'HCl is a strong acid, fully dissociates. [H⁺] = 0.01 = 10⁻², so pH = 2.',
+    'pH = −log[H⁺]. Strong acids fully dissociate.',
+    'AB1'
+  ),
+  (
+    'chem_007',
+    'Chemistry',
+    'Organic Chemistry',
+    'Naming',
+    'chemistry|organic chemistry|naming',
+    2,
+    'What is the IUPAC name for CH₃CH₂CH₂COOH?',
+    '["Propanoic acid","Butanoic acid","Pentanoic acid","Ethanoic acid"]'::jsonb,
+    1,
+    'There are 4 carbons including the carboxyl carbon, so the name is butanoic acid.',
+    'Count all carbons including the carbon in –COOH.',
+    'OC2'
+  )
+on conflict (id) do update set
+  subject      = excluded.subject,
+  topic        = excluded.topic,
+  subtopic     = excluded.subtopic,
+  concept_tag  = excluded.concept_tag,
+  difficulty   = excluded.difficulty,
+  question     = excluded.question,
+  options      = excluded.options,
+  answer_index = excluded.answer_index,
+  solution     = excluded.solution,
+  tip          = excluded.tip,
+  sace_code    = excluded.sace_code;
 
-('chem_002','Atomic Theory','Isotopes',2,
- 'Carbon-14 has how many neutrons?',
- '["6","8","14","12"]',
- 1,'Mass number = protons + neutrons. Carbon has 6 protons. 14 − 6 = 8 neutrons.','Neutrons = mass number minus atomic number.','AT2'),
-
-('chem_003','Compounds & Reactions','Types of Reactions',2,
- 'Which of these is a redox reaction?',
- '["NaCl + AgNO₃ → AgCl + NaNO₃","Mg + 2HCl → MgCl₂ + H₂","NaOH + HCl → NaCl + H₂O","CaCO₃ → CaO + CO₂"]',
- 1,'Mg is oxidised (0→+2), H is reduced (+1→0). Electron transfer = redox.','If oxidation states change, it''s redox.','CR1'),
-
-('chem_004','Acid/Base Chemistry','pH Calculations',3,
- 'What is the pH of a 0.01 mol/L HCl solution?',
- '["1","2","3","7"]',
- 1,'HCl is a strong acid, fully dissociates. [H⁺]=0.01=10⁻². pH=−log(10⁻²)=2.','pH = −log[H⁺]. Strong acids fully dissociate.','AB1'),
-
-('chem_005','Acid/Base Chemistry','Buffers',4,
- 'A buffer solution resists pH change because it contains:',
- '["Only a strong acid","A weak acid and its conjugate base","Equal amounts of two strong acids","Only pure water"]',
- 1,'Buffers use the weak acid to neutralise added base, and conjugate base to neutralise added acid.','Weak acid + conjugate base = buffer. This is the Henderson–Hasselbalch setup.','AB2'),
-
-('chem_006','Organic Chemistry','Functional Groups',1,
- 'Which functional group is present in ethanol (CH₃CH₂OH)?',
- '["Carboxyl","Hydroxyl","Carbonyl","Amino"]',
- 1,'The –OH group is a hydroxyl group, present in all alcohols.','–OH = hydroxyl = alcohol family.','OC1'),
-
-('chem_007','Organic Chemistry','Naming',2,
- 'What is the IUPAC name for CH₃CH₂CH₂COOH?',
- '["Propanoic acid","Butanoic acid","Pentanoic acid","Ethanoic acid"]',
- 1,'4 carbons including the carboxyl carbon = butane chain → butanoic acid.','Count ALL carbons including the one in –COOH.','OC2'),
-
-('chem_008','Organic Chemistry','Reactions',3,
- 'What type of reaction occurs when ethanol reacts with ethanoic acid to form ethyl ethanoate?',
- '["Addition","Substitution","Esterification","Saponification"]',
- 2,'Alcohol + carboxylic acid → ester + water. This is esterification (a condensation reaction).','Acid + alcohol → ester. Always produces water as a byproduct.','OC3'),
-
-('chem_009','Rates & Equilibrium','Le Chatelier''s Principle',3,
- 'For N₂(g) + 3H₂(g) ⇌ 2NH₃(g), increasing pressure shifts equilibrium:',
- '["Left, towards more moles of gas","Right, towards fewer moles of gas","No effect","Right, because NH₃ is more stable"]',
- 1,'Left side: 4 moles gas. Right side: 2 moles. Increasing pressure favours fewer moles → shifts right.','Increased pressure → shift toward fewer moles of gas.','RE1'),
-
-('chem_010','Rates & Equilibrium','Equilibrium Constants',4,
- 'For the reaction A + 2B ⇌ C, what is the correct expression for Keq?',
- '["[A][B]²/[C]","[C]/[A][B]","[C]/[A][B]²","[A][B]/[C]²"]',
- 2,'Keq = products over reactants, each raised to stoichiometric coefficient. [C]¹/([A]¹[B]²).','Coefficients become powers in the Keq expression.','RE2'),
-
-('chem_011','Redox & Electrochemistry','Oxidation States',2,
- 'What is the oxidation state of sulfur in H₂SO₄?',
- '["+4","+6","+2","-2"]',
- 1,'H₂SO₄: 2(+1) + S + 4(−2) = 0 → 2 + S − 8 = 0 → S = +6.','Set up the equation: all oxidation states sum to overall charge.','RX1'),
-
-('chem_012','Redox & Electrochemistry','Galvanic Cells',4,
- 'In a galvanic cell, oxidation occurs at the:',
- '["Cathode","Anode","Salt bridge","Electrolyte"]',
- 1,'Oxidation = Anode. Reduction = Cathode. Remember: AN OX, RED CAT.','AN OX RED CAT — Anode Oxidation, Reduction Cathode.','RX2'),
-
-('chem_013','Measurement','Significant Figures',1,
- 'How many significant figures are in 0.00450?',
- '["5","3","2","6"]',
- 1,'Leading zeros are not significant. 4, 5, and the trailing 0 after 5 are significant = 3.','Leading zeros never count. Trailing zeros after a decimal point always count.','MD1'),
-
-('chem_014','Measurement','Mole Calculations',2,
- 'How many moles are in 44g of CO₂? (Molar mass = 44 g/mol)',
- '["44","0.5","2","1"]',
- 3,'n = m/M = 44/44 = 1 mol.','n = m ÷ M. The three-way triangle: n, m, M.','MD2'),
-
-('chem_015','Periodicity','Periodic Trends',2,
- 'Which of these elements has the highest electronegativity?',
- '["Oxygen","Sodium","Fluorine","Chlorine"]',
- 2,'Electronegativity increases across a period and up a group. Fluorine (top-right) is highest.','Electronegativity: up and to the right on the periodic table.','PT1')
-
-on conflict (id) do nothing;
+-- =========================
+-- SAMPLE REMEDIATION VARIANTS
+-- =========================
+insert into public.question_variants
+  (parent_question_id, variant_type, subject, topic, subtopic, concept_tag, difficulty, question, options, answer_index, solution, tip, source)
+values
+  (
+    'chem_004',
+    'direct',
+    'Chemistry',
+    'Acid/Base Chemistry',
+    'pH Calculations',
+    'chemistry|acid/base chemistry|ph calculations',
+    3,
+    'What is the pH of a 0.001 mol/L HCl solution?',
+    '["1","2","3","4"]'::jsonb,
+    2,
+    'HCl is a strong acid. [H⁺] = 10⁻³, so pH = 3.',
+    'For powers of ten, the pH is the positive value of the exponent.',
+    'prebuilt'
+  ),
+  (
+    'chem_004',
+    'direct',
+    'Chemistry',
+    'Acid/Base Chemistry',
+    'pH Calculations',
+    'chemistry|acid/base chemistry|ph calculations',
+    3,
+    'A strong acid has [H⁺] = 10⁻⁴ mol/L. What is its pH?',
+    '["2","3","4","5"]'::jsonb,
+    2,
+    'pH = −log(10⁻⁴) = 4.',
+    'Negative log turns 10⁻⁴ into 4.',
+    'prebuilt'
+  ),
+  (
+    'chem_007',
+    'direct',
+    'Chemistry',
+    'Organic Chemistry',
+    'Naming',
+    'chemistry|organic chemistry|naming',
+    2,
+    'What is the IUPAC name for CH₃CH₂COOH?',
+    '["Ethanoic acid","Propanoic acid","Butanoic acid","Pentanoic acid"]'::jsonb,
+    1,
+    'There are 3 carbons including the carboxyl carbon, so it is propanoic acid.',
+    'Always count the acid carbon as part of the main chain.',
+    'prebuilt'
+  ),
+  (
+    'chem_007',
+    'direct',
+    'Chemistry',
+    'Organic Chemistry',
+    'Naming',
+    'chemistry|organic chemistry|naming',
+    2,
+    'How many carbons are in the parent chain of CH₃CH₂CH₂COOH?',
+    '["3","4","5","2"]'::jsonb,
+    1,
+    'The carboxyl carbon is included, giving a total of 4 carbons.',
+    'The carbon in –COOH still counts.',
+    'prebuilt'
+  )
+on conflict do nothing;
