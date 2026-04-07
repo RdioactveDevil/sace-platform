@@ -38,8 +38,6 @@ const NAV_ITEMS = [
   { icon: '🕐', label: 'History',       path: '/history'       },
 ]
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
-
 function extractJsonArray(text = '') {
   try {
     const parsed = JSON.parse(text)
@@ -202,30 +200,26 @@ function StatusToast({ status }) {
 
   return (
     <div style={{
-      position: 'fixed',
-      top: 20,
-      right: 20,
-      zIndex: 2000,
-      width: 320,
-      maxWidth: 'calc(100vw - 32px)',
-      borderRadius: 16,
+      marginTop: 12,
+      borderRadius: 14,
       background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
       border: `1px solid ${isComplete ? 'rgba(16,185,129,0.35)' : 'rgba(241,190,67,0.24)'}`,
-      boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
       padding: '14px 16px',
       animation: 'popIn 0.18s ease',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
-          width: 40,
-          height: 40,
+          width: 38,
+          height: 38,
           borderRadius: 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 20,
+          fontSize: 18,
           background: isComplete ? 'rgba(16,185,129,0.12)' : 'rgba(241,190,67,0.12)',
           border: `1px solid ${isComplete ? 'rgba(16,185,129,0.22)' : 'rgba(241,190,67,0.18)'}`,
+          flexShrink: 0,
         }}>
           {isComplete ? '✅' : '🧠'}
         </div>
@@ -765,8 +759,6 @@ export default function QuizScreen({
         </div>
       )}
 
-      <StatusToast status={remediationStatus === 'complete' || remediationStatus === 'generating' ? remediationStatus : null} />
-
       {showExit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
           <div style={{ background: '#111a4a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18, padding: '32px', maxWidth: 340, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease' }}>
@@ -875,9 +867,58 @@ export default function QuizScreen({
 
               {showAns && (
                 <div style={{ animation: 'popIn 0.2s ease' }}>
-                  <button onClick={nextQ} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)` }}>
+                  <button
+                    onClick={nextQ}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+                      color: NAVY,
+                      fontSize: 15,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      fontFamily: FONT_B,
+                      boxShadow: `0 6px 20px rgba(241,190,67,0.3)`
+                    }}
+                  >
                     {nextButtonLabel}
                   </button>
+
+                  <StatusToast
+                    status={remediationStatus === 'complete' || remediationStatus === 'generating' ? remediationStatus : null}
+                  />
+
+                  {remediationMode && (
+                    <div style={{
+                      marginTop: 12,
+                      padding: '12px 14px',
+                      background: 'rgba(241,190,67,0.06)',
+                      borderRadius: 12,
+                      border: '1px solid rgba(241,190,67,0.16)',
+                      animation: 'popIn 0.18s ease',
+                    }}>
+                      <div style={{
+                        fontSize: 11,
+                        color: GOLD,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        marginBottom: 4
+                      }}>
+                        Remediation State
+                      </div>
+                      <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 700, marginBottom: 4 }}>
+                        Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                        {remediationStatus === 'complete'
+                          ? 'Mastery confirmed. Return to the main quiz when you are ready.'
+                          : 'This concept is temporarily locked until you answer 3 similar questions correctly in a row.'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -897,12 +938,6 @@ export default function QuizScreen({
                   {aiTip && (
                     <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
                       🤖 {aiTip}
-                    </div>
-                  )}
-                  {remediationMode && (
-                    <div style={{ marginTop: 10, padding: '10px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: 10, border: '1px solid rgba(241,190,67,0.16)' }}>
-                      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Remediation</div>
-                      <div style={{ fontSize: 12, color: '#e2e8f0' }}>Mastery streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}</div>
                     </div>
                   )}
                 </div>
@@ -936,18 +971,6 @@ export default function QuizScreen({
                   {aiTip && (
                     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
                       🤖 {aiTip}
-                    </div>
-                  )}
-
-                  {remediationMode && (
-                    <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(241,190,67,0.06)', borderRadius: 12, border: '1px solid rgba(241,190,67,0.16)' }}>
-                      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Remediation State</div>
-                      <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 700, marginBottom: 4 }}>Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}</div>
-                      <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
-                        {remediationStatus === 'complete'
-                          ? 'Mastery confirmed. Return to the main quiz when you are ready.'
-                          : 'This concept is temporarily locked until you answer 3 similar questions correctly in a row.'}
-                      </div>
                     </div>
                   )}
 
