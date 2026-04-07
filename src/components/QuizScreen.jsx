@@ -31,11 +31,11 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 const NAV_ITEMS = [
   { icon: '⚡', label: 'Question Bank', path: '/question-bank' },
-  { icon: '🎓', label: 'Learn',         path: '/learn'         },
-  { icon: '📊', label: 'My Progress',   path: '/my-progress'   },
-  { icon: '🏆', label: 'Leaderboard',   path: '/leaderboard'   },
-  { icon: '📚', label: 'Study Plan',    path: '/study-plan'    },
-  { icon: '🕐', label: 'History',       path: '/history'       },
+  { icon: '🎓', label: 'Learn', path: '/learn' },
+  { icon: '📊', label: 'My Progress', path: '/my-progress' },
+  { icon: '🏆', label: 'Leaderboard', path: '/leaderboard' },
+  { icon: '📚', label: 'Study Plan', path: '/study-plan' },
+  { icon: '🕐', label: 'History', path: '/history' },
 ]
 
 function extractJsonArray(text = '') {
@@ -81,39 +81,51 @@ function createLocalFallbackVariants(parentQuestion) {
 }
 
 async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
-  const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
-  const system = [
-    'You are generating remediation MCQs for a SACE Chemistry student.',
-    'Return only a valid JSON array containing exactly 3 objects.',
-    'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
-    'Each options array must contain exactly 4 strings.',
-    'Keep the same underlying concept, but vary wording, values, or structure.',
-    'Do not include markdown or commentary outside the JSON array.',
-  ].join(' ')
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3500)
 
-  const user = [
-    `Topic: ${parentQuestion.topic}`,
-    `Subtopic: ${parentQuestion.subtopic}`,
-    `Concept tag: ${conceptTag}`,
-    `Original question: ${parentQuestion.question}`,
-    `Correct answer: ${correctAnswer}`,
-    `Original solution: ${parentQuestion.solution}`,
-    'Generate 3 targeted remediation questions that test the same concept but are not copies.',
-  ].join('\n')
+    const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+    const system = [
+      'You are generating remediation MCQs for a SACE Chemistry student.',
+      'Return only a valid JSON array containing exactly 3 objects.',
+      'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
+      'Each options array must contain exactly 4 strings.',
+      'Keep the same underlying concept, but vary wording, values, or structure.',
+      'Do not include markdown or commentary outside the JSON array.',
+    ].join(' ')
 
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      max_tokens: 1200,
-      system,
-      messages: [{ role: 'user', content: user }],
-    }),
-  })
+    const user = [
+      `Topic: ${parentQuestion.topic}`,
+      `Subtopic: ${parentQuestion.subtopic}`,
+      `Concept tag: ${conceptTag}`,
+      `Original question: ${parentQuestion.question}`,
+      `Correct answer: ${correctAnswer}`,
+      `Original solution: ${parentQuestion.solution}`,
+      'Generate 3 targeted remediation questions that test the same concept but are not copies.',
+    ].join('\n')
 
-  const data = await res.json()
-  const rawText = data?.content?.[0]?.text || ''
-  return extractJsonArray(rawText)
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        max_tokens: 1200,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    })
+
+    clearTimeout(timeout)
+
+    if (!res.ok) return []
+
+    const data = await res.json()
+    const rawText = data?.content?.[0]?.text || ''
+    return extractJsonArray(rawText)
+  } catch {
+    return []
+  }
 }
 
 function normalizeVariantRecord(parentQuestion, variant, index = 0) {
@@ -350,44 +362,30 @@ export default function QuizScreen({
     const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
     setRemediationStatus('generating')
 
-    let generated = []
-    try {
-      generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag)
-    } catch {
-      generated = []
-    }
+    const localFallback = createLocalFallbackVariants(parentQuestion).map((variant, index) =>
+      normalizeVariantRecord(parentQuestion, variant, index)
+    )
 
-    if (!generated.length) {
-      generated = createLocalFallbackVariants(parentQuestion)
-    }
+    const localQueue = buildRemediationQueue({
+      generatedVariants: localFallback,
+      excludeIds: existingUsedIds,
+      limit: 5,
+    }).map(v => ({ ...v, is_variant: true, source: 'ai_generated' }))
 
-    const normalizedGenerated = generated.map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index))
+    ;(async () => {
+      try {
+        const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag)
+        if (!generated.length) return
+        try {
+          await insertGeneratedQuestionVariants(parentQuestion, generated)
+        } catch {}
+      } catch {}
+    })()
 
-    try {
-      const saved = await insertGeneratedQuestionVariants(parentQuestion, generated)
-      const savedNormalized = (saved || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index))
-      const queue = buildRemediationQueue({
-        generatedVariants: savedNormalized,
-        excludeIds: existingUsedIds,
-        limit: 5,
-      }).map(v => ({ ...v, is_variant: true, source: v.source || 'ai_generated' }))
-
-      setRemediationSource('generated')
-      setRemediationStatus('activated')
-      setRemediationQueue(queue)
-      return queue
-    } catch {
-      const queue = buildRemediationQueue({
-        generatedVariants: normalizedGenerated,
-        excludeIds: existingUsedIds,
-        limit: 5,
-      }).map(v => ({ ...v, is_variant: true, source: v.source || 'ai_generated' }))
-
-      setRemediationSource('generated')
-      setRemediationStatus('activated')
-      setRemediationQueue(queue)
-      return queue
-    }
+    setRemediationSource('generated')
+    setRemediationStatus('activated')
+    setRemediationQueue(localQueue)
+    return localQueue
   }, [setRemediationQueue, setRemediationSource, setRemediationStatus])
 
   const enterRemediation = useCallback(async (parentQuestion) => {
@@ -545,6 +543,23 @@ export default function QuizScreen({
 
     if (!queue.length && remediationOriginalQ) {
       queue = await generateRemediationQueue(remediationOriginalQ, remediationUsedIds)
+    }
+
+    if (!queue.length) {
+      const fallbackBase = remediationOriginalQ || currentQ
+      const hardFallback = createLocalFallbackVariants(fallbackBase).map((variant, index) =>
+        normalizeVariantRecord(fallbackBase, variant, index)
+      )
+
+      queue = buildRemediationQueue({
+        generatedVariants: hardFallback,
+        excludeIds: remediationUsedIds,
+        limit: 5,
+      }).map(v => ({ ...v, is_variant: true, source: 'ai_generated' }))
+
+      setRemediationQueue(queue)
+      setRemediationSource('generated')
+      setRemediationStatus('activated')
     }
 
     if (!queue.length) return false
@@ -712,10 +727,10 @@ export default function QuizScreen({
         <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
           {[
-            { label: 'Correct', val: sessionCorrect,                color: '#10b981' },
-            { label: 'Wrong',   val: sessionTotal - sessionCorrect, color: '#ef4444' },
-            { label: 'XP',      val: `+${sessionXP}`,               color: GOLD      },
-            { label: 'Streak',  val: streak > 0 ? `🔥 ${streak}` : '—', color: '#f59e0b' },
+            { label: 'Correct', val: sessionCorrect, color: '#10b981' },
+            { label: 'Wrong', val: sessionTotal - sessionCorrect, color: '#ef4444' },
+            { label: 'XP', val: `+${sessionXP}`, color: GOLD },
+            { label: 'Streak', val: streak > 0 ? `🔥 ${streak}` : '—', color: '#f59e0b' },
           ].map(stat => (
             <div key={stat.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: stat.color }}>{stat.val}</div>
@@ -817,7 +832,7 @@ export default function QuizScreen({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
             {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
-            <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>}
             {!isMobile && (
               <button onClick={() => setShowExit(true)} style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End Session</button>
             )}
@@ -847,14 +862,56 @@ export default function QuizScreen({
                   {currentQ.options.map((opt, i) => {
                     const isCorrectOpt = i === currentQ.answer_index
                     const isSelectedOpt = i === selected
-                    let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lCol = '#0c1037'
+                    let bg = '#f5f6ff'
+                    let border = '1px solid #e2e5f0'
+                    let color = '#334155'
+                    let lBg = '#e2e5f0'
+                    let lCol = '#0c1037'
+
                     if (showAns) {
-                      if (isCorrectOpt) { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lCol = '#166534' }
-                      else if (isSelectedOpt && !correct) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lCol = '#991b1b' }
-                      else { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lCol = '#9ca3af' }
+                      if (isCorrectOpt) {
+                        bg = '#f0fdf4'
+                        border = '1px solid #86efac'
+                        color = '#166534'
+                        lBg = '#bbf7d0'
+                        lCol = '#166534'
+                      } else if (isSelectedOpt && !correct) {
+                        bg = '#fef2f2'
+                        border = '1px solid #fca5a5'
+                        color = '#991b1b'
+                        lBg = '#fecaca'
+                        lCol = '#991b1b'
+                      } else {
+                        bg = '#fafafa'
+                        border = '1px solid #f0f0f0'
+                        color = '#9ca3af'
+                        lBg = '#f0f0f0'
+                        lCol = '#9ca3af'
+                      }
                     }
+
                     return (
-                      <button key={i} onClick={() => handleAnswer(i)} className={showAns ? '' : 'qopt'} style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.13s' }}>
+                      <button
+                        key={i}
+                        onClick={() => handleAnswer(i)}
+                        className={showAns ? '' : 'qopt'}
+                        style={{
+                          background: bg,
+                          border,
+                          color,
+                          padding: '12px 16px',
+                          borderRadius: 11,
+                          fontSize: 14,
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          cursor: showAns ? 'default' : 'pointer',
+                          fontFamily: FONT_B,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          transition: 'all 0.13s',
+                        }}
+                      >
                         <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                           {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
                         </span>
@@ -869,6 +926,7 @@ export default function QuizScreen({
                 <div style={{ animation: 'popIn 0.2s ease' }}>
                   <button
                     onClick={nextQ}
+                    disabled={remediationStatus === 'generating'}
                     style={{
                       width: '100%',
                       padding: '14px',
@@ -880,7 +938,9 @@ export default function QuizScreen({
                       fontWeight: 800,
                       cursor: 'pointer',
                       fontFamily: FONT_B,
-                      boxShadow: `0 6px 20px rgba(241,190,67,0.3)`
+                      boxShadow: `0 6px 20px rgba(241,190,67,0.3)`,
+                      opacity: remediationStatus === 'generating' ? 0.7 : 1,
+                      pointerEvents: remediationStatus === 'generating' ? 'none' : 'auto',
                     }}
                   >
                     {nextButtonLabel}
@@ -905,7 +965,7 @@ export default function QuizScreen({
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         letterSpacing: '0.08em',
-                        marginBottom: 4
+                        marginBottom: 4,
                       }}>
                         Remediation State
                       </div>
