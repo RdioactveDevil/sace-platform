@@ -21,7 +21,9 @@ export function computeWeights(questions, struggleMap) {
     const s = struggleMap[q.id]
 
     if (!s || s.attempts === 0) {
-      return { id: q.id, weight: 0.3 + (q.difficulty / 5) * 0.1 }
+      // Random jitter (0–0.15) shuffles unseen questions each session while
+      // keeping them ranked below any meaningfully-struggled question (max ~1.0)
+      return { id: q.id, weight: 0.3 + (q.difficulty / 5) * 0.1 + Math.random() * 0.15 }
     }
 
     const errorRate = s.wrong / s.attempts
