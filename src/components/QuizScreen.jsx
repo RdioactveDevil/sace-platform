@@ -88,7 +88,7 @@ async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
     const system = [
       'You are generating remediation MCQs for a SACE Chemistry student.',
-      'Return only a valid JSON array containing exactly 3 objects.',
+      'Return only a valid JSON array containing exactly 5 objects.',
       'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
       'Each options array must contain exactly 4 strings.',
       'Keep the same underlying concept, but vary wording, values, or structure.',
@@ -102,7 +102,7 @@ async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
       `Original question: ${parentQuestion.question}`,
       `Correct answer: ${correctAnswer}`,
       `Original solution: ${parentQuestion.solution}`,
-      'Generate 3 targeted remediation questions that test the same concept but are not copies.',
+      'Generate 5 targeted remediation questions that test the same concept but are not copies.',
     ].join('\n')
 
     const res = await fetch('/api/chat', {
@@ -110,7 +110,7 @@ async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
       body: JSON.stringify({
-        max_tokens: 1200,
+        max_tokens: 2000,
         system,
         messages: [{ role: 'user', content: user }],
       }),
@@ -517,6 +517,23 @@ export default function QuizScreen({
     await recordAnswer(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
 
     if (!isCorrect) {
+      // Immediately lock into remediation so the button changes to "Start Remediation →"
+      // before the AI tip fetch runs. Without this, the user could click "Next Question →"
+      // during the 3.5s AI timeout window and skip remediation entirely.
+      const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
+      setRemediationMode(true)
+      setRemediationStreak(0)
+      setRemediationTarget(3)
+      setRemediationStatus('activated')
+      setRemediationSource('prebuilt')
+      setRemediationConcept(conceptTagNow)
+      setRemediationParentId(currentQ.id)
+      setRemediationOriginalQ(currentQ)
+      setRemediationUsedIds([])
+
+      // Load remediation queue in background — parallel with AI tip fetch
+      enterRemediation(currentQ)
+
       setLoadingTip(true)
       try {
         const res = await fetch('/api/chat', {
@@ -534,7 +551,6 @@ export default function QuizScreen({
         setAiTip('')
       }
       setLoadingTip(false)
-      await enterRemediation(currentQ)
     }
   }
 
