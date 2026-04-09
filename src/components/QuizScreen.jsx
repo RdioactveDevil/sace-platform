@@ -444,12 +444,6 @@ export default function QuizScreen({
     }
   }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap])
 
-  useEffect(() => {
-    if (remediationStatus !== 'complete') return
-    const timeout = setTimeout(() => setRemediationStatus('activated'), 1400)
-    return () => clearTimeout(timeout)
-  }, [remediationStatus, setRemediationStatus])
-
   const handleAnswer = async (idx) => {
     if (showAns || !currentQ) return
 
