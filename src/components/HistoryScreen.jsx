@@ -43,8 +43,23 @@ export default function HistoryScreen({ profile, theme, embedded }) {
       .order('answered_at', { ascending: false })
       .limit(300)
 
+    // Fetch question text for all unique question IDs in one query
+    const qIds = [...new Set((answers || []).map(a => a.question_id).filter(Boolean))]
+    let questionMap = {}
+    if (qIds.length > 0) {
+      const { data: qs } = await supabase
+        .from('questions')
+        .select('id, question, topic, subtopic')
+        .in('id', qIds)
+      ;(qs || []).forEach(q => { questionMap[q.id] = q })
+    }
+
     const sessionMap = {}
     ;(answers || []).forEach((a) => {
+      const q = questionMap[a.question_id]
+      a.question_text = q?.question || null
+      a.topic        = q?.topic    || null
+      a.subtopic     = q?.subtopic || null
       const bucket = Math.floor(new Date(a.answered_at).getTime() / (30 * 60 * 1000))
       if (!sessionMap[bucket]) sessionMap[bucket] = { id: String(bucket), date: a.answered_at, answers: [], correct: 0, total: 0 }
       sessionMap[bucket].answers.push(a)
@@ -145,7 +160,10 @@ export default function HistoryScreen({ profile, theme, embedded }) {
                           {session.answers.slice(0, 15).map((a, j) => (
                             <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: j < Math.min(session.answers.length, 15) - 1 ? `1px solid ${t.border}` : 'none' }}>
                               <div style={{ width: 20, height: 20, borderRadius: '50%', background: a.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: a.correct ? t.success : t.danger, flexShrink: 0 }}>{a.correct ? '✓' : '✗'}</div>
-                              <div style={{ flex: 1, fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.question_text || a.question_id || `Question ${j + 1}`}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.question_text || `Question ${j + 1}`}</div>
+                                {a.subtopic && <div style={{ fontSize: 10, color: t.textMuted, marginTop: 1 }}>{a.subtopic}</div>}
+                              </div>
                               <div style={{ fontSize: 11, color: a.correct ? t.success : t.danger, fontWeight: 600, flexShrink: 0 }}>{a.correct ? '+XP' : 'Wrong'}</div>
                             </div>
                           ))}

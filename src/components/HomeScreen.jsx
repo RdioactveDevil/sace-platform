@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
+import { supabase } from '../lib/supabase'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -73,8 +74,28 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const totalWrong = Object.values(currentStruggleMap).reduce((s, v) => s + (v.wrong || 0), 0)
   const accuracy = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
   const days = ['M','T','W','T','F','S','S']
-  const activity = [0,0,0,0,totalAttempts,0,0]
-  const maxAct = Math.max(...activity, 1)
+  const [weekActivity, setWeekActivity] = useState([0,0,0,0,0,0,0])
+  const maxAct = Math.max(...weekActivity, 1)
+
+  useEffect(() => {
+    if (!profile?.id) return
+    // Start of this Mon–Sun week
+    const now = new Date()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+    monday.setHours(0, 0, 0, 0)
+    supabase
+      .from('answer_log')
+      .select('answered_at')
+      .eq('user_id', profile.id)
+      .gte('answered_at', monday.toISOString())
+      .then(({ data }) => {
+        if (!data?.length) return
+        const counts = [0,0,0,0,0,0,0]
+        data.forEach(a => { counts[(new Date(a.answered_at).getDay() + 6) % 7]++ })
+        setWeekActivity(counts)
+      })
+  }, [profile.id])
 
   const card = {
     background: t.bgCard,
@@ -273,8 +294,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 48 }}>
               {days.map((d, i) => (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: '100%', background: activity[i] > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: activity[i] > 0 ? `${Math.max((activity[i]/maxAct)*38, 8)}px` : '3px' }} />
-                  <div style={{ fontSize: 10, color: i === 4 ? GOLD : t.textFaint, fontWeight: i === 4 ? 700 : 400 }}>{d}</div>
+                  <div style={{ width: '100%', background: weekActivity[i] > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: weekActivity[i] > 0 ? `${Math.max((weekActivity[i]/maxAct)*38, 8)}px` : '3px' }} />
+                  <div style={{ fontSize: 10, color: i === (new Date().getDay() + 6) % 7 ? GOLD : t.textFaint, fontWeight: i === (new Date().getDay() + 6) % 7 ? 700 : 400 }}>{d}</div>
                 </div>
               ))}
             </div>

@@ -136,7 +136,7 @@ export function getLevelProgress(xp) {
 }
 
 export function calcXP(correct, difficulty, streak) {
-  if (!correct) return 3
+  if (!correct) return -(difficulty * 4)   // lose XP on wrong — harder questions cost more
   const base = difficulty * 12
   const multi = Math.min(1 + streak * 0.12, 2.2)
   return Math.round(base * multi)
