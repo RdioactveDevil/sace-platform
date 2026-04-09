@@ -134,7 +134,7 @@ export async function updateSession(sessionId, updates) {
 
 // ─── XP & STREAK ──────────────────────────────────────────────────────────────
 export async function addXP(userId, xpEarned, newStreak, currentProfile) {
-  const newXP = currentProfile.xp + xpEarned
+  const newXP = Math.max(0, currentProfile.xp + xpEarned)
   const today = new Date().toDateString()
   const lastActive = currentProfile.last_active
     ? new Date(currentProfile.last_active).toDateString()
