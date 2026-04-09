@@ -396,7 +396,7 @@ export default function QuizScreen({
     setRemediationMode(true)
     setRemediationStreak(0)
     setRemediationTarget(3)
-    setRemediationStatus('activated')
+    // status stays 'generating' (set by handleAnswer) — button stays disabled until queue loads
     setRemediationSource('prebuilt')
     setRemediationConcept(conceptTag)
     setRemediationParentId(parentQuestion.id)
@@ -413,9 +413,12 @@ export default function QuizScreen({
       }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
 
       if (!queue.length) {
+        // generateRemediationQueue sets status to 'activated' once the fallback queue is ready
         queue = await generateRemediationQueue(parentQuestion, [])
       } else {
+        // DB variants loaded — enable the button now
         setRemediationQueue(queue)
+        setRemediationStatus('activated')
       }
     } catch {
       await generateRemediationQueue(parentQuestion, [])
@@ -518,7 +521,7 @@ export default function QuizScreen({
       setRemediationMode(true)
       setRemediationStreak(0)
       setRemediationTarget(3)
-      setRemediationStatus('activated')
+      setRemediationStatus('generating') // keep button disabled until queue is loaded
       setRemediationSource('prebuilt')
       setRemediationConcept(conceptTagNow)
       setRemediationParentId(currentQ.id)
