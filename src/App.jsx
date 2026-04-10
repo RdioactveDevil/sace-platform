@@ -13,6 +13,7 @@ import LearnScreen       from './components/LearnScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
 import ProfileScreen     from './components/ProfileScreen'
 import HistoryScreen     from './components/HistoryScreen'
+import StudyPlanScreen   from './components/StudyPlanScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -210,11 +211,9 @@ function AppShellScreens({
           }} />
       </div>
       <div style={show('study-plan')}>
-        <div style={{ padding: '40px 32px', color: THEMES[theme].text, fontFamily: FONT_B }}>
-          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>Study Plan</h1>
-          <p style={{ color: THEMES[theme].textMuted, fontSize: 15 }}>Personalised study schedules based on your quiz performance. Coming soon.</p>
-        </div>
+        <StudyPlanScreen
+          profile={profile} questions={questions} struggleMap={struggleMap}
+          theme={theme} onStartSession={onStartSession} />
       </div>
       <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />
