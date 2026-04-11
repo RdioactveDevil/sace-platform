@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
@@ -9,6 +10,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
+  const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([]) // [] = none selected by default
   const [expandedTopics, setExpandedTopics] = useState(() => new Set())
 
@@ -186,10 +188,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const SprintCard = () => (
     <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 SACE Exam Sprint</div>
-      <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set a study goal to track your daily progress.</div>
-      <button style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
-        Set Study Goal →
+      <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📚 Study Plan</div>
+      <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>See your personalised review schedule and topic mastery.</div>
+      <button
+        onClick={() => navigate('/study-plan')}
+        style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+      >
+        View Study Plan →
       </button>
     </div>
   )
@@ -271,12 +276,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 5 }}>
-                {['Week','Month','All'].map((tab, i) => (
-                  <button key={tab} style={{ padding: '5px 14px', borderRadius: 20, border: 'none', background: i === 0 ? GOLD : 'transparent', color: i === 0 ? '#0c1037' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-                    {tab}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{ padding: '5px 14px', borderRadius: 20, background: GOLD, color: '#0c1037', fontSize: 12, fontWeight: 700 }}>This Week</span>
               </div>
               <div style={{ display: 'flex', gap: 20 }}>
                 {[

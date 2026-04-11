@@ -110,18 +110,21 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                 <section style={{ marginBottom: 28 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: t.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Today's Focus</div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    {todayFocus.map(f => (
-                      <div
-                        key={f.topic}
-                        className="sp-focus-card"
-                        onClick={() => onStartSession?.({ mode: 'wrong', subtopics: f.subtopics })}
-                        style={{ flex: '1 1 180px', padding: '14px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
-                      >
-                        <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>{f.topic}</div>
-                        <div style={{ fontSize: 11, color: t.textMuted }}>{f.dueCount} due · {f.wrongCount} wrong</div>
-                        <div style={{ marginTop: 10, fontSize: 11, color: GOLD, fontWeight: 600 }}>Start session →</div>
-                      </div>
-                    ))}
+                    {todayFocus.map(f => {
+                      const mode = f.wrongCount > 0 ? 'wrong' : 'all'
+                      return (
+                        <div
+                          key={f.topic}
+                          className="sp-focus-card"
+                          onClick={() => onStartSession?.({ mode, subtopics: [...f.subtopics] })}
+                          style={{ flex: '1 1 180px', padding: '14px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>{f.topic}</div>
+                          <div style={{ fontSize: 11, color: t.textMuted }}>{f.dueCount} due{f.wrongCount > 0 ? ` · ${f.wrongCount} wrong` : ''}</div>
+                          <div style={{ marginTop: 10, fontSize: 11, color: GOLD, fontWeight: 600 }}>Start session →</div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </section>
               )}

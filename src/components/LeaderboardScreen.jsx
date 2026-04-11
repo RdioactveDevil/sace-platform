@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { getLeaderboard } from '../lib/db'
 import { RANK_ICONS, getLevel } from '../lib/engine'
 import { THEMES } from '../lib/theme'
+import { SkeletonRow } from './Skeleton'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD = '#f1be43'
@@ -66,7 +67,9 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
           </div>
 
           {loading ? (
-            <div style={{ color: t.textMuted, padding: '40px 0' }}>Loading…</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} theme={theme} />)}
+            </div>
           ) : (
             <>
               {visibleBoard.length >= 3 && (

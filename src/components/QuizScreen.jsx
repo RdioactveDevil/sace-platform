@@ -633,37 +633,120 @@ export default function QuizScreen({
       loadNext([], struggleMap, mode, quizSubtopics)
     }
 
+    // ── Session summary calculations ────────────────────────────────────────
+    const mainResults   = sessionResults.filter(r => !r.remediation)
+    const sessCorrect   = mainResults.filter(r => r.correct).length
+    const sessTotal     = mainResults.length
+    const sessAccuracy  = sessTotal > 0 ? Math.round((sessCorrect / sessTotal) * 100) : 0
+    const accColor      = sessAccuracy >= 70 ? '#4ade80' : sessAccuracy >= 40 ? GOLD : '#f87171'
+    const accEmoji      = sessAccuracy >= 70 ? '🏆' : sessAccuracy >= 40 ? '📈' : '💪'
+
+    // Per-topic breakdown (main questions only)
+    const topicMap = {}
+    mainResults.forEach(r => {
+      if (!r.topic) return
+      if (!topicMap[r.topic]) topicMap[r.topic] = { correct: 0, total: 0 }
+      topicMap[r.topic].total++
+      if (r.correct) topicMap[r.topic].correct++
+    })
+    const topicBreakdown = Object.entries(topicMap)
+      .map(([topic, s]) => ({ topic, ...s, pct: Math.round((s.correct / s.total) * 100) }))
+      .sort((a, b) => a.pct - b.pct) // weakest first
+
+    const weakTopics = topicBreakdown.filter(t => t.pct < 70)
+    const weakSubtopics = [...new Set(
+      sessionResults.filter(r => !r.correct && !r.remediation && r.subtopic).map(r => r.subtopic)
+    )].slice(0, 4)
+
+    const headlineText = quizMode === 'new'
+      ? 'Session Complete!'
+      : quizMode === 'wrong'
+        ? 'Wrongs Reviewed!'
+        : 'Session Complete!'
+
     return (
-      <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-          <div style={{ fontFamily: FONT_D, fontSize: 28, color: '#fff', letterSpacing: 1, marginBottom: 8 }}>
-            {quizMode === 'new' ? 'ALL CAUGHT UP!' : quizMode === 'wrong' ? 'WRONGS REVIEWED!' : 'SESSION COMPLETE!'}
-          </div>
-          <div style={{ fontSize: 15, color: '#64748b', lineHeight: 1.7, marginBottom: 8 }}>
-            {quizMode === 'new'
-              ? "You've attempted every question on gradefarm. right now — more are being added soon."
-              : 'Great work reviewing those questions.'}
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 32, flexWrap: 'wrap' }}>
-            <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#4ade80' }}>
-              +{sessionXP} XP this session
+      <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, overflowY: 'auto' }}>
+        <style>{`@keyframes ss-fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }`}</style>
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 20px 60px', animation: 'ss-fadeUp 0.35s ease' }}>
+
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div style={{ fontSize: 52, marginBottom: 12 }}>{accEmoji}</div>
+            <div style={{ fontFamily: FONT_D, fontSize: 26, color: '#fff', letterSpacing: 1, marginBottom: 6 }}>
+              {headlineText}
             </div>
-            <div style={{ background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.25)', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: GOLD }}>
-              {sessionResults.filter(r => r.correct).length}/{sessionResults.length} correct
+            <div style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
+              {quizMode === 'new' && sessTotal > 0
+                ? "You've worked through every question in this set."
+                : 'Good work finishing the session.'}
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-            {counts.wrong > 0 && (
-              <button onClick={() => startMode('wrong')} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                Re-attempt {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''} →
+          {/* Score strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+            {[
+              { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor },
+              { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: '#e2e8f0' },
+              { label: 'XP Earned', val: `+${sessionXP}`,         color: GOLD },
+            ].map(s => (
+              <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '14px 10px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
+                <div style={{ fontSize: 11, color: '#475569', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Topic breakdown */}
+          {topicBreakdown.length > 0 && (
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Topic Breakdown</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {topicBreakdown.map(t => {
+                  const tc = t.pct >= 70 ? '#4ade80' : t.pct >= 40 ? GOLD : '#f87171'
+                  return (
+                    <div key={t.topic}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>{t.topic}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: tc }}>{t.correct}/{t.total}</span>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 999, height: 5, overflow: 'hidden' }}>
+                        <div style={{ width: `${t.pct}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width 0.6s ease' }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Weak spots callout */}
+          {weakSubtopics.length > 0 && (
+            <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: 14, padding: '14px 18px', marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: '#f87171', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Needs Work</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {weakSubtopics.map(sub => (
+                  <span key={sub} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#fca5a5' }}>{sub}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {weakTopics.length > 0 && counts.wrong > 0 && (
+              <button onClick={() => startMode('wrong')}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                Fix {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''} →
               </button>
             )}
-            <button onClick={() => startMode('all')} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-              Repeat all questions
-            </button>
-            <button onClick={onHome} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(241,190,67,0.3)', background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+            {counts.wrong === 0 && quizMode !== 'all' && (
+              <button onClick={() => startMode('all')}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                Repeat all questions
+              </button>
+            )}
+            <button onClick={onHome}
+              style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid rgba(241,190,67,0.3)`, background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
               ← Back to Question Bank
             </button>
           </div>
