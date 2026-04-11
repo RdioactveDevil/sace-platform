@@ -20,8 +20,11 @@ create table if not exists public.profiles (
   streak       integer not null default 0,
   best_streak  integer not null default 0,
   last_active  timestamptz,
+  exam_date    date,
   created_at   timestamptz default now()
 );
+
+alter table public.profiles add column if not exists exam_date date;
 
 create or replace function public.handle_new_user()
 returns trigger

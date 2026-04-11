@@ -77,27 +77,49 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const accuracy = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
   const days = ['M','T','W','T','F','S','S']
   const [weekActivity, setWeekActivity] = useState([0,0,0,0,0,0,0])
+  const [todayStats, setTodayStats]     = useState({ total: 0, correct: 0 })
+  const [showComeback, setShowComeback] = useState(false)
   const maxAct = Math.max(...weekActivity, 1)
 
   useEffect(() => {
     if (!profile?.id) return
+
+    // Comeback check — show banner if away 48h+ and haven't answered today
+    const lastActive = profile.last_active ? new Date(profile.last_active) : null
+    const hoursSince = lastActive ? (Date.now() - lastActive.getTime()) / 3600000 : 0
+    const dismissKey = `gf-comeback-${new Date().toDateString()}`
+    if (hoursSince >= 48 && !localStorage.getItem(dismissKey)) setShowComeback(true)
+
     // Start of this Mon–Sun week
     const now = new Date()
     const monday = new Date(now)
     monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
     monday.setHours(0, 0, 0, 0)
+
+    // Start of today
+    const todayMidnight = new Date()
+    todayMidnight.setHours(0, 0, 0, 0)
+
     supabase
       .from('answer_log')
-      .select('answered_at')
+      .select('answered_at, correct')
       .eq('user_id', profile.id)
       .gte('answered_at', monday.toISOString())
       .then(({ data }) => {
         if (!data?.length) return
-        const counts = [0,0,0,0,0,0,0]
-        data.forEach(a => { counts[(new Date(a.answered_at).getDay() + 6) % 7]++ })
+        const counts = [0, 0, 0, 0, 0, 0, 0]
+        let todayTotal = 0, todayCorrect = 0
+        data.forEach(a => {
+          counts[(new Date(a.answered_at).getDay() + 6) % 7]++
+          if (new Date(a.answered_at) >= todayMidnight) {
+            todayTotal++
+            if (a.correct) todayCorrect++
+          }
+        })
         setWeekActivity(counts)
+        setTodayStats({ total: todayTotal, correct: todayCorrect })
       })
-  }, [profile.id])
+  }, [profile.id, profile.last_active])
 
   const card = {
     background: t.bgCard,
@@ -199,6 +221,87 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     </div>
   )
 
+  // ── Daily Missions ────────────────────────────────────────────────────────
+  const daysActiveThisWeek = weekActivity.filter(c => c > 0).length
+  const missions = [
+    { icon: '⚡', label: 'Answer 10 questions', progress: Math.min(todayStats.total, 10), target: 10 },
+    { icon: '🎯', label: 'Get 8 correct today',  progress: Math.min(todayStats.correct, 8), target: 8 },
+    { icon: '📅', label: 'Study 5 days this week', progress: Math.min(daysActiveThisWeek, 5), target: 5 },
+  ]
+  const allMissionsDone = missions.every(m => m.progress >= m.target)
+
+  const MissionsCard = () => (
+    <div style={{ ...card, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Daily Missions</div>
+        {allMissionsDone && <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 700 }}>✓ All done!</span>}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {missions.map(m => {
+          const done = m.progress >= m.target
+          const pct  = Math.round((m.progress / m.target) * 100)
+          return (
+            <div key={m.label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: done ? '#4ade80' : t.text, fontWeight: 600 }}>
+                  {m.icon} {m.label}
+                </span>
+                <span style={{ fontSize: 11, color: done ? '#4ade80' : t.textMuted, fontWeight: 700 }}>
+                  {m.progress}/{m.target}
+                </span>
+              </div>
+              <div style={{ background: t.border, borderRadius: 999, height: 5, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%', borderRadius: 999,
+                  background: done ? '#4ade80' : `linear-gradient(90deg,${GOLD},${GOLDL})`,
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  // ── Exam Countdown ────────────────────────────────────────────────────────
+  const ExamCountdownCard = () => {
+    const ed = profile.exam_date
+    if (!ed) return (
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 Exam Countdown</div>
+        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set your exam date in My Progress to see the countdown.</div>
+        <button onClick={() => navigate('/my-progress')} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
+          Set exam date →
+        </button>
+      </div>
+    )
+
+    const daysLeft = Math.max(0, Math.ceil((new Date(ed) - new Date()) / 86400000))
+    const color    = daysLeft > 60 ? '#4ade80' : daysLeft > 21 ? GOLD : '#f87171'
+    const message  = daysLeft > 60 ? 'You have time — build strong habits now.'
+      : daysLeft > 21 ? 'Crunch mode. Focus on weak topics first.'
+      : daysLeft > 7  ? 'Final stretch — revise, revise, revise.'
+      : daysLeft > 0  ? 'This week! Review key formulas and past patterns.'
+      : 'Exam day — best of luck! 🏆'
+
+    return (
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid ${color}30`, background: `${color}08` }}>
+        <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>📅 SACE Exam</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+          <div style={{ textAlign: 'center', flexShrink: 0 }}>
+            <div style={{ fontSize: 40, fontWeight: 800, color, lineHeight: 1 }}>{daysLeft}</div>
+            <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 600 }}>days left</div>
+          </div>
+          <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>{message}</div>
+        </div>
+        <div style={{ fontSize: 11, color: t.textFaint }}>
+          {new Date(ed).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+        </div>
+      </div>
+    )
+  }
+
   const toggleTopic = (topic) => {
     const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
     const allSel = subs.every(s => selectedSubtopics.includes(s))
@@ -269,6 +372,23 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
       <div className="hs-wrap">
         <div className="hs-main">
+          {/* Comeback banner */}
+          {showComeback && (
+            <div style={{ marginBottom: 16, padding: '14px 18px', borderRadius: 14, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 3 }}>👋 Welcome back!</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>You've been away a while. Pick up where you left off — your study plan is waiting.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => onStartSession({ mode: 'wrong', subtopics: [] })} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                  Start session →
+                </button>
+                <button onClick={() => { setShowComeback(false); localStorage.setItem(`gf-comeback-${new Date().toDateString()}`, '1') }}
+                  style={{ padding: '8px 10px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>✕</button>
+              </div>
+            </div>
+          )}
+
           <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
           <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>
             {subject?.stage || 'Stage 1'} · {subject?.name || 'Chemistry'} · {questions.length} questions
@@ -455,6 +575,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <div className="hs-mobile-cards">
+            <ExamCountdownCard />
+            <MissionsCard />
             <PriorityCard />
             <StatsCard />
             <SprintCard />
@@ -462,6 +584,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
 
         <div className="hs-right">
+          <ExamCountdownCard />
+          <MissionsCard />
           <PriorityCard />
           <StatsCard />
           <SprintCard />

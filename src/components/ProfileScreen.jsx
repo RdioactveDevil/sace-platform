@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
+import { updateProfile } from '../lib/db'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -7,6 +9,8 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLearn }) {
   const t = THEMES[theme]
+  const [examDate, setExamDate] = useState(profile.exam_date || '')
+  const [savingDate, setSavingDate] = useState(false)
   const { level, pct } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
   const nextRank = RANKS[Math.min(level + 1, RANKS.length - 1)]
@@ -58,6 +62,13 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const startTopicQuiz = (topic) => {
     const subtopics = topicSubtopics[topic] || []
     onStartSession?.({ mode: 'new', subtopics })
+  }
+
+  const saveExamDate = async (val) => {
+    setExamDate(val)
+    setSavingDate(true)
+    try { await updateProfile(profile.id, { exam_date: val || null }) } catch {}
+    setSavingDate(false)
   }
 
   return (
@@ -207,6 +218,41 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
               })}
             </div>
           </div>
+
+          {/* Goals — exam date */}
+          <div style={{ ...card, padding: '18px 20px', marginTop: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>🎯 My Goals</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>Set your SACE exam date to unlock the countdown and daily plan.</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <label style={{ fontSize: 11, color: t.textMuted, fontWeight: 600, display: 'block', marginBottom: 5 }}>SACE Exam Date</label>
+                <input
+                  type="date"
+                  value={examDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => saveExamDate(e.target.value)}
+                  style={{
+                    width: '100%', padding: '9px 12px', borderRadius: 10, fontSize: 13, fontFamily: FONT_B,
+                    border: `1px solid ${examDate ? 'rgba(241,190,67,0.4)' : t.border}`,
+                    background: t.bgInput, color: t.text, outline: 'none', boxSizing: 'border-box',
+                    colorScheme: theme === 'dark' ? 'dark' : 'light',
+                  }}
+                />
+              </div>
+              {examDate && (() => {
+                const days = Math.ceil((new Date(examDate) - new Date()) / 86400000)
+                const color = days > 60 ? t.success : days > 21 ? GOLD : t.danger
+                return (
+                  <div style={{ textAlign: 'center', flexShrink: 0, padding: '8px 16px', background: `${color}15`, border: `1px solid ${color}40`, borderRadius: 12 }}>
+                    <div style={{ fontSize: 26, fontWeight: 800, color, lineHeight: 1 }}>{Math.max(0, days)}</div>
+                    <div style={{ fontSize: 10, color: t.textMuted, marginTop: 3 }}>days left</div>
+                  </div>
+                )
+              })()}
+              {savingDate && <span style={{ fontSize: 11, color: t.textMuted }}>Saving…</span>}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
