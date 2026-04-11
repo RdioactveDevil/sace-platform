@@ -165,6 +165,21 @@ create table if not exists public.learn_sessions (
 create index if not exists idx_learn_sessions_user_id on public.learn_sessions(user_id);
 
 -- =========================
+-- QUESTION FLAGS
+-- =========================
+create table if not exists public.question_flags (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  question_id text not null references public.questions(id) on delete cascade,
+  flag_type   text not null,
+  created_at  timestamptz default now(),
+  unique(user_id, question_id, flag_type)
+);
+
+create index if not exists idx_qflags_question_id on public.question_flags(question_id);
+create index if not exists idx_qflags_user_id on public.question_flags(user_id);
+
+-- =========================
 -- RPC FUNCTIONS
 -- =========================
 create or replace function public.increment_xp(uid uuid, amount integer)

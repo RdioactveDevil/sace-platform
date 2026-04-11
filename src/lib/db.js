@@ -153,6 +153,30 @@ export async function addXP(userId, xpEarned, newStreak, currentProfile) {
   return newXP
 }
 
+// ─── QUESTION FLAGS ───────────────────────────────────────────────────────────
+export async function flagQuestion(userId, questionId, flagType) {
+  const { error } = await supabase
+    .from('question_flags')
+    .upsert({ user_id: userId, question_id: questionId, flag_type: flagType }, { onConflict: 'user_id,question_id,flag_type' })
+  if (error) throw error
+}
+
+export async function getUserFlags(userId, questionIds) {
+  if (!questionIds.length) return {}
+  const { data, error } = await supabase
+    .from('question_flags')
+    .select('question_id, flag_type')
+    .eq('user_id', userId)
+    .in('question_id', questionIds)
+  if (error) throw error
+  const map = {}
+  ;(data || []).forEach(r => {
+    if (!map[r.question_id]) map[r.question_id] = []
+    map[r.question_id].push(r.flag_type)
+  })
+  return map
+}
+
 // ─── LEADERBOARD ──────────────────────────────────────────────────────────────
 export async function getLeaderboard(limit = 20) {
   const { data, error } = await supabase

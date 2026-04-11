@@ -19,8 +19,10 @@ import {
   getRemediationVariants,
   insertGeneratedQuestionVariants,
   incrementQuestionVariantUsage,
+  flagQuestion,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
+import MathText from './MathText'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -278,6 +280,8 @@ export default function QuizScreen({
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const [finished, setFinished] = useState(false)
+  const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
+  const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
   const startTime = useRef(null)
 
   useEffect(() => {
@@ -313,6 +317,21 @@ export default function QuizScreen({
 
   const navigate = useNavigate()
   const location = useLocation()
+
+  const handleFlag = async (tag) => {
+    if (!currentQ || flagging) return
+    const qid = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
+    setFlagging(tag)
+    try {
+      await flagQuestion(profile.id, qid, tag)
+      setFlaggedMap(prev => {
+        const existing = new Set(prev[qid] || [])
+        existing.add(tag)
+        return { ...prev, [qid]: existing }
+      })
+    } catch {}
+    setFlagging(null)
+  }
 
   const setDisplayQuestion = useCallback((q) => {
     setFinished(false)
@@ -952,7 +971,7 @@ export default function QuizScreen({
 
               <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)', marginBottom: showAns ? 14 : 0 }}>
                 <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
-                  {currentQ.question}
+                  <MathText text={currentQ.question} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {currentQ.options.map((opt, i) => {
@@ -1011,7 +1030,7 @@ export default function QuizScreen({
                         <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                           {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
                         </span>
-                        {opt}
+                        <MathText text={opt} />
                       </button>
                     )
                   })}
@@ -1096,6 +1115,33 @@ export default function QuizScreen({
                       🤖 {aiTip}
                     </div>
                   )}
+                  {(() => {
+                    const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
+                    const myFlags = flaggedMap[qid] || new Set()
+                    return (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 10, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => {
+                            const active = myFlags.has(tag)
+                            const saving = flagging === tag
+                            return (
+                              <button key={tag} onClick={() => handleFlag(tag)} disabled={!!flagging}
+                                style={{
+                                  padding: '4px 9px', borderRadius: 6, fontSize: 11, cursor: flagging ? 'default' : 'pointer',
+                                  fontFamily: FONT_B, transition: 'all 0.15s',
+                                  border: `1px solid ${active ? 'rgba(241,190,67,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                                  background: active ? 'rgba(241,190,67,0.12)' : 'transparent',
+                                  color: active ? GOLD : saving ? '#64748b' : '#475569',
+                                  opacity: flagging && !saving ? 0.5 : 1,
+                                }}
+                              >{saving ? '…' : active ? `✓ ${tag}` : tag}</button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -1130,14 +1176,38 @@ export default function QuizScreen({
                     </div>
                   )}
 
-                  <div>
-                    <div style={{ fontSize: 11, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => (
-                        <button key={tag} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#475569', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>{tag}</button>
-                      ))}
-                    </div>
-                  </div>
+                  {(() => {
+                    const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
+                    const myFlags = flaggedMap[qid] || new Set()
+                    return (
+                      <div>
+                        <div style={{ fontSize: 11, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => {
+                            const active = myFlags.has(tag)
+                            const saving = flagging === tag
+                            return (
+                              <button
+                                key={tag}
+                                onClick={() => handleFlag(tag)}
+                                disabled={!!flagging}
+                                style={{
+                                  padding: '5px 10px', borderRadius: 7, fontSize: 12, cursor: flagging ? 'default' : 'pointer',
+                                  fontFamily: FONT_B, transition: 'all 0.15s',
+                                  border: `1px solid ${active ? 'rgba(241,190,67,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                                  background: active ? 'rgba(241,190,67,0.12)' : saving ? 'rgba(255,255,255,0.04)' : 'transparent',
+                                  color: active ? GOLD : saving ? '#64748b' : '#475569',
+                                  opacity: flagging && !saving ? 0.5 : 1,
+                                }}
+                              >
+                                {saving ? '…' : active ? `✓ ${tag}` : tag}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>
