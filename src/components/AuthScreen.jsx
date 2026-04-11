@@ -23,11 +23,12 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
     try {
       if (mode === 'signin') {
         await signIn(email, pass)
+        onAuth(false)
       } else {
         if (!name.trim()) throw new Error('Please enter your name.')
         await signUp(email, pass, name, school)
+        onAuth(true)
       }
-      onAuth()
     } catch (e) {
       setError(e.message)
     }

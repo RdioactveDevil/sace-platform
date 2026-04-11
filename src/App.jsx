@@ -14,6 +14,7 @@ import LeaderboardScreen from './components/LeaderboardScreen'
 import ProfileScreen     from './components/ProfileScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
+import OnboardingScreen  from './components/OnboardingScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -446,7 +447,14 @@ function AppInner() {
       <Route path="/auth" element={
         (user && profile)
           ? <Navigate to="/question-bank" replace />
-          : <AuthScreen {...commonProps} onAuth={() => navigate('/subject-picker')} onBack={() => navigate('/home')} />
+          : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/subject-picker')} onBack={() => navigate('/home')} />
+      } />
+
+      {/* Onboarding — new users only */}
+      <Route path="/onboarding" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <OnboardingScreen profile={profile} onDone={() => navigate('/subject-picker')} />
       } />
 
       {/* Subject picker — logged in only */}

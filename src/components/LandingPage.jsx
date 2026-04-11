@@ -187,7 +187,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
       <section style={{ padding: '0 32px 80px' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 2 }}>
           {[
-            { val: 65, suffix: '+', label: 'SACE questions', sub: 'Stage 1 & 2 Chemistry' },
+            { val: 175, suffix: '+', label: 'SACE questions', sub: 'Stage 1 & 2 Chemistry' },
             { val: 100, suffix: '%', label: 'Adaptive', sub: 'Targets your exact weaknesses' },
             { val: 0, suffix: '$', label: 'Cost to start', sub: 'Free during beta' },
           ].map((s, i) => (
@@ -262,7 +262,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <p style={{ fontSize: 16, color: '#64748b', marginBottom: 40 }}>More subjects dropping soon. Stage 1 and Stage 2 covered.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             {[
-              { name: 'Chemistry',              stage: 'Stage 1 & 2', icon: '⚗️', color: GOLD,      available: true,  count: '65 questions' },
+              { name: 'Chemistry',              stage: 'Stage 1 & 2', icon: '⚗️', color: GOLD,      available: true,  count: '175+ questions' },
               { name: 'Mathematical Methods',   stage: 'Stage 2',     icon: '∫',  color: '#a78bfa', available: false },
               { name: 'Physics',                stage: 'Stage 2',     icon: '⚛️', color: GOLDL,     available: false },
               { name: 'Biology',                stage: 'Stage 2',     icon: '🧬', color: '#10b981', available: false },
