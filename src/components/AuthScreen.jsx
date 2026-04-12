@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { signIn, signUp } from '../lib/db'
 
 const GOLD  = '#f1be43'
@@ -61,7 +61,6 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
 
       <div style={{ width: '100%', maxWidth: 400, background: 'rgba(8,13,40,0.95)', borderRadius: 20, border: '1px solid rgba(241,190,67,0.15)', padding: '36px 32px', boxShadow: '0 32px 80px rgba(0,0,0,0.6)', animation: 'fadeUp 0.5s ease' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, fontSize: 24, marginBottom: 14, boxShadow: `0 8px 24px rgba(241,190,67,0.3)` }}>🦁</div>
           <h1 style={{ margin: 0, fontFamily: FONT_D, fontSize: 26, color: '#f1f5f9', letterSpacing: 1 }}>
             gradefarm<span style={{ color: GOLD }}>.</span>
           </h1>

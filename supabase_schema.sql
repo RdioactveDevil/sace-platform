@@ -25,6 +25,35 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles add column if not exists exam_date date;
+alter table public.profiles add column if not exists dob date;
+alter table public.profiles add column if not exists year_level integer;
+alter table public.profiles add column if not exists atar_target numeric(4,1);
+alter table public.profiles add column if not exists goals text;
+alter table public.profiles add column if not exists study_hours_per_week integer;
+alter table public.profiles add column if not exists onboarding_completed boolean default false;
+alter table public.profiles add column if not exists terms_accepted_at timestamptz;
+
+-- =========================
+-- USER SUBSCRIPTIONS
+-- =========================
+create table if not exists public.user_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid references public.profiles(id) on delete cascade not null,
+  subject_name text not null,
+  stage        text not null,
+  active       boolean default true,
+  beta         boolean default true,
+  created_at   timestamptz default now(),
+  unique (user_id, subject_name, stage)
+);
+
+alter table public.user_subscriptions enable row level security;
+
+drop policy if exists "subscriptions_own" on public.user_subscriptions;
+create policy "subscriptions_own"
+  on public.user_subscriptions for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -301,6 +330,26 @@ drop policy if exists "learn_sessions_own" on public.learn_sessions;
 create policy "learn_sessions_own"
   on public.learn_sessions
   for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- =========================
+-- ASSESSMENTS
+-- =========================
+create table if not exists public.assessments (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid references public.profiles(id) on delete cascade not null,
+  type       text not null check (type in ('Assignment', 'Test', 'Revision Test', 'Exam')),
+  label      text not null,
+  date       date not null,
+  created_at timestamptz default now()
+);
+
+alter table public.assessments enable row level security;
+
+drop policy if exists "assessments_own" on public.assessments;
+create policy "assessments_own"
+  on public.assessments for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 

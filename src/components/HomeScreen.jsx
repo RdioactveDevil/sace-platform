@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
+import { getAssessments } from '../lib/db'
+import { getTopicConfig } from '../lib/saceTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -10,9 +12,18 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
   const t = THEMES[theme]
+  const { macroGroups: MACRO_GROUPS, normFn: topicNormFn } = getTopicConfig(subject?.stage)
   const navigate = useNavigate()
-  const [selectedSubtopics, setSelectedSubtopics] = useState([]) // [] = none selected by default
+  const [selectedSubtopics, setSelectedSubtopics] = useState([])
   const [expandedTopics, setExpandedTopics] = useState(() => new Set())
+  const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
+  const [assessments, setAssessments] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    getAssessments(profile.id).then(rows => { if (!cancelled) setAssessments(rows) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [profile.id])
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {
@@ -43,6 +54,38 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   })
 
   const topicEntries = Object.entries(topicGroups)
+
+  // ── Normalised topic helpers ───────────────────────────────────────────────
+  // Build a set of macro labels so we can detect when q.topic IS a macro label
+  const macroLabelToGroup = {}
+  MACRO_GROUPS.forEach(macro => { macroLabelToGroup[macro.label.toLowerCase()] = macro })
+
+  const topicNorm = (raw) => {
+    if (!raw) return null
+    const canonical = topicNormFn(raw)
+    if (canonical) return canonical
+    // If the raw topic exactly matches a macro label, leave it as-is so the
+    // macro-level fallback below can pick it up
+    if (macroLabelToGroup[raw.toLowerCase()]) return raw
+    return raw
+  }
+
+  const normTopicToSubs = {}
+  const normTopicGroups = {}
+  questions.forEach(q => {
+    const n = topicNorm(q.topic)
+    if (!n) return
+    if (!normTopicToSubs[n]) normTopicToSubs[n] = []
+    if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
+    if (!normTopicGroups[n]) normTopicGroups[n] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
+    normTopicGroups[n].total++
+    const s = currentStruggleMap[q.id]
+    if (s && s.attempts > 0) {
+      normTopicGroups[n].attempted++
+      normTopicGroups[n].correct += (s.attempts - s.wrong)
+      normTopicGroups[n].wrong += s.wrong
+    }
+  })
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
   const hasNoTopicsSelected = selectedSubtopics.length === 0
   const isAllTopicsSelected = allSubtopics.length > 0 && selectedSubtopics.length === allSubtopics.length
@@ -266,38 +309,64 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   // ── Exam Countdown ────────────────────────────────────────────────────────
   const ExamCountdownCard = () => {
-    const ed = profile.exam_date
-    if (!ed) return (
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const upcoming = assessments
+      .filter(a => new Date(a.date) >= today)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+    const next = upcoming[0] || null
+
+    if (!next) return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 Exam Countdown</div>
-        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Set your exam date in My Progress to see the countdown.</div>
+        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Add assessments in My Progress to track upcoming exams and tests.</div>
         <button onClick={() => navigate('/my-progress')} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
-          Set exam date →
+          Add assessment →
         </button>
       </div>
     )
 
-    const daysLeft = Math.max(0, Math.ceil((new Date(ed) - new Date()) / 86400000))
+    const daysLeft = Math.max(0, Math.ceil((new Date(next.date) - today) / 86400000))
+    const isExam   = next.type === 'Exam'
     const color    = daysLeft > 60 ? '#4ade80' : daysLeft > 21 ? GOLD : '#f87171'
     const message  = daysLeft > 60 ? 'You have time — build strong habits now.'
       : daysLeft > 21 ? 'Crunch mode. Focus on weak topics first.'
       : daysLeft > 7  ? 'Final stretch — revise, revise, revise.'
       : daysLeft > 0  ? 'This week! Review key formulas and past patterns.'
-      : 'Exam day — best of luck! 🏆'
+      : 'Today! Best of luck! 🏆'
 
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid ${color}30`, background: `${color}08` }}>
-        <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>📅 SACE Exam</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+          {isExam ? '📅 SACE Exam' : `📋 ${next.type}`}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
           <div style={{ textAlign: 'center', flexShrink: 0 }}>
             <div style={{ fontSize: 40, fontWeight: 800, color, lineHeight: 1 }}>{daysLeft}</div>
             <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 600 }}>days left</div>
           </div>
-          <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>{message}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{next.label}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{message}</div>
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: t.textFaint }}>
-          {new Date(ed).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: upcoming.length > 1 ? 10 : 0 }}>
+          {new Date(next.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
         </div>
+        {upcoming.length > 1 && (
+          <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {upcoming.slice(1, 4).map(a => {
+              const d = Math.max(0, Math.ceil((new Date(a.date) - today) / 86400000))
+              const c2 = d > 60 ? '#4ade80' : d > 21 ? GOLD : '#f87171'
+              return (
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{a.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: c2, flexShrink: 0, marginLeft: 8 }}>{d}d</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -325,6 +394,40 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       else next.add(topic)
       return next
     })
+  }
+
+  const toggleMacroExpand = (macroId) => {
+    setExpandedMacros(prev => {
+      const next = new Set(prev)
+      if (next.has(macroId)) next.delete(macroId)
+      else next.add(macroId)
+      return next
+    })
+  }
+
+  const toggleMacro = (macroId) => {
+    const macro = MACRO_GROUPS.find(g => g.id === macroId)
+    if (!macro) return
+    const macroSubs = macro.topics.flatMap(tp => normTopicToSubs[tp] || [])
+    const allSel = macroSubs.length > 0 && macroSubs.every(s => selectedSubtopics.includes(s))
+    if (allSel) setSelectedSubtopics(prev => prev.filter(s => !macroSubs.includes(s)))
+    else setSelectedSubtopics(prev => [...new Set([...prev, ...macroSubs])])
+  }
+
+  const toggleNormTopic = (topicName) => {
+    const subs = normTopicToSubs[topicName] || []
+    const allSel = subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
+    if (allSel) setSelectedSubtopics(prev => prev.filter(s => !subs.includes(s)))
+    else setSelectedSubtopics(prev => [...new Set([...prev, ...subs])])
+  }
+
+  const normTopicStatusColor = (topicName) => {
+    const tg = normTopicGroups[topicName]
+    if (!tg || tg.attempted === 0) return GOLD
+    const rate = tg.wrong / tg.attempted
+    if (rate >= 0.5) return t.danger
+    if (rate >= 0.25) return GOLD
+    return t.success
   }
 
   const topicStatusColor = (topic) => {
@@ -455,7 +558,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
             <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>{topicEntries.length} topics · {questions.length} questions</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>{MACRO_GROUPS.length} topics · {questions.length} questions</div>
             </div>
 
             <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)}
@@ -464,67 +567,78 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 {isAllTopicsSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
               </div>
               <span style={{ fontSize: 14, fontWeight: 800, color: isAllTopicsSelected ? GOLD : t.text, flex: 1 }}>All Topics</span>
-              <span style={{ fontSize: 13, color: t.textMuted }}>{questions.length}/{questions.length}</span>
+              <span style={{ fontSize: 13, color: t.textMuted }}>{Object.values(currentStruggleMap).filter(s => s.attempts > 0).length}/{questions.length}</span>
             </div>
 
-            <div style={{ maxHeight: 520, overflowY: 'auto' }}>
-              {topicEntries.map(([topic, tg]) => {
-                const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
-                const topicSel = subs.every(s => selectedSubtopics.includes(s))
-                const topicPartial = subs.some(s => selectedSubtopics.includes(s)) && !topicSel
-                const accent = topicStatusColor(topic)
-                const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
-                const isExpanded = expandedTopics.has(topic)
-
+            <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+              {MACRO_GROUPS.map((macro, mi) => {
+                const macroSubs = macro.topics.flatMap(tp => normTopicToSubs[tp] || [])
+                const macroSelected = macroSubs.length > 0 && macroSubs.every(s => selectedSubtopics.includes(s))
+                const macroPartial = macroSubs.some(s => selectedSubtopics.includes(s)) && !macroSelected
+                const isMacroExpanded = expandedMacros.has(macro.id)
+                // Also count questions keyed by the macro label itself (when q.topic = macro label)
+                const macroLabelGroup = normTopicGroups[macro.label] || { total: 0, attempted: 0 }
+                const macroTotal = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.total || 0), 0) + macroLabelGroup.total
+                const macroAttempted = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.attempted || 0), 0) + macroLabelGroup.attempted
                 return (
-                  <div key={topic}>
-                    <div
-                      style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${t.border}`, gap: 12 }}
-                    >
-                      <div
-                        onClick={() => toggleTopic(topic)}
-                        style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                      >
-                        {topicSel && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                        {topicPartial && !topicSel && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
+                  <div key={macro.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderBottom: `1px solid ${t.border}`, background: isMacroExpanded ? (theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') : 'transparent', gap: 10 }}>
+                      <div onClick={() => toggleMacro(macro.id)} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${macroSelected || macroPartial ? GOLD : t.border}`, background: macroSelected ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        {macroSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                        {macroPartial && !macroSelected && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
                       </div>
-
-                      <button
-                        onClick={() => toggleExpanded(topic)}
-                        aria-label={isExpanded ? `Collapse ${topic}` : `Expand ${topic}`}
-                        style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer', color: t.textMuted, fontSize: 14, lineHeight: 1, width: 14, flexShrink: 0 }}
-                      >
-                        {isExpanded ? '▾' : '▸'}
+                      <button onClick={() => toggleMacroExpand(macro.id)} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', color: t.textMuted, fontSize: 14, lineHeight: 1, width: 14, flexShrink: 0 }}>
+                        {isMacroExpanded ? '▾' : '▸'}
                       </button>
-
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flexShrink: 0 }} />
-
-                      <div className="hs-topic-grid" style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {topic} <span style={{ color: t.textMuted, fontWeight: 600 }}>({tg.attempted}/{tg.total})</span>
-                        </div>
-                        <div className="hs-topic-track" style={{ background: t.border }}>
-                          <div style={{ width: `${topicPct}%`, height: '100%', background: GOLD, borderRadius: 999 }} />
-                        </div>
-                        <div style={{ fontSize: 11, color: t.textFaint, textAlign: 'right' }}>{topicPct}%</div>
+                      <div onClick={() => toggleMacroExpand(macro.id)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                        <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Topic {macro.num}</div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{macro.label}</div>
                       </div>
+                      <span style={{ fontSize: 12, color: t.textMuted, flexShrink: 0 }}>{macroAttempted}/{macroTotal}</span>
                     </div>
 
-                    {isExpanded && subs.map(sub => {
-                      const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
-                      const subSel = selectedSubtopics.includes(sub)
-                      const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
+                    {isMacroExpanded && macro.topics.map((topicName, ti) => {
+                      const tg = normTopicGroups[topicName]
+                      if (!tg) return null
+                      const subs = normTopicToSubs[topicName] || []
+                      const topicSel = subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
+                      const topicPartial = subs.some(s => selectedSubtopics.includes(s)) && !topicSel
+                      const accent = normTopicStatusColor(topicName)
+                      const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
+                      const isTopicExpanded = expandedTopics.has(topicName)
                       return (
-                        <div key={sub} onClick={() => toggleSub(sub)}
-                          style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 64px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
-                          <div style={{ width: 14, height: 14, borderRadius: 4, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {subSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                        <div key={topicName}>
+                          <div style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 30px', borderBottom: `1px solid ${t.border}`, gap: 8 }}>
+                            <div onClick={() => toggleNormTopic(topicName)} style={{ width: 15, height: 15, borderRadius: 4, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                              {topicSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                              {topicPartial && !topicSel && <span style={{ fontSize: 9, color: GOLD, fontWeight: 800 }}>−</span>}
+                            </div>
+                            <button onClick={() => toggleExpanded(topicName)} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', color: t.textMuted, fontSize: 12, lineHeight: 1, width: 12, flexShrink: 0 }}>
+                              {isTopicExpanded ? '▾' : '▸'}
+                            </button>
+                            <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+                            <div onClick={() => toggleExpanded(topicName)} style={{ flex: 1, minWidth: 0, cursor: 'pointer', overflow: 'hidden' }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{mi + 1}.{ti + 1} {topicName}</span>
+                              <span style={{ fontSize: 11, color: t.textMuted }}> ({tg.attempted}/{tg.total})</span>
+                            </div>
+                            <span style={{ fontSize: 11, color: t.textFaint, flexShrink: 0 }}>{topicPct}%</span>
                           </div>
-                          <span style={{ fontSize: 12, color: subSel ? t.text : t.textMuted, flex: 1 }}>{sub}</span>
-                          {errRate !== null && errRate > 0 && (
-                            <span style={{ fontSize: 10, color: t.danger, fontWeight: 700, marginRight: 8 }}>⚡ {errRate}%</span>
-                          )}
-                          <span style={{ fontSize: 11, color: t.textMuted }}>{sg.attempted}/{sg.total}</span>
+                          {isTopicExpanded && subs.map(sub => {
+                            const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
+                            const subSel = selectedSubtopics.includes(sub)
+                            const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
+                            return (
+                              <div key={sub} onClick={() => toggleSub(sub)}
+                                style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 8px 64px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
+                                <div style={{ width: 13, height: 13, borderRadius: 3, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {subSel && <span style={{ fontSize: 8, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                                </div>
+                                <span style={{ fontSize: 12, color: subSel ? t.text : t.textMuted, flex: 1 }}>{sub}</span>
+                                {errRate !== null && errRate > 0 && <span style={{ fontSize: 10, color: t.danger, fontWeight: 700, marginRight: 8 }}>⚡ {errRate}%</span>}
+                                <span style={{ fontSize: 11, color: t.textMuted }}>{sg.attempted}/{sg.total}</span>
+                              </div>
+                            )
+                          })}
                         </div>
                       )
                     })}

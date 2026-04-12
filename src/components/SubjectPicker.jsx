@@ -1,220 +1,168 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { THEMES } from '../lib/theme'
+import { ALL_SUBJECTS } from '../lib/subjects'
 
-const SUBJECTS = [
-  {
-    id: 'chemistry_s1',
-    name: 'Chemistry',
-    stage: 'Stage 1',
-    icon: '⚗️',
-    color: '#f1be43',
-    topics: ['Atomic Structure', 'Ionic Bonding', 'Quantities', 'Periodic Table', 'Solutions'],
-    questionCount: 50,
-    available: true,
-  },
-  {
-    id: 'chemistry_s2',
-    name: 'Chemistry',
-    stage: 'Stage 2',
-    icon: '⚗️',
-    color: '#f9d87a',
-    topics: ['Organic Chemistry', 'Redox', 'Equilibrium', 'Acid/Base', 'Electrochemistry'],
-    questionCount: 15,
-    available: true,
-  },
-  {
-    id: 'maths_methods_s2',
-    name: 'Mathematical Methods',
-    stage: 'Stage 2',
-    icon: '∫',
-    color: '#6366f1',
-    topics: ['Differentiation', 'Integration', 'Functions', 'Probability', 'Statistics'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'physics_s2',
-    name: 'Physics',
-    stage: 'Stage 2',
-    icon: '⚛️',
-    color: '#f59e0b',
-    topics: ['Motion', 'Forces', 'Electricity', 'Waves', 'Modern Physics'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'biology_s2',
-    name: 'Biology',
-    stage: 'Stage 2',
-    icon: '🧬',
-    color: '#10b981',
-    topics: ['Cells', 'DNA', 'Evolution', 'Ecosystems', 'Human Biology'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'english_s2',
-    name: 'English Literary Studies',
-    stage: 'Stage 2',
-    icon: '📖',
-    color: '#ec4899',
-    topics: ['Close Analysis', 'Essay Writing', 'Comparative Study', 'Creative Response'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-]
+const GOLD   = '#f1be43'
+const GOLDL  = '#f9d87a'
+const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-export default function SubjectPicker({ profile, onSelect, theme }) {
+export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
   const t = THEMES[theme]
 
-  const available = SUBJECTS.filter(s => s.available)
-  const coming    = SUBJECTS.filter(s => !s.available)
+  const hasSubscriptions = subscriptions.length > 0
+
+  const subscribed = ALL_SUBJECTS.filter(s =>
+    s.available && (
+      !hasSubscriptions ||
+      subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
+    )
+  )
+
+  const notSubscribed = hasSubscriptions
+    ? ALL_SUBJECTS.filter(s =>
+        s.available &&
+        !subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
+      )
+    : []
+
+  const comingSoon = ALL_SUBJECTS.filter(s => !s.available)
+
+  const SubjectCard = ({ subj, locked = false }) => {
+    const isSelected = selected?.id === subj.id
+    return (
+      <div
+        onClick={() => !locked && setSelected(subj)}
+        onMouseEnter={() => !locked && setHovering(subj.id)}
+        onMouseLeave={() => setHovering(null)}
+        style={{
+          background: locked ? '#f8f9ff' : '#ffffff',
+          border: locked ? '1.5px dashed #c7d0e8' : isSelected ? `2px solid #0c1037` : '1px solid #e2e5f0',
+          borderRadius: 14, padding: '20px',
+          cursor: locked ? 'default' : 'pointer',
+          transition: 'all 0.15s ease',
+          boxShadow: isSelected ? '0 4px 20px rgba(12,16,55,0.14)' : '0 1px 4px rgba(0,0,0,0.06)',
+          position: 'relative',
+        }}
+      >
+        {locked && (
+          <div style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, background: '#eef0ff', border: '1px solid #c7d0e8', color: '#6b7db3', padding: '3px 8px', borderRadius: 6, fontWeight: 700, letterSpacing: '0.04em' }}>
+            LOCKED
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 11, background: locked ? '#f0f2ff' : `${subj.color}22`, border: locked ? '1px solid #c7d0e8' : `1px solid ${subj.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, opacity: locked ? 0.45 : 1 }}>
+              {locked ? '🔒' : subj.icon}
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: locked ? '#8896b3' : '#0c1037' }}>{subj.name}</div>
+              <div style={{ fontSize: 11, color: locked ? '#a0aec0' : subj.color, fontWeight: 700, marginTop: 1 }}>{subj.stage}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
+          {subj.topics.slice(0, 4).map(topic => (
+            <span key={topic} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: locked ? '#eef0ff' : '#f1f5f9', border: `1px solid ${locked ? '#c7d0e8' : '#e2e5f0'}`, color: locked ? '#8896b3' : '#334155' }}>{topic}</span>
+          ))}
+          {subj.topics.length > 4 && <span style={{ fontSize: 11, color: '#94a3b8' }}>+{subj.topics.length - 4} more</span>}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: locked ? '#a0aec0' : '#64748b' }}>{subj.questionCount} questions</span>
+          {locked ? (
+            <button
+              onClick={e => { e.stopPropagation(); onGetAccess && onGetAccess(subj) }}
+              style={{
+                fontSize: 12, fontWeight: 700, color: '#ffffff',
+                background: 'linear-gradient(135deg, #0c1037, #1e2a6e)',
+                padding: '6px 14px', borderRadius: 8,
+                border: 'none', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontFamily: FONT_B,
+                boxShadow: '0 2px 8px rgba(12,16,55,0.2)',
+              }}
+            >
+              ✦ Get Access
+            </button>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
+              <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>Ready</span>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div style={{
-      minHeight: '100vh', background: '#f8f9ff', color: '#0c1037',
-      fontFamily: "'Plus Jakarta Sans', sans-serif",
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'flex-start', padding: '40px 20px 60px',
-      boxSizing: 'border-box',
-    }}>
-      <style>{`
-        *, *::before, *::after { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; background: #f8f9ff; overflow-x: hidden; }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.6} }
-      `}</style>
+    <div style={{ minHeight: '100vh', background: '#f8f9ff', color: '#0c1037', fontFamily: FONT_B, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px 60px', boxSizing: 'border-box' }}>
+      <style>{`*, *::before, *::after { box-sizing: border-box; } @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }`}</style>
 
-      {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 40, animation: 'fadeUp 0.4s ease' }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: 14,
-          background: `linear-gradient(135deg,#f1be43,#f9d87a)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 24, margin: '0 auto 16px',
-          boxShadow: `0 8px 24px ${t.accent}40`,
-        }}>⚗️</div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', color: '#0c1037' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 16px' }}>⚗️</div>
+        <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 8px', color: '#0c1037' }}>
           Welcome back, {profile.display_name.split(' ')[0]}
         </h1>
-        <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>
-          Choose a subject to practise
-        </p>
+        <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>Choose a subject to practise</p>
       </div>
 
-      {/* Available subjects */}
       <div style={{ width: '100%', maxWidth: 680, animation: 'fadeUp 0.5s ease' }}>
-        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
-          Available Now
-        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 32 }}>
-          {available.map(subj => {
-            const isSelected = selected?.id === subj.id
-            const isHovered  = hovering === subj.id
-            return (
-              <div
-                key={subj.id}
-                onClick={() => setSelected(subj)}
-                onMouseEnter={() => setHovering(subj.id)}
-                onMouseLeave={() => setHovering(null)}
-                style={{
-                  background: '#ffffff',
-                  border: isSelected ? '2px solid #0c1037' : '1px solid #e2e5f0',
-                  borderRadius: 14, padding: '20px',
-                  cursor: 'pointer', transition: 'all 0.15s ease',
-                  boxShadow: isSelected
-                    ? '0 4px 20px rgba(12,16,55,0.14)'
-                    : '0 1px 4px rgba(0,0,0,0.06)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                      width: 42, height: 42, borderRadius: 11,
-                      background: `${subj.color}22`,
-                      border: `1px solid ${subj.color}44`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 20,
-                    }}>{subj.icon}</div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#0c1037' }}>{subj.name}</div>
-                      <div style={{ fontSize: 11, color: subj.color, fontWeight: 700, marginTop: 1 }}>{subj.stage}</div>
-                    </div>
-                  </div>
-                  {isSelected && (
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#0c1037', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#f1be43', flexShrink: 0 }}>✓</div>
-                  )}
-                </div>
-
-                {/* Topics */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
-                  {subj.topics.slice(0, 4).map(topic => (
-                    <span key={topic} style={{
-                      fontSize: 11, padding: '3px 8px', borderRadius: 6,
-                      background: '#f1f5f9', border: '1px solid #e2e5f0', color: '#334155',
-                    }}>{topic}</span>
-                  ))}
-                  {subj.topics.length > 4 && (
-                    <span style={{ fontSize: 11, color: t.textFaint }}>+{subj.topics.length - 4} more</span>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>
-                    {subj.questionCount} questions
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
-                    <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>Ready</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Coming soon */}
-        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
-          Coming Soon
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10, marginBottom: 36, opacity: 0.6 }}>
-          {coming.map(subj => (
-            <div key={subj.id} style={{
-              background: '#f0f2ff', border: '1px solid #e2e5f0',
-              borderRadius: 14, padding: '16px 20px',
-              display: 'flex', alignItems: 'center', gap: 14,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-            }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}15`, border: `1px solid ${subj.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{subj.icon}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2a5e' }}>{subj.name}</div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>{subj.stage}</div>
-              </div>
-              <span style={{ fontSize: 10, background: '#e2e5f0', color: '#64748b', padding: '3px 8px', borderRadius: 6, border: '1px solid #d1d5e0', fontWeight: 600 }}>SOON</span>
+        {subscribed.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Your Subjects</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 28 }}>
+              {subscribed.map(subj => <SubjectCard key={subj.id} subj={subj} />)}
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
-        {/* Continue button */}
+        {notSubscribed.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Not in Your Plan</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 28 }}>
+              {notSubscribed.map(subj => <SubjectCard key={subj.id} subj={subj} locked />)}
+            </div>
+          </>
+        )}
+
+        {comingSoon.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Coming Soon</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10, marginBottom: 36, opacity: 0.55 }}>
+              {comingSoon.map(subj => (
+                <div key={subj.id} style={{ background: '#f0f2ff', border: '1px solid #e2e5f0', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}15`, border: `1px solid ${subj.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{subj.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2a5e' }}>{subj.name}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{subj.stage}</div>
+                  </div>
+                  <span style={{ fontSize: 10, background: '#e2e5f0', color: '#64748b', padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>SOON</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {subscribed.length === 0 && notSubscribed.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '32px 20px', color: '#64748b', fontSize: 14 }}>
+            No subjects available. Please complete onboarding to set up your subjects.
+          </div>
+        )}
+
         <button
           onClick={() => selected && onSelect(selected)}
           disabled={!selected}
           style={{
             width: '100%', padding: '16px', borderRadius: 14, border: 'none',
             background: selected ? '#0c1037' : '#e2e5f0',
-            color: selected ? '#f1be43' : '#94a3b8',
-            fontSize: 15, fontWeight: 800, cursor: selected ? 'pointer' : 'default',
-            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            color: selected ? GOLD : '#94a3b8',
+            fontSize: 15, fontWeight: 800,
+            cursor: selected ? 'pointer' : 'default',
+            fontFamily: FONT_B,
             boxShadow: selected ? '0 8px 28px rgba(12,16,55,0.25)' : 'none',
-            border: 'none',
             transition: 'all 0.2s ease',
           }}
         >
@@ -223,12 +171,4 @@ export default function SubjectPicker({ profile, onSelect, theme }) {
       </div>
     </div>
   )
-}
-
-// Helper to convert hex to rgb for rgba()
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1,3),16)
-  const g = parseInt(hex.slice(3,5),16)
-  const b = parseInt(hex.slice(5,7),16)
-  return `${r},${g},${b}`
 }

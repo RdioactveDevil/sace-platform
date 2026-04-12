@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   selectNextQuestion,
@@ -58,26 +58,50 @@ function extractJsonArray(text = '') {
   }
 }
 
-function createLocalFallbackVariants(parentQuestion) {
-  const correctIndex = parentQuestion.answer_index ?? 0
-  const options = Array.isArray(parentQuestion.options) ? parentQuestion.options : []
-  const correctAnswer = options[correctIndex] || ''
+function createLocalFallbackVariants(parentQuestion, allQuestions = []) {
+  // Prefer real questions from the same subtopic, then same topic — never clone the parent.
+  const shuffle = arr => arr.slice().sort(() => Math.random() - 0.5)
 
-  return Array.from({ length: 3 }, (_, index) => ({
+  const sameSubtopic = shuffle(
+    allQuestions.filter(q =>
+      q.id !== parentQuestion.id &&
+      q.subtopic === parentQuestion.subtopic &&
+      !q.is_variant
+    )
+  )
+
+  const sameTopic = shuffle(
+    allQuestions.filter(q =>
+      q.id !== parentQuestion.id &&
+      q.topic === parentQuestion.topic &&
+      q.subtopic !== parentQuestion.subtopic &&
+      !q.is_variant
+    )
+  )
+
+  // Combine: subtopic first, then fill with same-topic questions
+  const candidates = [...sameSubtopic, ...sameTopic].slice(0, 5)
+
+  if (candidates.length === 0) {
+    // Absolute last resort: present the parent question once more (no "(check N)" text)
+    return [{
+      ...parentQuestion,
+      id: `local_fallback__${parentQuestion.id}__${Date.now()}__0`,
+      variant_record_id: `local_fallback__${parentQuestion.id}__0`,
+      variant_type: 'fallback_1',
+      parent_question_id: parentQuestion.id,
+      source: 'fallback',
+      is_variant: true,
+    }]
+  }
+
+  return candidates.map((q, index) => ({
+    ...q,
     id: `local_fallback__${parentQuestion.id}__${Date.now()}__${index}`,
     variant_record_id: `local_fallback__${parentQuestion.id}__${index}`,
-    question: `${parentQuestion.question} (Reinforcement check ${index + 1})`,
-    options,
-    answer_index: correctIndex,
-    difficulty: Math.max(1, Math.min(5, Number(parentQuestion.difficulty || 1))),
-    topic: parentQuestion.topic,
-    subtopic: parentQuestion.subtopic,
-    concept_tag: parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion),
-    solution: parentQuestion.solution || `The correct answer remains ${correctAnswer}. Focus on the same concept again.`,
-    tip: parentQuestion.tip || 'Use the explanation you just saw, then check the key concept again.',
-    variant_type: `fallback_${index + 1}`,
+    variant_type: `related_${index + 1}`,
     parent_question_id: parentQuestion.id,
-    source: 'ai_generated',
+    source: 'related',
     is_variant: true,
   }))
 }
@@ -153,7 +177,9 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
     ? 'Generating more similar questions for this same concept.'
     : remediationStatus === 'complete'
       ? 'Mastery confirmed. Returning to the main quiz.'
-      : 'You are in targeted reinforcement for this concept. Get 3 correct in a row to continue.'
+      : remediationStatus === 'failed'
+        ? 'Reinforcement ended. Moving on to a new question.'
+        : 'You are in targeted reinforcement for this concept. Get 3 correct in a row to continue.'
 
   return (
     <div style={{
@@ -189,9 +215,9 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
         <span style={{
           padding: '5px 11px',
           borderRadius: 999,
-          background: remediationStatus === 'complete' ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid ${remediationStatus === 'complete' ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}`,
-          color: remediationStatus === 'complete' ? '#4ade80' : '#e2e8f0',
+          background: remediationStatus === 'complete' ? 'rgba(16,185,129,0.12)' : remediationStatus === 'failed' ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${remediationStatus === 'complete' ? 'rgba(16,185,129,0.3)' : remediationStatus === 'failed' ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
+          color: remediationStatus === 'complete' ? '#4ade80' : remediationStatus === 'failed' ? '#f87171' : '#e2e8f0',
           fontSize: 12,
           fontWeight: 700,
         }}>
@@ -207,17 +233,22 @@ function StatusToast({ status }) {
   if (!status || status === 'idle' || status === 'activated') return null
 
   const isComplete = status === 'complete'
-  const title = isComplete ? 'Remediation Complete' : 'Generating Similar Questions'
+  const isFailed = status === 'failed'
+  const title = isComplete ? 'Reinforcement Complete'
+    : isFailed ? 'Reinforcement Ended'
+    : 'Generating Similar Questions'
   const subtitle = isComplete
-    ? 'Concept recovered. Returning to the main quiz.'
-    : 'Preparing more same-concept reinforcement.'
+    ? 'Concept mastered! Returning to the main quiz.'
+    : isFailed
+      ? 'Keep practising this topic — you’ll get it next time.'
+      : 'Preparing more same-concept reinforcement.'
 
   return (
     <div style={{
       marginTop: 12,
       borderRadius: 14,
       background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
-      border: `1px solid ${isComplete ? 'rgba(16,185,129,0.35)' : 'rgba(241,190,67,0.24)'}`,
+      border: `1px solid ${isComplete ? 'rgba(16,185,129,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'rgba(241,190,67,0.24)'}`,
       boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
       padding: '14px 16px',
       animation: 'popIn 0.18s ease',
@@ -231,11 +262,11 @@ function StatusToast({ status }) {
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: 18,
-          background: isComplete ? 'rgba(16,185,129,0.12)' : 'rgba(241,190,67,0.12)',
-          border: `1px solid ${isComplete ? 'rgba(16,185,129,0.22)' : 'rgba(241,190,67,0.18)'}`,
+          background: isComplete ? 'rgba(16,185,129,0.12)' : isFailed ? 'rgba(239,68,68,0.12)' : 'rgba(241,190,67,0.12)',
+          border: `1px solid ${isComplete ? 'rgba(16,185,129,0.22)' : isFailed ? 'rgba(239,68,68,0.22)' : 'rgba(241,190,67,0.18)'}`,
           flexShrink: 0,
         }}>
-          {isComplete ? '✅' : '🧠'}
+          {isComplete ? '✅' : isFailed ? '❌' : '🧠'}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>{title}</div>
@@ -282,6 +313,7 @@ export default function QuizScreen({
   const [finished, setFinished] = useState(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
+  const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const startTime = useRef(null)
 
   useEffect(() => {
@@ -364,6 +396,7 @@ export default function QuizScreen({
     setRemediationParentId(null)
     setRemediationOriginalQ(null)
     setRemediationUsedIds([])
+    setRemediationWrongCount(0)
   }, [
     setRemediationConcept,
     setRemediationMode,
@@ -375,13 +408,14 @@ export default function QuizScreen({
     setRemediationStreak,
     setRemediationTarget,
     setRemediationUsedIds,
+    setRemediationWrongCount,
   ])
 
   const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = []) => {
     const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
     setRemediationStatus('generating')
 
-    const localFallback = createLocalFallbackVariants(parentQuestion).map((variant, index) =>
+    const localFallback = createLocalFallbackVariants(parentQuestion, questions).map((variant, index) =>
       normalizeVariantRecord(parentQuestion, variant, index)
     )
 
@@ -405,7 +439,7 @@ export default function QuizScreen({
     setRemediationStatus('activated')
     setRemediationQueue(localQueue)
     return localQueue
-  }, [setRemediationQueue, setRemediationSource, setRemediationStatus])
+  }, [questions, setRemediationQueue, setRemediationSource, setRemediationStatus])
 
   const enterRemediation = useCallback(async (parentQuestion) => {
     if (!parentQuestion) return
@@ -454,6 +488,7 @@ export default function QuizScreen({
     setRemediationStreak,
     setRemediationTarget,
     setRemediationUsedIds,
+    setRemediationWrongCount,
   ])
 
   useEffect(() => {
@@ -513,6 +548,12 @@ export default function QuizScreen({
         }
       } else {
         setRemediationStreak(0)
+        const newWrongCount = remediationWrongCount + 1
+        setRemediationWrongCount(newWrongCount)
+        if (newWrongCount >= 3) {
+          // Student has failed too many reinforcement checks — exit to avoid infinite loop
+          setRemediationStatus('failed')
+        }
       }
       return
     }
@@ -579,7 +620,7 @@ export default function QuizScreen({
 
     if (!queue.length) {
       const fallbackBase = remediationOriginalQ || currentQ
-      const hardFallback = createLocalFallbackVariants(fallbackBase).map((variant, index) =>
+      const hardFallback = createLocalFallbackVariants(fallbackBase, questions).map((variant, index) =>
         normalizeVariantRecord(fallbackBase, variant, index)
       )
 
@@ -621,7 +662,7 @@ export default function QuizScreen({
     }
 
     if (remediationMode && currentQ.is_variant) {
-      if (remediationStatus === 'complete') {
+      if (remediationStatus === 'complete' || remediationStatus === 'failed') {
         clearRemediation()
         setQNumber(n => n + 1)
         setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
@@ -797,7 +838,7 @@ export default function QuizScreen({
 
   const nextButtonLabel = remediationPendingEntry
     ? 'Start Remediation →'
-    : inRemediationQuestion && remediationStatus === 'complete'
+    : inRemediationQuestion && (remediationStatus === 'complete' || remediationStatus === 'failed')
       ? 'Return to Quiz →'
       : inRemediationQuestion
         ? 'Next Similar Question →'
@@ -1062,7 +1103,7 @@ export default function QuizScreen({
                   </button>
 
                   <StatusToast
-                    status={remediationStatus === 'complete' || remediationStatus === 'generating' ? remediationStatus : null}
+                    status={remediationStatus === 'complete' || remediationStatus === 'failed' || remediationStatus === 'generating' ? remediationStatus : null}
                   />
 
                   {remediationMode && (
@@ -1090,7 +1131,9 @@ export default function QuizScreen({
                       <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
                         {remediationStatus === 'complete'
                           ? 'Mastery confirmed. Return to the main quiz when you are ready.'
-                          : 'This concept is temporarily locked until you answer 3 similar questions correctly in a row.'}
+                          : remediationStatus === 'failed'
+                            ? 'Reinforcement ended. Return to the quiz and revisit this topic soon.'
+                            : 'This concept is temporarily locked until you answer 3 similar questions correctly in a row.'}
                       </div>
                     </div>
                   )}
@@ -1103,16 +1146,18 @@ export default function QuizScreen({
                     {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
                   </div>
                   <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
-                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>{currentQ.solution}</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>
+                    <MathText text={currentQ.solution} />
+                  </div>
                   {currentQ.tip && (
                     <div style={{ marginTop: 10, padding: '9px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65 }}>
-                      💡 {currentQ.tip}
+                      💡 <MathText text={currentQ.tip} />
                     </div>
                   )}
                   {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
                   {aiTip && (
                     <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
-                      🤖 {aiTip}
+                      🤖 <MathText text={aiTip} />
                     </div>
                   )}
                   {(() => {
@@ -1161,18 +1206,18 @@ export default function QuizScreen({
                   </div>
 
                   <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Explanation</div>
-                  <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.8, marginBottom: 16 }}>{currentQ.solution}</div>
+                  <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.8, marginBottom: 16 }}><MathText text={currentQ.solution} /></div>
 
                   {currentQ.tip && (
                     <div style={{ padding: '12px 14px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16 }}>
-                      💡 {currentQ.tip}
+                      💡 <MathText text={currentQ.tip} />
                     </div>
                   )}
 
                   {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
                   {aiTip && (
                     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
-                      🤖 {aiTip}
+                      🤖 <MathText text={aiTip} />
                     </div>
                   )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -217,7 +217,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               { icon: '⚡', color: GOLD,      title: 'XP & leaderboards',          desc: 'Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.' },
               { icon: '📊', color: '#10b981', title: 'Know your gaps',             desc: 'After every session, see exactly which topics need work and a personalised study plan to fix them. No guessing what to revise.' },
               { icon: '📄', color: GOLDL,     title: 'Your notes, your tutor',     desc: "Upload your teacher's slides. Titan AI reads them and teaches you from your exact school content — not some textbook you've never seen." },
-              { icon: '🦁', color: GOLD,      title: 'Backed by Titanium Tutoring',desc: 'Questions written and reviewed by real SACE tutors. Actual exam-relevant content aligned to the SACE curriculum.' },
+              { icon: '⭐', color: GOLD,      title: 'Backed by Titanium Tutoring',desc: 'Questions written and reviewed by real SACE tutors. Actual exam-relevant content aligned to the SACE curriculum.' },
             ].map(f => (
               <div key={f.title} className="fc" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 28, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: `${f.color}20`, border: `1px solid ${f.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 16 }}>{f.icon}</div>
@@ -316,7 +316,6 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
       {/* FINAL CTA */}
       <section style={{ padding: '80px 32px' }}>
         <div style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ fontSize: 44, marginBottom: 16 }}>🦁</div>
           <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(26px,4vw,38px)', margin: '0 0 16px', color: '#f1f5f9', lineHeight: 1.15, letterSpacing: 1 }}>
             "IT'S OKAY. GRADEFARM. WILL SAVE ME AT HOME."
           </h2>

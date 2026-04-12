@@ -1,7 +1,7 @@
-import { supabase } from './supabase'
+﻿import { supabase } from './supabase'
 import { nextReviewTime } from './engine'
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function signUp(email, password, displayName, school) {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -31,7 +31,7 @@ export async function getSession() {
   return data.session
 }
 
-// ─── PROFILE ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getProfile(userId) {
   const { data, error } = await supabase
     .from('profiles')
@@ -47,7 +47,7 @@ export async function updateProfile(userId, updates) {
   if (error) throw error
 }
 
-// ─── QUESTIONS ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ QUESTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getQuestions(subject = 'Chemistry') {
   const { data, error } = await supabase
     .from('questions')
@@ -65,7 +65,7 @@ export async function getQuestions(subject = 'Chemistry') {
   }))
 }
 
-// ─── STRUGGLE PROFILE ─────────────────────────────────────────────────────────
+// â”€â”€â”€ STRUGGLE PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getStruggleMap(userId) {
   const { data, error } = await supabase
     .from('struggle_profiles')
@@ -116,7 +116,7 @@ export async function recordAnswer(userId, questionId, correct, selected = 0, se
   })
 }
 
-// ─── SESSION ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ SESSION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function createSession(userId, subject = 'Chemistry') {
   const { data, error } = await supabase
     .from('sessions')
@@ -132,7 +132,7 @@ export async function updateSession(sessionId, updates) {
   if (error) throw error
 }
 
-// ─── XP & STREAK ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ XP & STREAK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function addXP(userId, xpEarned, newStreak, currentProfile) {
   const newXP = Math.max(0, currentProfile.xp + xpEarned)
   const today = new Date().toDateString()
@@ -153,7 +153,7 @@ export async function addXP(userId, xpEarned, newStreak, currentProfile) {
   return newXP
 }
 
-// ─── QUESTION FLAGS ───────────────────────────────────────────────────────────
+// â”€â”€â”€ QUESTION FLAGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function flagQuestion(userId, questionId, flagType) {
   const { error } = await supabase
     .from('question_flags')
@@ -177,7 +177,92 @@ export async function getUserFlags(userId, questionIds) {
   return map
 }
 
-// ─── LEADERBOARD ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ ANSWER LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export async function getAnswerLogLast30Days(userId) {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await supabase
+    .from('answer_log')
+    .select('answered_at, correct, question_id')
+    .eq('user_id', userId)
+    .gte('answered_at', since)
+    .order('answered_at', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+// â”€â”€â”€ ASSESSMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export async function getAssessments(userId) {
+  const { data, error } = await supabase
+    .from('assessments')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+export async function addAssessment(userId, type, label, date) {
+  const { data, error } = await supabase
+    .from('assessments')
+    .insert({ user_id: userId, type, label, date })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteAssessment(id) {
+  const { error } = await supabase.from('assessments').delete().eq('id', id)
+  if (error) throw error
+}
+
+// â”€â”€â”€ SUBSCRIPTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export async function getSubscriptions(userId) {
+  const { data, error } = await supabase
+    .from('user_subscriptions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('active', true)
+  if (error) throw error
+  return data || []
+}
+
+export async function saveSubscriptions(userId, subjects) {
+  // subjects = [{ subject_name, stage }]
+  // Delete all existing subscriptions first so de-selected subjects don't persist
+  const { error: delError } = await supabase
+    .from('user_subscriptions')
+    .delete()
+    .eq('user_id', userId)
+  if (delError) throw delError
+  if (subjects.length === 0) return
+  const rows = subjects.map(s => ({
+    user_id: userId,
+    subject_name: s.subject_name,
+    stage: s.stage,
+    active: true,
+    beta: true,
+  }))
+  const { error } = await supabase
+    .from('user_subscriptions')
+    .insert(rows)
+  if (error) throw error
+}
+
+export async function addSubscription(userId, subjectName, stage) {
+  const { error } = await supabase
+    .from('user_subscriptions')
+    .upsert({ user_id: userId, subject_name: subjectName, stage, active: true, beta: true }, { onConflict: 'user_id,subject_name,stage' })
+  if (error) throw error
+}
+
+export async function completeOnboarding(userId, profileUpdates) {
+  const updates = { ...profileUpdates, onboarding_completed: true, terms_accepted_at: new Date().toISOString() }
+  const { error } = await supabase.from('profiles').update(updates).eq('id', userId)
+  if (error) throw error
+}
+
+// â”€â”€â”€ LEADERBOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getLeaderboard(limit = 20) {
   const { data, error } = await supabase
     .from('leaderboard')
@@ -187,7 +272,7 @@ export async function getLeaderboard(limit = 20) {
   return data
 }
 
-// ─── REMEDIATION VARIANTS ─────────────────────────────────────────────────────
+// â”€â”€â”€ REMEDIATION VARIANTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function normalizeVariant(v, parentQuestionId = null, conceptTag = null) {
   return {
     ...v,

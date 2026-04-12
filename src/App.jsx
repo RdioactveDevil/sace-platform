@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import { getProfile, getStruggleMap, signOut, getQuestions } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions } from './lib/db'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
@@ -12,9 +12,13 @@ import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
 import ProfileScreen     from './components/ProfileScreen'
+import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
 import OnboardingScreen  from './components/OnboardingScreen'
+import GetAccessScreen   from './components/GetAccessScreen'
+import TermsScreen       from './components/TermsScreen'
+import PrivacyScreen     from './components/PrivacyScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -23,7 +27,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const SUBJECT_DB_MAP = {
   'chemistry_s1': 'Chemistry Stage 1',
-  'chemistry_s2': 'Chemistry',
+  'chemistry_s2': 'Chemistry Stage 2',
 }
 
 const NAV_ITEMS = [
@@ -48,9 +52,12 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#080d28', fontFamily: FONT_B }}>
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span onClick={() => go('/home')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
-          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-        </span>
+        <div onClick={() => go('/home')} style={{ cursor: 'pointer', lineHeight: 1 }}>
+          <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1 }}>
+            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          </span>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', fontFamily: FONT_B, letterSpacing: '0.04em', marginTop: 3 }}>by Titanium Tutoring</div>
+        </div>
         <button onClick={onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>
           <span style={{ fontSize: 10 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
           <div style={{ width: 24, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.1)', position: 'relative' }}>
@@ -63,7 +70,12 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
       </div>
 
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+      <div
+        onClick={() => go('/my-account')}
+        style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0, cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28', flexShrink: 0 }}>
             {profile.display_name[0].toUpperCase()}
@@ -99,6 +111,27 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         <button onClick={onChangeSubject} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(241,190,67,0.3)', background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>⇄ Change Subject</button>
         <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', background: 'transparent', color: 'rgba(255,255,255,0.3)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Sign out</button>
       </div>
+    </div>
+  )
+}
+
+
+// ── Locked Subject Screen ─────────────────────────────────────────────────────
+function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
+  const t = THEMES[theme]
+  return (
+    <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
+      <div style={{ fontSize: 52 }}>🔒</div>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Subject Not in Your Plan</h2>
+      <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 360, lineHeight: 1.6, margin: 0 }}>
+        <strong style={{ color: t.text }}>{subject?.name} {subject?.stage}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
+      </p>
+      <a href="mailto:hello@titaniumtutoring.com.au" style={{ padding: '12px 24px', borderRadius: 12, background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        Contact us to upgrade →
+      </a>
+      <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        ← Back to subject picker
+      </button>
     </div>
   )
 }
@@ -219,6 +252,9 @@ function AppShellScreens({
       <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />
       </div>
+      <div style={show('my-account')}>
+        <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} />
+      </div>
     </AppShell>
   )
 }
@@ -236,6 +272,16 @@ function AppInner() {
   })
   const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
+  const [subscriptions, setSubscriptions]     = useState([])
+  const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
+
+  const refreshSubscriptions = async () => {
+    try {
+      const subs = await getSubscriptions(user.id)
+      setSubscriptions(subs)
+      setSubscriptionsLoaded(true)
+    } catch {}
+  }
 
   // Lifted Learn state — survives route changes
   const [learnPhase,      setLearnPhase]      = useState('setup')
@@ -270,6 +316,7 @@ function AppInner() {
   const [quizRemediationParentId,  setQuizRemediationParentId]  = useState(null)
   const [quizRemediationOriginalQ, setQuizRemediationOriginalQ] = useState(null)
   const [quizRemediationUsedIds,   setQuizRemediationUsedIds]   = useState([])
+  const [quizRemediationWrongCount, setQuizRemediationWrongCount] = useState(0)
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -303,7 +350,22 @@ function AppInner() {
     if (!user) return
     setLoading(true)
     Promise.all([getProfile(user.id), getStruggleMap(user.id)])
-      .then(([prof, map]) => { setProfile(prof); setStruggleMap(map); setLoading(false); setBootstrapped(true) })
+      .then(([prof, map]) => {
+        setProfile(prof)
+        setStruggleMap(map)
+        setLoading(false)
+        setBootstrapped(true)
+        if (prof) getSubscriptions(user.id).then(subs => {
+          setSubscriptions(subs)
+          setSubscriptionsLoaded(true)
+          // Evict a persisted subject the user is no longer subscribed to
+          const stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
+          if (stored && subs.length > 0 && !subs.some(s => s.subject_name === stored.name && s.stage === stored.stage)) {
+            localStorage.removeItem('gf-subject')
+            setSelectedSubject(null)
+          }
+        }).catch(() => { setSubscriptionsLoaded(true) })
+      })
       .catch(() => { setLoading(false); setBootstrapped(true) })
   }, [user])
 
@@ -348,6 +410,7 @@ function AppInner() {
     setQuizRemediationParentId(null)
     setQuizRemediationOriginalQ(null)
     setQuizRemediationUsedIds([])
+    setQuizRemediationWrongCount(0)
     navigate('/home')
   }
 
@@ -376,6 +439,8 @@ function AppInner() {
     setQuizRemediationParentId(null)
     setQuizRemediationOriginalQ(null)
     setQuizRemediationUsedIds([])
+    setQuizRemediationWrongCount(0)
+    setSubscriptionsLoaded(false)
     navigate('/home')
   }
 
@@ -405,6 +470,7 @@ function AppInner() {
     remediationParentId: quizRemediationParentId,   setRemediationParentId: setQuizRemediationParentId,
     remediationOriginalQ: quizRemediationOriginalQ, setRemediationOriginalQ: setQuizRemediationOriginalQ,
     remediationUsedIds: quizRemediationUsedIds,     setRemediationUsedIds: setQuizRemediationUsedIds,
+    remediationWrongCount: quizRemediationWrongCount, setRemediationWrongCount: setQuizRemediationWrongCount,
   }
 
   const learnState   = {
@@ -418,7 +484,7 @@ function AppInner() {
 
   if (!bootstrapped && loading) return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: FONT_B }}>
-      <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🦁</div>
+      <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}><span style={{ fontFamily: FONT_D, fontSize: 20, color: '#0a0f2e', fontWeight: 900, letterSpacing: 0.5 }}>G</span></div>
       <div style={{ fontSize: 13, color: '#64748b' }}>Loading…</div>
     </div>
   )
@@ -435,6 +501,8 @@ function AppInner() {
     <Routes>
       {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/terms"   element={<TermsScreen />} />
+      <Route path="/privacy" element={<PrivacyScreen />} />
 
       {/* Landing page — public */}
       <Route path="/home" element={
@@ -447,21 +515,38 @@ function AppInner() {
       <Route path="/auth" element={
         (user && profile)
           ? <Navigate to="/question-bank" replace />
-          : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/subject-picker')} onBack={() => navigate('/home')} />
+          : <AuthScreen {...commonProps} onAuth={() => navigate('/onboarding', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
       {/* Onboarding — new users only */}
       <Route path="/onboarding" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
-          : <OnboardingScreen profile={profile} onDone={() => navigate('/subject-picker')} />
+          : profile.onboarding_completed
+            ? <Navigate to="/subject-picker" replace />
+            : <OnboardingScreen profile={profile} userEmail={user?.email} onDone={async () => {
+                try {
+                  const subs = await getSubscriptions(profile.id)
+                  setSubscriptions(subs)
+                  setSubscriptionsLoaded(true)
+                } catch {}
+                setProfile(prev => ({ ...prev, onboarding_completed: true }))
+                navigate('/subject-picker', { replace: true })
+              }} />
       } />
 
       {/* Subject picker — logged in only */}
       <Route path="/subject-picker" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
-          : <SubjectPicker {...commonProps} profile={profile} onSelect={handleSelectSubject} />
+          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
+      } />
+
+      {/* Get access / purchase page */}
+      <Route path="/get-access" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <GetAccessScreen profile={profile} onAccessGranted={refreshSubscriptions} />
       } />
 
       {/* Quiz — full screen, no shell */}
@@ -477,7 +562,9 @@ function AppInner() {
       {/* Single shell route — AppShellScreens stays mounted across ALL tab switches */}
       <Route path="/*" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
+        !profile.onboarding_completed ? <Navigate to="/onboarding" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
+        (subscriptionsLoaded && subscriptions.length > 0 && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
@@ -508,6 +595,7 @@ function AppInner() {
             setQuizRemediationParentId(null)
             setQuizRemediationOriginalQ(null)
             setQuizRemediationUsedIds([])
+            setQuizRemediationWrongCount(0)
             navigate('/quiz')
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />

@@ -1,31 +1,91 @@
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+import 'katex/contrib/mhchem/mhchem.js' // enables \ce{} for chemical equations
 
 /**
- * Renders a string that may contain inline LaTeX math ($...$) or display
- * math ($$...$$). Everything outside delimiters is plain text.
+ * Renders text that may contain:
+ *   1. Explicit LaTeX:  $...$  or  $$...$$
+ *   2. Auto-detected chemical equations:  SO2 + H2O → H2SO3 → H2SO4
+ *   3. Auto-detected inline chemical formulas:  SO2, H2SO4, Ca(OH)2
  *
- * Examples that will render with KaTeX:
- *   "Calculate $K_{eq} = \frac{[C]}{[A][B]^2}$ for the reaction."
- *   "$$\Delta G = \Delta H - T\Delta S$$"
+ * Plain Unicode arrows (→, ⇌) and symbols render as-is when they appear
+ * outside any detectable chemical context.
+ */
+
+// Convert Unicode reaction arrows to mhchem notation
+function toMhchem(str) {
+  return str
+    .replace(/→|⟶/g, '->')
+    .replace(/⇌|⟷/g, '<->')
+    .replace(/←|⟵/g, '<-')
+    .replace(/⇒/g, '=>')
+}
+
+// Returns true if the string contains at least one chemical formula token
+// (an element symbol immediately followed by a subscript digit, e.g. SO2, H2O)
+function hasChemFormula(str) {
+  return /[A-Z][a-z]?\d/.test(str)
+}
+
+/**
+ * Pre-process plain text to insert $\ce{...}$ delimiters so that the
+ * main KaTeX renderer can pick them up.
  *
- * Existing questions that use Unicode (N₂, ⇌, →) render as-is — no change.
+ * Rules (applied in order):
+ *   1. If the text already has $ signs → skip (it uses explicit LaTeX)
+ *   2. If the text has a reaction arrow AND a chemical formula →
+ *      treat the whole text as a chemical equation
+ *   3. Otherwise scan for subscript-bearing formula tokens (e.g. SO2)
+ *      and wrap each individually
+ */
+function preprocess(text) {
+  if (!text || text.includes('$')) return text
+
+  const hasArrow = /[→←⇌⟶⟵⟷⇒]/.test(text)
+
+  if (hasArrow && hasChemFormula(text)) {
+    // The whole string is (or contains) a reaction equation
+    return `$\\ce{${toMhchem(text)}}$`
+  }
+
+  if (!hasChemFormula(text)) return text
+
+  // Inline formula pass: find tokens like SO2, H2SO4, CO2, NH3, Ca2+
+  // Each group: [A-Z][a-z]? (element symbol) + \d* (optional subscript)
+  // Optionally followed by charge like 2+ or 3-
+  return text.replace(
+    /(?:[A-Z][a-z]?\d*(?:\([^)]+\)\d*)?)+(?:[+-])?/g,
+    (match) => {
+      // Only wrap if the match contains a digit (subscript is present)
+      // and is longer than 1 character to avoid single letters like "I"
+      if (/\d/.test(match) && match.length > 1) {
+        return `$\\ce{${match}}$`
+      }
+      return match
+    }
+  )
+}
+
+/**
+ * Split preprocessed text on $...$ / $$...$$ and render each math segment
+ * with KaTeX (mhchem already loaded above).
  */
 export default function MathText({ text = '', style = {} }) {
   if (!text || typeof text !== 'string') return null
-  if (!text.includes('$')) return <span style={style}>{text}</span>
 
-  // Split on $$...$$ first (display), then $...$ (inline)
+  const processed = preprocess(text)
+
+  if (!processed.includes('$')) return <span style={style}>{processed}</span>
+
   const parts = []
-  let remaining = text
   const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
   let lastIndex = 0
   let match
 
   pattern.lastIndex = 0
-  while ((match = pattern.exec(text)) !== null) {
+  while ((match = pattern.exec(processed)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ type: 'text', content: text.slice(lastIndex, match.index) })
+      parts.push({ type: 'text', content: processed.slice(lastIndex, match.index) })
     }
     const raw = match[0]
     const isDisplay = raw.startsWith('$$')
@@ -34,8 +94,8 @@ export default function MathText({ text = '', style = {} }) {
     lastIndex = match.index + raw.length
   }
 
-  if (lastIndex < text.length) {
-    parts.push({ type: 'text', content: text.slice(lastIndex) })
+  if (lastIndex < processed.length) {
+    parts.push({ type: 'text', content: processed.slice(lastIndex) })
   }
 
   return (
@@ -56,7 +116,6 @@ export default function MathText({ text = '', style = {} }) {
             />
           )
         } catch {
-          // Fallback: render raw delimiters if KaTeX fails
           return <span key={i}>{part.display ? `$$${part.content}$$` : `$${part.content}$`}</span>
         }
       })}
