@@ -345,6 +345,13 @@ export async function insertGeneratedQuestionVariants(parentQuestion, variants =
   return (data || []).map(v => normalizeVariant(v, parentQuestion.id, parentQuestion.concept_tag))
 }
 
+export async function flagTopicForStudyPlan(userId, { subject, topic, subtopic, concept_tag, reason = 'remediation' }) {
+  const { error } = await supabase
+    .from('study_plan_items')
+    .insert({ user_id: userId, subject, topic, subtopic, concept_tag, reason })
+  if (error) throw error
+}
+
 export async function incrementQuestionVariantUsage(variantId) {
   if (!variantId) return
 

@@ -354,6 +354,31 @@ create policy "assessments_own"
   with check (auth.uid() = user_id);
 
 -- =========================
+-- STUDY PLAN ITEMS (remediation flags)
+-- =========================
+create table if not exists public.study_plan_items (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  subject      text,
+  topic        text,
+  subtopic     text,
+  concept_tag  text,
+  reason       text not null default 'remediation',
+  flagged_at   timestamptz not null default now(),
+  resolved     boolean not null default false,
+  resolved_at  timestamptz
+);
+
+alter table public.study_plan_items enable row level security;
+
+drop policy if exists "Users manage own study plan" on public.study_plan_items;
+drop policy if exists "study_plan_items_own" on public.study_plan_items;
+create policy "study_plan_items_own"
+  on public.study_plan_items for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- =========================
 -- LEADERBOARD VIEW
 -- =========================
 create or replace view public.leaderboard as

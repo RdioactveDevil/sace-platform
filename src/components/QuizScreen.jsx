@@ -20,6 +20,7 @@ import {
   insertGeneratedQuestionVariants,
   incrementQuestionVariantUsage,
   flagQuestion,
+  flagTopicForStudyPlan,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
@@ -58,11 +59,23 @@ function extractJsonArray(text = '') {
   }
 }
 
-function createLocalFallbackVariants(parentQuestion, allQuestions = []) {
-  // Prefer real questions from the same subtopic, then same topic — never clone the parent.
+function createLocalFallbackVariants(parentQuestion, allQuestions = [], targetDifficulty = null) {
+  // Prefer easier questions from the same subtopic, then same topic — never clone the parent.
+  const target = targetDifficulty ?? (parentQuestion.difficulty ?? 3)
   const shuffle = arr => arr.slice().sort(() => Math.random() - 0.5)
 
-  const sameSubtopic = shuffle(
+  // Priority 1: easier questions in same subtopic
+  const easierSameSubtopic = shuffle(
+    allQuestions.filter(q =>
+      q.id !== parentQuestion.id &&
+      q.subtopic === parentQuestion.subtopic &&
+      !q.is_variant &&
+      (q.difficulty ?? 3) <= target
+    )
+  )
+
+  // Priority 2: same subtopic, any difficulty (if not enough easier ones)
+  const anySameSubtopic = shuffle(
     allQuestions.filter(q =>
       q.id !== parentQuestion.id &&
       q.subtopic === parentQuestion.subtopic &&
@@ -70,6 +83,7 @@ function createLocalFallbackVariants(parentQuestion, allQuestions = []) {
     )
   )
 
+  // Priority 3: same topic, different subtopic
   const sameTopic = shuffle(
     allQuestions.filter(q =>
       q.id !== parentQuestion.id &&
@@ -79,8 +93,10 @@ function createLocalFallbackVariants(parentQuestion, allQuestions = []) {
     )
   )
 
-  // Combine: subtopic first, then fill with same-topic questions
-  const candidates = [...sameSubtopic, ...sameTopic].slice(0, 5)
+  // Deduplicate by id, easier-first order
+  const candidates = [...new Map(
+    [...easierSameSubtopic, ...anySameSubtopic, ...sameTopic].map(q => [q.id, q])
+  ).values()].slice(0, 5)
 
   if (candidates.length === 0) {
     // Absolute last resort: present the parent question once more (no "(check N)" text)
@@ -106,14 +122,15 @@ function createLocalFallbackVariants(parentQuestion, allQuestions = []) {
   }))
 }
 
-async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
+async function generateRemediationVariantsViaAI(parentQuestion, conceptTag, targetDifficulty = null) {
   try {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 3500)
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+    const diffTarget = Math.max(1, Math.min(5, targetDifficulty ?? (parentQuestion.difficulty ?? 3)))
     const system = [
-      'You are generating remediation MCQs for a SACE Chemistry student.',
+      'You are generating adaptive remediation MCQs for a SACE Chemistry student.',
       'Return only a valid JSON array containing exactly 5 objects.',
       'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
       'Each options array must contain exactly 4 strings.',
@@ -128,7 +145,9 @@ async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
       `Original question: ${parentQuestion.question}`,
       `Correct answer: ${correctAnswer}`,
       `Original solution: ${parentQuestion.solution}`,
+      `Target difficulty: ${diffTarget} out of 5 — make these questions easier/more accessible than the original.`,
       'Generate 5 targeted remediation questions that test the same concept but are not copies.',
+      'Vary wording, values, or scenario. Each question difficulty should be at or below the target.',
     ].join('\n')
 
     const res = await fetch('/api/chat', {
@@ -151,6 +170,76 @@ async function generateRemediationVariantsViaAI(parentQuestion, conceptTag) {
     return extractJsonArray(rawText)
   } catch {
     return []
+  }
+}
+
+async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
+
+    const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+    const system = [
+      'You are a SACE Chemistry teacher generating a concept-builder question for a struggling student.',
+      'Return only a valid JSON object (not an array).',
+      'The question MUST embed the key fact or hint directly in the question stem — like a teacher explaining in class.',
+      'Structure: state the core concept or mechanism first, then ask the student to apply it.',
+      'Make it feel like a teacher leading the student step-by-step to the answer.',
+      'Required keys: question, options (array of exactly 4 strings), answer_index, solution, tip,',
+      'difficulty (always 1), topic, subtopic, concept_tag, variant_type (always "concept_builder").',
+      'No markdown, no commentary outside the JSON.',
+    ].join(' ')
+
+    const user = [
+      `Topic: ${parentQuestion.topic}`,
+      `Subtopic: ${parentQuestion.subtopic}`,
+      `Concept: ${conceptTag}`,
+      `Original question: ${parentQuestion.question}`,
+      `Correct answer: ${correctAnswer}`,
+      `Key explanation: ${parentQuestion.solution}`,
+      '',
+      'Generate ONE concept-builder question in this style:',
+      '"Alcohols contain an -OH group which forms hydrogen bonds with water molecules.',
+      ' Based on this property, short-chain alcohols are: A. soluble in water  B. insoluble in water  C. only soluble when heated  D. soluble only in organic solvents"',
+      '',
+      'The hint/concept MUST be in the question stem itself. Make the student reason from the hint to the answer.',
+    ].join('\n')
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        max_tokens: 600,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    })
+
+    clearTimeout(timeout)
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const rawText = data?.content?.[0]?.text || ''
+
+    // Parse single JSON object
+    try {
+      const parsed = JSON.parse(rawText)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+    } catch {}
+
+    // Try extracting object from text
+    const start = rawText.indexOf('{')
+    const end = rawText.lastIndexOf('}')
+    if (start !== -1 && end > start) {
+      try {
+        const parsed = JSON.parse(rawText.slice(start, end + 1))
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+      } catch {}
+    }
+    return null
+  } catch {
+    return null
   }
 }
 
@@ -177,9 +266,24 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
     ? 'Generating more similar questions for this same concept.'
     : remediationStatus === 'complete'
       ? 'Mastery confirmed. Returning to the main quiz.'
-      : remediationStatus === 'failed'
-        ? 'Reinforcement ended. Moving on to a new question.'
-        : 'You are in targeted reinforcement for this concept. Get 3 correct in a row to continue.'
+      : remediationStatus === 'struggling'
+        ? "You're finding this one tricky. You can keep going with an easier question, or return to the quiz."
+        : remediationStatus === 'needs_review'
+          ? 'This topic has been added to your study plan for focused practice later.'
+          : `You are in targeted reinforcement. Get ${remediationTarget} correct in a row to continue.`
+
+  const streakBg = remediationStatus === 'complete' ? 'rgba(16,185,129,0.12)'
+    : remediationStatus === 'struggling' ? 'rgba(241,190,67,0.12)'
+    : remediationStatus === 'needs_review' ? 'rgba(99,102,241,0.12)'
+    : 'rgba(255,255,255,0.05)'
+  const streakBorder = remediationStatus === 'complete' ? 'rgba(16,185,129,0.3)'
+    : remediationStatus === 'struggling' ? 'rgba(241,190,67,0.3)'
+    : remediationStatus === 'needs_review' ? 'rgba(99,102,241,0.3)'
+    : 'rgba(255,255,255,0.08)'
+  const streakColor = remediationStatus === 'complete' ? '#4ade80'
+    : remediationStatus === 'struggling' ? GOLD
+    : remediationStatus === 'needs_review' ? '#818cf8'
+    : '#e2e8f0'
 
   return (
     <div style={{
@@ -215,9 +319,9 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
         <span style={{
           padding: '5px 11px',
           borderRadius: 999,
-          background: remediationStatus === 'complete' ? 'rgba(16,185,129,0.12)' : remediationStatus === 'failed' ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid ${remediationStatus === 'complete' ? 'rgba(16,185,129,0.3)' : remediationStatus === 'failed' ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
-          color: remediationStatus === 'complete' ? '#4ade80' : remediationStatus === 'failed' ? '#f87171' : '#e2e8f0',
+          background: streakBg,
+          border: `1px solid ${streakBorder}`,
+          color: streakColor,
           fontSize: 12,
           fontWeight: 700,
         }}>
@@ -229,31 +333,49 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
   )
 }
 
-function StatusToast({ status }) {
+function StatusToast({ status, onReturnToQuiz }) {
   if (!status || status === 'idle' || status === 'activated') return null
 
   const isComplete = status === 'complete'
-  const isFailed = status === 'failed'
+  const isStruggling = status === 'struggling'
+  const isNeedsReview = status === 'needs_review'
+
+  const borderColor = isComplete ? 'rgba(16,185,129,0.35)'
+    : isStruggling ? 'rgba(241,190,67,0.35)'
+    : isNeedsReview ? 'rgba(99,102,241,0.35)'
+    : 'rgba(241,190,67,0.24)'
+  const iconBg = isComplete ? 'rgba(16,185,129,0.12)'
+    : isStruggling ? 'rgba(241,190,67,0.12)'
+    : isNeedsReview ? 'rgba(99,102,241,0.12)'
+    : 'rgba(241,190,67,0.12)'
+  const iconBorder = isComplete ? 'rgba(16,185,129,0.22)'
+    : isStruggling ? 'rgba(241,190,67,0.22)'
+    : isNeedsReview ? 'rgba(99,102,241,0.22)'
+    : 'rgba(241,190,67,0.18)'
+  const icon = isComplete ? '\u2705' : isStruggling ? '\uD83D\uDCA1' : isNeedsReview ? '\uD83D\uDCDA' : '\uD83E\uDDE0'
   const title = isComplete ? 'Reinforcement Complete'
-    : isFailed ? 'Reinforcement Ended'
+    : isStruggling ? 'Need a Break?'
+    : isNeedsReview ? 'Topic Added to Study Plan'
     : 'Generating Similar Questions'
   const subtitle = isComplete
     ? 'Concept mastered! Returning to the main quiz.'
-    : isFailed
-      ? 'Keep practising this topic — you’ll get it next time.'
-      : 'Preparing more same-concept reinforcement.'
+    : isStruggling
+      ? "You've missed a few in a row. Keep going for an easier question, or return to the quiz and revisit this concept in your study plan."
+      : isNeedsReview
+        ? 'This concept will appear in your study plan for focused practice. Press Continue to return to the quiz.'
+        : 'Preparing more same-concept reinforcement.'
 
   return (
     <div style={{
       marginTop: 12,
       borderRadius: 14,
       background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
-      border: `1px solid ${isComplete ? 'rgba(16,185,129,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'rgba(241,190,67,0.24)'}`,
+      border: `1px solid ${borderColor}`,
       boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
       padding: '14px 16px',
       animation: 'popIn 0.18s ease',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{
           width: 38,
           height: 38,
@@ -262,20 +384,42 @@ function StatusToast({ status }) {
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: 18,
-          background: isComplete ? 'rgba(16,185,129,0.12)' : isFailed ? 'rgba(239,68,68,0.12)' : 'rgba(241,190,67,0.12)',
-          border: `1px solid ${isComplete ? 'rgba(16,185,129,0.22)' : isFailed ? 'rgba(239,68,68,0.22)' : 'rgba(241,190,67,0.18)'}`,
+          background: iconBg,
+          border: `1px solid ${iconBorder}`,
           flexShrink: 0,
+          marginTop: 1,
         }}>
-          {isComplete ? '✅' : isFailed ? '❌' : '🧠'}
+          {icon}
         </div>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>{title}</div>
           <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, marginTop: 2 }}>{subtitle}</div>
+          {isStruggling && onReturnToQuiz && (
+            <button
+              onClick={onReturnToQuiz}
+              style={{
+                marginTop: 10,
+                padding: '6px 14px',
+                borderRadius: 8,
+                border: '1px solid rgba(241,190,67,0.35)',
+                background: 'rgba(241,190,67,0.08)',
+                color: GOLD,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: FONT_B,
+                display: 'block',
+              }}
+            >
+              Return to Quiz
+            </button>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
 
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
@@ -314,6 +458,7 @@ export default function QuizScreen({
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
+  const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
   const startTime = useRef(null)
 
   useEffect(() => {
@@ -397,6 +542,7 @@ export default function QuizScreen({
     setRemediationOriginalQ(null)
     setRemediationUsedIds([])
     setRemediationWrongCount(0)
+    setRemediationDifficultyTarget(null)
   }, [
     setRemediationConcept,
     setRemediationMode,
@@ -411,11 +557,32 @@ export default function QuizScreen({
     setRemediationWrongCount,
   ])
 
-  const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = []) => {
+  // Flags the current remediation topic for study plan and exits remediation.
+  // Used by the "Return to Quiz" button in the 'struggling' toast (option F+G).
+  const handleReturnToQuiz = useCallback(async () => {
+    const q = remediationOriginalQ
+    if (q) {
+      try {
+        await flagTopicForStudyPlan(profile.id, {
+          subject: q.subject,
+          topic: q.topic,
+          subtopic: q.subtopic,
+          concept_tag: remediationConcept,
+          reason: 'remediation_gave_up',
+        })
+      } catch {}
+    }
+    clearRemediation()
+    setQNumber(n => n + 1)
+    setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
+  }, [clearRemediation, loadNext, profile.id, quizMode, quizSubtopics, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
+
+  const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = [], difficultyTarget = null) => {
     const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
+    const diffTarget = difficultyTarget ?? Math.max(1, (parentQuestion?.difficulty ?? 3) - 1)
     setRemediationStatus('generating')
 
-    const localFallback = createLocalFallbackVariants(parentQuestion, questions).map((variant, index) =>
+    const localFallback = createLocalFallbackVariants(parentQuestion, questions, diffTarget).map((variant, index) =>
       normalizeVariantRecord(parentQuestion, variant, index)
     )
 
@@ -423,15 +590,22 @@ export default function QuizScreen({
       generatedVariants: localFallback,
       excludeIds: existingUsedIds,
       limit: 5,
-    }).map(v => ({ ...v, is_variant: true, source: 'ai_generated' }))
+    }).map(v => ({ ...v, is_variant: true, source: 'related' }))
 
+    // Fire AI generation in background — append results to live queue when ready
     ;(async () => {
       try {
-        const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag)
+        const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag, diffTarget)
         if (!generated.length) return
-        try {
-          await insertGeneratedQuestionVariants(parentQuestion, generated)
-        } catch {}
+        const normalized = generated.map((v, i) => ({
+          ...normalizeVariantRecord(parentQuestion, v, i),
+          is_variant: true,
+          source: 'ai_generated',
+          variant_type: v.variant_type || 'ai_variant',
+        }))
+        // Append AI questions to whatever is left in the queue
+        setRemediationQueue(prev => [...prev, ...normalized])
+        try { await insertGeneratedQuestionVariants(parentQuestion, generated) } catch {}
       } catch {}
     })()
 
@@ -445,10 +619,12 @@ export default function QuizScreen({
     if (!parentQuestion) return
 
     const conceptTag = parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion)
+    const diffTarget = Math.max(1, (parentQuestion.difficulty ?? 3) - 1)
 
     setRemediationMode(true)
     setRemediationStreak(0)
     setRemediationTarget(3)
+    setRemediationDifficultyTarget(diffTarget)
     // status stays 'generating' (set by handleAnswer) — button stays disabled until queue loads
     setRemediationSource('prebuilt')
     setRemediationConcept(conceptTag)
@@ -467,14 +643,28 @@ export default function QuizScreen({
 
       if (!queue.length) {
         // generateRemediationQueue sets status to 'activated' once the fallback queue is ready
-        queue = await generateRemediationQueue(parentQuestion, [])
+        queue = await generateRemediationQueue(parentQuestion, [], diffTarget)
       } else {
-        // DB variants loaded — enable the button now
+        // DB variants loaded — enable the button now, also fire AI for adaptive replenishment
         setRemediationQueue(queue)
         setRemediationStatus('activated')
+        ;(async () => {
+          try {
+            const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag, diffTarget)
+            if (!generated.length) return
+            const normalized = generated.map((v, i) => ({
+              ...normalizeVariantRecord(parentQuestion, v, i),
+              is_variant: true,
+              source: 'ai_generated',
+              variant_type: v.variant_type || 'ai_variant',
+            }))
+            setRemediationQueue(prev => [...prev, ...normalized])
+            try { await insertGeneratedQuestionVariants(parentQuestion, generated) } catch {}
+          } catch {}
+        })()
       }
     } catch {
-      await generateRemediationQueue(parentQuestion, [])
+      await generateRemediationQueue(parentQuestion, [], diffTarget)
     }
   }, [
     generateRemediationQueue,
@@ -547,13 +737,41 @@ export default function QuizScreen({
           setRemediationStatus('complete')
         }
       } else {
-        setRemediationStreak(0)
-        const newWrongCount = remediationWrongCount + 1
-        setRemediationWrongCount(newWrongCount)
-        if (newWrongCount >= 3) {
-          // Student has failed too many reinforcement checks — exit to avoid infinite loop
-          setRemediationStatus('failed')
+        // Option D: concept-builder questions are exempt from wrong count
+        const isConceptBuilder = currentQ.variant_type === 'concept_builder'
+
+        if (!isConceptBuilder) {
+          setRemediationStreak(0)
+          const newWrongCount = remediationWrongCount + 1
+          setRemediationWrongCount(newWrongCount)
+          const newDiffTarget = Math.max(1, (remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)) - 1)
+          setRemediationDifficultyTarget(newDiffTarget)
+
+          if (newWrongCount >= 5) {
+            // Option G: hard exit — flag topic for study plan, no failure messaging
+            setRemediationStatus('needs_review')
+          } else if (newWrongCount === 3) {
+            // Option F: soft pause — student gets a choice
+            setRemediationTarget(1) // Option I: scale target down to 1
+            setRemediationStatus('struggling')
+          } else if (newWrongCount === 2) {
+            // Option I: scale mastery target down, trigger concept builder
+            setRemediationTarget(2)
+            const tag = remediationOriginalQ?.concept_tag || getQuestionConceptTag(remediationOriginalQ)
+            ;(async () => {
+              const cb = await generateConceptBuilderViaAI(remediationOriginalQ, tag)
+              if (!cb) return
+              const normalized = {
+                ...normalizeVariantRecord(remediationOriginalQ, cb, 0),
+                is_variant: true,
+                source: 'concept_builder',
+                variant_type: 'concept_builder',
+              }
+              setRemediationQueue(prev => [normalized, ...prev])
+            })()
+          }
         }
+        // concept builders: no wrongCount change, no streak reset, student just continues
       }
       return
     }
@@ -578,9 +796,12 @@ export default function QuizScreen({
       // before the AI tip fetch runs. Without this, the user could click "Next Question →"
       // during the 3.5s AI timeout window and skip remediation entirely.
       const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
+      const initialDiffTarget = Math.max(1, (currentQ.difficulty ?? 3) - 1)
       setRemediationMode(true)
       setRemediationStreak(0)
       setRemediationTarget(3)
+      setRemediationWrongCount(0)
+      setRemediationDifficultyTarget(initialDiffTarget)
       setRemediationStatus('generating') // keep button disabled until queue is loaded
       setRemediationSource('prebuilt')
       setRemediationConcept(conceptTagNow)
@@ -615,12 +836,12 @@ export default function QuizScreen({
     let queue = remediationQueue
 
     if (!queue.length && remediationOriginalQ) {
-      queue = await generateRemediationQueue(remediationOriginalQ, remediationUsedIds)
+      queue = await generateRemediationQueue(remediationOriginalQ, remediationUsedIds, remediationDifficultyTarget)
     }
 
     if (!queue.length) {
       const fallbackBase = remediationOriginalQ || currentQ
-      const hardFallback = createLocalFallbackVariants(fallbackBase, questions).map((variant, index) =>
+      const hardFallback = createLocalFallbackVariants(fallbackBase, questions, remediationDifficultyTarget).map((variant, index) =>
         normalizeVariantRecord(fallbackBase, variant, index)
       )
 
@@ -628,7 +849,7 @@ export default function QuizScreen({
         generatedVariants: hardFallback,
         excludeIds: remediationUsedIds,
         limit: 5,
-      }).map(v => ({ ...v, is_variant: true, source: 'ai_generated' }))
+      }).map(v => ({ ...v, is_variant: true, source: 'related' }))
 
       setRemediationQueue(queue)
       setRemediationSource('generated')
@@ -662,7 +883,34 @@ export default function QuizScreen({
     }
 
     if (remediationMode && currentQ.is_variant) {
-      if (remediationStatus === 'complete' || remediationStatus === 'failed') {
+      if (remediationStatus === 'complete') {
+        clearRemediation()
+        setQNumber(n => n + 1)
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
+        return
+      }
+
+      // Option F: "Keep Going →" resumes remediation with lower target (already set at wrongCount=3)
+      if (remediationStatus === 'struggling') {
+        setRemediationStatus('activated')
+        await loadNextRemediationQuestion()
+        return
+      }
+
+      // Option G: forced exit — flag topic for study plan then return to main quiz
+      if (remediationStatus === 'needs_review') {
+        const q = remediationOriginalQ
+        if (q) {
+          try {
+            await flagTopicForStudyPlan(profile.id, {
+              subject: q.subject,
+              topic: q.topic,
+              subtopic: q.subtopic,
+              concept_tag: remediationConcept,
+              reason: 'remediation_exhausted',
+            })
+          } catch {}
+        }
         clearRemediation()
         setQNumber(n => n + 1)
         setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
@@ -838,11 +1086,15 @@ export default function QuizScreen({
 
   const nextButtonLabel = remediationPendingEntry
     ? 'Start Remediation →'
-    : inRemediationQuestion && (remediationStatus === 'complete' || remediationStatus === 'failed')
+    : inRemediationQuestion && remediationStatus === 'complete'
       ? 'Return to Quiz →'
-      : inRemediationQuestion
-        ? 'Next Similar Question →'
-        : 'Next Question →'
+    : inRemediationQuestion && remediationStatus === 'struggling'
+      ? 'Keep Going →'
+    : inRemediationQuestion && remediationStatus === 'needs_review'
+      ? 'Continue →'
+    : inRemediationQuestion
+      ? 'Next Similar Question →'
+      : 'Next Question →'
 
   const SidebarContent = ({ onClose }) => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: NAVYD, fontFamily: FONT_B }}>
@@ -1103,7 +1355,8 @@ export default function QuizScreen({
                   </button>
 
                   <StatusToast
-                    status={remediationStatus === 'complete' || remediationStatus === 'failed' || remediationStatus === 'generating' ? remediationStatus : null}
+                    status={['complete', 'struggling', 'needs_review', 'generating'].includes(remediationStatus) ? remediationStatus : null}
+                    onReturnToQuiz={handleReturnToQuiz}
                   />
 
                   {remediationMode && (
@@ -1131,9 +1384,11 @@ export default function QuizScreen({
                       <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
                         {remediationStatus === 'complete'
                           ? 'Mastery confirmed. Return to the main quiz when you are ready.'
-                          : remediationStatus === 'failed'
-                            ? 'Reinforcement ended. Return to the quiz and revisit this topic soon.'
-                            : 'This concept is temporarily locked until you answer 3 similar questions correctly in a row.'}
+                          : remediationStatus === 'struggling'
+                            ? `Keep going with an easier question, or return to the quiz. You only need 1 correct answer to continue.`
+                            : remediationStatus === 'needs_review'
+                              ? 'This concept has been added to your study plan. Press Continue to return to the quiz.'
+                              : `This concept is temporarily locked. Get ${remediationTarget} correct in a row to continue.`}
                       </div>
                     </div>
                   )}
