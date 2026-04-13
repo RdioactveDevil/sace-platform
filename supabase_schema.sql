@@ -282,6 +282,18 @@ create policy "questions_read_all"
   for select
   using (true);
 
+-- Allow admins to publish from draft_questions approve flow (client uses user JWT + anon key).
+drop policy if exists "questions_insert_admin" on public.questions;
+create policy "questions_insert_admin"
+  on public.questions
+  for insert
+  with check (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and is_admin = true
+    )
+  );
+
 -- QUESTION VARIANTS
 drop policy if exists "question_variants_read_all" on public.question_variants;
 create policy "question_variants_read_all"

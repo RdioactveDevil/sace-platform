@@ -8,16 +8,19 @@ const GOLD   = '#f1be43'
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
 function StatusBadge({ status }) {
+  const key = String(status || 'pending')
+    .trim()
+    .toLowerCase()
   const map = {
     pending:      { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: GOLD },
     needs_review: { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: '#f87171' },
     approved:     { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: '#4ade80' },
     rejected:     { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  color: 'rgba(255,255,255,0.3)' },
   }
-  const c = map[status] || map.pending
+  const c = map[key] || map.pending
   return (
     <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: c.bg, border: `1px solid ${c.border}`, color: c.color }}>
-      {status}
+      {key}
     </span>
   )
 }
@@ -30,9 +33,12 @@ export default function AdminReviewScreen({ profile }) {
   const [editState,    setEditState]    = useState(null)
   const [saving,       setSaving]       = useState(false)
   const [checked,      setChecked]      = useState(new Set())
+  const [actionError,  setActionError]  = useState(null)
+  const [actionOk,     setActionOk]     = useState(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts = {}) => {
+    const { skipLoading } = opts
+    if (!skipLoading) setLoading(true)
     try {
       const data = await getDraftQuestions({
         status: filterStatus === 'all' ? undefined : filterStatus,
@@ -41,11 +47,16 @@ export default function AdminReviewScreen({ profile }) {
     } catch (e) {
       console.error(e)
     } finally {
-      setLoading(false)
+      if (!skipLoading) setLoading(false)
     }
   }, [filterStatus])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setActionError(null)
+    setActionOk(null)
+  }, [filterStatus])
 
   const openDraft = (draft) => {
     setSelected(draft)
@@ -59,40 +70,96 @@ export default function AdminReviewScreen({ profile }) {
     setSaving(true)
     try {
       await upsertDraftQuestion(editState)
-      setDrafts(prev => prev.map(d => d.id === editState.id ? { ...editState } : d))
+      setDrafts(prev => prev.map(d => (String(d.id) === String(editState.id) ? { ...editState } : d)))
       setSelected({ ...editState })
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
   }
 
+  const bumpDraftListAfterStatusChange = (draftId, newStatus) => {
+    const id = String(draftId)
+    if (filterStatus === 'all') {
+      setDrafts(prev => prev.map(d => (String(d.id) === id ? { ...d, status: newStatus } : d)))
+    } else {
+      setDrafts(prev => prev.filter(d => String(d.id) !== id))
+    }
+  }
+
   const handleApprove = async (draftId) => {
     setSaving(true)
+    setActionError(null)
+    setActionOk(null)
     try {
+      if (editState && String(editState.id) === String(draftId)) {
+        await upsertDraftQuestion(editState)
+      }
       await approveDraftQuestion(draftId, profile.id)
-      setDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status: 'approved' } : d))
+      setChecked(prev => {
+        const next = new Set(prev)
+        next.delete(draftId)
+        return next
+      })
       closePanel()
-    } catch (e) { console.error(e) }
-    finally { setSaving(false) }
+      setActionOk('Question published to the live bank.')
+      bumpDraftListAfterStatusChange(draftId, 'approved')
+      await load({ skipLoading: true })
+    } catch (e) {
+      console.error(e)
+      setActionError(e.message || 'Could not approve — check console or Supabase RLS / questions table.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleReject = async (draftId) => {
     setSaving(true)
+    setActionError(null)
+    setActionOk(null)
     try {
       await rejectDraftQuestion(draftId, profile.id)
-      setDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status: 'rejected' } : d))
+      setChecked(prev => {
+        const next = new Set(prev)
+        next.delete(draftId)
+        return next
+      })
       closePanel()
-    } catch (e) { console.error(e) }
-    finally { setSaving(false) }
+      setActionOk('Draft marked as rejected (still in database for audit).')
+      bumpDraftListAfterStatusChange(draftId, 'rejected')
+      await load({ skipLoading: true })
+    } catch (e) {
+      console.error(e)
+      setActionError(e.message || 'Could not reject this draft.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleBulkApprove = async () => {
+    const ids = [...checked]
+    const total = ids.length
+    if (total === 0) return
     setSaving(true)
-    for (const id of checked) {
-      try { await approveDraftQuestion(id, profile.id) } catch {}
+    setActionError(null)
+    setActionOk(null)
+    let failed = 0
+    for (const id of ids) {
+      try {
+        await approveDraftQuestion(id, profile.id)
+      } catch (e) {
+        console.error(e)
+        failed += 1
+      }
     }
     setChecked(new Set())
     setSaving(false)
-    load()
+    if (failed > 0) {
+      setActionError(
+        `${failed} of ${total} could not be approved. Open the browser console for details, or check Supabase RLS on the questions table.`
+      )
+    } else {
+      setActionOk(`Published ${total} question(s) to the live bank.`)
+    }
+    await load({ skipLoading: true })
   }
 
   const toggleCheck = (id, e) => {
@@ -151,6 +218,39 @@ export default function AdminReviewScreen({ profile }) {
             ))}
           </div>
         </div>
+
+        {actionOk && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: '10px 14px',
+              borderRadius: 10,
+              background: 'rgba(16,185,129,0.1)',
+              border: '1px solid rgba(16,185,129,0.28)',
+              color: '#4ade80',
+              fontSize: 13,
+              fontFamily: FONT_B,
+            }}
+          >
+            {actionOk}
+          </div>
+        )}
+        {actionError && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: '10px 14px',
+              borderRadius: 10,
+              background: 'rgba(239,68,68,0.1)',
+              border: '1px solid rgba(239,68,68,0.28)',
+              color: '#f87171',
+              fontSize: 13,
+              fontFamily: FONT_B,
+            }}
+          >
+            {actionError}
+          </div>
+        )}
 
         {loading ? (
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading…</div>

@@ -47,6 +47,13 @@ export async function approveDraftQuestion(draftId, adminId) {
     .single()
   if (fetchError) throw fetchError
 
+  if (!draft.topic || !String(draft.topic).trim()) {
+    throw new Error('Set a topic (use the topic dropdown) before approving.')
+  }
+  if (!draft.question || !String(draft.question).trim()) {
+    throw new Error('Question text is empty; fix the draft before approving.')
+  }
+
   const questionId = `admin_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const conceptTag = `${draft.subject}|${draft.topic}|${draft.subtopic || draft.topic}`.toLowerCase()
 
@@ -63,7 +70,13 @@ export async function approveDraftQuestion(draftId, adminId) {
     solution: draft.solution ?? '',
     tip: null,
   })
-  if (insertError) throw insertError
+  if (insertError) {
+    const hint =
+      insertError.code === '42501' || insertError.message?.includes('policy')
+        ? ' Database rejected insert (RLS). In Supabase SQL Editor, run the questions_insert_admin policy from supabase_schema.sql, and confirm profiles.is_admin is true for your user.'
+        : ''
+    throw new Error((insertError.message || 'Insert into questions failed') + hint)
+  }
 
   const { error: updateError } = await supabase
     .from('draft_questions')
