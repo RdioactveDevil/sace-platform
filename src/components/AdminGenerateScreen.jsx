@@ -58,7 +58,7 @@ export default function AdminGenerateScreen() {
   const selectStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 8,
     border: '1px solid rgba(255,255,255,0.12)',
-    background: 'rgba(255,255,255,0.04)',
+    background: '#0c1037',
     color: '#fff', fontSize: 13, fontFamily: FONT_B, outline: 'none',
   }
 
