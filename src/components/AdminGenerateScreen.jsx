@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { S1_TOPICS, S2_TOPICS } from '../lib/adminTopics'
+import { adminApiPost } from '../lib/adminApi'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -52,13 +53,12 @@ export default function AdminGenerateScreen() {
     setError(null)
 
     try {
-      const res = await fetch('/api/generate-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage, topicCode, count, difficulty }),
+      const data = await adminApiPost('/api/generate-questions', {
+        stage,
+        topicCode,
+        count,
+        difficulty,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Generation failed')
       setResult(data)
     } catch (err) {
       setError(err.message)

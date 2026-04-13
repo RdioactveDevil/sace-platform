@@ -1,7 +1,11 @@
 import { useState, useRef } from 'react'
+import { adminApiPost } from '../lib/adminApi'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
+
+/** ~3 MB raw PDF keeps base64+JSON under Vercel serverless ~4.5 MB body limit */
+const MAX_PDF_BYTES = 3 * 1024 * 1024
 
 const STAGES = ['Chemistry Stage 1', 'Chemistry Stage 2']
 
@@ -25,6 +29,12 @@ export default function AdminUploadScreen() {
 
   const handleSubmit = async () => {
     if (!file) return
+    if (file.size > MAX_PDF_BYTES) {
+      setError(
+        `This PDF is too large for browser upload (${Math.round((file.size / (1024 * 1024)) * 10) / 10} MB). Use a file under ~3 MB, or split/compress the PDF so the upload stays within hosting limits.`
+      )
+      return
+    }
     setLoading(true)
     setResult(null)
     setError(null)
@@ -37,14 +47,7 @@ export default function AdminUploadScreen() {
         reader.readAsDataURL(file)
       })
 
-      const res = await fetch('/api/extract-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64, filename: file.name, stage }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Extraction failed')
+      const data = await adminApiPost('/api/extract-pdf', { base64, filename: file.name, stage })
       setResult(data)
     } catch (err) {
       setError(err.message)
@@ -58,6 +61,7 @@ export default function AdminUploadScreen() {
       <h2 style={{ color: '#fff', marginTop: 0 }}>Upload PDF</h2>
       <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
         Upload a SACE Chemistry exam or textbook. Claude will extract all MCQs into the draft queue.
+        {' '}Use PDFs under ~3 MB so the upload fits hosting limits (base64 expands the file size).
       </p>
 
       {/* Stage selector */}
