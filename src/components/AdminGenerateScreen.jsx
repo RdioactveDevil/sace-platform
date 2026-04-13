@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { S1_TOPICS, S2_TOPICS } from '../lib/adminTopics'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -21,8 +21,20 @@ export default function AdminGenerateScreen() {
   const [count,      setCount]      = useState(10)
   const [difficulty, setDifficulty] = useState('mixed')
   const [loading,    setLoading]    = useState(false)
+  const [elapsed,    setElapsed]    = useState(0)
   const [result,     setResult]     = useState(null)
   const [error,      setError]      = useState(null)
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (loading) {
+      setElapsed(0)
+      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000)
+    } else {
+      clearInterval(timerRef.current)
+    }
+    return () => clearInterval(timerRef.current)
+  }, [loading])
 
   const topics = stage === 'Chemistry Stage 1' ? S1_TOPICS : S2_TOPICS
 
@@ -146,8 +158,20 @@ export default function AdminGenerateScreen() {
           fontFamily: FONT_B,
         }}
       >
-        {loading ? `Generating ${count} questions…` : `Generate ${count} Questions`}
+        {loading ? `Generating ${count} questions… ${elapsed}s` : `Generate ${count} Questions`}
       </button>
+
+      {loading && (
+        <div style={{ marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,0.35)', fontFamily: FONT_B }}>
+          {elapsed < 10
+            ? 'Calling Claude API…'
+            : elapsed < 30
+            ? 'Claude is writing questions…'
+            : elapsed < 60
+            ? 'Almost there, parsing response…'
+            : `Still working… (${elapsed}s — large batches can take ~90s)`}
+        </div>
+      )}
 
       {result && (
         <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
