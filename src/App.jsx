@@ -19,6 +19,8 @@ import OnboardingScreen  from './components/OnboardingScreen'
 import GetAccessScreen   from './components/GetAccessScreen'
 import TermsScreen       from './components/TermsScreen'
 import PrivacyScreen     from './components/PrivacyScreen'
+import AdminRoute        from './components/AdminRoute'
+import AdminScreen       from './components/AdminScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -557,6 +559,15 @@ function AppInner() {
               profile={profile} setProfile={setProfile}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')} />
+      } />
+
+      {/* Admin — is_admin only */}
+      <Route path="/admin/*" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <AdminRoute profile={profile}>
+              <AdminScreen profile={profile} />
+            </AdminRoute>
       } />
 
       {/* Single shell route — AppShellScreens stays mounted across ALL tab switches */}
