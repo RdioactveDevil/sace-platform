@@ -521,4 +521,52 @@ values
     'The carbon in –COOH still counts.',
     'prebuilt'
   )
-on conflict do nothing;
+;
+
+-- =========================
+-- ADMIN
+-- =========================
+alter table public.profiles add column if not exists is_admin boolean default false;
+
+-- =========================
+-- DRAFT QUESTIONS
+-- =========================
+create table if not exists public.draft_questions (
+  id            uuid primary key default gen_random_uuid(),
+  source        text not null,
+  source_file   text,
+  subject       text not null,
+  topic_code    text,
+  subtopic      text,
+  topic         text,
+  question      text not null,
+  options       jsonb not null,
+  answer_index  integer not null,
+  solution      text,
+  difficulty    integer,
+  status        text not null default 'pending',
+  created_at    timestamptz default now(),
+  reviewed_at   timestamptz,
+  reviewed_by   uuid references public.profiles(id)
+);
+
+create index if not exists idx_draft_questions_status  on public.draft_questions(status);
+create index if not exists idx_draft_questions_subject on public.draft_questions(subject);
+
+alter table public.draft_questions enable row level security;
+
+drop policy if exists "draft_questions_admin" on public.draft_questions;
+create policy "draft_questions_admin"
+  on public.draft_questions for all
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and is_admin = true
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and is_admin = true
+    )
+  );
