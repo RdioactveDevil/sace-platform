@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogLast30Days, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
-import { SACE_STAGE1_TOPICS, normalizeTopic } from '../lib/saceTopics'
+import { SACE_STAGE1_TOPICS, SACE_STAGE2_TOPICS, getTopicConfig } from '../lib/saceTopics'
 import ReadinessCard from './ReadinessCard'
 import StreakCalendar from './StreakCalendar'
 import SubtopicHeatmap from './SubtopicHeatmap'
@@ -11,8 +11,10 @@ const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLearn }) {
+export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLearn, subject }) {
   const t = THEMES[theme]
+  const { normFn: normalizeCurriculumTopic } = getTopicConfig(subject?.stage)
+  const curriculumTopics = subject?.stage === 'Stage 2' ? SACE_STAGE2_TOPICS : SACE_STAGE1_TOPICS
   const [answerLog, setAnswerLog] = useState([])
   const [assessments, setAssessments] = useState([])
   const [addFormType, setAddFormType] = useState('Test')
@@ -36,8 +38,8 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const topicStats = {}
   const topicSubtopics = {}
   questions.forEach((q) => {
-    const topic = normalizeTopic(q.topic)
-    if (!topic) return // skip questions whose topic isn't part of SACE Stage 1
+    const topic = normalizeCurriculumTopic(q.topic)
+    if (!topic) return // skip questions whose topic isn't in the current stage curriculum
     if (!topicStats[topic]) topicStats[topic] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
     if (!topicSubtopics[topic]) topicSubtopics[topic] = []
     topicStats[topic].total += 1
@@ -361,15 +363,16 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
             struggleMap={struggleMap}
             onStartSession={onStartSession}
             theme={theme}
+            subject={subject}
           />
 
           <div style={{ ...card, padding: '18px 20px', marginTop: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Topic Breakdown</div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>SACE Stage 1 Chemistry</div>
+              <div style={{ fontSize: 11, color: t.textMuted }}>SACE {subject?.stage || 'Stage 1'} {subject?.name || 'Chemistry'}</div>
             </div>
             <div className="ps-topic-grid">
-              {SACE_STAGE1_TOPICS.map((topic) => {
+              {curriculumTopics.map((topic) => {
                 const s = topicStats[topic]
                 const rate = s && s.attempted > 0 ? s.correct / Math.max(s.correct + s.wrong, 1) : null
                 const total = s?.total ?? 0

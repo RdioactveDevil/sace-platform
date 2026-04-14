@@ -237,7 +237,7 @@ function AppShellScreens({
       </div>
       <div style={show('my-progress')}>
         <ProfileScreen {...commonProps}
-          profile={profile} questions={questions}
+          profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
           onOpenLearn={(nextTopic) => {
