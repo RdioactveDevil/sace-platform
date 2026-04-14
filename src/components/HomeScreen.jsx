@@ -15,7 +15,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const { macroGroups: MACRO_GROUPS, normFn: topicNormFn } = getTopicConfig(subject?.stage)
   const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([])
-  const [expandedTopics, setExpandedTopics] = useState(() => new Set())
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
   const [assessments, setAssessments] = useState([])
 
@@ -33,27 +32,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     })
     return filtered
   }, [struggleMap, questionIds])
-
-  const topicGroups = {}
-  const subtopicGroups = {}
-  questions.forEach(q => {
-    if (!topicGroups[q.topic]) topicGroups[q.topic] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
-    topicGroups[q.topic].total++
-
-    if (!subtopicGroups[q.subtopic]) subtopicGroups[q.subtopic] = { topic: q.topic, total: 0, attempted: 0, wrong: 0 }
-    subtopicGroups[q.subtopic].total++
-
-    const s = currentStruggleMap[q.id]
-    if (s && s.attempts > 0) {
-      topicGroups[q.topic].attempted++
-      topicGroups[q.topic].correct += (s.attempts - s.wrong)
-      topicGroups[q.topic].wrong += s.wrong
-      subtopicGroups[q.subtopic].attempted++
-      subtopicGroups[q.subtopic].wrong += s.wrong
-    }
-  })
-
-  const topicEntries = Object.entries(topicGroups)
 
   // ── Normalised topic helpers ───────────────────────────────────────────────
   // Build a set of macro labels so we can detect when q.topic IS a macro label
@@ -87,6 +65,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     }
   })
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
+  const selectedNormTopicCount = MACRO_GROUPS.reduce((acc, macro) => {
+    return acc + macro.topics.filter(tn => {
+      const subs = normTopicToSubs[tn] || []
+      return subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
+    }).length
+  }, 0)
+  const topicsInBankCount = MACRO_GROUPS.reduce((n, m) => n + m.topics.filter(tn => normTopicGroups[tn]).length, 0)
   const hasNoTopicsSelected = selectedSubtopics.length === 0
   const isAllTopicsSelected = allSubtopics.length > 0 && selectedSubtopics.length === allSubtopics.length
   const effectiveSubtopics = selectedSubtopics
@@ -225,8 +210,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
           <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${t.danger}15`, border: `1px solid ${t.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: t.danger, flexShrink: 0 }}>{i+1}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q.subtopic}</div>
-            <div style={{ fontSize: 10, color: t.textMuted }}>{s.q.topic}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topicNorm(s.q.topic) || s.q.topic}</div>
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
         </div>
@@ -371,31 +355,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     )
   }
 
-  const toggleTopic = (topic) => {
-    const subs = [...new Set(questions.filter(q => q.topic === topic).map(q => q.subtopic).filter(Boolean))]
-    const allSel = subs.every(s => selectedSubtopics.includes(s))
-
-    if (allSel) {
-      setSelectedSubtopics(prev => prev.filter(s => !subs.includes(s)))
-      return
-    }
-
-    setSelectedSubtopics(prev => [...new Set([...prev, ...subs])])
-  }
-
-  const toggleSub = (sub) => {
-    setSelectedSubtopics(prev => prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub])
-  }
-
-  const toggleExpanded = (topic) => {
-    setExpandedTopics(prev => {
-      const next = new Set(prev)
-      if (next.has(topic)) next.delete(topic)
-      else next.add(topic)
-      return next
-    })
-  }
-
   const toggleMacroExpand = (macroId) => {
     setExpandedMacros(prev => {
       const next = new Set(prev)
@@ -423,15 +382,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const normTopicStatusColor = (topicName) => {
     const tg = normTopicGroups[topicName]
-    if (!tg || tg.attempted === 0) return GOLD
-    const rate = tg.wrong / tg.attempted
-    if (rate >= 0.5) return t.danger
-    if (rate >= 0.25) return GOLD
-    return t.success
-  }
-
-  const topicStatusColor = (topic) => {
-    const tg = topicGroups[topic]
     if (!tg || tg.attempted === 0) return GOLD
     const rate = tg.wrong / tg.attempted
     if (rate >= 0.5) return t.danger
@@ -605,40 +555,26 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                       const topicPartial = subs.some(s => selectedSubtopics.includes(s)) && !topicSel
                       const accent = normTopicStatusColor(topicName)
                       const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
-                      const isTopicExpanded = expandedTopics.has(topicName)
                       return (
                         <div key={topicName}>
-                          <div style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 30px', borderBottom: `1px solid ${t.border}`, gap: 8 }}>
-                            <div onClick={() => toggleNormTopic(topicName)} style={{ width: 15, height: 15, borderRadius: 4, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                          <div
+                            onClick={() => toggleNormTopic(topicName)}
+                            style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 30px', borderBottom: `1px solid ${t.border}`, gap: 8, cursor: 'pointer' }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleNormTopic(topicName) } }}
+                          >
+                            <div style={{ width: 15, height: 15, borderRadius: 4, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                               {topicSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
                               {topicPartial && !topicSel && <span style={{ fontSize: 9, color: GOLD, fontWeight: 800 }}>−</span>}
                             </div>
-                            <button onClick={() => toggleExpanded(topicName)} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', color: t.textMuted, fontSize: 12, lineHeight: 1, width: 12, flexShrink: 0 }}>
-                              {isTopicExpanded ? '▾' : '▸'}
-                            </button>
                             <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
-                            <div onClick={() => toggleExpanded(topicName)} style={{ flex: 1, minWidth: 0, cursor: 'pointer', overflow: 'hidden' }}>
+                            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                               <span style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{mi + 1}.{ti + 1} {topicName}</span>
                               <span style={{ fontSize: 11, color: t.textMuted }}> ({tg.attempted}/{tg.total})</span>
                             </div>
                             <span style={{ fontSize: 11, color: t.textFaint, flexShrink: 0 }}>{topicPct}%</span>
                           </div>
-                          {isTopicExpanded && subs.map(sub => {
-                            const sg = subtopicGroups[sub] || { attempted: 0, total: 0, wrong: 0 }
-                            const subSel = selectedSubtopics.includes(sub)
-                            const errRate = sg.attempted > 0 ? Math.round((sg.wrong / sg.attempted) * 100) : null
-                            return (
-                              <div key={sub} onClick={() => toggleSub(sub)}
-                                style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 8px 64px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: subSel ? 'rgba(241,190,67,0.04)' : 'transparent' }}>
-                                <div style={{ width: 13, height: 13, borderRadius: 3, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', marginRight: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {subSel && <span style={{ fontSize: 8, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                                </div>
-                                <span style={{ fontSize: 12, color: subSel ? t.text : t.textMuted, flex: 1 }}>{sub}</span>
-                                {errRate !== null && errRate > 0 && <span style={{ fontSize: 10, color: t.danger, fontWeight: 700, marginRight: 8 }}>⚡ {errRate}%</span>}
-                                <span style={{ fontSize: 11, color: t.textMuted }}>{sg.attempted}/{sg.total}</span>
-                              </div>
-                            )
-                          })}
                         </div>
                       )
                     })}
@@ -653,7 +589,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Selected for next session</div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
-                  {isAllTopicsSelected ? allSubtopics.length : selectedSubtopics.length} subtopic{(isAllTopicsSelected ? allSubtopics.length : selectedSubtopics.length) !== 1 ? 's' : ''} selected
+                  {isAllTopicsSelected
+                    ? `${topicsInBankCount} topic${topicsInBankCount !== 1 ? 's' : ''} selected`
+                    : `${selectedNormTopicCount} topic${selectedNormTopicCount !== 1 ? 's' : ''} selected`}
                 </div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{selectedTopicsSummary}</div>
               </div>
