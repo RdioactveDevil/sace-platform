@@ -2,6 +2,12 @@
 // `available` = questions exist and are live.
 // `comingSoon` = planned but not yet launched.
 
+/** Picker `id` → Supabase `questions.subject` (see getQuestions in db.js). */
+export const QUESTIONS_SUBJECT_BY_ID = {
+  chemistry_s1: 'Chemistry Stage 1',
+  chemistry_s2: 'Chemistry Stage 2',
+}
+
 export const ALL_SUBJECTS = [
   {
     id: 'chemistry_s1',
@@ -18,7 +24,7 @@ export const ALL_SUBJECTS = [
     name: 'Chemistry',
     stage: 'Stage 2',
     icon: '⚗️',
-    color: '#f9d87a',
+    color: '#f1be43',
     topics: ['Monitoring the Environment', 'Chemical Processes', 'Organic Chemistry', 'Managing Resources'],
     questionCount: 15,
     available: true,

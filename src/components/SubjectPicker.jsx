@@ -1,15 +1,34 @@
-﻿import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS } from '../lib/subjects'
+import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { countQuestionsForSubject } from '../lib/db'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_B = `'Plus Jakarta Sans', sans-serif`
 
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
+  const [liveQuestionCounts, setLiveQuestionCounts] = useState({})
   const t = THEMES[theme]
+
+  useEffect(() => {
+    let cancelled = false
+    const ids = ALL_SUBJECTS.filter((s) => s.available && QUESTIONS_SUBJECT_BY_ID[s.id]).map((s) => s.id)
+    if (ids.length === 0) return undefined
+    Promise.all(
+      ids.map(async (id) => {
+        const n = await countQuestionsForSubject(QUESTIONS_SUBJECT_BY_ID[id])
+        return [id, n]
+      })
+    )
+      .then((pairs) => {
+        if (!cancelled) setLiveQuestionCounts(Object.fromEntries(pairs))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const hasSubscriptions = subscriptions.length > 0
 
@@ -69,7 +88,9 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           {subj.topics.length > 4 && <span style={{ fontSize: 11, color: '#94a3b8' }}>+{subj.topics.length - 4} more</span>}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: locked ? '#a0aec0' : '#64748b' }}>{subj.questionCount} questions</span>
+          <span style={{ fontSize: 12, color: locked ? '#a0aec0' : '#64748b' }}>
+            {liveQuestionCounts[subj.id] !== undefined ? liveQuestionCounts[subj.id] : subj.questionCount} questions
+          </span>
           {locked ? (
             <button
               onClick={e => { e.stopPropagation(); onGetAccess && onGetAccess(subj) }}

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions } from './lib/db'
@@ -7,6 +7,7 @@ import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
+import { QUESTIONS_SUBJECT_BY_ID } from './lib/subjects'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -26,11 +27,6 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-
-const SUBJECT_DB_MAP = {
-  'chemistry_s1': 'Chemistry Stage 1',
-  'chemistry_s2': 'Chemistry Stage 2',
-}
 
 const NAV_ITEMS = [
   { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/question-bank' },
@@ -374,7 +370,7 @@ function AppInner() {
   // Reload questions if subject was persisted but questions are empty
   useEffect(() => {
     if (!selectedSubject || questions.length > 0) return
-    getQuestions(SUBJECT_DB_MAP[selectedSubject.id] || selectedSubject.name)
+    getQuestions(QUESTIONS_SUBJECT_BY_ID[selectedSubject.id] || selectedSubject.name)
       .then(qs => setQuestions(qs))
       .catch(() => {})
   }, [selectedSubject])
@@ -382,7 +378,7 @@ function AppInner() {
   const handleSelectSubject = async (subject) => {
     setSelectedSubject(subject)
     localStorage.setItem('gf-subject', JSON.stringify(subject))
-    const qs = await getQuestions(SUBJECT_DB_MAP[subject.id] || subject.name)
+    const qs = await getQuestions(QUESTIONS_SUBJECT_BY_ID[subject.id] || subject.name)
     setQuestions(qs)
     navigate('/home')
   }
