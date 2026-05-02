@@ -28,6 +28,16 @@ function hasChemFormula(str) {
 }
 
 /**
+ * Detect numbered-list patterns like "(1) ... (2) ..." and insert \n
+ * before each item so equations appear on their own lines.
+ */
+function insertLineBreaks(text) {
+  if (!text || text.includes('\n')) return text
+  if (!/\(1\)/.test(text) || !/\(2\)/.test(text)) return text
+  return text.replace(/\s*(\(\d+\))/g, '\n$1')
+}
+
+/**
  * Pre-process plain text to insert $\ce{...}$ delimiters so that the
  * main KaTeX renderer can pick them up.
  *
@@ -73,9 +83,11 @@ function preprocess(text) {
 export default function MathText({ text = '', style = {} }) {
   if (!text || typeof text !== 'string') return null
 
-  const processed = preprocess(text)
+  const withBreaks = insertLineBreaks(text)
+  const processed = preprocess(withBreaks)
+  const outerStyle = { whiteSpace: 'pre-line', ...style }
 
-  if (!processed.includes('$')) return <span style={style}>{processed}</span>
+  if (!processed.includes('$')) return <span style={outerStyle}>{processed}</span>
 
   const parts = []
   const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
@@ -99,7 +111,7 @@ export default function MathText({ text = '', style = {} }) {
   }
 
   return (
-    <span style={style}>
+    <span style={outerStyle}>
       {parts.map((part, i) => {
         if (part.type === 'text') return <span key={i}>{part.content}</span>
         try {
