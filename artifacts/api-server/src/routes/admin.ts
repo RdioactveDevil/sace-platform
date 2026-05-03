@@ -183,11 +183,27 @@ router.get("/admin/students", async (req, res) => {
     if (!ctx) return;
     const { admin } = ctx;
 
-    const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    if (listError) return res.status(500).json({ error: listError.message });
+    // Paginate through all auth users so the list stays complete past 1000 accounts
+    const allAuthUsers: { id: string; email: string; created_at: string }[] = [];
+    let page = 1;
+    const pageSize = 200;
+    while (true) {
+      const { data: pageData, error: pageError } = await admin.auth.admin.listUsers({
+        page,
+        perPage: pageSize,
+      });
+      if (pageError) return res.status(500).json({ error: pageError.message });
+      for (const u of pageData.users) {
+        allAuthUsers.push({ id: u.id, email: u.email || "", created_at: u.created_at });
+      }
+      if (pageData.users.length < pageSize) break;
+      page++;
+    }
 
-    const allIds = listData.users.map((u) => u.id);
-    if (allIds.length === 0) return res.json({ students: [] });
+    if (allAuthUsers.length === 0) return res.json({ students: [], warnings: [] });
+
+    const allIds = allAuthUsers.map((u) => u.id);
+    const warnings: string[] = [];
 
     const [profilesRes, subsRes, tutorRes] = await Promise.all([
       admin
@@ -205,6 +221,8 @@ router.get("/admin/students", async (req, res) => {
     ]);
 
     if (profilesRes.error) return res.status(500).json({ error: profilesRes.error.message });
+    if (subsRes.error)     warnings.push(`subscriptions unavailable: ${subsRes.error.message}`);
+    if (tutorRes.error)    warnings.push(`tutor assignments unavailable: ${tutorRes.error.message}`);
 
     const profiles = (profilesRes.data || []) as StudentProfileRow[];
 
@@ -213,13 +231,17 @@ router.get("/admin/students", async (req, res) => {
     const uniqueTutorIds = [...new Set(tutorRows.map((r) => r.tutor_id))];
     const tutorNames: Record<string, string> = {};
     if (uniqueTutorIds.length > 0) {
-      const { data: tutorProfiles } = await admin
+      const { data: tutorProfiles, error: tnError } = await admin
         .from("profiles")
         .select("id, display_name")
         .in("id", uniqueTutorIds);
-      (tutorProfiles as TutorNameRow[] | null || []).forEach((p) => {
-        tutorNames[p.id] = p.display_name || "Unknown";
-      });
+      if (tnError) {
+        warnings.push(`tutor names unavailable: ${tnError.message}`);
+      } else {
+        (tutorProfiles as TutorNameRow[]).forEach((p) => {
+          tutorNames[p.id] = p.display_name || "Unknown";
+        });
+      }
     }
 
     // Group subscriptions by user_id
@@ -237,13 +259,13 @@ router.get("/admin/students", async (req, res) => {
 
     const profById = new Map<string, StudentProfileRow>(profiles.map((p) => [p.id, p]));
 
-    const students = listData.users
+    const students = allAuthUsers
       .map((u) => {
         const p = profById.get(u.id);
         const tut = tutorByStudent[u.id] || null;
         return {
           id: u.id,
-          email: u.email || "",
+          email: u.email,
           display_name: p?.display_name ?? null,
           school: p?.school ?? null,
           xp: p?.xp ?? 0,
@@ -264,7 +286,7 @@ router.get("/admin/students", async (req, res) => {
       .filter((u) => !u.is_admin && !u.is_tutor)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    return res.json({ students });
+    return res.json({ students, warnings });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -288,6 +310,13 @@ router.get("/admin/students/:id/stats", async (req, res) => {
       admin.from("struggle_profiles").select("question_id, attempts, wrong").eq("user_id", id),
       admin.from("questions").select("id, topic, subject"),
     ]);
+
+    const statsWarnings: string[] = [];
+    if (totalRes.error)     statsWarnings.push(`answer_log total unavailable: ${totalRes.error.message}`);
+    if (correctRes.error)   statsWarnings.push(`answer_log correct unavailable: ${correctRes.error.message}`);
+    if (sessionsRes.error)  statsWarnings.push(`sessions unavailable: ${sessionsRes.error.message}`);
+    if (strugglesRes.error) statsWarnings.push(`struggle_profiles unavailable: ${strugglesRes.error.message}`);
+    if (questionsRes.error) statsWarnings.push(`questions unavailable: ${questionsRes.error.message}`);
 
     const totalAnswers = totalRes.count ?? 0;
     const correctAnswers = correctRes.count ?? 0;
@@ -324,6 +353,7 @@ router.get("/admin/students/:id/stats", async (req, res) => {
       accuracy: totalAnswers > 0 ? Math.round((correctAnswers / totalAnswers) * 100) : 0,
       sessionsWeek,
       weakTopics,
+      warnings: statsWarnings,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

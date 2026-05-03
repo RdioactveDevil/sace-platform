@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   adminListStudents,
   adminGetStudentStats,
@@ -53,8 +53,6 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [busyId, setBusyId]                 = useState(null)
   const [roleError, setRoleError]           = useState('')
 
-  const loadRef = useRef(false)
-
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
@@ -63,6 +61,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
       const list = json.students || []
       setStudents(list)
       onCountLoad?.(list.length)
+      if (json.warnings?.length) {
+        console.warn('[AdminStudentsTab] API warnings:', json.warnings)
+      }
     } catch (e) {
       if (!silent) setError(e.message)
     }
@@ -110,9 +111,13 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setRoleError('')
     try {
       await fn()
-      await load()
-      // Refresh selected if it matches
-      setSelected(prev => prev?.id === id ? null : prev)
+      // Reload full list and update the detail panel in-place (or close if promoted out of students)
+      const json = await adminListStudents()
+      const list = json.students || []
+      setStudents(list)
+      onCountLoad?.(list.length)
+      const updated = list.find(s => s.id === id)
+      setSelected(updated ?? null)
     } catch (e) {
       setRoleError(e.message)
     }
