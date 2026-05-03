@@ -373,6 +373,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .lp-stats-grid { grid-template-columns:1fr !important; gap:8px !important; }
           .lp-stats-grid > div > div { border-radius:14px !important; padding:24px 16px !important; }
           .lp-stats-num { font-size:44px !important; }
+          /* SACE/Curriculum bento banner: tighten padding, drop forced min-width, shrink stat numbers so 3-up row fits */
+          .lp-sace-banner { padding:22px 18px !important; gap:20px !important; }
+          .lp-sace-text { min-width:0 !important; flex-basis:100% !important; }
+          .lp-sace-stats { width:100% !important; gap:10px !important; flex-shrink:1 !important; justify-content:space-between !important; }
+          .lp-sace-num { font-size:22px !important; letter-spacing:0.5px !important; }
         }
         @media(max-width:380px) {
           .subjects-grid { grid-template-columns:1fr !important; }
@@ -598,7 +603,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
 
             {/* CARD 6 — SACE Content (full width banner) */}
             <FadeUp delay={350} className="bento-span" style={{ gridColumn:'span 3' }}>
-              <div className="bc" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
+              <div className="bc lp-sace-banner" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
                 <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
                 <div style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
                   <div style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)' }}>⭐</div>
@@ -607,13 +612,13 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Backed by Titanium Tutoring</div>
                   </div>
                 </div>
-                <div style={{ flex:1, minWidth:240 }}>
+                <div className="lp-sace-text" style={{ flex:1, minWidth:240 }}>
                   <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Questions written and peer-reviewed by real SACE tutors with proven results. Every question is curriculum-mapped to Stage 1 & Stage 2 Chemistry — nothing off-syllabus, nothing wasted.</p>
                 </div>
-                <div className="lp-stats" style={{ display:'flex', gap:20, flexShrink:0, flexWrap:'wrap' }}>
+                <div className="lp-stats lp-sace-stats" style={{ display:'flex', gap:20, flexShrink:0, flexWrap:'wrap' }}>
                   {[['175+','SACE questions'],['100%','Curriculum-aligned'],['2','Stages covered']].map(([n,l]) => (
                     <div key={l} style={{ textAlign:'center' }}>
-                      <div style={{ fontFamily:FONT_D, fontSize:28, color:GOLD, letterSpacing:1 }}>{n}</div>
+                      <div className="lp-sace-num" style={{ fontFamily:FONT_D, fontSize:28, color:GOLD, letterSpacing:1 }}>{n}</div>
                       <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>{l}</div>
                     </div>
                   ))}
