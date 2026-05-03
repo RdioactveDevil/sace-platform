@@ -378,6 +378,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .lp-sace-text { min-width:0 !important; flex-basis:100% !important; }
           .lp-sace-stats { width:100% !important; gap:10px !important; flex-shrink:1 !important; justify-content:space-between !important; }
           .lp-sace-num { font-size:22px !important; letter-spacing:0.5px !important; }
+          /* let icon+heading row fill the banner width and wrap if needed instead of overflowing */
+          .lp-sace-head { width:100% !important; min-width:0 !important; flex:1 1 100% !important; gap:12px !important; }
+          .lp-sace-icon { width:44px !important; height:44px !important; font-size:22px !important; }
+          .lp-sace-title { flex:1 1 auto !important; }
+          .lp-sace-title > div:last-child { font-size:16px !important; line-height:1.3 !important; overflow-wrap:anywhere; }
         }
         @media(max-width:380px) {
           .subjects-grid { grid-template-columns:1fr !important; }
@@ -605,9 +610,9 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <FadeUp delay={350} className="bento-span" style={{ gridColumn:'span 3' }}>
               <div className="bc lp-sace-banner" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
                 <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
-                <div style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
-                  <div style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)' }}>⭐</div>
-                  <div>
+                <div className="lp-sace-head" style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
+                  <div className="lp-sace-icon" style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)', flexShrink:0 }}>⭐</div>
+                  <div className="lp-sace-title" style={{ minWidth:0 }}>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:4 }}>Curriculum</div>
                     <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Backed by Titanium Tutoring</div>
                   </div>
