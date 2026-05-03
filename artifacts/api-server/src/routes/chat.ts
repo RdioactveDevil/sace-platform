@@ -91,12 +91,14 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
 function logOffTopicAttempt(verifiedUserId: string, subject: string, topic: string): void {
   const db = getServiceClient();
   if (!db) return;
-  db.from("off_topic_attempts")
-    .insert({ student_id: verifiedUserId, subject, topic })
-    .then(({ error }) => {
+  void (async () => {
+    try {
+      const { error } = await db.from("off_topic_attempts").insert({ student_id: verifiedUserId, subject, topic });
       if (error) logger.warn({ error }, "Failed to log off-topic attempt");
-    })
-    .catch((err) => logger.warn({ err }, "Failed to log off-topic attempt"));
+    } catch (err: unknown) {
+      logger.warn({ err }, "Failed to log off-topic attempt");
+    }
+  })();
 }
 
 router.post("/chat", async (req, res) => {
