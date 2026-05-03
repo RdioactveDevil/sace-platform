@@ -15,12 +15,12 @@ export default function AdminScreen({ profile }) {
   const [studentCount, setStudentCount] = useState(null)
 
   const tabs = [
-    { label: 'Students',           badge: studentCount, path: 'students' },
-    { label: 'All Users',          path: 'users' },
-    { label: 'Tutor Applications', path: 'applications' },
-    { label: 'Upload PDF',         path: 'upload' },
-    { label: 'Generate',           path: 'generate' },
-    { label: 'Review Queue',       path: 'review' },
+    { label: 'Students',           badge: studentCount, path: '/admin/students' },
+    { label: 'All Users',          path: '/admin/users' },
+    { label: 'Tutor Applications', path: '/admin/applications' },
+    { label: 'Upload PDF',         path: '/admin/upload' },
+    { label: 'Generate',           path: '/admin/generate' },
+    { label: 'Review Queue',       path: '/admin/review' },
   ]
 
   return (
