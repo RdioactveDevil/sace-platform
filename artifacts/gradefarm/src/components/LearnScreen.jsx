@@ -18,13 +18,17 @@ function buildSystemPrompt(profile, topic, docContext, struggleTopics, interests
     music:  'Use music analogies — reactions = songs, molecules = instruments, energy = volume, equilibrium = harmony.',
   }
 
+  const teachingStyle = (interests && analogyGuide[interests])
+    ? analogyGuide[interests]
+    : 'Explain concepts in plain, direct language. Use clear real-world scenarios and concrete examples, but avoid analogies and thematic metaphors entirely.'
+
   return `You are Titan AI, a SACE tutor for ${profile.display_name}. You work for Titanium Tutoring (gradefarm.).
 
 STUDENT PROFILE:
 - Name: ${profile.display_name.split(' ')[0]}
 - Topic today: ${topic || 'General Chemistry'}
 - Known weaknesses: ${struggleList}
-- Analogy style: ${interests}
+- Analogy style: ${interests || 'none — teach in plain, direct language'}
 
 YOUR PERSONALITY:
 - Warm, encouraging, never condescending
@@ -36,7 +40,7 @@ YOUR PERSONALITY:
 YOUR TEACHING METHOD:
 - NEVER start with a formula. Always start with a story or scenario
 - Ask questions constantly — never lecture more than 2–3 sentences without checking in
-- ${analogyGuide[interests] || analogyGuide.sport}
+- ${teachingStyle}
 - Use "imagine..." and "picture this..." to set up scenarios
 - After explaining, always ask: "Does that click? Want me to try a different way?"
 - Keep responses short — 3–4 sentences max, then ask something
@@ -312,9 +316,10 @@ export default function LearnScreen({
   ))
 
   const STYLE_OPTS = [
-    { id: 'sport',  emoji: '🏈', label: 'Sport',  desc: 'AFL, cricket' },
-    { id: 'gaming', emoji: '🎮', label: 'Gaming', desc: 'RPGs, strategy' },
-    { id: 'music',  emoji: '🎵', label: 'Music',  desc: 'beats, harmony' },
+    { id: null,     emoji: '📖', label: 'No analogies', desc: 'plain & direct' },
+    { id: 'sport',  emoji: '🏈', label: 'Sport',        desc: 'AFL, cricket' },
+    { id: 'gaming', emoji: '🎮', label: 'Gaming',       desc: 'RPGs, strategy' },
+    { id: 'music',  emoji: '🎵', label: 'Music',        desc: 'beats, harmony' },
   ]
 
   if (!phase || phase === 'setup') return (
@@ -373,7 +378,7 @@ export default function LearnScreen({
               {STYLE_OPTS.map(opt => {
                 const active = interests === opt.id
                 return (
-                  <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ flex: '1 1 160px', minWidth: 160, padding: '12px 8px', borderRadius: 12, border: `2px solid ${active ? GOLD : t.border}`, background: active ? GOLD : t.bgCard, color: active ? '#0c1037' : t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', textAlign: 'center' }}>
+                  <button key={opt.id ?? 'none'} onClick={() => setInterests(opt.id)} style={{ flex: '1 1 160px', minWidth: 160, padding: '12px 8px', borderRadius: 12, border: `2px solid ${active ? GOLD : t.border}`, background: active ? GOLD : t.bgCard, color: active ? '#0c1037' : t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', textAlign: 'center' }}>
                     <div style={{ fontSize: 18, marginBottom: 4 }}>{opt.emoji}</div>
                     <div>{opt.label}</div>
                     <div style={{ fontSize: 10, marginTop: 2, fontWeight: 500, opacity: 0.75 }}>{opt.desc}</div>
@@ -464,7 +469,7 @@ export default function LearnScreen({
             {STYLE_OPTS.map(opt => {
               const active = interests === opt.id
               return (
-                <button key={opt.id} onClick={() => setInterests(opt.id)} style={{ padding: '5px 10px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? GOLD : 'transparent', color: active ? '#0c1037' : t.textMuted, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
+                <button key={opt.id ?? 'none'} onClick={() => setInterests(opt.id)} style={{ padding: '5px 10px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? GOLD : 'transparent', color: active ? '#0c1037' : t.textMuted, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>
                   {opt.emoji} {opt.label}
                 </button>
               )

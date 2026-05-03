@@ -286,7 +286,7 @@ function AppInner() {
   const [learnPhase,      setLearnPhase]      = useState('setup')
   const [learnTopic,      setLearnTopic]      = useState('')
   const [learnMessages,   setLearnMessages]   = useState([])
-  const [learnInterests,  setLearnInterests]  = useState('sport')
+  const [learnInterests,  setLearnInterests]  = useState(null)
   const [learnDocContext, setLearnDocContext]  = useState('')
   const [learnDocName,    setLearnDocName]    = useState('')
 
