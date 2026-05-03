@@ -178,6 +178,11 @@ router.post("/chat", async (req, res) => {
         )
       : [];
 
+    if (Array.isArray(messages) && messages.length > 0 && typedMessages.length !== messages.length) {
+      res.status(400).json({ error: "Invalid message payload (bad role, content, or image limits exceeded)" });
+      return;
+    }
+
     if (typeof subject === "string" && subject.trim().length > 0 && typeof topic === "string" && topic.trim().length > 0 && typedMessages.length > 0) {
       const lastUserMsg = [...typedMessages].reverse().find((m) => m.role === "user");
       const lastUserText = lastUserMsg ? extractTextFromContent(lastUserMsg.content) : "";
@@ -215,7 +220,7 @@ router.post("/chat", async (req, res) => {
         model: "claude-haiku-4-5-20251001",
         max_tokens: max_tokens || 1000,
         system,
-        messages,
+        messages: typedMessages,
       }),
     });
 

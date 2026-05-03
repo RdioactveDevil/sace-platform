@@ -886,6 +886,13 @@ export default function LearnScreen({
           )}
 
           <div style={{ borderTop: `1px solid ${t.border}`, background: t.bgSubtle, padding: '14px 22px 18px', flexShrink: 0 }}>
+            {processingImages && attachedImages.length === 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12, color: t.textMuted }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: GOLD, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                Processing photo…
+              </div>
+            )}
+
             {attachedImages.length > 0 && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 {attachedImages.map((img, i) => (
@@ -929,14 +936,14 @@ export default function LearnScreen({
                 type="button"
                 onClick={() => photoRef.current?.click()}
                 disabled={attachedImages.length >= MAX_IMAGES_PER_MESSAGE || processingImages}
-                aria-label="Attach photo"
-                title="Attach photo"
+                aria-label="Add photo"
+                title="Add photo"
                 className="ls-composer-btn"
                 style={{
-                  width: 42, height: 42, borderRadius: 11,
+                  height: 42, padding: '0 12px', borderRadius: 11, gap: 6,
                   border: `1px solid ${t.borderMid}`,
                   background: t.bgCard,
-                  color: t.textMuted,
+                  color: t.textSub,
                   cursor: attachedImages.length >= MAX_IMAGES_PER_MESSAGE || processingImages ? 'default' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
@@ -944,9 +951,10 @@ export default function LearnScreen({
                   opacity: attachedImages.length >= MAX_IMAGES_PER_MESSAGE ? 0.5 : 1,
                 }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>Add photo</span>
               </button>
               <input
                 ref={photoRef}
