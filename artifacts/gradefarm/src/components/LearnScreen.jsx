@@ -57,6 +57,7 @@ export default function LearnScreen({
   interests,   setInterests,
   docContext,  setDocContext,
   docName,     setDocName,
+  questionContext, setQuestionContext, onConsolidate,
 }) {
   const t = THEMES[theme]
 
@@ -64,6 +65,8 @@ export default function LearnScreen({
   const [loading, setLoading]           = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [sessionId, setSessionId]       = useState(null)
+  const [fromContext, setFromContext]   = useState(false)
+  const [contextSubtopic, setContextSubtopic] = useState(null)
 
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
@@ -108,6 +111,67 @@ export default function LearnScreen({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Auto-start Titan AI from a question context sent from QuizScreen
+  useEffect(() => {
+    if (!questionContext) return
+    const ctx = questionContext
+    // Consume immediately so navigation back doesn't re-trigger
+    if (setQuestionContext) setQuestionContext(null)
+
+    const contextTopic = ctx.subtopic || ctx.topic
+    setTopic(contextTopic)
+    setFromContext(true)
+    setContextSubtopic(ctx.subtopic || ctx.topic)
+    setPhase('chat')
+    setMessages([])
+    setLoading(true)
+
+    const systemPrompt = buildSystemPrompt(profile, contextTopic, docContext || '', [], interests)
+    const openingPrompt = [
+      `A student just encountered this question in a quiz:`,
+      `"${ctx.question}"`,
+      `The correct answer is: "${ctx.correctAnswer}".`,
+      `They want to understand the underlying concept of ${contextTopic} more deeply.`,
+      `Greet them warmly (by first name), acknowledge the specific question they just saw,`,
+      `and start explaining the concept from the ground up in an engaging way.`,
+      `Keep it brief — 3 to 4 sentences max — then ask them a question to check their starting knowledge.`,
+    ].join(' ')
+
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 800,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: openingPrompt }],
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        const firstMsg = {
+          role: 'assistant',
+          content: data.content?.[0]?.text || `Hey! Let me explain the concept behind that question on ${contextTopic}.`,
+        }
+        setMessages([firstMsg])
+        supabase
+          .from('learn_sessions')
+          .insert({ user_id: profile.id, topic: contextTopic, interests, messages: [firstMsg] })
+          .select('id')
+          .single()
+          .then(({ data: sess }) => { if (sess?.id) setSessionId(sess.id) })
+          .catch(() => {})
+      })
+      .catch(() => {
+        setMessages([{ role: 'assistant', content: `Hey! Let me break down the concept from that question. What do you know about ${contextTopic}?` }])
+      })
+      .finally(() => {
+        setLoading(false)
+        setTimeout(() => inputRef.current?.focus(), 100)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionContext])
+
   const handleDocUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -146,6 +210,9 @@ export default function LearnScreen({
 
   const startLesson = async () => {
     if (!topic.trim()) return
+    // Reset bridge-context flags when the student manually starts a new lesson
+    setFromContext(false)
+    setContextSubtopic(null)
     setPhase('chat')
     setLoading(true)
     const systemPrompt = buildSystemPrompt(profile, topic, docContext, struggleTopics, interests)
@@ -453,6 +520,40 @@ export default function LearnScreen({
             </div>
           )}
 
+          {fromContext && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
+            <div style={{
+              padding: '10px 16px 10px 24px',
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.06))',
+              borderTop: '1px solid rgba(99,102,241,0.25)',
+              flexShrink: 0,
+            }}>
+              <button
+                onClick={() => {
+                  onConsolidate(contextSubtopic)
+                }}
+                style={{
+                  width: '100%',
+                  padding: '11px 16px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  background: 'rgba(99,102,241,0.15)',
+                  color: '#c7d2fe',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontFamily: FONT_B,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+              >
+                <span>⚡</span>
+                <span>Consolidate — Practice this topic</span>
+                <span style={{ opacity: 0.6, fontSize: 11, fontWeight: 500 }}>({contextSubtopic})</span>
+              </button>
+            </div>
+          )}
           <div style={{ padding: '10px 16px 10px 24px', borderTop: `1px solid rgba(255,255,255,0.07)`, background: '#080d28', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
             <textarea
               ref={inputRef}

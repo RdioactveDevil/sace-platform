@@ -202,12 +202,13 @@ function AppShellScreens({
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
+  questionContext, setQuestionContext, onConsolidate,
 }) {
   const navigate   = useNavigate()
   const location   = useLocation()
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
-  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName }
+  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate }
   const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -288,6 +289,10 @@ function AppInner() {
   const [learnInterests,  setLearnInterests]  = useState('sport')
   const [learnDocContext, setLearnDocContext]  = useState('')
   const [learnDocName,    setLearnDocName]    = useState('')
+
+  // Titan AI bridge state
+  const [questionContext,     setQuestionContext]     = useState(null)  // set from QuizScreen, consumed by LearnScreen
+  const [consolidateSubtopic, setConsolidateSubtopic] = useState(null)  // set from LearnScreen, consumed by QuizScreen
 
   // Lifted Quiz state — persists across tab switches
   const [quizQ,           setQuizQ]           = useState(null)
@@ -391,6 +396,8 @@ function AppInner() {
     setLearnPhase('setup')
     setLearnMessages([])
     setLearnTopic('')
+    setQuestionContext(null)
+    setConsolidateSubtopic(null)
     setQuizQ(null)
     setQuizResults([])
     setQuizAnswered([])
@@ -478,6 +485,37 @@ function AppInner() {
     interests: learnInterests, setInterests: setLearnInterests,
     docContext: learnDocContext, setDocContext: setLearnDocContext,
     docName: learnDocName,   setDocName: setLearnDocName,
+    questionContext, setQuestionContext,
+    onConsolidate: (subtopic) => {
+      setConsolidateSubtopic(subtopic)
+      // Reset quiz session so the filtered practice starts fresh in 'all' mode
+      setQuizQ(null)
+      setQuizSelected(null)
+      setQuizShowAns(false)
+      setQuizCorrect(null)
+      setQuizEarnedXP(0)
+      setQuizStreak(0)
+      setQuizSessionXP(0)
+      setQuizResults([])
+      setQuizAnswered([])
+      setQuizQNumber(1)
+      setQuizAiTip('')
+      setQuizLoadingTip(false)
+      setQuizMode('all')    // 'all' ensures subtopic questions are always available
+      setQuizSubtopics([])  // consolidation uses its own state, not quizSubtopics
+      setQuizRemediationMode(false)
+      setQuizRemediationStreak(0)
+      setQuizRemediationTarget(3)
+      setQuizRemediationQueue([])
+      setQuizRemediationStatus('idle')
+      setQuizRemediationSource('prebuilt')
+      setQuizRemediationConcept(null)
+      setQuizRemediationParentId(null)
+      setQuizRemediationOriginalQ(null)
+      setQuizRemediationUsedIds([])
+      setQuizRemediationWrongCount(0)
+      navigate('/quiz')
+    },
   }
 
   if (!bootstrapped && loading) return (
@@ -554,7 +592,16 @@ function AppInner() {
           : <QuizScreen {...commonProps} {...quizState}
               profile={profile} setProfile={setProfile}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
-              onHome={() => navigate('/question-bank')} />
+              onHome={() => navigate('/question-bank')}
+              onOpenLearn={(topic, ctx) => {
+                if (topic) setLearnTopic(topic)
+                if (ctx) setQuestionContext(ctx)
+                setLearnPhase('setup')
+                setLearnMessages([])
+                navigate('/learn')
+              }}
+              consolidateSubtopic={consolidateSubtopic}
+              onClearConsolidate={() => setConsolidateSubtopic(null)} />
       } />
 
       {/* Admin — is_admin only */}

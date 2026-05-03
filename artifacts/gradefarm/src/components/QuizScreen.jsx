@@ -423,6 +423,7 @@ function StatusToast({ status, onReturnToQuiz }) {
 
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
+  onOpenLearn, consolidateSubtopic, onClearConsolidate,
   currentQ: _currentQ, setCurrentQ,
   selected: _selected, setSelected,
   showAns: _showAns, setShowAns,
@@ -481,6 +482,7 @@ export default function QuizScreen({
   const loadingTip = _loadingTip ?? false
   const quizMode = _quizMode ?? 'new'
   const quizSubtopics = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
+  const effectiveSubtopics = consolidateSubtopic ? [consolidateSubtopic] : quizSubtopics
   const remediationMode = _remediationMode ?? false
   const remediationStreak = _remediationStreak ?? 0
   const remediationTarget = _remediationTarget ?? 3
@@ -574,8 +576,8 @@ export default function QuizScreen({
     }
     clearRemediation()
     setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
-  }, [clearRemediation, loadNext, profile.id, quizMode, quizSubtopics, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
+    setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
+  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
 
   const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = [], difficultyTarget = null) => {
     const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
@@ -712,9 +714,18 @@ export default function QuizScreen({
     }
     if (!_currentQ) {
       init()
-      loadNext([], struggleMap, quizMode, quizSubtopics)
+      loadNext([], struggleMap, quizMode, effectiveSubtopics)
     }
-  }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidateSubtopic])
+
+  // Clear consolidation filter when leaving the quiz screen
+  useEffect(() => {
+    return () => {
+      if (consolidateSubtopic) onClearConsolidate?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleAnswer = async (idx) => {
     if (showAns || !currentQ) return
@@ -926,7 +937,7 @@ export default function QuizScreen({
       if (!loaded) {
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(answered, prev, quizMode, quizSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(answered, prev, quizMode, effectiveSubtopics); return prev })
       }
       return
     }
@@ -935,7 +946,7 @@ export default function QuizScreen({
       if (remediationStatus === 'complete') {
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
         return
       }
 
@@ -962,7 +973,7 @@ export default function QuizScreen({
         }
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, quizSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
         return
       }
 
@@ -973,10 +984,10 @@ export default function QuizScreen({
     const newAnswered = [...sessionAnswered, currentQ.id]
     setSessionAnswered(newAnswered)
     setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, quizSubtopics); return prev })
+    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics); return prev })
   }
 
-  const counts = getQuestionCounts(questions, struggleMap, quizSubtopics)
+  const counts = getQuestionCounts(questions, struggleMap, effectiveSubtopics)
 
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode) => {
@@ -987,7 +998,7 @@ export default function QuizScreen({
       setSessionXP(0)
       clearRemediation()
       setFinished(false)
-      loadNext([], struggleMap, mode, quizSubtopics)
+      loadNext([], struggleMap, mode, effectiveSubtopics)
     }
 
     // ── Session summary calculations ────────────────────────────────────────
@@ -1303,6 +1314,31 @@ export default function QuizScreen({
         <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'auto' : 'hidden' }}>
           <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{ width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
+              {consolidateSubtopic && (
+                <div style={{
+                  marginBottom: 14,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  background: 'rgba(99,102,241,0.1)',
+                  border: '1px solid rgba(99,102,241,0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#a5b4fc' }}>
+                    📌 Consolidating: <span style={{ color: '#c7d2fe' }}>{consolidateSubtopic}</span>
+                  </span>
+                  <button
+                    onClick={onClearConsolidate}
+                    style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: 16, cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
+                    title="Return to full quiz"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <RemediationChip
                 remediationMode={remediationMode}
                 remediationStreak={remediationStreak}
@@ -1381,27 +1417,55 @@ export default function QuizScreen({
 
               {showAns && (
                 <div style={{ animation: 'popIn 0.2s ease' }}>
-                  <button
-                    onClick={nextQ}
-                    disabled={remediationStatus === 'generating'}
-                    style={{
-                      width: '100%',
-                      padding: '14px',
-                      borderRadius: 12,
-                      border: 'none',
-                      background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
-                      color: NAVY,
-                      fontSize: 15,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      fontFamily: FONT_B,
-                      boxShadow: `0 6px 20px rgba(241,190,67,0.3)`,
-                      opacity: remediationStatus === 'generating' ? 0.7 : 1,
-                      pointerEvents: remediationStatus === 'generating' ? 'none' : 'auto',
-                    }}
-                  >
-                    {nextButtonLabel}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 0 }}>
+                    <button
+                      onClick={nextQ}
+                      disabled={remediationStatus === 'generating'}
+                      style={{
+                        flex: 1,
+                        padding: '14px',
+                        borderRadius: 12,
+                        border: 'none',
+                        background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+                        color: NAVY,
+                        fontSize: 15,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        fontFamily: FONT_B,
+                        boxShadow: `0 6px 20px rgba(241,190,67,0.3)`,
+                        opacity: remediationStatus === 'generating' ? 0.7 : 1,
+                        pointerEvents: remediationStatus === 'generating' ? 'none' : 'auto',
+                      }}
+                    >
+                      {nextButtonLabel}
+                    </button>
+                    {onOpenLearn && (
+                      <button
+                        onClick={() => onOpenLearn(currentQ.topic, {
+                          question: currentQ.question,
+                          correctAnswer: currentQ.options?.[currentQ.answer_index] || '',
+                          subtopic: currentQ.subtopic,
+                          topic: currentQ.topic,
+                        })}
+                        title="Explain this concept with Titan AI"
+                        style={{
+                          flexShrink: 0,
+                          padding: '14px 16px',
+                          borderRadius: 12,
+                          border: `1px solid rgba(241,190,67,0.35)`,
+                          background: 'rgba(241,190,67,0.08)',
+                          color: GOLD,
+                          fontSize: 13,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          fontFamily: FONT_B,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        🎓 Take this to Titan AI
+                      </button>
+                    )}
+                  </div>
 
                   <StatusToast
                     status={['complete', 'struggling', 'needs_review', 'generating'].includes(remediationStatus) ? remediationStatus : null}

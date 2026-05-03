@@ -15,7 +15,9 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 ### Key Features
 - Supabase auth (login/signup)
 - Adaptive quiz system with streak tracking and XP
-- AI-powered tutor via Anthropic Claude (chat at `/api/chat`)
+- Remediation mode: auto-generates similar questions when a student gets one wrong
+- AI-powered tutor (Titan AI) via Anthropic Claude (chat at `/api/chat`)
+- **Titan AI bridge**: "🎓 Titan AI" button in quiz post-answer panel sends the question straight to Titan AI with a primed opening message; after the AI responds, a "Consolidate — Practice this topic" button appears to loop back to filtered quiz practice
 - Admin tools: AI question generation (`/api/generate-questions`), PDF extraction (`/api/extract-pdf`)
 - Leaderboard, progress tracking, study plans
 - Subject picker with subscription gating
