@@ -210,6 +210,94 @@ const Y7_MATHS_LEARNING_OBJECTIVES: Record<string, string> = {
   "P2":  "AC9M7P02: run repeated chance experiments (e.g. rolling a die, tossing a coin) and record relative frequencies; use digital simulations for large numbers of trials; observe that relative frequency approaches theoretical probability as trial number increases; explain variability in small samples",
 };
 
+// ─── Victorian Curriculum F–10 v2.0 — Year 10 Mathematics ────────────────────
+const VIC_Y10_MATHS_TOPICS: Record<string, string> = {
+  "N1":  "Percentages, errors and approximations with real numbers",
+  "N2":  "Simple and compound interest",
+  "A1":  "Expanding, factorising and simplifying algebraic expressions",
+  "A2":  "Solving linear equations and inequalities",
+  "A3":  "Solving quadratic equations",
+  "A4":  "Linear, quadratic and simple exponential functions and graphs",
+  "A5":  "Direct and inverse proportion",
+  "A6":  "Simultaneous linear equations",
+  "M1":  "Surface area and volume of pyramids, cones and spheres",
+  "M2":  "Similarity and scale factors",
+  "M3":  "Trigonometry \u2014 right-angled triangles (sin, cos, tan)",
+  "M4":  "Applications of Pythagoras\u2019 theorem and trigonometry",
+  "SP1": "Geometric reasoning and proofs with plane shapes",
+  "SP2": "Congruence and similarity of triangles",
+  "SP3": "Circle geometry \u2014 chord, tangent and angle properties",
+  "ST1": "Data distributions \u2014 displaying and comparing with statistical measures",
+  "ST2": "Bivariate numerical data \u2014 scatter plots and lines of best fit",
+  "ST3": "Evaluating statistical reports and media claims",
+  "P1":  "Conditional probability and independence",
+  "P2":  "Two-step and multi-step chance experiments \u2014 tables and tree diagrams",
+};
+
+// ─── Victorian Curriculum F–10 v2.0 — Year 10A Mathematics ───────────────────
+const VIC_Y10A_MATHS_TOPICS: Record<string, string> = {
+  "XN1":  "The real number system \u2014 surds and irrational numbers",
+  "XN2":  "Logarithms \u2014 definition, laws and applications",
+  "XA1":  "Binomial expansion and Pascal\u2019s triangle",
+  "XA2":  "Polynomial functions \u2014 graphs, roots and factorisation",
+  "XA3":  "Exponential and logarithmic functions and equations",
+  "XA4":  "Inverse functions and function notation",
+  "XA5":  "Arithmetic and geometric sequences and series",
+  "XM1":  "Trigonometry \u2014 non-right-angled triangles (sine and cosine rules)",
+  "XM2":  "Trigonometric ratios of obtuse angles and exact values",
+  "XM3":  "Arc length, sectors and segments of circles",
+  "XSP1": "Proof \u2014 congruent and similar triangles, angle and chord theorems",
+  "XSP2": "Vectors \u2014 representation, addition and scalar multiplication",
+  "XST1": "Statistical inference \u2014 sampling distributions and variability",
+  "XST2": "Correlation coefficient and lines of best fit \u2014 interpretation and use",
+  "XP1":  "Counting techniques \u2014 permutations and combinations",
+  "XP2":  "Probability distributions \u2014 discrete random variables",
+};
+
+// Victorian Curriculum v2.0 Year 10 Mathematics — learning objectives per topic
+const VIC_Y10_LEARNING_OBJECTIVES: Record<string, string> = {
+  "N1":  "VC2M10N01/N02: calculate with percentages including percentage increases, decreases and errors; recognise the effect of using approximations of real numbers in repeated calculations; compare results using exact vs approximate values; apply in financial and scientific contexts",
+  "N2":  "VC2M10N03: distinguish between simple interest (I = Prn) and compound interest (A = P(1+r)^n); calculate interest and final amounts for both; compare outcomes over time; solve practical problems involving loans, savings and investments",
+  "A1":  "VC2M10A01: apply index laws for integer exponents including products, quotients and powers of expressions; expand binomial products using FOIL and the distributive law; factorise expressions including common factors, difference of two squares, and trinomials; simplify algebraic fractions",
+  "A2":  "VC2M10A02: solve linear equations with one variable including those with fractions and brackets; solve and graph linear inequalities on a number line; apply to practical word problems; understand that multiplying/dividing by a negative reverses the inequality sign",
+  "A3":  "VC2M10A03: solve quadratic equations using factorisation, completing the square, and the quadratic formula; determine the number of solutions using the discriminant; connect solutions to x-intercepts of a parabola; apply to area and projectile problems",
+  "A4":  "VC2M10A04: recognise and sketch linear (y=mx+c), quadratic (y=ax²+bx+c), and simple exponential (y=a^x) functions; identify key features including intercepts, vertex, axis of symmetry, asymptotes; compare growth rates; use digital tools to explore effects of changing parameters",
+  "A5":  "VC2M10A05: identify direct proportion (y=kx) and inverse proportion (y=k/x); find the constant of proportionality from graphs or tables; solve problems involving proportional relationships in science, finance and everyday contexts",
+  "A6":  "VC2M10A06: solve pairs of simultaneous linear equations by substitution and elimination; interpret solutions graphically as the point of intersection; solve practical problems involving two unknown quantities; identify inconsistent and dependent systems",
+  "M1":  "VC2M10M01: calculate the surface area and volume of pyramids (V=⅓Ah), cones (V=⅓πr²h, SA=πrl+πr²), and spheres (V=⁴⁄₃πr³, SA=4πr²); solve composite solid problems; choose appropriate units and convert between them",
+  "M2":  "VC2M10M02: identify similar figures and use scale factors to find unknown lengths, areas and volumes; apply the enlargement transformation; use similarity in map reading, plans, and scale drawings; prove triangles similar using AA, SAS and SSS conditions",
+  "M3":  "VC2M10M03: define sine, cosine and tangent ratios for right-angled triangles; use SOH-CAH-TOA to find unknown sides and angles; apply inverse trigonometric functions; solve practical problems involving angles of elevation and depression",
+  "M4":  "VC2M10M04: apply Pythagoras' theorem in two and three dimensions; combine Pythagoras' theorem and trigonometric ratios to solve multi-step problems; determine bearings and distances; solve problems set in real contexts such as construction and navigation",
+  "SP1": "VC2M10SP01: identify and apply properties of parallel lines, triangles, quadrilaterals and other polygons; construct formal geometric arguments using known properties as reasons; understand what constitutes a valid geometric proof; present proofs in a logical sequence",
+  "SP2": "VC2M10SP02: apply congruence conditions (SSS, SAS, ASA, AAS, RHS) to prove triangles congruent; apply similarity conditions (AA, SAS, SSS) to prove triangles similar; use congruence and similarity to find unknown sides and angles and to prove properties of quadrilaterals",
+  "SP3": "VC2M10SP03: apply circle theorems including: angle at centre is double the angle at circumference; angles in the same segment are equal; angle in a semicircle is 90°; opposite angles of a cyclic quadrilateral are supplementary; tangent is perpendicular to the radius at the point of contact; use theorems to find unknown angles in circle diagrams",
+  "ST1": "VC2M10ST01: construct and interpret box plots, histograms and back-to-back displays for numerical data; calculate and compare mean, median, mode, range and interquartile range; describe the shape of distributions (symmetric, skewed); identify and explain the effect of outliers on summary statistics",
+  "ST2": "VC2M10ST02: construct scatter plots for bivariate numerical data; describe the association (form, direction, strength) between two variables; draw and use lines of best fit by eye and using digital tools; use the line to make predictions; distinguish between interpolation and extrapolation",
+  "ST3": "VC2M10ST03: identify potential sources of bias, misrepresentation and distortion in statistical reports, graphs and surveys; evaluate claims made in media using statistical evidence; distinguish between correlation and causation; assess the reliability and validity of data collection methods",
+  "P1":  "VC2M10P01: calculate conditional probabilities using two-way tables and tree diagrams; use the formula P(A|B) = P(A∩B)/P(B); determine whether two events are independent using P(A∩B) = P(A)×P(B); apply to real-world problems such as medical testing and quality control",
+  "P2":  "VC2M10P02: list sample spaces and calculate probabilities for two-step and multi-step chance experiments; use tables of outcomes and tree diagrams to represent combined events; apply the addition rule for mutually exclusive events; solve practical probability problems",
+};
+
+// Victorian Curriculum v2.0 Year 10A Mathematics — learning objectives per topic
+const VIC_Y10A_LEARNING_OBJECTIVES: Record<string, string> = {
+  "XN1":  "VC2M10AN01: define surds as irrational numbers that are square (or cube) roots of non-perfect-square integers; simplify surds by extracting perfect-square factors; perform operations with surds (add, subtract, multiply, divide, rationalise the denominator); distinguish rational from irrational numbers and locate both on the number line",
+  "XN2":  "VC2M10AN02: define logarithm as the inverse of exponentiation: log_a(x)=y ↔ a^y=x; apply log laws (product, quotient, power); change of base; solve exponential equations using logarithms; apply to half-life, compound interest and earthquake magnitude (Richter scale)",
+  "XA1":  "VC2M10AA01: apply the binomial theorem to expand (a+b)^n for small positive integer n; identify coefficients using Pascal's triangle or combinations ⁿCᵣ; find a specific term in a binomial expansion; recognise the connection between Pascal's triangle and combinatorics",
+  "XA2":  "VC2M10AA02: define polynomials and identify degree, leading coefficient and roots; divide polynomials using long division; apply the remainder and factor theorems; factorise higher-degree polynomials; sketch graphs identifying intercepts, end behaviour and turning points",
+  "XA3":  "VC2M10AA03: graph y=a^x and y=log_a(x) as inverse functions; solve exponential equations by writing both sides as powers of the same base or using logarithms; solve logarithmic equations by converting to exponential form; identify domain, range and asymptotes; apply to growth and decay models",
+  "XA4":  "VC2M10AA04: understand that inverse functions 'undo' each other; find the inverse of linear and simple non-linear functions algebraically and graphically; use correct function notation f(x), f⁻¹(x); understand the relationship between the graph of a function and its inverse (reflection in y=x); state domain and range restrictions for the inverse to exist",
+  "XA5":  "VC2M10AA05: recognise arithmetic sequences (common difference d) and geometric sequences (common ratio r); write the n-th term rule for each; find the sum of arithmetic series using Sn = n/2(2a+(n-1)d) and geometric series using Sn = a(r^n−1)/(r−1); apply to financial problems (annuities, loans) and scientific contexts",
+  "XM1":  "VC2M10AM01: apply the sine rule (a/sinA = b/sinB = c/sinC) to find unknown sides and angles in non-right-angled triangles; apply the cosine rule (c²=a²+b²−2ab·cosC) to find unknown sides and angles; determine which rule to use depending on given information; solve ambiguous case for the sine rule; apply to bearing and navigation problems",
+  "XM2":  "VC2M10AM02: extend trigonometric ratios to angles beyond 90°; identify signs of sin, cos and tan in each quadrant using the CAST diagram; recall exact values for 0°, 30°, 45°, 60°, 90°; apply supplementary angle identities sin(180°−θ)=sinθ; solve equations such as sinθ=k for θ in [0°,360°]",
+  "XM3":  "VC2M10AM03: calculate arc length using l=rθ (θ in radians) and convert between degrees and radians; find the area of a sector A=½r²θ; find the area of a segment (sector minus triangle); apply to problems involving wheels, clocks and circular motion",
+  "XSP1": "VC2M10ASP01: construct formal proofs using congruent and similar triangles to establish properties of geometric figures; prove angle, chord and tangent theorems in circles; present deductive proofs in clear logical steps with explicit reasons; understand the distinction between inductive (observational) and deductive (formal) reasoning",
+  "XSP2": "VC2M10ASP02: represent 2D vectors as directed line segments or column vectors; add and subtract vectors geometrically and algebraically; multiply a vector by a scalar; calculate the magnitude of a vector; apply vectors to describe translations, resultant forces and displacement; understand position vectors",
+  "XST1": "VC2M10AST01: understand the concept of a sampling distribution; recognise that different samples from the same population give different statistics; estimate population parameters from sample statistics; understand the effect of sample size on variability; interpret margin of error in survey results; compare sample proportions and means across repeated samples",
+  "XST2": "VC2M10AST02: calculate and interpret Pearson's correlation coefficient r (ranging from −1 to +1); understand that r measures the strength and direction of a linear association; distinguish between correlation and causation; find the equation of the least-squares regression line y=a+bx using digital tools; use the line to make predictions and interpret the gradient and intercept in context",
+  "XP1":  "VC2M10AP01: apply the multiplication principle for counting ordered arrangements; calculate permutations nPr = n!/(n−r)! for selecting and arranging r objects from n; calculate combinations nCr = n!/[r!(n−r)!] for selecting r objects from n where order does not matter; solve probability problems using counting techniques; apply to card games, committee selection and code-making",
+  "XP2":  "VC2M10AP02: define a discrete random variable X and its probability distribution P(X=x); verify that probabilities sum to 1; calculate E(X)=Σx·P(X=x) (expected value) and Var(X)=Σ(x−μ)²P(X=x); apply to decision-making and games of chance; compare theoretical expected values with experimental results from simulations",
+};
+
 // AC v9 Year 7 English — elaborations grounded in AC9E7LA, AC9E7LE, AC9E7LY descriptors
 const Y7_ENGLISH_LEARNING_OBJECTIVES: Record<string, string> = {
   // Language (AC9E7LA)
@@ -266,9 +354,25 @@ router.post("/generate-questions", async (req, res) => {
     return;
   }
 
-  const isY7Maths   = resolvedSubject === "Year 7 Mathematics";
-  const isY7English = resolvedSubject === "Year 7 English";
+  // Normalise picker IDs to canonical Supabase subject strings before use.
+  const normalizedSubject =
+    resolvedSubject === "maths_y10" ? "Year 10 Mathematics" :
+    resolvedSubject;
+
+  const isY7Maths = normalizedSubject === "Year 7 Mathematics";
+  const isY7English = normalizedSubject === "Year 7 English";
+  const isY10 = normalizedSubject === "Year 10 Mathematics";
   const isY7 = isY7Maths || isY7English;
+
+  // Combined Year 10 topic map (standard codes + X-prefix 10A extension codes)
+  const Y10_MATHS_TOPICS_COMBINED: Record<string, string> = {
+    ...VIC_Y10_MATHS_TOPICS,
+    ...VIC_Y10A_MATHS_TOPICS,
+  };
+  const Y10_LEARNING_OBJECTIVES_COMBINED: Record<string, string> = {
+    ...VIC_Y10_LEARNING_OBJECTIVES,
+    ...VIC_Y10A_LEARNING_OBJECTIVES,
+  };
 
   let topicMap: Record<string, string>;
   let learningObjectivesMap: Record<string, string>;
@@ -282,6 +386,13 @@ router.post("/generate-questions", async (req, res) => {
     topicMap = Y7_ENGLISH_TOPICS;
     learningObjectivesMap = Y7_ENGLISH_LEARNING_OBJECTIVES;
     curriculumLabel = "Australian Curriculum v9 Year 7 English";
+  } else if (isY10) {
+    topicMap = Y10_MATHS_TOPICS_COMBINED;
+    learningObjectivesMap = Y10_LEARNING_OBJECTIVES_COMBINED;
+    // X-prefix codes are Year 10A extension topics
+    curriculumLabel = topicCode.startsWith("X")
+      ? "Year 10 Mathematics (10A extension)"
+      : "Year 10 Mathematics";
   } else {
     const stageKey = resolvedSubject === "Chemistry Stage 1" ? "s1" : "s2";
     topicMap = stageKey === "s1" ? S1_TOPICS : S2_TOPICS;
@@ -305,7 +416,38 @@ router.post("/generate-questions", async (req, res) => {
   let system: string;
   let user: string;
 
-  if (isY7) {
+  if (isY10) {
+    const yearLabel = topicCode.startsWith("X") ? "Year 10A" : "Year 10";
+    system = [
+      `You are generating multiple-choice questions for ${curriculumLabel} students.`,
+      `CRITICAL CONSTRAINT: All questions must be strictly based on the ${yearLabel} Mathematics curriculum scope.`,
+      `Do NOT draw on knowledge that falls outside the ${yearLabel} Mathematics curriculum level.`,
+      `Every question must be directly answerable using only what a ${yearLabel} Mathematics student is expected to know.`,
+      "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
+      `Generate exactly ${count} questions.`,
+      "Each object must have these exact keys:",
+      "  question (string)",
+      "  options (array of exactly 4 strings)",
+      "  answer_index (integer 0\u20133)",
+      `  solution (string \u2014 explain why the answer is correct with clear mathematical reasoning, 2\u20134 sentences)`,
+      "  subtopic (short free-text label for the specific concept tested)",
+      "  difficulty (integer 1\u20135)",
+      "Questions must be accurate, unambiguous, and test conceptual understanding.",
+      "Use standard mathematical terminology. Avoid SACE, VCE, HSC, IB or curriculum-specific branding.",
+      "Do not repeat the same scenario across questions.",
+      difficultyInstruction,
+    ].join("\n");
+
+    user = [
+      `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
+      "",
+      `Learning requirements for this topic:`,
+      learningObjectives,
+      "",
+      "All questions must directly assess one or more of the specific concepts listed above.",
+      "Use the exact scope and terminology listed \u2014 nothing broader.",
+    ].join("\n");
+  } else if (isY7) {
     system = [
       `You are generating multiple-choice questions for Australian Curriculum v9 Year 7 students.`,
       `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
@@ -409,7 +551,7 @@ router.post("/generate-questions", async (req, res) => {
 
   const rows = questions.map((q) => ({
     source: "ai_generated",
-    subject: resolvedSubject,
+    subject: normalizedSubject,
     topic_code: topicCode,
     topic: topicName,
     subtopic: q.subtopic || null,

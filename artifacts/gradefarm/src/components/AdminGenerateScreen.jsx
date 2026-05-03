@@ -6,10 +6,11 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
 
 const SUBJECTS = [
-  { id: 'Chemistry Stage 1', label: 'Chemistry Stage 1' },
-  { id: 'Chemistry Stage 2', label: 'Chemistry Stage 2' },
+  { id: 'Chemistry Stage 1',  label: 'Chemistry Stage 1' },
+  { id: 'Chemistry Stage 2',  label: 'Chemistry Stage 2' },
   { id: 'Year 7 Mathematics', label: 'Year 7 Mathematics' },
   { id: 'Year 7 English',     label: 'Year 7 English' },
+  { id: 'Year 10 Mathematics', label: 'Year 10 Mathematics' },
 ]
 
 const COUNTS = [5, 10, 20]
@@ -22,7 +23,12 @@ const DIFFICULTIES = [
   { value: '5', label: '5 — Hard' },
 ]
 
-const Y7_SUBJECT_IDS = new Set(['Year 7 Mathematics', 'Year 7 English'])
+// Subjects that send { subject } in the payload (not { stage: subject } used for SACE).
+const NON_SACE_SUBJECT_IDS = new Set([
+  'Year 7 Mathematics',
+  'Year 7 English',
+  'Year 10 Mathematics',
+])
 
 export default function AdminGenerateScreen() {
   const [subject,    setSubject]    = useState('Chemistry Stage 1')
@@ -61,8 +67,7 @@ export default function AdminGenerateScreen() {
     setError(null)
 
     try {
-      const isY7 = Y7_SUBJECT_IDS.has(subject)
-      const payload = isY7
+      const payload = NON_SACE_SUBJECT_IDS.has(subject)
         ? { subject, topicCode, count, difficulty }
         : { stage: subject, topicCode, count, difficulty }
 

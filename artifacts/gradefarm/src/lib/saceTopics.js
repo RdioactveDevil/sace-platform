@@ -1,3 +1,8 @@
+import {
+  MACRO_GROUPS_Y10,
+  normalizeY10Topic,
+} from './vicMathsTopics'
+
 // ─── Stage 1 ──────────────────────────────────────────────────────────────────
 
 // Official SACE Stage 1 Chemistry topics — in curriculum order
@@ -266,6 +271,9 @@ export const MACRO_GROUPS_STAGE2 = [
 export function getTopicConfig(stage) {
   if (stage === 'Stage 2') {
     return { macroGroups: MACRO_GROUPS_STAGE2, normFn: normalizeTopicStage2 }
+  }
+  if (stage === 'Year 10') {
+    return { macroGroups: MACRO_GROUPS_Y10, normFn: normalizeY10Topic }
   }
   return { macroGroups: MACRO_GROUPS_STAGE1, normFn: normalizeTopic }
 }

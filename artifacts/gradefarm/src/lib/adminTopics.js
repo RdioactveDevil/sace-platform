@@ -124,6 +124,60 @@ export const Y7_ENGLISH_TOPICS = [
   { code: 'LC8', name: 'understand how to use spelling rules and word origins; for example, Greek and Latin roots, base words, suffixes, prefixes and spelling patterns to learn new words and how to spell them' },
 ]
 
+// ─── Year 10 Mathematics (combined standard + 10A extension) ─────────────────
+// Codes N/A/M/SP/ST/P = standard Year 10; X-prefix = Year 10A extension topics.
+
+export const Y10_MATHS_TOPICS = [
+  // Number
+  { code: 'N1',   name: 'Percentages, errors and approximations with real numbers' },
+  { code: 'N2',   name: 'Simple and compound interest' },
+  // Algebra
+  { code: 'A1',   name: 'Expanding, factorising and simplifying algebraic expressions' },
+  { code: 'A2',   name: 'Solving linear equations and inequalities' },
+  { code: 'A3',   name: 'Solving quadratic equations' },
+  { code: 'A4',   name: 'Linear, quadratic and simple exponential functions and graphs' },
+  { code: 'A5',   name: 'Direct and inverse proportion' },
+  { code: 'A6',   name: 'Simultaneous linear equations' },
+  // Measurement
+  { code: 'M1',   name: 'Surface area and volume of pyramids, cones and spheres' },
+  { code: 'M2',   name: 'Similarity and scale factors' },
+  { code: 'M3',   name: 'Trigonometry \u2014 right-angled triangles (sin, cos, tan)' },
+  { code: 'M4',   name: 'Applications of Pythagoras\u2019 theorem and trigonometry' },
+  // Geometry
+  { code: 'SP1',  name: 'Geometric reasoning and proofs with plane shapes' },
+  { code: 'SP2',  name: 'Congruence and similarity of triangles' },
+  { code: 'SP3',  name: 'Circle geometry \u2014 chord, tangent and angle properties' },
+  // Statistics
+  { code: 'ST1',  name: 'Data distributions \u2014 displaying and comparing with statistical measures' },
+  { code: 'ST2',  name: 'Bivariate numerical data \u2014 scatter plots and lines of best fit' },
+  { code: 'ST3',  name: 'Evaluating statistical reports and media claims' },
+  // Probability
+  { code: 'P1',   name: 'Conditional probability and independence' },
+  { code: 'P2',   name: 'Two-step and multi-step chance experiments \u2014 tables and tree diagrams' },
+  // Year 10A extension — Number
+  { code: 'XN1',  name: 'The real number system \u2014 surds and irrational numbers' },
+  { code: 'XN2',  name: 'Logarithms \u2014 definition, laws and applications' },
+  // Year 10A extension — Algebra
+  { code: 'XA1',  name: 'Binomial expansion and Pascal\u2019s triangle' },
+  { code: 'XA2',  name: 'Polynomial functions \u2014 graphs, roots and factorisation' },
+  { code: 'XA3',  name: 'Exponential and logarithmic functions and equations' },
+  { code: 'XA4',  name: 'Inverse functions and function notation' },
+  { code: 'XA5',  name: 'Arithmetic and geometric sequences and series' },
+  // Year 10A extension — Measurement
+  { code: 'XM1',  name: 'Trigonometry \u2014 non-right-angled triangles (sine and cosine rules)' },
+  { code: 'XM2',  name: 'Trigonometric ratios of obtuse angles and exact values' },
+  { code: 'XM3',  name: 'Arc length, sectors and segments of circles' },
+  // Year 10A extension — Geometry
+  { code: 'XSP1', name: 'Proof \u2014 congruent and similar triangles, angle and chord theorems' },
+  { code: 'XSP2', name: 'Vectors \u2014 representation, addition and scalar multiplication' },
+  // Year 10A extension — Statistics
+  { code: 'XST1', name: 'Statistical inference \u2014 sampling distributions and variability' },
+  { code: 'XST2', name: 'Correlation coefficient and lines of best fit \u2014 interpretation and use' },
+  // Year 10A extension — Probability
+  { code: 'XP1',  name: 'Counting techniques \u2014 permutations and combinations' },
+  { code: 'XP2',  name: 'Probability distributions \u2014 discrete random variables' },
+]
+
 /**
  * Returns the topic list for a given subject ID.
  * @param {string} subjectId  e.g. 'chemistry_s1', 'maths_y7', 'english_y7'
@@ -139,6 +193,8 @@ export function getTopicsBySubject(subjectId) {
     case 'Year 7 Mathematics': return Y7_MATHS_TOPICS
     case 'english_y7':
     case 'Year 7 English': return Y7_ENGLISH_TOPICS
+    case 'maths_y10':
+    case 'Year 10 Mathematics': return Y10_MATHS_TOPICS
     default: return S1_TOPICS
   }
 }

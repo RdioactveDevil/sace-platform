@@ -8,6 +8,7 @@ export const QUESTIONS_SUBJECT_BY_ID = {
   chemistry_s2: 'Chemistry Stage 2',
   maths_y7: 'Year 7 Mathematics',
   english_y7: 'Year 7 English',
+  maths_y10: 'Year 10 Mathematics',
 }
 
 export const ALL_SUBJECTS = [
@@ -115,6 +116,17 @@ export const ALL_SUBJECTS = [
     icon: '📝',
     color: '#ec4899',
     topics: ['Language', 'Literature', 'Literacy'],
+    questionCount: 0,
+    available: false,
+    comingSoon: true,
+  },
+  {
+    id: 'maths_y10',
+    name: 'Mathematics',
+    stage: 'Year 10',
+    icon: '📐',
+    color: '#8b5cf6',
+    topics: ['Number', 'Algebra', 'Functions & Graphs', 'Measurement', 'Geometry', 'Statistics', 'Probability'],
     questionCount: 0,
     available: false,
     comingSoon: true,
