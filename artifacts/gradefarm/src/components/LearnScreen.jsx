@@ -1005,16 +1005,21 @@ export default function LearnScreen({
           <div>
             <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>Quick replies</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {["I don't get it", 'Give me an example', 'I think I get it!', 'Different analogy'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => sendPresetMessage(s)}
-                  className="ls-quickreply"
-                  style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%' }}
-                >
-                  {s}
-                </button>
-              ))}
+              {["I don't get it", 'Give me an example', 'I think I get it!', 'Different analogy'].map(s => {
+                const blocked = attachedImages.length > 0
+                return (
+                  <button
+                    key={s}
+                    onClick={() => sendPresetMessage(s)}
+                    disabled={blocked}
+                    title={blocked ? 'Send your photo first, or remove it to use a quick reply' : undefined}
+                    className="ls-quickreply"
+                    style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12.5, cursor: blocked ? 'not-allowed' : 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%', opacity: blocked ? 0.45 : 1 }}
+                  >
+                    {s}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
