@@ -90,6 +90,34 @@ export async function adminGetStudentStats(studentId) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/stats`)
 }
 
+export async function adminGetStudentAssignments(studentId) {
+  const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/assignments`)
+  return json.assignments || []
+}
+
+export async function adminListTutors() {
+  const json = await adminFetch('/api/admin/tutors')
+  return json.tutors || []
+}
+
+export async function adminGetTutor(tutorId) {
+  return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}`)
+}
+
+export async function adminListAssignmentSubjects() {
+  const json = await adminFetch('/api/admin/assignment-subjects')
+  return json.subjects || []
+}
+
+export async function adminListAssignments(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
+  }
+  const qs = params.toString()
+  return adminFetch(`/api/admin/assignments${qs ? `?${qs}` : ''}`)
+}
+
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error

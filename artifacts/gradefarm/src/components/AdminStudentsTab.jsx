@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   adminListStudents,
   adminGetStudentStats,
+  adminGetStudentAssignments,
   adminSetTutor,
   adminSetAdmin,
   adminApproveTutor,
@@ -52,6 +53,8 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [statsLoading, setStatsLoading]     = useState(false)
   const [busyId, setBusyId]                 = useState(null)
   const [roleError, setRoleError]           = useState('')
+  const [detailAssignments, setDetailAssignments] = useState(null)
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -97,14 +100,19 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const openDetail = (student) => {
     setSelected(student)
     setDetailStats(null)
+    setDetailAssignments(null)
     setRoleError('')
     setStatsLoading(true)
+    setAssignmentsLoading(true)
     adminGetStudentStats(student.id)
       .then(s => { setDetailStats(s); setStatsLoading(false) })
       .catch(() => setStatsLoading(false))
+    adminGetStudentAssignments(student.id)
+      .then(a => { setDetailAssignments(a); setAssignmentsLoading(false) })
+      .catch(() => { setDetailAssignments([]); setAssignmentsLoading(false) })
   }
 
-  const closeDetail = () => { setSelected(null); setDetailStats(null) }
+  const closeDetail = () => { setSelected(null); setDetailStats(null); setDetailAssignments(null) }
 
   const runRole = async (id, fn) => {
     setBusyId(id)
@@ -408,6 +416,41 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   ))}
                 </Section>
               )}
+
+              {/* Assignment history */}
+              <Section title="Assignment History">
+                {assignmentsLoading ? (
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading…</div>
+                ) : !detailAssignments || detailAssignments.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#475569' }}>No assignments yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
+                    {detailAssignments.map(a => {
+                      const c = a.status === 'completed' ? '#4ade80' : a.status === 'overdue' ? '#f87171' : GOLD
+                      return (
+                        <div key={a.id} style={{ padding: '9px 11px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9' }}>{a.type}</span>
+                            <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 10, border: `1px solid ${c}40`, background: `${c}15`, color: c, fontWeight: 700, textTransform: 'capitalize' }}>{a.status}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                            From <strong style={{ color: '#cbd5e1' }}>{a.tutor_name}</strong> · {a.subject}
+                          </div>
+                          {a.topics?.length > 0 && (
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {a.topics.join(', ')}
+                            </div>
+                          )}
+                          <div style={{ fontSize: 10, color: '#475569', marginTop: 3 }}>
+                            Due {fmtDate(a.due_date)}
+                            {a.completed_at && ` · Completed ${fmtDate(a.completed_at)}`}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Section>
 
               {/* Role management */}
               <Section title="Role Management">

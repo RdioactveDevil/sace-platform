@@ -394,4 +394,383 @@ router.get("/admin/students/:id/stats", async (req, res) => {
   }
 });
 
+// ── TUTORS OVERSIGHT ─────────────────────────────────────────────────────────
+
+type AssignmentRow = {
+  id: string;
+  tutor_id: string;
+  student_id: string;
+  type: string;
+  subject: string;
+  topics: string[] | null;
+  due_date: string | null;
+  created_at: string;
+  completed_at: string | null;
+  class_id: string | null;
+  batch_id: string | null;
+};
+
+function bucketAssignment(a: { completed_at: string | null; due_date: string | null }): "completed" | "overdue" | "pending" {
+  if (a.completed_at) return "completed";
+  if (a.due_date) {
+    const due = new Date(a.due_date);
+    due.setHours(23, 59, 59, 999);
+    if (due.getTime() < Date.now()) return "overdue";
+  }
+  return "pending";
+}
+
+// Today's date as YYYY-MM-DD (server local) for SQL-side overdue/pending filtering.
+// `due_date` is stored as a `date` column, so a string compare is safe.
+function todayDateString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// GET /admin/tutors — list tutors with aggregate stats
+router.get("/admin/tutors", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const { data: tutors, error: tutorErr } = await admin
+      .from("profiles")
+      .select("id, display_name, school, last_active, created_at")
+      .eq("is_tutor", true);
+    if (tutorErr) return res.status(500).json({ error: tutorErr.message });
+
+    const tutorList = (tutors || []) as {
+      id: string; display_name: string | null; school: string | null;
+      last_active: string | null; created_at: string;
+    }[];
+    if (tutorList.length === 0) return res.json({ tutors: [] });
+
+    const tutorIds = tutorList.map(t => t.id);
+
+    // Fetch all roster rows + assignments for these tutors in parallel
+    const [rosterRes, asgnRes, authUsers] = await Promise.all([
+      admin.from("tutor_students").select("tutor_id, student_id").in("tutor_id", tutorIds),
+      admin.from("assignments").select("id, tutor_id, student_id, due_date, completed_at, created_at").in("tutor_id", tutorIds),
+      listAllAuthUsers(admin).catch(() => [] as { id: string; email: string; created_at: string }[]),
+    ]);
+
+    if (rosterRes.error) return res.status(500).json({ error: rosterRes.error.message });
+    if (asgnRes.error)   return res.status(500).json({ error: asgnRes.error.message });
+
+    const emailById = new Map<string, string>();
+    for (const u of authUsers) if (u.id && u.email) emailById.set(u.id, u.email);
+
+    const rosterCount: Record<string, number> = {};
+    (rosterRes.data as { tutor_id: string }[] | null || []).forEach((r) => {
+      rosterCount[r.tutor_id] = (rosterCount[r.tutor_id] || 0) + 1;
+    });
+
+    type AsgnAggRow = Pick<AssignmentRow, "id" | "tutor_id" | "student_id" | "due_date" | "completed_at" | "created_at">;
+    const stats: Record<string, { total: number; completed: number; pending: number; overdue: number; lastCreated: string | null }> = {};
+    for (const id of tutorIds) stats[id] = { total: 0, completed: 0, pending: 0, overdue: 0, lastCreated: null };
+    (asgnRes.data as AsgnAggRow[] | null || []).forEach((a) => {
+      const s = stats[a.tutor_id];
+      if (!s) return;
+      s.total++;
+      s[bucketAssignment(a)]++;
+      if (!s.lastCreated || (a.created_at && a.created_at > s.lastCreated)) s.lastCreated = a.created_at;
+    });
+
+    const out = tutorList
+      .map(t => ({
+        id: t.id,
+        display_name: t.display_name,
+        email: emailById.get(t.id) || null,
+        school: t.school,
+        last_active: t.last_active,
+        created_at: t.created_at,
+        roster_size: rosterCount[t.id] || 0,
+        assignments_total:     stats[t.id].total,
+        assignments_completed: stats[t.id].completed,
+        assignments_pending:   stats[t.id].pending,
+        assignments_overdue:   stats[t.id].overdue,
+        last_assignment_at:    stats[t.id].lastCreated,
+      }))
+      .sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+
+    return res.json({ tutors: out });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /admin/tutors/:id — tutor detail (roster + assignment history)
+router.get("/admin/tutors/:id", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { id } = req.params;
+
+    const { data: tutor, error: tutorErr } = await admin
+      .from("profiles")
+      .select("id, display_name, school, is_tutor, last_active, created_at")
+      .eq("id", id)
+      .single();
+    if (tutorErr || !tutor) return res.status(404).json({ error: "Tutor not found" });
+
+    type RosterJoinRow = {
+      student_id: string;
+      invited_at: string | null;
+      profiles: { display_name: string | null; xp: number | null; streak: number | null; last_active: string | null } | null;
+    };
+    type AsgnJoinRow = AssignmentRow & {
+      profiles: { display_name: string | null } | null;
+    };
+
+    const [rosterRes, asgnRes, authUsers] = await Promise.all([
+      admin
+        .from("tutor_students")
+        .select("student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak, last_active)")
+        .eq("tutor_id", id),
+      admin
+        .from("assignments")
+        .select("id, tutor_id, student_id, type, subject, topics, due_date, created_at, completed_at, class_id, batch_id, profiles!assignments_student_id_fkey(display_name)")
+        .eq("tutor_id", id)
+        .order("created_at", { ascending: false }),
+      listAllAuthUsers(admin).catch(() => [] as { id: string; email: string; created_at: string }[]),
+    ]);
+
+    if (rosterRes.error) return res.status(500).json({ error: rosterRes.error.message });
+    if (asgnRes.error)   return res.status(500).json({ error: asgnRes.error.message });
+
+    const emailById = new Map<string, string>();
+    for (const u of authUsers) if (u.id && u.email) emailById.set(u.id, u.email);
+
+    const rosterRows = (rosterRes.data || []) as unknown as RosterJoinRow[];
+
+    // Per-student accuracy: batch one count-only query per rostered student in parallel.
+    // Roster sizes are small (typical << 100), so this stays a constant number of cheap counts.
+    const accuracyByStudent = new Map<string, { total: number; correct: number }>();
+    await Promise.all(rosterRows.map(async (r) => {
+      const [tot, cor] = await Promise.all([
+        admin.from("answer_log").select("*", { count: "exact", head: true }).eq("user_id", r.student_id),
+        admin.from("answer_log").select("*", { count: "exact", head: true }).eq("user_id", r.student_id).eq("correct", true),
+      ]);
+      accuracyByStudent.set(r.student_id, { total: tot.count ?? 0, correct: cor.count ?? 0 });
+    }));
+
+    const roster = rosterRows.map((r) => {
+      const acc = accuracyByStudent.get(r.student_id) || { total: 0, correct: 0 };
+      return {
+        student_id: r.student_id,
+        invited_at: r.invited_at,
+        display_name: r.profiles?.display_name || null,
+        email: emailById.get(r.student_id) || null,
+        xp: r.profiles?.xp ?? 0,
+        streak: r.profiles?.streak ?? 0,
+        last_active: r.profiles?.last_active || null,
+        total_answers: acc.total,
+        accuracy: acc.total > 0 ? Math.round((acc.correct / acc.total) * 100) : null,
+      };
+    });
+
+    const assignments = ((asgnRes.data || []) as unknown as AsgnJoinRow[]).map((a) => ({
+      id: a.id,
+      student_id: a.student_id,
+      student_name: a.profiles?.display_name || null,
+      type: a.type,
+      subject: a.subject,
+      topics: a.topics || [],
+      due_date: a.due_date,
+      created_at: a.created_at,
+      completed_at: a.completed_at,
+      class_id: a.class_id,
+      batch_id: a.batch_id,
+      status: bucketAssignment(a),
+    }));
+
+    return res.json({
+      tutor: {
+        id: tutor.id,
+        display_name: tutor.display_name,
+        email: emailById.get(tutor.id) || null,
+        school: tutor.school,
+        last_active: tutor.last_active,
+        created_at: tutor.created_at,
+      },
+      roster,
+      assignments,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /admin/students/:id/assignments — full assignment history for one student
+router.get("/admin/students/:id/assignments", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { id } = req.params;
+
+    const { data: asgns, error: asgnErr } = await admin
+      .from("assignments")
+      .select("id, tutor_id, student_id, type, subject, topics, due_date, created_at, completed_at, class_id, batch_id")
+      .eq("student_id", id)
+      .order("created_at", { ascending: false });
+    if (asgnErr) return res.status(500).json({ error: asgnErr.message });
+
+    const list = (asgns || []) as AssignmentRow[];
+    const tutorIds = [...new Set(list.map(a => a.tutor_id))];
+    const tutorNames: Record<string, string> = {};
+    if (tutorIds.length > 0) {
+      const { data: tutors } = await admin
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", tutorIds);
+      (tutors as TutorNameRow[] | null || []).forEach((t) => { tutorNames[t.id] = t.display_name || "Unknown"; });
+    }
+
+    const out = list.map(a => ({
+      id: a.id,
+      tutor_id: a.tutor_id,
+      tutor_name: tutorNames[a.tutor_id] || "Unknown",
+      type: a.type,
+      subject: a.subject,
+      topics: a.topics || [],
+      due_date: a.due_date,
+      created_at: a.created_at,
+      completed_at: a.completed_at,
+      class_id: a.class_id,
+      batch_id: a.batch_id,
+      status: bucketAssignment(a),
+    }));
+
+    return res.json({ assignments: out });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /admin/assignments — list every assignment, with filters & pagination
+router.get("/admin/assignments", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const tutorId   = (req.query.tutor_id   as string) || "";
+    const studentId = (req.query.student_id as string) || "";
+    const status    = (req.query.status     as string) || ""; // pending|overdue|completed|""
+    const subject   = (req.query.subject    as string) || "";
+    const sort      = (req.query.sort       as string) || "created"; // created|due
+    const limit     = Math.min(500, parseInt((req.query.limit as string) || "200", 10));
+    const offset    = Math.max(0, parseInt((req.query.offset as string) || "0", 10));
+
+    let q = admin
+      .from("assignments")
+      .select("id, tutor_id, student_id, type, subject, topics, due_date, created_at, completed_at, class_id, batch_id", { count: "exact" });
+
+    if (tutorId)   q = q.eq("tutor_id", tutorId);
+    if (studentId) q = q.eq("student_id", studentId);
+    if (subject)   q = q.eq("subject", subject);
+
+    // DB-side status filtering so pagination + total count are correct.
+    // bucketAssignment treats due_date as end-of-day local; for date-typed
+    // columns this is equivalent to "due_date < today's date".
+    const today = todayDateString();
+    if (status === "completed") {
+      q = q.not("completed_at", "is", null);
+    } else if (status === "overdue") {
+      q = q.is("completed_at", null).not("due_date", "is", null).lt("due_date", today);
+    } else if (status === "pending") {
+      q = q.is("completed_at", null).or(`due_date.is.null,due_date.gte.${today}`);
+    }
+
+    q = sort === "due"
+      ? q.order("due_date", { ascending: true, nullsFirst: false })
+      : q.order("created_at", { ascending: false });
+
+    q = q.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await q;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const list = (data || []) as AssignmentRow[];
+
+    // Resolve tutor + student display names in batch
+    const tutorIds   = [...new Set(list.map(a => a.tutor_id))];
+    const studentIds = [...new Set(list.map(a => a.student_id))];
+    const allIds = [...new Set([...tutorIds, ...studentIds])];
+
+    const nameById: Record<string, string> = {};
+    if (allIds.length > 0) {
+      const BATCH = 200;
+      for (let i = 0; i < allIds.length; i += BATCH) {
+        const chunk = allIds.slice(i, i + BATCH);
+        const { data: profs } = await admin
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", chunk);
+        (profs as TutorNameRow[] | null || []).forEach((p) => { nameById[p.id] = p.display_name || "Unknown"; });
+      }
+    }
+
+    const out = list.map(a => ({
+      id: a.id,
+      tutor_id: a.tutor_id,
+      tutor_name: nameById[a.tutor_id] || "Unknown",
+      student_id: a.student_id,
+      student_name: nameById[a.student_id] || "Unknown",
+      type: a.type,
+      subject: a.subject,
+      topics: a.topics || [],
+      due_date: a.due_date,
+      created_at: a.created_at,
+      completed_at: a.completed_at,
+      class_id: a.class_id,
+      batch_id: a.batch_id,
+      status: bucketAssignment(a),
+    }));
+
+    return res.json({ assignments: out, total: count ?? out.length, limit, offset });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /admin/assignments/subjects — distinct list of all subjects across every assignment
+router.get("/admin/assignment-subjects", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    // Pull just the subject column; PostgREST caps responses, so paginate to be safe.
+    const subjects = new Set<string>();
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data, error } = await admin
+        .from("assignments")
+        .select("subject")
+        .range(from, from + PAGE - 1);
+      if (error) return res.status(500).json({ error: error.message });
+      const rows = (data || []) as { subject: string | null }[];
+      for (const r of rows) if (r.subject) subjects.add(r.subject);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+    return res.json({ subjects: [...subjects].sort() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 export default router;

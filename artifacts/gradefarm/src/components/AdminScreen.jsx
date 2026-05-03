@@ -5,6 +5,8 @@ import AdminGenerateScreen       from './AdminGenerateScreen'
 import AdminReviewScreen         from './AdminReviewScreen'
 import AdminUsersTab             from './AdminUsersTab'
 import AdminStudentsTab          from './AdminStudentsTab'
+import AdminTutorsTab            from './AdminTutorsTab'
+import AdminAssignmentsTab       from './AdminAssignmentsTab'
 import AdminTutorApplicationsTab from './AdminTutorApplicationsTab'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -16,6 +18,8 @@ export default function AdminScreen({ profile }) {
 
   const tabs = [
     { label: 'Students',           badge: studentCount, path: '/admin/students' },
+    { label: 'Tutors',             path: '/admin/tutors' },
+    { label: 'Assignments',        path: '/admin/assignments' },
     { label: 'All Users',          path: '/admin/users' },
     { label: 'Tutor Applications', path: '/admin/applications' },
     { label: 'Upload PDF',         path: '/admin/upload' },
@@ -91,6 +95,8 @@ export default function AdminScreen({ profile }) {
         <Routes>
           <Route index element={<Navigate to="students" replace />} />
           <Route path="students"     element={<AdminStudentsTab profile={profile} onCountLoad={setStudentCount} />} />
+          <Route path="tutors"       element={<AdminTutorsTab />} />
+          <Route path="assignments"  element={<AdminAssignmentsTab />} />
           <Route path="users"        element={<AdminUsersTab profile={profile} />} />
           <Route path="applications" element={<AdminTutorApplicationsTab />} />
           <Route path="upload"       element={<AdminUploadScreen />} />
