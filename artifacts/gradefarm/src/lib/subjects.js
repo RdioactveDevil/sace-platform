@@ -105,9 +105,8 @@ export const ALL_SUBJECTS = [
     icon: '📐',
     color: '#6366f1',
     topics: ['Number', 'Algebra', 'Measurement', 'Space', 'Statistics', 'Probability'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
+    questionCount: 36,
+    available: true,
   },
   {
     id: 'english_y7',
@@ -116,9 +115,8 @@ export const ALL_SUBJECTS = [
     icon: '📝',
     color: '#ec4899',
     topics: ['Language', 'Literature', 'Literacy'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
+    questionCount: 18,
+    available: true,
   },
   {
     id: 'maths_y10',
