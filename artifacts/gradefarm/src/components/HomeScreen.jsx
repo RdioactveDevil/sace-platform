@@ -3,26 +3,28 @@ import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
-import { getAssessments } from '../lib/db'
+import { getAssessments, fetchAssignmentsForStudent } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme }) {
+export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
   const { macroGroups: MACRO_GROUPS, normFn: topicNormFn } = getTopicConfig(subject?.stage)
   const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([])
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
   const [assessments, setAssessments] = useState([])
+  const [assignments, setAssignments] = useState([])
 
   useEffect(() => {
     let cancelled = false
     getAssessments(profile.id).then(rows => { if (!cancelled) setAssessments(rows) }).catch(() => {})
+    fetchAssignmentsForStudent(profile.id).then(rows => { if (!cancelled) setAssignments(rows) }).catch(() => {})
     return () => { cancelled = true }
-  }, [profile.id])
+  }, [profile.id, assignmentsVersion])
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {
@@ -234,6 +236,49 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       ))}
     </div>
   )
+
+  const AssignedTasksCard = () => {
+    if (assignments.length === 0) return null
+    return (
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2 }}>📋 Assigned Tasks</div>
+        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>From your tutor</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {assignments.slice(0, 5).map(a => {
+            const due = a.due_date ? new Date(a.due_date) : null
+            due?.setHours(23, 59, 59, 999)
+            const overdue = due && due < new Date()
+            const daysLeft = due ? Math.ceil((due - new Date()) / 86400000) : null
+            const color = overdue ? '#f87171' : daysLeft !== null && daysLeft <= 3 ? GOLD : '#4ade80'
+            return (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} · {a.subject}</div>
+                  {a.topics?.length > 0 && (
+                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.topics.join(', ')}</div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color }}>
+                    {overdue ? 'Overdue' : daysLeft === 0 ? 'Due today' : daysLeft !== null ? `${daysLeft}d left` : 'No due date'}
+                  </div>
+                  <button
+                    onClick={() => onStartSession({ mode: 'all', subtopics: a.topics || [], assignmentId: a.id, assignmentSubject: a.subject })}
+                    style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+                  >
+                    Start
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {assignments.length > 5 && (
+          <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{assignments.length - 5} more tasks</div>
+        )}
+      </div>
+    )
+  }
 
   const SprintCard = () => (
     <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
@@ -627,6 +672,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <div className="hs-mobile-cards">
+            <AssignedTasksCard />
             <ExamCountdownCard />
             <MissionsCard />
             <PriorityCard />
@@ -636,6 +682,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
 
         <div className="hs-right">
+          <AssignedTasksCard />
           <ExamCountdownCard />
           <MissionsCard />
           <PriorityCard />

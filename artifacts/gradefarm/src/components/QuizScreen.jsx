@@ -21,6 +21,7 @@ import {
   incrementQuestionVariantUsage,
   flagQuestion,
   flagTopicForStudyPlan,
+  completeAssignment,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
@@ -448,6 +449,8 @@ export default function QuizScreen({
   remediationParentId: _remediationParentId, setRemediationParentId,
   remediationOriginalQ: _remediationOriginalQ, setRemediationOriginalQ,
   remediationUsedIds: _remediationUsedIds, setRemediationUsedIds,
+  activeAssignmentId,
+  onAssignmentComplete,
 }) {
   const t = THEMES[theme]
 
@@ -460,6 +463,8 @@ export default function QuizScreen({
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
+  const [assignmentsCompleted, setAssignmentsCompleted] = useState([])
+  const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
 
   useEffect(() => {
@@ -718,6 +723,30 @@ export default function QuizScreen({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidateSubtopic])
+
+  // Auto-complete the specific tutor assignment that launched this session (if any).
+  // Only fires when the student actually answered at least one question.
+  useEffect(() => {
+    const sessionEnded = finished || (sessionResults.length > 0 && !_currentQ)
+    if (!sessionEnded) return
+    if (sessionCompletedRef.current) return
+    if (!activeAssignmentId) return
+    if (sessionResults.length === 0) return  // guard: no questions answered, don't auto-complete
+    sessionCompletedRef.current = true
+
+    completeAssignment(activeAssignmentId)
+      .then(() => {
+        setAssignmentsCompleted([{ id: activeAssignmentId }])
+        onAssignmentComplete?.()
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished, _currentQ, sessionResults.length, activeAssignmentId])
+
+  // Reset completion ref when a new session starts
+  useEffect(() => {
+    if (!finished && _currentQ) sessionCompletedRef.current = false
+  }, [_currentQ, finished])
 
   // Clear consolidation filter when leaving the quiz screen
   useEffect(() => {
@@ -1049,6 +1078,19 @@ export default function QuizScreen({
                 : 'Good work finishing the session.'}
             </div>
           </div>
+
+          {/* Assignments completed banner */}
+          {assignmentsCompleted.length > 0 && (
+            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>✅</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#4ade80' }}>
+                  {assignmentsCompleted.length === 1 ? 'Assignment completed!' : `${assignmentsCompleted.length} assignments completed!`}
+                </div>
+                <div style={{ fontSize: 11, color: '#475569', marginTop: 1 }}>Your tutor has been notified.</div>
+              </div>
+            </div>
+          )}
 
           {/* Score strip */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>

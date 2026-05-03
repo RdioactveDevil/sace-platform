@@ -7,7 +7,8 @@ import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
-import { QUESTIONS_SUBJECT_BY_ID } from './lib/subjects'
+import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS } from './lib/subjects'
+import { getTopicConfig } from './lib/saceTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -22,6 +23,8 @@ import TermsScreen       from './components/TermsScreen'
 import PrivacyScreen     from './components/PrivacyScreen'
 import AdminRoute        from './components/AdminRoute'
 import AdminScreen       from './components/AdminScreen'
+import TutorRoute        from './components/TutorRoute'
+import TutorScreen       from './components/TutorScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -103,6 +106,13 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
             </button>
           )
         })}
+        {profile?.is_tutor && (
+          <button onClick={() => go('/tutor')}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: location.pathname === '/tutor' ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${location.pathname === '/tutor' ? GOLD : 'transparent'}`, color: location.pathname === '/tutor' ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: location.pathname === '/tutor' ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
+            <span style={{ fontSize: 15 }}>👨‍🏫</span>
+            Tutor Dashboard
+          </button>
+        )}
       </nav>
 
       <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
@@ -199,6 +209,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
   onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
+  assignmentsVersion,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
@@ -221,6 +232,7 @@ function AppShellScreens({
         <HomeScreen {...commonProps}
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
+          assignmentsVersion={assignmentsVersion}
           onStartSession={onStartSession} />
       </div>
       <div style={show('learn')}>
@@ -320,6 +332,8 @@ function AppInner() {
   const [quizRemediationOriginalQ, setQuizRemediationOriginalQ] = useState(null)
   const [quizRemediationUsedIds,   setQuizRemediationUsedIds]   = useState([])
   const [quizRemediationWrongCount, setQuizRemediationWrongCount] = useState(0)
+  const [activeAssignmentId, setActiveAssignmentId] = useState(null)
+  const [assignmentsVersion, setAssignmentsVersion] = useState(0)
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -534,6 +548,8 @@ function AppInner() {
   }
 
   return (
+    <>
+      <RoleSwitcherBar profile={profile} />
     <Routes>
       {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
@@ -543,15 +559,15 @@ function AppInner() {
       {/* Landing page — public */}
       <Route path="/home" element={
         (user && profile)
-          ? <Navigate to="/question-bank" replace />
+          ? <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
       } />
 
       {/* Auth — public */}
       <Route path="/auth" element={
         (user && profile)
-          ? <Navigate to="/question-bank" replace />
-          : <AuthScreen {...commonProps} onAuth={() => navigate('/onboarding', { replace: true })} onBack={() => navigate('/home')} />
+          ? <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
       {/* Onboarding — new users only */}
@@ -601,7 +617,12 @@ function AppInner() {
                 navigate('/learn')
               }}
               consolidateSubtopic={consolidateSubtopic}
-              onClearConsolidate={() => setConsolidateSubtopic(null)} />
+              onClearConsolidate={() => setConsolidateSubtopic(null)}
+              activeAssignmentId={activeAssignmentId}
+              onAssignmentComplete={() => {
+                setActiveAssignmentId(null)
+                setAssignmentsVersion(v => v + 1)
+              }} />
       } />
 
       {/* Admin — is_admin only */}
@@ -613,6 +634,15 @@ function AppInner() {
             </AdminRoute>
       } />
 
+      {/* Tutor — is_tutor only */}
+      <Route path="/tutor" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <TutorRoute profile={profile}>
+              <TutorScreen profile={profile} theme={theme} />
+            </TutorRoute>
+      } />
+
       {/* Single shell route — AppShellScreens stays mounted across ALL tab switches */}
       <Route path="/*" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
@@ -622,11 +652,58 @@ function AppInner() {
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
-          onStartSession={(opts) => {
+          assignmentsVersion={assignmentsVersion}
+          onStartSession={async (opts) => {
             const nextMode = opts?.mode || 'new'
             const nextSubtopics = Array.isArray(opts?.subtopics) ? opts.subtopics : []
+            setActiveAssignmentId(opts?.assignmentId ?? null)
+
+            // If assignment specifies a subject, switch to it and load the right question bank
+            let activeQuestions = questions
+            let activeSubject = selectedSubject
+            if (opts?.assignmentSubject) {
+              const matchingSubject = ALL_SUBJECTS.find(
+                s => `${s.name} ${s.stage}` === opts.assignmentSubject
+              )
+              if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
+                setSelectedSubject(matchingSubject)
+                localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))
+                const qs = await getQuestions(QUESTIONS_SUBJECT_BY_ID[matchingSubject.id] || matchingSubject.name)
+                setQuestions(qs)
+                activeQuestions = qs
+                activeSubject = matchingSubject
+              }
+            }
+
+            // Assignment entries may be topic names OR subtopic names. Expand topic
+            // names to their matching subtopics; keep direct subtopic matches as-is.
+            let expandedSubtopics = nextSubtopics
+            if (opts?.assignmentId && nextSubtopics.length > 0) {
+              const { normFn } = getTopicConfig(activeSubject?.stage)
+              const allSubtopicsLower = new Map()
+              activeQuestions.forEach(q => {
+                if (q.subtopic) allSubtopicsLower.set(q.subtopic.toLowerCase(), q.subtopic)
+              })
+              const wantedTopicsLower = new Set()
+              const directSubtopics = new Set()
+              nextSubtopics.forEach(entry => {
+                const lower = entry.toLowerCase()
+                if (allSubtopicsLower.has(lower)) {
+                  directSubtopics.add(allSubtopicsLower.get(lower))
+                } else {
+                  wantedTopicsLower.add((normFn?.(entry) || entry).toLowerCase())
+                }
+              })
+              const expanded = new Set(directSubtopics)
+              activeQuestions.forEach(q => {
+                const tNorm = (normFn?.(q.topic) || q.topic || '').toLowerCase()
+                if (wantedTopicsLower.has(tNorm) && q.subtopic) expanded.add(q.subtopic)
+              })
+              if (expanded.size > 0) expandedSubtopics = Array.from(expanded)
+            }
+
             setQuizMode(nextMode)
-            setQuizSubtopics(nextSubtopics)
+            setQuizSubtopics(expandedSubtopics)
             setQuizQ(null)
             setQuizSelected(null)
             setQuizShowAns(false)
@@ -654,6 +731,71 @@ function AppInner() {
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
     </Routes>
+    </>
+  )
+}
+
+function RoleSwitcherBar({ profile }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  if (!profile) return null
+
+  const path = location.pathname || ''
+  // Hide on full-screen quiz / auth / onboarding / landing
+  const hideOn = ['/quiz', '/auth', '/home', '/onboarding', '/learn']
+  if (hideOn.some(p => path === p || path.startsWith(p + '/'))) return null
+
+  const isPending  = profile.tutor_application_status === 'pending'
+  const isAdmin    = !!profile.is_admin
+  const isTutor    = !!profile.is_tutor
+  const onAdmin    = path.startsWith('/admin')
+  const onTutor    = path.startsWith('/tutor')
+
+  if (!isAdmin && !isTutor && !isPending) return null
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '6px 12px',
+      background: isPending ? 'rgba(241,190,67,0.10)' : 'rgba(8,13,40,0.9)',
+      borderBottom: '1px solid rgba(241,190,67,0.18)',
+      fontFamily: "'Plus Jakarta Sans', sans-serif",
+      fontSize: 12, color: '#cbd5e1',
+      position: 'sticky', top: 0, zIndex: 100,
+    }}>
+      {isPending && (
+        <span style={{ color: '#f1be43', fontWeight: 700 }}>
+          Tutor application pending admin approval
+        </span>
+      )}
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        {isAdmin && !onAdmin && (
+          <SwitchLink onClick={() => navigate('/admin')} color="#a78bfa">Admin</SwitchLink>
+        )}
+        {isTutor && !onTutor && (
+          <SwitchLink onClick={() => navigate('/tutor')} color="#f1be43">Tutor dashboard</SwitchLink>
+        )}
+        {(onAdmin || onTutor) && (
+          <SwitchLink onClick={() => navigate('/question-bank')} color="#94a3b8">Student app</SwitchLink>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SwitchLink({ onClick, color, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '4px 10px', borderRadius: 6,
+        border: `1px solid ${color}55`,
+        background: `${color}14`,
+        color, fontSize: 12, fontWeight: 700,
+        cursor: 'pointer',
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}
+    >{children}</button>
   )
 }
 

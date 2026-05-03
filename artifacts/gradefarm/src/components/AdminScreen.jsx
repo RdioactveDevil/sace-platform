@@ -2,6 +2,8 @@ import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import AdminUploadScreen   from './AdminUploadScreen'
 import AdminGenerateScreen from './AdminGenerateScreen'
 import AdminReviewScreen   from './AdminReviewScreen'
+import AdminUsersTab       from './AdminUsersTab'
+import AdminTutorApplicationsTab from './AdminTutorApplicationsTab'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -36,6 +38,8 @@ export default function AdminScreen({ profile }) {
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
         {[
+          { label: 'Users', path: 'users' },
+          { label: 'Tutor Applications', path: 'applications' },
           { label: 'Upload PDF', path: 'upload' },
           { label: 'Generate', path: 'generate' },
           { label: 'Review Queue', path: 'review' },
@@ -63,10 +67,12 @@ export default function AdminScreen({ profile }) {
       {/* Sub-route content */}
       <div style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
         <Routes>
-          <Route index element={<Navigate to="upload" replace />} />
-          <Route path="upload"   element={<AdminUploadScreen />} />
-          <Route path="generate" element={<AdminGenerateScreen />} />
-          <Route path="review"   element={<AdminReviewScreen profile={profile} />} />
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="users"        element={<AdminUsersTab profile={profile} />} />
+          <Route path="applications" element={<AdminTutorApplicationsTab />} />
+          <Route path="upload"       element={<AdminUploadScreen />} />
+          <Route path="generate"     element={<AdminGenerateScreen />} />
+          <Route path="review"       element={<AdminReviewScreen profile={profile} />} />
         </Routes>
       </div>
     </div>

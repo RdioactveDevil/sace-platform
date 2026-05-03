@@ -22,6 +22,12 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - Admin tools: AI question generation (`/api/generate-questions`), PDF extraction (`/api/extract-pdf`)
 - Leaderboard, progress tracking, study plans
 - Subject picker with subscription gating
+- **Tutor Dashboard** (`/tutor`): 3-tab dashboard for users with `is_tutor=true` on their profile
+  - Students tab: add students by email (looked up server-side via service role), view/remove roster
+  - Assignments tab: create Quiz/Test/Worksheet/Homework assignments with topics and due dates
+  - Progress tab: per-student XP, accuracy, topic breakdown, recent activity
+- **Assigned Tasks widget**: appears on student Home screen when they have pending tutor assignments
+- **Assignment auto-completion**: assignments are marked complete when a student finishes a quiz session
 
 ### Required Environment Variables
 - `ANTHROPIC_API_KEY` — for AI chat/question generation features

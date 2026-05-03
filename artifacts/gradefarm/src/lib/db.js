@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { nextReviewTime } from './engine'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export async function signUp(email, password, displayName, school) {
+export async function signUp(email, password, displayName, school, applyForTutor = false) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -10,10 +10,76 @@ export async function signUp(email, password, displayName, school) {
   })
   if (error) throw error
 
-  if (data.user && school) {
-    await supabase.from('profiles').update({ school }).eq('id', data.user.id)
+  if (data.user) {
+    const updates = {}
+    if (school) updates.school = school
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('profiles').update(updates).eq('id', data.user.id)
+    }
+    if (applyForTutor) {
+      // Best-effort: works once the user has a session. If signUp requires
+      // email confirmation, the RPC will no-op; the user can re-apply later.
+      try { await supabase.rpc('apply_for_tutor') } catch {}
+    }
   }
   return data
+}
+
+export async function applyForTutor() {
+  const { error } = await supabase.rpc('apply_for_tutor')
+  if (error) throw error
+}
+
+export async function withdrawTutorApplication() {
+  const { error } = await supabase.rpc('withdraw_tutor_application')
+  if (error) throw error
+}
+
+// ─── ADMIN ───────────────────────────────────────────────────────────────────
+async function adminFetch(path, opts = {}) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(opts.headers || {}),
+    },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`)
+  return json
+}
+
+export async function adminListUsers(page = 1, perPage = 100) {
+  return adminFetch(`/api/admin/users?page=${page}&perPage=${perPage}`)
+}
+
+export async function adminListTutorApplications() {
+  const json = await adminFetch('/api/admin/tutor-applications')
+  return json.applications || []
+}
+
+export async function adminApproveTutor(userId) {
+  const { error } = await supabase.rpc('admin_approve_tutor', { p_user_id: userId })
+  if (error) throw error
+}
+
+export async function adminRejectTutor(userId) {
+  const { error } = await supabase.rpc('admin_reject_tutor', { p_user_id: userId })
+  if (error) throw error
+}
+
+export async function adminSetTutor(userId, value) {
+  const { error } = await supabase.rpc('admin_set_tutor', { p_user_id: userId, p_value: !!value })
+  if (error) throw error
+}
+
+export async function adminSetAdmin(userId, value) {
+  const { error } = await supabase.rpc('admin_set_admin', { p_user_id: userId, p_value: !!value })
+  if (error) throw error
 }
 
 export async function signIn(email, password) {
@@ -414,4 +480,213 @@ export async function incrementQuestionVariantUsage(variantId) {
     .eq('id', variantId)
 
   if (error) throw error
+}
+
+// ── TUTOR DASHBOARD ───────────────────────────────────────────────────────────
+
+/** Fetch the roster of students for a tutor. Returns joined profile data. */
+export async function fetchRoster(tutorId) {
+  const { data, error } = await supabase
+    .from('tutor_students')
+    .select('student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak)')
+    .eq('tutor_id', tutorId)
+    .order('invited_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
+}
+
+/** Add a student to a tutor's roster by email.
+ *  Email lookup is done server-side via the api-server (service role required to query auth.users).
+ *  The caller's Supabase JWT is forwarded so the server can verify tutor identity.
+ */
+export async function addStudentToRoster(tutorId, studentEmail) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const jwt = sessionData?.session?.access_token
+  if (!jwt) throw new Error('Not authenticated.')
+
+  const res = await fetch('/api/tutor/find-student', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ email: studentEmail }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to add student' }))
+    throw new Error(err.error || 'No user found with that email address.')
+  }
+  const studentData = await res.json()
+
+  const { error } = await supabase
+    .from('tutor_students')
+    .upsert({ tutor_id: tutorId, student_id: studentData.id }, { onConflict: 'tutor_id,student_id' })
+  if (error) throw error
+  return studentData
+}
+
+/** Fetch email map { studentId → email } for the given roster student IDs. */
+export async function fetchStudentEmails(studentIds) {
+  if (!Array.isArray(studentIds) || studentIds.length === 0) return {}
+  const { data: sessionData } = await supabase.auth.getSession()
+  const jwt = sessionData?.session?.access_token
+  if (!jwt) throw new Error('Not authenticated.')
+
+  const res = await fetch('/api/tutor/student-emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ ids: studentIds }),
+  })
+  if (!res.ok) return {}
+  const json = await res.json().catch(() => ({ emails: {} }))
+  return json.emails || {}
+}
+
+/** Remove a student from a tutor's roster. */
+export async function removeStudentFromRoster(tutorId, studentId) {
+  const { error } = await supabase
+    .from('tutor_students')
+    .delete()
+    .eq('tutor_id', tutorId)
+    .eq('student_id', studentId)
+  if (error) throw error
+}
+
+/** Create an assignment for a single student. */
+export async function createAssignment(tutorId, studentId, { type, subject, topics, due_date }) {
+  const { data, error } = await supabase
+    .from('assignments')
+    .insert({ tutor_id: tutorId, student_id: studentId, type, subject, topics, due_date })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** Fetch all assignments created by a tutor, with student profile data. */
+export async function fetchAssignmentsForTutor(tutorId) {
+  const { data, error } = await supabase
+    .from('assignments')
+    .select('*, profiles!assignments_student_id_fkey(display_name)')
+    .eq('tutor_id', tutorId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
+}
+
+/** Fetch pending (not completed) assignments for a student. */
+export async function fetchAssignmentsForStudent(studentId) {
+  const { data, error } = await supabase
+    .from('assignments')
+    .select('*')
+    .eq('student_id', studentId)
+    .is('completed_at', null)
+    .order('due_date', { ascending: true, nullsFirst: false })
+  if (error) throw error
+  return data || []
+}
+
+/** Mark an assignment as completed.
+ *  Uses the complete_assignment() security-definer RPC so students can only
+ *  update completed_at — all other columns are frozen inside the function.
+ */
+export async function completeAssignment(assignmentId) {
+  const { error } = await supabase.rpc('complete_assignment', { p_assignment_id: assignmentId })
+  if (error) throw error
+}
+
+/** Delete an assignment (tutor only). */
+export async function deleteAssignment(assignmentId) {
+  const { error } = await supabase
+    .from('assignments')
+    .delete()
+    .eq('id', assignmentId)
+  if (error) throw error
+}
+
+/**
+ * Fetch a student's full progress summary for a tutor's view.
+ * Returns: xp, streak, accuracy, totalAttempts, topicBreakdown[], assignments[], recentActivity[]
+ */
+export async function fetchStudentProgressForTutor(tutorId, studentId) {
+  // Verify this student is on the tutor's roster
+  const { data: rosterRow, error: rosterError } = await supabase
+    .from('tutor_students')
+    .select('student_id')
+    .eq('tutor_id', tutorId)
+    .eq('student_id', studentId)
+    .single()
+  if (rosterError || !rosterRow) throw new Error('Student not on your roster.')
+
+  // Fetch profile stats (xp, streak)
+  const { data: prof, error: profError } = await supabase
+    .from('profiles')
+    .select('xp, streak, best_streak')
+    .eq('id', studentId)
+    .single()
+  if (profError) throw profError
+
+  // Fetch struggle profile for accuracy/topic breakdown
+  const { data: struggles, error: sError } = await supabase
+    .from('struggle_profiles')
+    .select('question_id, attempts, wrong')
+    .eq('user_id', studentId)
+  if (sError) throw sError
+
+  // Fetch questions to map question_id → topic
+  const { data: questions, error: qError } = await supabase
+    .from('questions')
+    .select('id, topic, subject')
+  if (qError) throw qError
+
+  const qMap = {}
+  ;(questions || []).forEach(q => { qMap[q.id] = q })
+
+  const totalAttempts = (struggles || []).reduce((s, r) => s + (r.attempts || 0), 0)
+  const totalWrong    = (struggles || []).reduce((s, r) => s + (r.wrong || 0), 0)
+  const accuracy      = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
+
+  // Topic breakdown
+  const topicMap = {}
+  ;(struggles || []).forEach(r => {
+    const q = qMap[r.question_id]
+    if (!q) return
+    const t = q.topic || 'Unknown'
+    if (!topicMap[t]) topicMap[t] = { topic: t, attempts: 0, wrong: 0 }
+    topicMap[t].attempts += r.attempts || 0
+    topicMap[t].wrong    += r.wrong || 0
+  })
+  const topicBreakdown = Object.values(topicMap).sort((a, b) => b.attempts - a.attempts)
+
+  // Fetch assignments for this student (from this tutor)
+  const { data: assignments, error: aError } = await supabase
+    .from('assignments')
+    .select('*')
+    .eq('tutor_id', tutorId)
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+  if (aError) throw aError
+
+  // Fetch recent activity (last 10 answers)
+  const { data: recentActivity, error: raError } = await supabase
+    .from('answer_log')
+    .select('answered_at, correct, question_id')
+    .eq('user_id', studentId)
+    .order('answered_at', { ascending: false })
+    .limit(10)
+  if (raError) throw raError
+
+  return {
+    xp:            prof?.xp ?? 0,
+    streak:        prof?.streak ?? 0,
+    best_streak:   prof?.best_streak ?? 0,
+    accuracy,
+    totalAttempts,
+    topicBreakdown,
+    assignments:   assignments || [],
+    recentActivity: recentActivity || [],
+  }
 }
