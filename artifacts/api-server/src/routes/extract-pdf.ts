@@ -103,11 +103,13 @@ router.post("/extract-pdf", async (req, res) => {
 
   let claudeResponse: Response;
   try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    const anthropicBase = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+    const anthropicKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+    claudeResponse = await fetch(`${anthropicBase}/v1/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "x-api-key": anthropicKey,
         "anthropic-version": "2023-06-01",
         "anthropic-beta": "pdfs-2024-09-25",
       },

@@ -9,6 +9,8 @@ export const QUESTIONS_SUBJECT_BY_ID = {
   maths_y7: 'Year 7 Mathematics',
   english_y7: 'Year 7 English',
   maths_y10: 'Year 10 Mathematics',
+  vic_maths_y10: 'Victorian Year 10 Mathematics',
+  vic_maths_y10a: 'Victorian Year 10A Mathematics',
 }
 
 export const ALL_SUBJECTS = [
@@ -128,5 +130,27 @@ export const ALL_SUBJECTS = [
     questionCount: 0,
     available: false,
     comingSoon: true,
+  },
+  {
+    id: 'vic_maths_y10',
+    name: 'Mathematics',
+    stage: 'Year 10',
+    curriculum: 'Victorian Curriculum',
+    icon: '📐',
+    color: '#8b5cf6',
+    topics: ['Number', 'Algebra', 'Measurement', 'Geometry', 'Statistics', 'Probability'],
+    questionCount: 122,
+    available: true,
+  },
+  {
+    id: 'vic_maths_y10a',
+    name: 'Mathematics (10A)',
+    stage: 'Year 10',
+    curriculum: 'Victorian Curriculum',
+    icon: '📐',
+    color: '#7c3aed',
+    topics: ['Number', 'Algebra', 'Measurement', 'Geometry', 'Statistics', 'Probability'],
+    questionCount: 95,
+    available: true,
   },
 ]

@@ -14,6 +14,13 @@ interface ChatMessage {
   content: string;
 }
 
+function getAnthropicConfig() {
+  return {
+    baseUrl: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "",
+  };
+}
+
 async function classifyMessage(subject: string, topic: string, userMessage: string): Promise<"on_topic" | "off_topic"> {
   try {
     const classifierSystem = [
@@ -30,11 +37,12 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
       .replace("SUBJECT_PLACEHOLDER", subject)
       .replace("TOPIC_PLACEHOLDER", topic);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const { baseUrl, apiKey } = getAnthropicConfig();
+    const response = await fetch(`${baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
@@ -51,7 +59,7 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
     });
 
     if (!response.ok) return "on_topic";
-    const data = await response.json();
+    const data = await response.json() as { content?: { text: string }[] };
     const text = (data.content?.[0]?.text || "").trim().toLowerCase();
     return text === "off_topic" ? "off_topic" : "on_topic";
   } catch {
@@ -88,11 +96,12 @@ router.post("/chat", async (req, res) => {
       }
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const { baseUrl, apiKey } = getAnthropicConfig();
+    const response = await fetch(`${baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({

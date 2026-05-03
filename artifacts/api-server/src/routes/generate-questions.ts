@@ -356,12 +356,16 @@ router.post("/generate-questions", async (req, res) => {
 
   // Normalise picker IDs to canonical Supabase subject strings before use.
   const normalizedSubject =
-    resolvedSubject === "maths_y10" ? "Year 10 Mathematics" :
+    resolvedSubject === "maths_y10"     ? "Year 10 Mathematics" :
+    resolvedSubject === "vic_maths_y10"  ? "Victorian Year 10 Mathematics" :
+    resolvedSubject === "vic_maths_y10a" ? "Victorian Year 10A Mathematics" :
     resolvedSubject;
 
-  const isY7Maths = normalizedSubject === "Year 7 Mathematics";
+  const isY7Maths   = normalizedSubject === "Year 7 Mathematics";
   const isY7English = normalizedSubject === "Year 7 English";
-  const isY10 = normalizedSubject === "Year 10 Mathematics";
+  const isY10       = normalizedSubject === "Year 10 Mathematics";
+  const isVicY10    = normalizedSubject === "Victorian Year 10 Mathematics";
+  const isVicY10A   = normalizedSubject === "Victorian Year 10A Mathematics";
   const isY7 = isY7Maths || isY7English;
 
   // Combined Year 10 topic map (standard codes + X-prefix 10A extension codes)
@@ -393,6 +397,14 @@ router.post("/generate-questions", async (req, res) => {
     curriculumLabel = topicCode.startsWith("X")
       ? "Year 10 Mathematics (10A extension)"
       : "Year 10 Mathematics";
+  } else if (isVicY10) {
+    topicMap = VIC_Y10_MATHS_TOPICS;
+    learningObjectivesMap = VIC_Y10_LEARNING_OBJECTIVES;
+    curriculumLabel = "Victorian Curriculum Year 10 Mathematics";
+  } else if (isVicY10A) {
+    topicMap = VIC_Y10A_MATHS_TOPICS;
+    learningObjectivesMap = VIC_Y10A_LEARNING_OBJECTIVES;
+    curriculumLabel = "Victorian Curriculum Year 10A Mathematics";
   } else {
     const stageKey = resolvedSubject === "Chemistry Stage 1" ? "s1" : "s2";
     topicMap = stageKey === "s1" ? S1_TOPICS : S2_TOPICS;
@@ -416,8 +428,8 @@ router.post("/generate-questions", async (req, res) => {
   let system: string;
   let user: string;
 
-  if (isY10) {
-    const yearLabel = topicCode.startsWith("X") ? "Year 10A" : "Year 10";
+  if (isY10 || isVicY10 || isVicY10A) {
+    const yearLabel = isVicY10A ? "Year 10A" : isVicY10 ? "Year 10" : (topicCode.startsWith("X") ? "Year 10A" : "Year 10");
     system = [
       `You are generating multiple-choice questions for ${curriculumLabel} students.`,
       `CRITICAL CONSTRAINT: All questions must be strictly based on the ${yearLabel} Mathematics curriculum scope.`,
@@ -509,13 +521,16 @@ router.post("/generate-questions", async (req, res) => {
     ].join("\n");
   }
 
+  const anthropicBaseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+  const anthropicApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+
   let claudeResponse: Response;
   try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    claudeResponse = await fetch(`${anthropicBaseUrl}/v1/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "x-api-key": anthropicApiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({

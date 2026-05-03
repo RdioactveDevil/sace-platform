@@ -11,6 +11,8 @@ const SUBJECTS = [
   { id: 'Year 7 Mathematics', label: 'Year 7 Mathematics' },
   { id: 'Year 7 English',     label: 'Year 7 English' },
   { id: 'Year 10 Mathematics', label: 'Year 10 Mathematics' },
+  { id: 'vic_maths_y10',      label: 'Vic Year 10 Maths' },
+  { id: 'vic_maths_y10a',     label: 'Vic Year 10A Maths' },
 ]
 
 const COUNTS = [5, 10, 20]
@@ -28,6 +30,8 @@ const NON_SACE_SUBJECT_IDS = new Set([
   'Year 7 Mathematics',
   'Year 7 English',
   'Year 10 Mathematics',
+  'vic_maths_y10',
+  'vic_maths_y10a',
 ])
 
 export default function AdminGenerateScreen() {
