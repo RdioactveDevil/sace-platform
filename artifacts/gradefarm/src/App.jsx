@@ -87,8 +87,10 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
     }}>
       <style>{`
         .gf-nav-btn { position: relative; isolation: isolate; }
-        .gf-nav-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15); }
+        .gf-nav-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
         .gf-nav-btn[data-active="true"] { background: linear-gradient(135deg, rgba(241,190,67,0.16), rgba(241,190,67,0.06)) !important; border-color: rgba(241,190,67,0.28) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.2) !important; }
+        /* Preserve a visible focus ring even when the focused nav item is the active one */
+        .gf-nav-btn[data-active="true"]:focus-visible { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.65), 0 0 0 4px rgba(241,190,67,0.18) !important; }
         .gf-nav-btn[data-active="false"]:hover { background: rgba(255,255,255,0.04) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.06) !important; }
         .gf-nav-btn[data-active="false"]:hover .gf-nav-icon { color: #f1f5f9 !important; }
         .gf-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.5); }
@@ -765,12 +767,14 @@ function AppInner() {
             </AdminRoute>
       } />
 
-      {/* Tutor — is_tutor only */}
+      {/* Tutor — is_tutor only. Wrapped in AppShell so the redesigned sidebar (incl. active Tutor Dashboard state) is present here too. */}
       <Route path="/tutor" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : <TutorRoute profile={profile}>
-              <TutorScreen profile={profile} theme={theme} />
+              <AppShell {...shellProps}>
+                <TutorScreen profile={profile} theme={theme} />
+              </AppShell>
             </TutorRoute>
       } />
 
