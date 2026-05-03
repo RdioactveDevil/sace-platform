@@ -6,14 +6,14 @@ export const FONTS = {
 
 export const THEMES = {
   dark: {
-    // Background layers — deeper for more contrast
-    bg:           '#0e0f18',
-    bgCard:       '#13141e',
-    bgNav:        '#080d28',
-    bgInput:      '#13141e',
-    bgHover:      '#1a1b27',
-    bgSubtle:     '#101119',
-    bgElevated:   '#1c1d2a',
+    // Background layers — breathable navy, not pure black
+    bg:           '#1a1d2e',
+    bgCard:       '#222639',
+    bgNav:        '#161928',
+    bgInput:      '#222639',
+    bgHover:      '#2c3047',
+    bgSubtle:     '#1f2233',
+    bgElevated:   '#2a2e44',
 
     // Borders — tiered opacity for depth
     border:       'rgba(255,255,255,0.07)',
