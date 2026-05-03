@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 
 function timeAgo(date) {
   const s = Math.floor((new Date() - new Date(date)) / 1000)
@@ -103,7 +104,7 @@ export default function HistoryScreen({ profile, theme, embedded }) {
       <div className="hist-scroll">
         <div className="hist-inner">
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Activity</div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: t.text }}>History</h1>
+          <h1 style={{ fontSize: 26, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, margin: 0, color: t.text }}>History</h1>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6, marginBottom: 22 }}>Review your quiz sessions and Titan AI chats in one place.</div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>

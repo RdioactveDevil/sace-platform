@@ -5,6 +5,7 @@ import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 const GOLD = '#f1be43'
 
 export default function LeaderboardScreen({ profile, theme, embedded }) {
@@ -43,7 +44,7 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Competition</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: t.text }}>Leaderboard</h1>
+              <h1 style={{ fontSize: 26, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, margin: 0, color: t.text }}>Leaderboard</h1>
               <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6 }}>Top players by XP</div>
             </div>
             {hasSchool && (

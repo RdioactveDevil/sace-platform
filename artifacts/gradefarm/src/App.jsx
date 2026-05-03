@@ -33,13 +33,28 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const NAV_ITEMS = [
-  { icon: '⚡', label: 'Question Bank', id: 'home',         path: '/question-bank' },
-  { icon: '🎓', label: 'Learn',         id: 'learn',        path: '/learn'         },
-  { icon: '📊', label: 'My Progress',   id: 'profile',      path: '/my-progress'   },
-  { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard',  path: '/leaderboard'   },
-  { icon: '📚', label: 'Study Plan',    id: 'study',        path: '/study-plan'    },
-  { icon: '🕐', label: 'History',       id: 'history',      path: '/history'       },
+  { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
+  { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
+  { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
+  { icon: 'leaderboard', label: 'Leaderboard',   id: 'leaderboard', path: '/leaderboard'   },
+  { icon: 'study',       label: 'Study Plan',    id: 'study',       path: '/study-plan'    },
+  { icon: 'history',     label: 'History',       id: 'history',     path: '/history'       },
 ]
+
+function NavIcon({ name, size = 14, color = 'currentColor' }) {
+  const S = { fill: 'none', stroke: color, strokeWidth: '1.65', strokeLinecap: 'round', strokeLinejoin: 'round' }
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" style={{ flexShrink: 0, display: 'block' }}>
+      {name === 'home'        && <><polygon points="8,2 2,7 2,14 5.5,14 5.5,9.5 10.5,9.5 10.5,14 14,14 14,7" {...S} /></>}
+      {name === 'learn'       && <><path d="M2 3h5.5v11H2zM8.5 3H14v11H8.5z" {...S} /><line x1="5" y1="7" x2="5" y2="7" strokeWidth="2" stroke={color} /></>}
+      {name === 'profile'     && <polyline points="2,13 5,8 8,11 13,3" {...S} />}
+      {name === 'leaderboard' && <><rect x="2" y="9" width="3" height="5" rx="1" {...S} /><rect x="6.5" y="5" width="3" height="9" rx="1" {...S} /><rect x="11" y="1" width="3" height="13" rx="1" {...S} /></>}
+      {name === 'study'       && <><line x1="3" y1="4" x2="10" y2="4" {...S} /><line x1="3" y1="8" x2="10" y2="8" {...S} /><line x1="3" y1="12" x2="7" y2="12" {...S} /><polyline points="10,10.5 12,12.5 15.5,9" {...S} /></>}
+      {name === 'history'     && <><circle cx="8" cy="8" r="6" {...S} /><polyline points="8,5 8,8.5 10.5,10" {...S} /></>}
+      {name === 'tutor'       && <><circle cx="8" cy="5.5" r="3" {...S} /><path d="M3 14.5c0-2.8 2.2-5 5-5s5 2.2 5 5" {...S} /></>}
+    </svg>
+  )
+}
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
@@ -52,73 +67,101 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const go = (path) => { navigate(path); onClose?.() }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#080d28', fontFamily: FONT_B }}>
-      <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'linear-gradient(180deg,#080d28 0%,#06091f 100%)', fontFamily: FONT_B }}>
+      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div onClick={() => go('/home')} style={{ cursor: 'pointer', lineHeight: 1 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1 }}>
+          <span style={{ fontFamily: FONT_D, fontSize: 18, letterSpacing: 1.5 }}>
             <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
           </span>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', fontFamily: FONT_B, letterSpacing: '0.04em', marginTop: 3 }}>by Titanium Tutoring</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontFamily: FONT_B, letterSpacing: '0.06em', marginTop: 3, textTransform: 'uppercase' }}>by Titanium Tutoring</div>
         </div>
-        <button onClick={onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>
-          <span style={{ fontSize: 10 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
-          <div style={{ width: 24, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.1)', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 1, left: theme === 'dark' ? 1 : 11, width: 11, height: 11, borderRadius: '50%', background: GOLD, transition: 'left 0.25s' }} />
+        <button
+          onClick={onToggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 8px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'border-color 0.2s, background 0.2s' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)'; e.currentTarget.style.background = 'rgba(241,190,67,0.06)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+        >
+          <span style={{ fontSize: 11 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
+          <div style={{ width: 26, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.08)', position: 'relative', flexShrink: 0 }}>
+            <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 12, width: 10, height: 10, borderRadius: '50%', background: GOLD, transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)', boxShadow: `0 0 6px ${GOLD}80` }} />
           </div>
         </button>
       </div>
 
-      <div style={{ padding: '7px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 6, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.15)' }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: GOLD, flexShrink: 0 }} />
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: 600, letterSpacing: '0.04em' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+        </div>
       </div>
 
       <div
         onClick={() => go('/my-account')}
-        style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0, cursor: 'pointer', transition: 'background 0.15s' }}
-        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+        style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#06091f', flexShrink: 0, boxShadow: `0 2px 8px ${GOLD}40` }}>
             {profile.display_name[0].toUpperCase()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</div>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 600 }}>{icon} {rank}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{profile.display_name}</div>
+            <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 1, letterSpacing: '0.02em' }}>{icon} {rank}</div>
           </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>›</div>
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 4, overflow: 'hidden', marginBottom: 3 }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
+        <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 3, height: 3, overflow: 'hidden', marginBottom: 4 }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s ease', borderRadius: 3 }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>Level {level}</span>
-          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{profile.xp}/{next} XP</span>
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.04em' }}>Level {level}</span>
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)' }}>{profile.xp.toLocaleString()} XP</span>
         </div>
       </div>
 
-      <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+      {/* Nav items */}
+      <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
         {NAV_ITEMS.map(item => {
           const active = location.pathname === item.path || (item.path === '/home' && location.pathname === '/')
           return (
             <button key={item.id} onClick={() => go(item.path)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
-              <span style={{ fontSize: 15 }}>{item.icon}</span>
+              style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px 9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.10)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.60)', fontSize: 13.5, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'color 0.15s, background 0.15s, border-color 0.15s', letterSpacing: active ? '-0.01em' : '0' }}
+              onMouseEnter={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' } }}
+              onMouseLeave={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,0.60)'; e.currentTarget.style.background = 'transparent' } }}
+            >
+              <NavIcon name={item.icon} size={14} color={active ? GOLD : 'rgba(255,255,255,0.55)'} />
               {item.label}
             </button>
           )
         })}
         {profile?.is_tutor && (
           <button onClick={() => go('/tutor')}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: location.pathname === '/tutor' ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${location.pathname === '/tutor' ? GOLD : 'transparent'}`, color: location.pathname === '/tutor' ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: location.pathname === '/tutor' ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%' }}>
-            <span style={{ fontSize: 15 }}>👨‍🏫</span>
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px 9px 12px', borderRadius: 8, border: 'none', background: location.pathname === '/tutor' ? 'rgba(241,190,67,0.10)' : 'transparent', borderLeft: `2px solid ${location.pathname === '/tutor' ? GOLD : 'transparent'}`, color: location.pathname === '/tutor' ? GOLD : 'rgba(255,255,255,0.60)', fontSize: 13.5, fontWeight: location.pathname === '/tutor' ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'color 0.15s, background 0.15s' }}
+            onMouseEnter={e => { if (location.pathname !== '/tutor') { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' } }}
+            onMouseLeave={e => { if (location.pathname !== '/tutor') { e.currentTarget.style.color = 'rgba(255,255,255,0.60)'; e.currentTarget.style.background = 'transparent' } }}
+          >
+            <NavIcon name="tutor" size={14} color={location.pathname === '/tutor' ? GOLD : 'rgba(255,255,255,0.55)'} />
             Tutor Dashboard
           </button>
         )}
       </nav>
 
-      <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        <button onClick={onChangeSubject} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(241,190,67,0.3)', background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>⇄ Change Subject</button>
-        <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)', background: 'transparent', color: 'rgba(255,255,255,0.3)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Sign out</button>
+      {/* Bottom actions */}
+      <div style={{ padding: '10px 12px 14px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+        <button
+          onClick={onChangeSubject}
+          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(241,190,67,0.25)', background: 'rgba(241,190,67,0.06)', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.15s, border-color 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.12)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.4)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.06)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.25)' }}
+        >⇄ Change Subject</button>
+        <button
+          onClick={onSignOut}
+          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)', background: 'transparent', color: 'rgba(255,255,255,0.25)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, transition: 'color 0.15s, border-color 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.25)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
+        >Sign out</button>
       </div>
     </div>
   )

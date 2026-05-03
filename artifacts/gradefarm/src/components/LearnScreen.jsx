@@ -6,6 +6,7 @@ import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 function buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests) {
@@ -373,11 +374,12 @@ export default function LearnScreen({
       <div className="ls-wrap">
         <div className="ls-main">
           <div className="ls-main-inner">
-            <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.15),rgba(241,190,67,0.06))`, border: `1px solid rgba(241,190,67,0.25)`, borderRadius: 18, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎓</div>
+            <div style={{ background: `linear-gradient(135deg,rgba(241,190,67,0.13),rgba(241,190,67,0.05))`, border: `1px solid rgba(241,190,67,0.28)`, borderLeft: `3px solid ${GOLD}`, borderRadius: 18, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 13, background: `linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))`, border: `1px solid rgba(241,190,67,0.38)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, boxShadow: `0 4px 16px rgba(241,190,67,0.2)` }}>🎓</div>
               <div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 1 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
+                <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>AI Tutor</div>
+                <div style={{ fontSize: 17, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 0.8, color: t.text }}>Learn with <span style={{ color: GOLD }}>Titan AI</span></div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>Your personal SACE tutor · {subject?.name || 'Chemistry'}</div>
               </div>
             </div>
 
@@ -518,13 +520,13 @@ export default function LearnScreen({
         }
       `}</style>
 
-      <div style={{ background: theme === 'dark' ? 'rgba(241,190,67,0.1)' : 'rgba(241,190,67,0.15)', borderBottom: `1px solid rgba(241,190,67,0.25)`, padding: '12px 18px', flexShrink: 0 }}>
+      <div style={{ background: theme === 'dark' ? 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))' : 'rgba(241,190,67,0.15)', borderBottom: `1px solid rgba(241,190,67,0.25)`, padding: '14px 18px', flexShrink: 0, boxShadow: theme === 'dark' ? 'inset 0 1px 0 rgba(255,255,255,0.04)' : 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>🎓</div>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, boxShadow: `0 6px 18px rgba(241,190,67,0.4), inset 0 1px 0 rgba(255,255,255,0.3)` }}>🎓</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Titan <span style={{ color: GOLD }}>AI</span></div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>Teaching: <span style={{ color: GOLD, fontWeight: 600 }}>{topic}</span></div>
+              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 2 }}>AI Tutor</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, fontFamily: FONT_D, letterSpacing: 0.5 }}>Titan <span style={{ color: GOLD }}>AI</span> · <span style={{ fontSize: 12, color: t.textMuted, fontFamily: FONT_B, fontWeight: 600 }}>{topic}</span></div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -621,7 +623,7 @@ export default function LearnScreen({
               </button>
             </div>
           )}
-          <div style={{ padding: '10px 16px 10px 24px', borderTop: `1px solid rgba(255,255,255,0.07)`, background: '#080d28', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
+          <div style={{ padding: '12px 16px 14px 24px', borderTop: `1px solid rgba(255,255,255,0.07)`, background: '#080d28', display: 'flex', gap: 10, alignItems: 'flex-end', flexShrink: 0, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)' }}>
             <textarea
               ref={inputRef}
               value={input}
@@ -629,20 +631,22 @@ export default function LearnScreen({
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
               placeholder="Type your answer or question…"
               rows={1}
-              style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: `1px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.06)', color: '#f1f5f9', fontSize: 14, fontFamily: FONT_B, outline: 'none', resize: 'none', maxHeight: 100, lineHeight: 1.5 }}
+              style={{ flex: 1, padding: '11px 14px', borderRadius: 11, border: `1px solid ${input.trim() ? 'rgba(241,190,67,0.25)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#f1f5f9', fontSize: 14, fontFamily: FONT_B, outline: 'none', resize: 'none', maxHeight: 100, lineHeight: 1.5, boxShadow: input.trim() ? '0 0 0 3px rgba(241,190,67,0.08)' : 'none', transition: 'border 0.15s, box-shadow 0.15s' }}
             />
             <button onClick={sendMessage} disabled={!input.trim() || loading}
-              style={{ width: 40, height: 40, borderRadius: 10, border: 'none', background: input.trim() && !loading ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.08)', color: input.trim() ? '#0c1037' : 'rgba(255,255,255,0.3)', fontSize: 16, fontWeight: 800, cursor: input.trim() && !loading ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
+              style={{ width: 42, height: 42, borderRadius: 11, border: 'none', background: input.trim() && !loading ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.08)', color: input.trim() ? '#0c1037' : 'rgba(255,255,255,0.3)', fontSize: 17, fontWeight: 800, cursor: input.trim() && !loading ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s', boxShadow: input.trim() && !loading ? '0 6px 18px rgba(241,190,67,0.35), inset 0 1px 0 rgba(255,255,255,0.3)' : 'none' }}>
               ↑
             </button>
           </div>
         </div>
 
         <div className="ls-chat-aside">
-          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Quick replies</div>
+          <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Quick replies</div>
           {["I don't get it", "Give me an example", "I think I get it!", "Different analogy"].map(s => (
             <button key={s} onClick={() => sendPresetMessage(s)}
-              style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%' }}>
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)'; e.currentTarget.style.background = 'rgba(241,190,67,0.06)'; e.currentTarget.style.color = GOLDL }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.72)' }}
+              style={{ textAlign: 'left', padding: '9px 11px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%' }}>
               {s}
             </button>
           ))}

@@ -10,6 +10,7 @@ import SubtopicHeatmap from './SubtopicHeatmap'
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLearn, subject }) {
   const t = THEMES[theme]
@@ -138,7 +139,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           <div className="ps-header-row">
             <div className="ps-header-text">
               <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Analytics</div>
-              <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, margin: 0 }}>My Progress</h1>
+              <h1 style={{ fontSize: 26, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, color: t.text, margin: 0 }}>My Progress</h1>
               <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6 }}>Track your level, identify weak areas, and jump straight into focused revision.</div>
             </div>
             <div style={{ ...card, padding: '16px 20px', background: theme === 'dark' ? 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(14,165,233,0.08))' : 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(14,165,233,0.04))', border: `1px solid ${theme === 'dark' ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.18)'}`, flexShrink: 0, minWidth: 210 }}>
@@ -183,7 +184,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                   { label: 'Questions', value: totalAttempts, color: t.purple },
                   { label: 'Best Streak', value: `${profile.best_streak || 0} 🔥`, color: GOLD },
                 ].map((item) => (
-                  <div key={item.label} style={{ background: t.bgHover, borderRadius: 12, padding: '12px 12px 11px', border: `1px solid ${t.border}` }}>
+                  <div key={item.label} style={{ background: t.bgHover, borderRadius: 12, padding: '12px 12px 11px', border: `1px solid ${t.border}`, borderTop: `2px solid ${item.color}`, position: 'relative', overflow: 'hidden' }}>
                     <div style={{ fontSize: 22, fontWeight: 800, color: item.color }}>{item.value}</div>
                     <div style={{ fontSize: 10, color: t.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</div>
                   </div>

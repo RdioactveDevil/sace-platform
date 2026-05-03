@@ -314,6 +314,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         @keyframes spin    { to{transform:rotate(360deg)} }
         @keyframes typing  { 0%,100%{opacity:0.25;transform:scale(0.9)} 50%{opacity:1;transform:scale(1.1)} }
         @keyframes scan    { 0%{top:-40%} 100%{top:110%} }
+        @keyframes pulse   { 0%,100%{box-shadow:0 0 0 3px rgba(241,190,67,0.2)} 50%{box-shadow:0 0 0 7px rgba(241,190,67,0.06)} }
         .tdot { animation:typing 1.4s ease-in-out infinite; }
         .td0  { animation-delay:0ms; }
         .td1  { animation-delay:220ms; }
@@ -325,7 +326,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         .bc:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(0,0,0,0.55) !important; }
         .bc-gold:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(241,190,67,0.2) !important; }
         .pill { animation:fadeUp 0.5s ease; }
-        .dot-grid { background-image:radial-gradient(rgba(241,190,67,0.11) 1px,transparent 1px); background-size:32px 32px; }
+        .dot-grid { background-image: linear-gradient(rgba(241,190,67,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(241,190,67,0.045) 1px, transparent 1px); background-size: 48px 48px; }
         .grad-text { background:linear-gradient(135deg,${GOLD} 0%,${GOLDL} 50%,#fff 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
         .shimmer-btn { background:linear-gradient(90deg,${GOLD} 0%,${GOLDL} 30%,#fff8e1 50%,${GOLDL} 70%,${GOLD} 100%); background-size:200% auto; animation:shimmer 3s linear infinite; }
         .scan-line { position:absolute; left:0; right:0; height:40%; background:linear-gradient(to bottom,transparent,rgba(241,190,67,0.04),transparent); animation:scan 4s ease-in-out infinite; pointer-events:none; }
@@ -353,15 +354,15 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <span style={{ fontFamily:FONT_D, fontSize:20, letterSpacing:1 }}>
             <span style={{ color:'#fff' }}>grade</span><span style={{ color:GOLD }}>farm.</span>
           </span>
-          <span style={{ fontSize:10, color:'#2d3a5e' }}>by Titanium Tutoring</span>
+          <span style={{ fontSize:10, color:'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
         </div>
         <div className="dnav" style={{ display:'flex', alignItems:'center', gap:28 }}>
           {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
-            <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'#4a5a7a', fontSize:14, fontWeight:500, cursor:'pointer', fontFamily:FONT_B }}>{label}</button>
+            <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.55)', fontSize:13.5, fontWeight:500, cursor:'pointer', fontFamily:FONT_B, transition:'color 0.15s' }}>{label}</button>
           ))}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <button onClick={onSignIn} className="dnav" style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,0.09)', background:'transparent', color:MUTED, fontSize:13, cursor:'pointer', fontFamily:FONT_B }}>Sign in</button>
+          <button onClick={onSignIn} className="dnav" style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.65)', fontSize:13, cursor:'pointer', fontFamily:FONT_B, transition:'all 0.2s' }}>Sign in</button>
           <button onClick={onGetStarted} className="ctab shimmer-btn dnav" style={{ padding:'9px 20px', borderRadius:9, border:'none', color:NAVYD, fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 4px 16px rgba(241,190,67,0.35)` }}>Get started free</button>
           {/* hamburger — mobile only */}
           <button
@@ -385,9 +386,9 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         <div className="hero-grid" style={{ maxWidth:1160, width:'100%', display:'flex', alignItems:'center', gap:80, position:'relative', zIndex:1 }}>
           {/* left */}
           <div style={{ flex:1, animation:'fadeUp 0.6s ease' }}>
-            <div className="pill" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(241,190,67,0.1)', border:'1px solid rgba(241,190,67,0.28)', borderRadius:20, padding:'6px 14px', marginBottom:28 }}>
-              <div style={{ width:6, height:6, borderRadius:'50%', background:GOLD }} />
-              <span style={{ fontSize:12, color:GOLD, fontWeight:700 }}>AI-powered · Built for Australia · Free to start</span>
+            <div className="pill" style={{ display:'inline-flex', alignItems:'center', gap:9, background:'rgba(241,190,67,0.08)', border:'1px solid rgba(241,190,67,0.32)', borderRadius:24, padding:'7px 16px', marginBottom:28 }}>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:GOLD, animation:'pulse 2.2s ease-in-out infinite', flexShrink:0 }} />
+              <span style={{ fontSize:12, color:GOLD, fontWeight:700, letterSpacing:'0.02em' }}>AI-powered · Built for Australia · Free to start</span>
             </div>
 
             <h1 style={{ fontFamily:FONT_D, fontSize:'clamp(36px,5.5vw,68px)', lineHeight:1.02, margin:'0 0 24px', color:'#fff', letterSpacing:1 }}>
@@ -412,8 +413,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             {/* trust row */}
             <div style={{ display:'flex', alignItems:'center', gap:16, paddingTop:28, borderTop:'1px solid rgba(255,255,255,0.05)' }}>
               <div style={{ display:'flex' }}>
-                {['A','J','M','S','P','R'].map((l,i) => (
-                  <div key={i} style={{ width:34, height:34, borderRadius:'50%', background:`hsl(${i*40+200},50%,32%)`, border:'2px solid #080d28', marginLeft: i>0?-10:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:'#fff' }}>{l}</div>
+                {[['A',GOLD,NAVYD],['J',PURPLE,'#0a0620'],['M',GREEN,'#03180e'],['S',GOLD,NAVYD],['P',PURPLE,'#0a0620'],['R',GREEN,'#03180e']].map(([l,bg,fg],i) => (
+                  <div key={i} style={{ width:34, height:34, borderRadius:'50%', background:`linear-gradient(135deg,${bg},${bg}bb)`, border:'2px solid #080d28', marginLeft:i>0?-10:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:fg, flexShrink:0 }}>{l}</div>
                 ))}
               </div>
               <div>
@@ -471,8 +472,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <FadeUp delay={0} style={{ gridColumn:'span 2' }}>
               <div className="bc-gold" style={{ background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320, height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:200, height:200, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.12) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
-                  <div style={{ width:44, height:44, borderRadius:12, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>🎯</div>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+                  <div style={{ width:48, height:48, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 4px 18px rgba(241,190,67,0.22)', flexShrink:0 }}>🎯</div>
                   <div>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Core Technology</div>
                     <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Adaptive Intelligence Engine</div>
@@ -492,8 +493,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <FadeUp delay={70}>
               <div className="bc" style={{ background:'rgba(167,139,250,0.04)', border:'1px solid rgba(167,139,250,0.22)', borderRadius:20, padding:28, position:'relative', overflow:'hidden', height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:140, height:140, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)`, filter:'blur(16px)', pointerEvents:'none' }} />
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(167,139,250,0.15)', border:'1px solid rgba(167,139,250,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>🎓</div>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(167,139,250,0.22),rgba(167,139,250,0.08))', border:'1px solid rgba(167,139,250,0.35)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(167,139,250,0.18)', flexShrink:0 }}>🎓</div>
                   <div>
                     <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>AI Tutor</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Titan AI</div>
@@ -507,8 +508,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             {/* CARD 3 — XP & Leaderboards */}
             <FadeUp delay={140}>
               <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>⚡</div>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.32)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(241,190,67,0.18)', flexShrink:0 }}>⚡</div>
                   <div>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gamification</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>XP & Leaderboards</div>
@@ -522,8 +523,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             {/* CARD 4 — Know Your Gaps */}
             <FadeUp delay={210}>
               <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📊</div>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))', border:'1px solid rgba(16,185,129,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(16,185,129,0.16)', flexShrink:0 }}>📊</div>
                   <div>
                     <div style={{ fontSize:10, color:GREEN, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gap Analysis</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Know Your Gaps</div>
@@ -537,8 +538,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             {/* CARD 5 — Your Notes */}
             <FadeUp delay={280}>
               <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(249,216,122,0.15)', border:'1px solid rgba(249,216,122,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📄</div>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(249,216,122,0.22),rgba(249,216,122,0.08))', border:'1px solid rgba(249,216,122,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(249,216,122,0.16)', flexShrink:0 }}>📄</div>
                   <div>
                     <div style={{ fontSize:10, color:GOLDL, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Smart Upload</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Your Notes, Your Tutor</div>
@@ -569,7 +570,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               <div className="bc" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
                 <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
                 <div style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
-                  <div style={{ width:52, height:52, borderRadius:14, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26 }}>⭐</div>
+                  <div style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)' }}>⭐</div>
                   <div>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:4 }}>Curriculum</div>
                     <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Backed by Titanium Tutoring</div>
@@ -615,7 +616,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     { icon:'🌙', text:'Available 24/7 — no scheduling, no waiting, no minimum booking' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:'rgba(167,139,250,0.1)', border:'1px solid rgba(167,139,250,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{f.icon}</div>
+                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.07))', border:'1px solid rgba(167,139,250,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(167,139,250,0.15)' }}>{f.icon}</div>
                       <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
                     </div>
                   ))}
@@ -706,7 +707,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     { icon:'🔁', text:'Questions you\'ve missed come back in spaced intervals until they stick permanently' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:'rgba(241,190,67,0.1)', border:'1px solid rgba(241,190,67,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{f.icon}</div>
+                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(241,190,67,0.2),rgba(241,190,67,0.07))', border:'1px solid rgba(241,190,67,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(241,190,67,0.15)' }}>{f.icon}</div>
                       <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
                     </div>
                   ))}
@@ -742,7 +743,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     { icon:'📈', text:'Progress tracking over time so you can see the gaps actually closing' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{f.icon}</div>
+                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(16,185,129,0.2),rgba(16,185,129,0.07))', border:'1px solid rgba(16,185,129,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(16,185,129,0.15)' }}>{f.icon}</div>
                       <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
                     </div>
                   ))}
@@ -783,19 +784,20 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           </FadeUp>
           <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
             {[
-              { num:'01', icon:'✍️', color:GOLD,   title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
-              { num:'02', icon:'⚡', color:GOLD,   title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
-              { num:'03', icon:'🎓', color:PURPLE, title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
-              { num:'04', icon:'📈', color:GREEN,  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
+              { num:'01', icon:'✍️', color:GOLD,   rgb:'241,190,67',  title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
+              { num:'02', icon:'⚡', color:GOLD,   rgb:'241,190,67',  title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
+              { num:'03', icon:'🎓', color:PURPLE, rgb:'167,139,250', title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
+              { num:'04', icon:'📈', color:GREEN,  rgb:'16,185,129',  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
             ].map((s,i) => (
               <FadeUp key={i} delay={i * 80}>
-                <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:18, padding:28, position:'relative', height:'100%' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-                    <div style={{ width:48, height:48, borderRadius:14, background:`rgba(${s.color===GOLD?'241,190,67':s.color===PURPLE?'167,139,250':'16,185,129'},0.12)`, border:`1px solid rgba(${s.color===GOLD?'241,190,67':s.color===PURPLE?'167,139,250':'16,185,129'},0.25)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>{s.icon}</div>
-                    <div style={{ fontFamily:FONT_D, fontSize:32, color:'rgba(255,255,255,0.06)', letterSpacing:2 }}>{s.num}</div>
+                <div style={{ background:'rgba(255,255,255,0.02)', border:`1px solid rgba(${s.rgb},0.14)`, borderLeft:`3px solid ${s.color}`, borderRadius:18, padding:28, position:'relative', height:'100%', overflow:'hidden' }}>
+                  <div style={{ position:'absolute', top:-8, right:-4, fontFamily:FONT_D, fontSize:88, color:`rgba(${s.rgb},0.05)`, letterSpacing:2, lineHeight:1, userSelect:'none', pointerEvents:'none' }}>{s.num}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
+                    <div style={{ width:48, height:48, borderRadius:14, background:`linear-gradient(135deg,rgba(${s.rgb},0.2),rgba(${s.rgb},0.07))`, border:`1px solid rgba(${s.rgb},0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:`0 4px 16px rgba(${s.rgb},0.18)`, flexShrink:0 }}>{s.icon}</div>
+                    <div style={{ fontFamily:FONT_D, fontSize:12, color:s.color, letterSpacing:'0.1em' }}>STEP {s.num}</div>
                   </div>
-                  <div style={{ fontFamily:FONT_D, fontSize:17, color:'#fff', marginBottom:10, letterSpacing:0.5 }}>{s.title.toUpperCase()}</div>
-                  <div style={{ fontSize:14, color:MUTED, lineHeight:1.65 }}>{s.desc}</div>
+                  <div style={{ fontFamily:FONT_D, fontSize:16, color:'#fff', marginBottom:10, letterSpacing:0.5, lineHeight:1.2 }}>{s.title.toUpperCase()}</div>
+                  <div style={{ fontSize:13.5, color:MUTED, lineHeight:1.7 }}>{s.desc}</div>
                   {i < 3 && <div style={{ position:'absolute', top:'50%', right:-9, transform:'translateY(-50%)', width:18, height:18, borderRadius:'50%', background:NAVYD, border:`1px solid rgba(241,190,67,0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:GOLD, zIndex:1 }}>→</div>}
                 </div>
               </FadeUp>
@@ -873,23 +875,28 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <p style={{ fontSize:16, color:MUTED, marginBottom:52, maxWidth:440, margin:'0 auto 52px', lineHeight:1.7 }}>Everything is free right now. Beta users lock in the lowest price forever.</p>
             <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:16, maxWidth:720, margin:'0 auto' }}>
               {[
-                { name:'Beta', price:'Free', sub:'While in beta', hi:true, features:['All subjects (Chemistry live now)','Unlimited quiz sessions','Learn with Titan AI','Struggle tracking & readiness score','Weekly leaderboard','Priority beta pricing forever'] },
-                { name:'Full Release', price:'$12', sub:'/month · after beta', hi:false, features:['Everything in Beta','All SACE subjects','Parent dashboard','School assignment mode','Exam countdown planner','Priority support'] },
+                { name:'Beta', price:'Free', sub:'While in beta · lock in your rate forever', hi:true, features:['All subjects (Chemistry live now)','Unlimited quiz sessions','Learn with Titan AI','Struggle tracking & readiness score','Weekly leaderboard','Priority beta pricing forever'] },
+                { name:'Full Release', price:'$12', sub:'/month · after beta ends', hi:false, features:['Everything in Beta','All SACE subjects','Parent dashboard','School assignment mode','Exam countdown planner','Priority support'] },
               ].map(p => (
-                <div key={p.name} style={{ background: p.hi?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${p.hi?'rgba(241,190,67,0.3)':'rgba(255,255,255,0.06)'}`, borderRadius:20, padding:'36px 30px', textAlign:'left', position:'relative' }}>
-                  {p.hi && <div style={{ position:'absolute', top:-12, left:'50%', transform:'translateX(-50%)', background:`linear-gradient(135deg,${GOLD},${GOLDL})`, color:NAVYD, fontSize:11, fontWeight:900, padding:'5px 16px', borderRadius:20 }}>AVAILABLE NOW</div>}
-                  <div style={{ fontSize:14, fontWeight:800, color: p.hi?GOLD:MUTED, marginBottom:6 }}>{p.name}</div>
-                  <div style={{ fontFamily:FONT_D, fontSize:44, color:'#f1f5f9', marginBottom:4, letterSpacing:1 }}>{p.price}</div>
-                  <div style={{ fontSize:13, color:MUTED, marginBottom:28 }}>{p.sub}</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:28 }}>
+                <div key={p.name} style={{ background: p.hi?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${p.hi?'rgba(241,190,67,0.32)':'rgba(255,255,255,0.06)'}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid rgba(255,255,255,0.06)`, borderRadius:20, padding: p.hi?'38px 30px 34px':'36px 30px', textAlign:'left', position:'relative' }}>
+                  {p.hi && <div style={{ position:'absolute', top:-12, left:'50%', transform:'translateX(-50%)', background:`linear-gradient(135deg,${GOLD},${GOLDL})`, color:NAVYD, fontSize:11, fontWeight:900, padding:'5px 16px', borderRadius:20, whiteSpace:'nowrap' }}>AVAILABLE NOW</div>}
+                  <div style={{ fontSize:11, fontWeight:800, color: p.hi?GOLD:'rgba(255,255,255,0.28)', marginBottom:8, letterSpacing:'0.12em', textTransform:'uppercase' }}>{p.name}</div>
+                  <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
+                    <div style={{ fontFamily:FONT_D, fontSize:52, color: p.hi?'#fff':'rgba(255,255,255,0.4)', letterSpacing:1, lineHeight:1 }}>{p.price}</div>
+                  </div>
+                  <div style={{ fontSize:12, color:MUTED, marginBottom:28, lineHeight:1.5 }}>{p.sub}</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:11, marginBottom:28 }}>
                     {p.features.map(f => (
-                      <div key={f} style={{ display:'flex', alignItems:'center', gap:10, fontSize:13, color:MUTED }}>
-                        <span style={{ color: p.hi?GOLD:'#334155', fontWeight:800 }}>✓</span> {f}
+                      <div key={f} style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color: p.hi?'#cbd5e1':MUTED }}>
+                        <div style={{ width:18, height:18, borderRadius:'50%', background: p.hi?'rgba(241,190,67,0.15)':'rgba(255,255,255,0.04)', border:`1px solid ${p.hi?'rgba(241,190,67,0.35)':'rgba(255,255,255,0.1)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                          <span style={{ fontSize:8, fontWeight:900, color: p.hi?GOLD:'#475569' }}>✓</span>
+                        </div>
+                        {f}
                       </div>
                     ))}
                   </div>
                   {p.hi && (
-                    <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ width:'100%', padding:14, borderRadius:11, border:'none', color:NAVYD, fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 6px 20px rgba(241,190,67,0.35)` }}>
+                    <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ width:'100%', padding:'15px 14px', borderRadius:11, border:'none', color:NAVYD, fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 6px 20px rgba(241,190,67,0.35)` }}>
                       Get started free →
                     </button>
                   )}
@@ -929,14 +936,14 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         <div className="footer-row" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:16 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <span style={{ fontFamily:FONT_D, fontSize:16, letterSpacing:1 }}><span style={{ color:'#f1f5f9' }}>grade</span><span style={{ color:GOLD }}>farm.</span></span>
-            <span style={{ fontSize:11, color:'#2d3a5e' }}>by Titanium Tutoring</span>
+            <span style={{ fontSize:11, color:'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
           </div>
           <div style={{ display:'flex', gap:24 }}>
             {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id,l]) => (
-              <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'#2d3a5e', fontSize:12, cursor:'pointer', fontFamily:FONT_B }}>{l}</button>
+              <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.35)', fontSize:12, cursor:'pointer', fontFamily:FONT_B, transition:'color 0.15s' }}>{l}</button>
             ))}
           </div>
-          <div style={{ fontSize:12, color:'#2d3a5e' }}>© 2026 Titanium Tutoring · Adelaide, SA · Per aspera ad astra</div>
+          <div style={{ fontSize:12, color:'rgba(255,255,255,0.25)' }}>© 2026 Titanium Tutoring · Adelaide, SA · Per aspera ad astra</div>
         </div>
       </footer>
     </div>

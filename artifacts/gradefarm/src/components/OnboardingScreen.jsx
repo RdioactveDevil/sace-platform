@@ -205,7 +205,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
   const stepDetails = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>👤</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>👤</div>
+      </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR DETAILS</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>Tell us a bit about yourself.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -273,7 +275,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
   const stepGoals = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>🎯</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>🎯</div>
+      </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR GOALS</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>This helps us calibrate your study plan.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -325,7 +329,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
   const stepSubjects = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>📚</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>📚</div>
+      </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR SUBJECTS</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 6 }}>Select the subjects you're studying.</p>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -378,7 +384,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
   const stepConfirm = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>✅</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>✅</div>
+      </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>ALMOST THERE</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20 }}>Review your setup and accept terms to get started.</p>
       <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>

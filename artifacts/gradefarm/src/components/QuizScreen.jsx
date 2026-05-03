@@ -1062,9 +1062,14 @@ export default function QuizScreen({
         : 'Session Complete!'
 
     return (
-      <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, overflowY: 'auto' }}>
-        <style>{`@keyframes ss-fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }`}</style>
-        <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 20px 60px', animation: 'ss-fadeUp 0.35s ease' }}>
+      <div style={{ minHeight: '100vh', background: NAVYD, fontFamily: FONT_B, overflowY: 'auto', position: 'relative' }}>
+        <style>{`
+          @keyframes ss-fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+          .ss-grid { background-image: linear-gradient(rgba(241,190,67,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(241,190,67,0.03) 1px, transparent 1px); background-size: 52px 52px; }
+        `}</style>
+        <div className="ss-grid" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 600, height: 300, borderRadius: '50%', background: `radial-gradient(circle,rgba(241,190,67,0.07) 0%,transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none' }} />
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 20px 60px', animation: 'ss-fadeUp 0.35s ease', position: 'relative', zIndex: 1 }}>
 
           {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -1092,16 +1097,22 @@ export default function QuizScreen({
             </div>
           )}
 
-          {/* Score strip */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor },
-              { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: '#e2e8f0' },
-              { label: 'XP Earned', val: `+${sessionXP}`,         color: GOLD },
+              { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor, isXP: false },
+              { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: '#e2e8f0', isXP: false },
+              { label: 'XP Earned', val: `+${sessionXP}`,         color: GOLD, isXP: true },
             ].map(s => (
-              <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '14px 10px', textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
-                <div style={{ fontSize: 11, color: '#475569', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.label}</div>
+              <div key={s.label} style={{
+                background: s.isXP ? 'linear-gradient(135deg, rgba(241,190,67,0.10), rgba(241,190,67,0.04))' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${s.isXP ? 'rgba(241,190,67,0.25)' : 'rgba(255,255,255,0.07)'}`,
+                borderRadius: 14,
+                padding: '16px 10px',
+                textAlign: 'center',
+                boxShadow: s.isXP ? '0 4px 18px rgba(241,190,67,0.12), inset 0 1px 0 rgba(255,255,255,0.04)' : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+              }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: s.color, fontFamily: FONT_D, letterSpacing: 0.5 }}>{s.val}</div>
+                <div style={{ fontSize: 10, color: s.isXP ? GOLD : '#64748b', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -1285,16 +1296,17 @@ export default function QuizScreen({
       )}
 
       {showExit && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
-          <div style={{ background: '#111a4a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18, padding: '32px', maxWidth: 340, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease' }}>
-            <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 8 }}>End this session?</div>
-            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.65 }}>
-              You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved.
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
+          <div style={{ background: 'rgba(8,13,40,0.98)', border: '1px solid rgba(241,190,67,0.18)', borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease', boxShadow: '0 32px 80px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04)' }}>
+            <div style={{ position: 'absolute', top: 0, left: '25%', right: '25%', height: 1, background: 'linear-gradient(90deg, transparent, rgba(241,190,67,0.5), transparent)', borderRadius: 99 }} />
+            <div style={{ fontSize: 36, marginBottom: 14 }}>⏸</div>
+            <div style={{ fontFamily: FONT_D, fontSize: 20, color: '#fff', marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
+            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.65 }}>
+              You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved — you can resume anytime.
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>Keep going</button>
-              <button onClick={onHome} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#ef4444', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End session</button>
+              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '13px', borderRadius: 11, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>Keep going</button>
+              <button onClick={onHome} style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, boxShadow: '0 4px 16px rgba(239,68,68,0.3)' }}>End session</button>
             </div>
           </div>
         </div>

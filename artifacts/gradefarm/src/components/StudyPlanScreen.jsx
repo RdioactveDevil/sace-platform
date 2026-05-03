@@ -5,6 +5,7 @@ import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function StudyPlanScreen({ profile, questions, struggleMap, theme, onStartSession, subject }) {
@@ -99,7 +100,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
       <div className="sp-scroll">
         <div className="sp-inner">
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Personalised</div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: t.text }}>Study Plan</h1>
+          <h1 style={{ fontSize: 26, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, margin: 0, color: t.text }}>Study Plan</h1>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6, marginBottom: 28 }}>Based on your quiz performance and spaced repetition schedule</div>
 
           {!hasActivity ? (

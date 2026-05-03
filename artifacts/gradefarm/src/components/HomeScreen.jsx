@@ -10,6 +10,7 @@ import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
@@ -206,8 +207,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   }
 
   const PriorityCard = () => topStruggles.length > 0 ? (
-    <div style={{ ...card, padding: '16px 18px' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 2 }}>Priority Topics</div>
+    <div style={{ ...card, padding: '18px 20px' }}>
+      <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Focus</div>
+      <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text, marginBottom: 2 }}>Priority Topics</div>
       <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Hit first in your next session</div>
       {topStruggles.map((s, i) => (
         <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
@@ -222,8 +224,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   ) : null
 
   const StatsCard = () => (
-    <div style={{ ...card, padding: '16px 18px' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 12 }}>Your Stats</div>
+    <div style={{ ...card, padding: '18px 20px' }}>
+      <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Performance</div>
+      <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text, marginBottom: 12 }}>Your Stats</div>
       {[
         { label: 'Total XP',       val: profile.xp.toLocaleString(),         color: GOLD },
         { label: 'Best streak',    val: `${profile.best_streak||0} days 🔥`, color: GOLD },
@@ -304,9 +307,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const allMissionsDone = missions.every(m => m.progress >= m.target)
 
   const MissionsCard = () => (
-    <div style={{ ...card, padding: '16px 18px' }}>
+    <div style={{ ...card, padding: '18px 20px' }}>
+      <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Today</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Daily Missions</div>
+        <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text }}>Daily Missions</div>
         {allMissionsDone && <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 700 }}>✓ All done!</span>}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -488,7 +492,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             </div>
           )}
 
-          <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4, color: t.text }}>Question Bank</h1>
+          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Questions</div>
+          <h1 style={{ fontSize: 24, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, marginBottom: 4, color: t.text }}>Question Bank</h1>
           <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>
             {subject?.stage || 'Stage 1'} · {subject?.name || 'Chemistry'} · {questions.length} questions
           </p>

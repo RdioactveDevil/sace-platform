@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function AccountScreen({ profile, theme, onSignOut, onChangeSubject }) {
   const t = THEMES[theme]
@@ -33,7 +34,7 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
 
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 10, boxSizing: 'border-box',
-    border: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgPage,
+    border: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg,
     color: t.text, fontSize: 14, fontFamily: FONT_B, outline: 'none',
   }
 
@@ -90,7 +91,9 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 48px', fontFamily: FONT_B, color: t.text, maxWidth: 680 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, color: t.text }}>My Account</h1>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
+      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Settings</div>
+      <h1 style={{ fontSize: 22, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.2, marginBottom: 6, color: t.text }}>My Account</h1>
       <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>Manage your profile and preferences.</p>
 
       {/* ── Profile card ── */}
