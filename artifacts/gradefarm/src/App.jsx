@@ -53,6 +53,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'study'       && <><path d="M3 4h7" {...S} /><path d="M3 9h7" {...S} /><path d="M3 14h4.5" {...S} /><path d="M11 12.5 13 14.5 16 11" {...S} /></>}
       {name === 'history'     && <><circle cx="9" cy="9" r="6.5" {...S} /><path d="M9 5.25V9l2.75 1.5" {...S} /></>}
       {name === 'tutor'       && <><circle cx="9" cy="6.25" r="3" {...S} /><path d="M3.25 15.5a5.75 5.75 0 0 1 11.5 0" {...S} /></>}
+      {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
     </svg>
   )
 }
@@ -67,15 +68,18 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
   const go = (path) => { navigate(path); onClose?.() }
 
-  // Single source of truth for nav items (incl. tutor) so the active-state logic stays consistent.
+  // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
   const navItems = [
     ...NAV_ITEMS,
     ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
+    ...(profile?.is_admin ? [{ icon: 'admin', label: 'Admin',           id: 'admin', path: '/admin' }] : []),
   ]
   const isActivePath = (p) =>
     location.pathname === p ||
     (p === '/home' && location.pathname === '/') ||
-    (p === '/question-bank' && location.pathname === '/quiz')
+    (p === '/question-bank' && location.pathname === '/quiz') ||
+    // Admin uses nested routes (/admin/*); treat any /admin descendant as active.
+    (p === '/admin' && location.pathname.startsWith('/admin'))
 
   return (
     <div className="gf-sidebar" style={{
@@ -672,7 +676,6 @@ function AppInner() {
 
   return (
     <>
-      <RoleSwitcherBar profile={profile} />
     <Routes>
       {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
@@ -868,70 +871,6 @@ function AppInner() {
       } />
     </Routes>
     </>
-  )
-}
-
-function RoleSwitcherBar({ profile }) {
-  const navigate = useNavigate()
-  const location = useLocation()
-  if (!profile) return null
-
-  const path = location.pathname || ''
-  // Hide on full-screen quiz / auth / onboarding / landing
-  const hideOn = ['/quiz', '/auth', '/home', '/onboarding', '/learn']
-  if (hideOn.some(p => path === p || path.startsWith(p + '/'))) return null
-
-  const isPending  = profile.tutor_application_status === 'pending'
-  const isAdmin    = !!profile.is_admin
-  const isTutor    = !!profile.is_tutor
-  const onAdmin    = path.startsWith('/admin')
-  const onTutor    = path.startsWith('/tutor')
-
-  if (!isAdmin && !isTutor && !isPending) return null
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '6px 12px',
-      background: isPending ? 'rgba(241,190,67,0.10)' : 'rgba(8,13,40,0.9)',
-      borderBottom: '1px solid rgba(241,190,67,0.18)',
-      fontFamily: "'Plus Jakarta Sans', sans-serif",
-      fontSize: 12, color: '#cbd5e1',
-      position: 'sticky', top: 0, zIndex: 100,
-    }}>
-      {isPending && (
-        <span style={{ color: '#f1be43', fontWeight: 700 }}>
-          Tutor application pending admin approval
-        </span>
-      )}
-      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-        {isAdmin && !onAdmin && (
-          <SwitchLink onClick={() => navigate('/admin')} color="#a78bfa">Admin</SwitchLink>
-        )}
-        {isTutor && !onTutor && (
-          <SwitchLink onClick={() => navigate('/tutor')} color="#f1be43">Tutor dashboard</SwitchLink>
-        )}
-        {(onAdmin || onTutor) && (
-          <SwitchLink onClick={() => navigate('/question-bank')} color="#94a3b8">Student app</SwitchLink>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SwitchLink({ onClick, color, children }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: '4px 10px', borderRadius: 6,
-        border: `1px solid ${color}55`,
-        background: `${color}14`,
-        color, fontSize: 12, fontWeight: 700,
-        cursor: 'pointer',
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-      }}
-    >{children}</button>
   )
 }
 

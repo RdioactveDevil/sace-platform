@@ -96,6 +96,14 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
       <h1 style={{ fontSize: 22, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.2, marginBottom: 6, color: t.text }}>My Account</h1>
       <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>Manage your profile and preferences.</p>
 
+      {/* Tutor application status — surfaced here now that the global RoleSwitcherBar has been removed. */}
+      {profile.tutor_application_status === 'pending' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', marginBottom: 16, borderRadius: 12, background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.28)', color: t.text, fontSize: 13 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}`, flexShrink: 0 }} />
+          <span><strong style={{ color: GOLD, fontWeight: 700 }}>Tutor application pending</strong> — an admin will review your application shortly.</span>
+        </div>
+      )}
+
       {/* ── Profile card ── */}
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
