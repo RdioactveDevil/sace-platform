@@ -660,6 +660,72 @@ export async function fetchAssignmentsForTutor(tutorId) {
   return (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
 }
 
+// ── TUTOR CLASSES ─────────────────────────────────────────────────────────────
+
+async function tutorFetch(path, opts = {}) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(opts.headers || {}),
+    },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`)
+  return json
+}
+
+/** Fetch tutor classes with their members. */
+export async function fetchTutorClasses() {
+  const json = await tutorFetch('/api/tutor/classes')
+  return json.classes || []
+}
+
+export async function createTutorClass({ name, subject, color, description } = {}) {
+  const json = await tutorFetch('/api/tutor/classes', {
+    method: 'POST',
+    body: JSON.stringify({ name, subject, color, description }),
+  })
+  return json.class
+}
+
+export async function updateTutorClass(classId, updates) {
+  const json = await tutorFetch(`/api/tutor/classes/${encodeURIComponent(classId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+  return json.class
+}
+
+export async function deleteTutorClass(classId) {
+  await tutorFetch(`/api/tutor/classes/${encodeURIComponent(classId)}`, { method: 'DELETE' })
+}
+
+export async function addStudentsToClass(classId, studentIds) {
+  return tutorFetch(`/api/tutor/classes/${encodeURIComponent(classId)}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ studentIds }),
+  })
+}
+
+export async function removeStudentFromClass(classId, studentId) {
+  await tutorFetch(`/api/tutor/classes/${encodeURIComponent(classId)}/members/${encodeURIComponent(studentId)}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Create a batch of assignments. Server resolves the union of studentIds + classIds + allRoster. */
+export async function createBatchAssignment({ type, subject, topics, due_date, studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
+  return tutorFetch('/api/tutor/assignments/batch', {
+    method: 'POST',
+    body: JSON.stringify({ type, subject, topics, due_date, studentIds, classIds, allRoster, notify }),
+  })
+}
+
 /** Fetch pending (not completed) assignments for a student. */
 export async function fetchAssignmentsForStudent(studentId) {
   const { data, error } = await supabase

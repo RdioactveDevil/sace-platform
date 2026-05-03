@@ -172,6 +172,76 @@ CREATE POLICY "tutors_read_rostered_student_answer_log"
     )
   );
 
+-- ── Tutor Classes & Batch Assignments ────────────────────────────────────────
+
+-- Classes a tutor can group their students into.
+CREATE TABLE IF NOT EXISTS tutor_classes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tutor_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  subject     TEXT,
+  color       TEXT,
+  description TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS tutor_classes_tutor_idx ON tutor_classes (tutor_id, created_at DESC);
+
+-- Join table for class membership. A student can belong to multiple classes.
+CREATE TABLE IF NOT EXISTS tutor_class_members (
+  class_id   UUID NOT NULL REFERENCES tutor_classes(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  added_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (class_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS tutor_class_members_student_idx ON tutor_class_members (student_id);
+
+-- Add optional class_id and batch_id to assignments so we can group per-student
+-- rows back into the batch (and class) they came from.
+ALTER TABLE assignments
+  ADD COLUMN IF NOT EXISTS class_id UUID REFERENCES tutor_classes(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS batch_id UUID;
+
+CREATE INDEX IF NOT EXISTS assignments_batch_idx ON assignments (batch_id);
+
+-- RLS: tutor_classes — only the owning tutor can read/write their own classes.
+ALTER TABLE tutor_classes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "tutors_manage_own_classes" ON tutor_classes;
+CREATE POLICY "tutors_manage_own_classes"
+  ON tutor_classes
+  USING  (tutor_id = auth.uid() AND is_current_user_tutor())
+  WITH CHECK (tutor_id = auth.uid() AND is_current_user_tutor());
+
+-- RLS: tutor_class_members — only the class's owning tutor can read/write members.
+ALTER TABLE tutor_class_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "tutors_manage_own_class_members" ON tutor_class_members;
+CREATE POLICY "tutors_manage_own_class_members"
+  ON tutor_class_members
+  USING (
+    is_current_user_tutor()
+    AND EXISTS (
+      SELECT 1 FROM tutor_classes c
+      WHERE c.id = tutor_class_members.class_id
+        AND c.tutor_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    is_current_user_tutor()
+    AND EXISTS (
+      SELECT 1 FROM tutor_classes c
+      WHERE c.id = tutor_class_members.class_id
+        AND c.tutor_id = auth.uid()
+    )
+    AND EXISTS (
+      SELECT 1 FROM tutor_students ts
+      WHERE ts.tutor_id = auth.uid()
+        AND ts.student_id = tutor_class_members.student_id
+    )
+  );
+
 -- ── Utility ───────────────────────────────────────────────────────────────────
 -- To make a user a tutor, run:
 --   UPDATE profiles SET is_tutor = true WHERE id = '<user-uuid>';

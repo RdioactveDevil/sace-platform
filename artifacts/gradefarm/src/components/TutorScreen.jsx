@@ -13,6 +13,13 @@ import {
   getQuestions,
   sendAssignmentNotification,
   notifyStudent,
+  fetchTutorClasses,
+  createTutorClass,
+  updateTutorClass,
+  deleteTutorClass,
+  addStudentsToClass,
+  removeStudentFromClass,
+  createBatchAssignment,
 } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
 import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
@@ -220,17 +227,21 @@ function AssignmentsTab({ profile, theme }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
+  const [classes, setClasses]         = useState([])
   const [loading, setLoading]         = useState(true)
   const [showForm, setShowForm]       = useState(false)
   const [saving, setSaving]           = useState(false)
   const [filterStudent, setFilterStudent] = useState('')
   const [filterStatus, setFilterStatus]   = useState('All')
+  const [expandedBatches, setExpandedBatches] = useState(() => new Set())
   const [form, setForm]               = useState({
     type: 'Quiz',
     subject: 'Chemistry Stage 1',
     topics: [],
     due_date: '',
+    target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
+    class_ids: [],
   })
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
@@ -272,12 +283,14 @@ function AssignmentsTab({ profile, theme }) {
   const load = async () => {
     setLoading(true)
     try {
-      const [asgns, ros] = await Promise.all([
+      const [asgns, ros, cls] = await Promise.all([
         fetchAssignmentsForTutor(profile.id),
         fetchRoster(profile.id),
+        fetchTutorClasses().catch(() => []),
       ])
       setAssignments(asgns)
       setRoster(ros)
+      setClasses(cls)
     } catch {}
     setLoading(false)
   }
@@ -290,44 +303,69 @@ function AssignmentsTab({ profile, theme }) {
     }))
   }
 
-  const toggleStudent = (id) => {
-    setForm(f => ({
-      ...f,
-      student_ids: f.student_ids.includes(id) ? f.student_ids.filter(s => s !== id) : [...f.student_ids, id],
-    }))
+  const setTargetMode = (mode) => {
+    setForm(f => ({ ...f, target_mode: mode, student_ids: [], class_ids: [] }))
   }
+
+  const toggleStudent = (id) => {
+    setForm(f => {
+      if (f.target_mode === 'single') return { ...f, student_ids: [id] }
+      return { ...f, student_ids: f.student_ids.includes(id) ? f.student_ids.filter(s => s !== id) : [...f.student_ids, id] }
+    })
+  }
+
+  const toggleClass = (id) => {
+    setForm(f => ({ ...f, class_ids: f.class_ids.includes(id) ? f.class_ids.filter(c => c !== id) : [...f.class_ids, id] }))
+  }
+
+  // Resolve preview union of student IDs based on target_mode
+  const resolvedStudentIds = (() => {
+    const set = new Set()
+    if (form.target_mode === 'all') {
+      roster.forEach(r => set.add(r.student_id))
+    } else if (form.target_mode === 'classes') {
+      classes.filter(c => form.class_ids.includes(c.id)).forEach(c => {
+        c.members.forEach(m => set.add(m.student_id))
+      })
+    } else {
+      form.student_ids.forEach(id => set.add(id))
+    }
+    // Always intersect against roster
+    const rosterSet = new Set(roster.map(r => r.student_id))
+    return Array.from(set).filter(id => rosterSet.has(id))
+  })()
+  const resolvedCount = resolvedStudentIds.length
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setFormError('')
     setNotifyStatus(null)
     if (form.topics.length === 0) { setFormError('Select at least one topic.'); return }
-    if (form.student_ids.length === 0) { setFormError('Select at least one student.'); return }
     if (!form.due_date) { setFormError('Please set a due date.'); return }
+    if (resolvedCount === 0) { setFormError('Select at least one target (student, class, or roster).'); return }
     setSaving(true)
     try {
-      const assignmentDetails = {
+      const result = await createBatchAssignment({
         type: form.type,
         subject: form.subject,
         topics: form.topics,
         due_date: form.due_date,
-      }
-      for (const sid of form.student_ids) {
-        await createAssignment(profile.id, sid, assignmentDetails)
-      }
+        studentIds: form.target_mode === 'classes' || form.target_mode === 'all' ? [] : form.student_ids,
+        classIds: form.target_mode === 'classes' ? form.class_ids : [],
+        allRoster: form.target_mode === 'all',
+        notify: true,
+      })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: 'Chemistry Stage 1', topics: [], due_date: '', student_ids: [] })
+      setForm({ type: 'Quiz', subject: 'Chemistry Stage 1', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
-      const notifyResults = await Promise.all(
-        form.student_ids.map(sid => sendAssignmentNotification(sid, assignmentDetails))
-      )
-      const failed = notifyResults.filter(r => !r.ok)
-      if (failed.length > 0) {
-        setNotifyStatus({ ok: false, msg: `Assignment created, but email notification failed: ${failed[0].error}` })
-      } else {
-        setNotifyStatus({ ok: true, msg: `Assignment created and ${notifyResults.length > 1 ? `${notifyResults.length} students notified` : 'student notified'} by email.` })
-        setTimeout(() => setNotifyStatus(null), 4000)
-      }
+      const created = result?.created ?? resolvedCount
+      const notified = result?.notified ?? 0
+      const errs = result?.notify_errors ?? 0
+      let msg = `Created ${created} assignment${created !== 1 ? 's' : ''}.`
+      if (notified > 0) msg += ` ${notified} student${notified !== 1 ? 's' : ''} notified by email.`
+      if (errs > 0) msg += ` ${errs} email${errs !== 1 ? 's' : ''} failed to send.`
+      setNotifyStatus({ ok: errs === 0, msg })
+      setTimeout(() => setNotifyStatus(null), 5000)
     } catch (err) {
       setFormError(err.message || 'Failed to create assignment.')
     }
@@ -438,33 +476,82 @@ function AssignmentsTab({ profile, theme }) {
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-                Assign To ({form.student_ids.length} selected)
+                Assign To
               </label>
               {roster.length === 0 ? (
                 <div style={{ fontSize: 12, color: t.textMuted }}>No students on your roster yet. Add students first.</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: t.text, fontWeight: 600 }}>
-                    <input type="checkbox"
-                      checked={form.student_ids.length === roster.length && roster.length > 0}
-                      onChange={() => setForm(f => ({ ...f, student_ids: f.student_ids.length === roster.length ? [] : roster.map(r => r.student_id) }))}
-                      style={{ accentColor: GOLD, width: 15, height: 15 }} />
-                    All students
-                  </label>
-                  {roster.map(s => (
-                    <label key={s.student_id} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: t.textMuted }}>
-                      <input type="checkbox" checked={form.student_ids.includes(s.student_id)} onChange={() => toggleStudent(s.student_id)} style={{ accentColor: GOLD, width: 15, height: 15 }} />
-                      {s.profiles?.display_name || 'Unknown'}
-                    </label>
-                  ))}
-                </div>
+                <>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'single',  label: 'Single student' },
+                      { id: 'multi',   label: 'Multi-select' },
+                      { id: 'classes', label: `Classes${classes.length > 0 ? ` (${classes.length})` : ''}` },
+                      { id: 'all',     label: 'Entire roster' },
+                    ].map(opt => {
+                      const active = form.target_mode === opt.id
+                      const disabled = opt.id === 'classes' && classes.length === 0
+                      return (
+                        <button key={opt.id} type="button" disabled={disabled} onClick={() => !disabled && setTargetMode(opt.id)}
+                          style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: disabled ? t.textFaint : active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONT_B, opacity: disabled ? 0.5 : 1 }}>
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {form.target_mode === 'all' && (
+                    <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 12px', borderRadius: 8, background: 'rgba(241,190,67,0.06)', border: `1px solid ${t.border}` }}>
+                      All {roster.length} student{roster.length !== 1 ? 's' : ''} on your roster will receive this.
+                    </div>
+                  )}
+
+                  {form.target_mode === 'classes' && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {classes.map(c => {
+                        const sel = form.class_ids.includes(c.id)
+                        const accent = c.color || GOLD
+                        return (
+                          <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
+                            style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${sel ? accent : t.border}`, background: sel ? `${accent}1f` : 'transparent', color: sel ? accent : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                            {c.name} · {c.members.length}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {(form.target_mode === 'single' || form.target_mode === 'multi') && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto', border: `1px solid ${t.border}`, borderRadius: 8, padding: 10 }}>
+                      {roster.map(s => {
+                        const checked = form.student_ids.includes(s.student_id)
+                        return (
+                          <label key={s.student_id} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: checked ? t.text : t.textMuted, fontWeight: checked ? 600 : 400 }}>
+                            <input
+                              type={form.target_mode === 'single' ? 'radio' : 'checkbox'}
+                              name="assign-target"
+                              checked={checked}
+                              onChange={() => toggleStudent(s.student_id)}
+                              style={{ accentColor: GOLD, width: 15, height: 15 }}
+                            />
+                            {s.profiles?.display_name || 'Unknown'}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 10, fontSize: 12, color: resolvedCount > 0 ? GOLD : t.textMuted, fontWeight: 700 }}>
+                    This will be sent to {resolvedCount} student{resolvedCount !== 1 ? 's' : ''}.
+                  </div>
+                </>
               )}
             </div>
 
             {formError && <div style={{ marginBottom: 12, fontSize: 12, color: '#f87171' }}>{formError}</div>}
 
             <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
-              {saving ? 'Creating…' : `Create Assignment${form.student_ids.length > 1 ? ` (${form.student_ids.length} students)` : ''}`}
+              {saving ? 'Creating…' : `Create Assignment${resolvedCount > 1 ? ` (${resolvedCount} students)` : ''}`}
             </button>
           </form>
         </div>
@@ -518,24 +605,43 @@ function AssignmentsTab({ profile, theme }) {
         ) : filteredAssignments.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No assignments match the current filters.</div>
         ) : (
-          <div>
-            {filteredAssignments.map(a => {
+          (() => {
+            // Group filtered assignments by batch_id (single-row batches and rows
+            // without a batch_id render as standalone rows).
+            const classNameById = {}
+            classes.forEach(c => { classNameById[c.id] = c })
+
+            const batchMap = new Map()
+            const standalone = []
+            for (const a of filteredAssignments) {
+              if (a.batch_id) {
+                if (!batchMap.has(a.batch_id)) batchMap.set(a.batch_id, [])
+                batchMap.get(a.batch_id).push(a)
+              } else {
+                standalone.push(a)
+              }
+            }
+
+            const renderRow = (a, indent = false) => {
               const status = assignmentStatus(a)
               const sc = statusColor(status)
               return (
-                <div key={a.id} style={{ padding: '13px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? (theme === 'dark' ? 'rgba(255,255,255,0.015)' : 'rgba(12,16,55,0.02)') : 'transparent' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{a.type}</span>
+                      {!indent && <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{a.type}</span>}
                       <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700 }}>{status}</span>
-                      <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}</span>
+                      {!indent && <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>
+                    <div style={{ fontSize: 12, color: t.textMuted, marginBottom: indent ? 0 : 3 }}>
                       <strong style={{ color: t.text }}>Student:</strong> {a.profiles?.display_name || a.student_id}
+                      {a.completed_at && <span style={{ marginLeft: 8, color: '#4ade80' }}>· Completed {fmtDate(a.completed_at)}</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: t.textMuted }}>
-                      <strong style={{ color: t.text }}>Topics:</strong> {(a.topics || []).join(', ') || a.subject}
-                    </div>
+                    {!indent && (
+                      <div style={{ fontSize: 12, color: t.textMuted }}>
+                        <strong style={{ color: t.text }}>Topics:</strong> {(a.topics || []).join(', ') || a.subject}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => handleDelete(a.id)}
@@ -545,8 +651,63 @@ function AssignmentsTab({ profile, theme }) {
                   </button>
                 </div>
               )
-            })}
-          </div>
+            }
+
+            // Combine batches + standalones, ordered by created_at of the first row.
+            const groups = []
+            for (const [batchId, rows] of batchMap.entries()) {
+              groups.push({ kind: 'batch', batchId, rows, order: rows[0]?.created_at || '' })
+            }
+            for (const a of standalone) {
+              groups.push({ kind: 'single', row: a, order: a.created_at || '' })
+            }
+            groups.sort((a, b) => (a.order < b.order ? 1 : -1))
+
+            return (
+              <div>
+                {groups.map(g => {
+                  if (g.kind === 'single') return renderRow(g.row)
+                  // Batch with multiple rows
+                  if (g.rows.length === 1) return renderRow(g.rows[0])
+                  const head = g.rows[0]
+                  const completed = g.rows.filter(r => r.completed_at).length
+                  const cls = head.class_id ? classNameById[head.class_id] : null
+                  const isExpanded = expandedBatches.has(g.batchId)
+                  const headerLabel = cls
+                    ? `Sent to Class: ${cls.name} — ${g.rows.length} students — ${completed} completed`
+                    : `Sent to ${g.rows.length} students — ${completed} completed`
+                  return (
+                    <div key={g.batchId}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedBatches(prev => {
+                          const next = new Set(prev)
+                          if (next.has(g.batchId)) next.delete(g.batchId)
+                          else next.add(g.batchId)
+                          return next
+                        })}
+                        style={{ width: '100%', textAlign: 'left', padding: '13px 20px', borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : 'rgba(241,190,67,0.06)', border: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', cursor: 'pointer', fontFamily: FONT_B, color: t.text }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, color: GOLD, fontWeight: 800 }}>{isExpanded ? '▾' : '▸'}</span>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{head.type}</span>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.15)', color: GOLD, fontWeight: 700 }}>Batch</span>
+                          <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(head.due_date)}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>
+                          <strong style={{ color: t.text }}>{headerLabel}</strong>
+                        </div>
+                        <div style={{ fontSize: 12, color: t.textMuted }}>
+                          <strong style={{ color: t.text }}>Topics:</strong> {(head.topics || []).join(', ') || head.subject}
+                        </div>
+                      </button>
+                      {isExpanded && g.rows.map(r => renderRow(r, true))}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()
         )}
       </div>
     </div>
@@ -720,9 +881,273 @@ function ProgressTab({ profile, theme }) {
   )
 }
 
+// ── Classes Tab ───────────────────────────────────────────────────────────────
+function ClassesTab({ profile, theme }) {
+  const t = THEMES[theme]
+  const [classes, setClasses]       = useState([])
+  const [roster, setRoster]         = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [newName, setNewName]       = useState('')
+  const [newSubject, setNewSubject] = useState('')
+  const [newColor, setNewColor]     = useState('')
+  const [newDescription, setNewDescription] = useState('')
+  const [createError, setCreateError]   = useState('')
+  const [creating, setCreating]         = useState(false)
+  const [expandedClass, setExpandedClass] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [pickerForClass, setPickerForClass] = useState(null)
+  const [pickerSelected, setPickerSelected] = useState([])
+  const [pickerSaving, setPickerSaving] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [cls, ros] = await Promise.all([
+        fetchTutorClasses(),
+        fetchRoster(profile.id),
+      ])
+      setClasses(cls)
+      setRoster(ros)
+    } catch (err) {
+      console.warn('[ClassesTab] load failed', err)
+    }
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [profile.id])
+
+  const rosterById = {}
+  roster.forEach(r => { rosterById[r.student_id] = r })
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setCreateError('')
+    if (!newName.trim()) { setCreateError('Class name is required.'); return }
+    setCreating(true)
+    try {
+      await createTutorClass({
+        name: newName.trim(),
+        subject: newSubject.trim() || null,
+        color: newColor.trim() || null,
+        description: newDescription.trim() || null,
+      })
+      setNewName(''); setNewSubject(''); setNewColor(''); setNewDescription('')
+      setShowCreate(false)
+      await load()
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create class.')
+    }
+    setCreating(false)
+  }
+
+  const handleRename = async (cls) => {
+    if (!renameValue.trim()) return
+    try {
+      await updateTutorClass(cls.id, { name: renameValue.trim() })
+      setRenamingId(null); setRenameValue('')
+      await load()
+    } catch {}
+  }
+
+  const handleDelete = async (cls) => {
+    try {
+      await deleteTutorClass(cls.id)
+      setConfirmDelete(null)
+      await load()
+    } catch {}
+  }
+
+  const openPicker = (cls) => {
+    const existing = new Set(cls.members.map(m => m.student_id))
+    setPickerForClass(cls.id)
+    setPickerSelected(roster.filter(r => !existing.has(r.student_id)).length === 0 ? [] : [])
+  }
+
+  const togglePickerStudent = (id) => {
+    setPickerSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
+  }
+
+  const handleAddMembers = async (cls) => {
+    if (pickerSelected.length === 0) { setPickerForClass(null); return }
+    setPickerSaving(true)
+    try {
+      await addStudentsToClass(cls.id, pickerSelected)
+      setPickerForClass(null); setPickerSelected([])
+      await load()
+    } catch {}
+    setPickerSaving(false)
+  }
+
+  const handleRemoveMember = async (cls, studentId) => {
+    try {
+      await removeStudentFromClass(cls.id, studentId)
+      await load()
+    } catch {}
+  }
+
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => { setShowCreate(v => !v); setCreateError('') }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showCreate ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showCreate ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+        >
+          {showCreate ? '✕ Cancel' : '+ New Class'}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div style={{ ...card, padding: '20px 22px' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 14 }}>Create Class</div>
+          <form onSubmit={handleCreate}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Name *</label>
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Year 10 Chem - Tuesday" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject (optional)</label>
+                <input value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14, marginBottom: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Color</label>
+                <input type="color" value={newColor || '#f1be43'} onChange={e => setNewColor(e.target.value)} style={{ ...inputStyle, padding: 4, height: 36 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Description</label>
+                <input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Optional notes about this class" style={inputStyle} />
+              </div>
+            </div>
+            {createError && <div style={{ marginBottom: 10, fontSize: 12, color: '#f87171' }}>{createError}</div>}
+            <button type="submit" disabled={creating} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: creating ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: creating ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: creating ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+              {creating ? 'Creating…' : 'Create Class'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      <div style={card}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>My Classes</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>{classes.length} class{classes.length !== 1 ? 'es' : ''}</div>
+        </div>
+        {loading ? (
+          <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
+        ) : classes.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No classes yet. Create one above to group students.</div>
+        ) : (
+          <div>
+            {classes.map(cls => {
+              const expanded = expandedClass === cls.id
+              const accent = cls.color || GOLD
+              const memberRows = (cls.members || []).map(m => ({ ...m, profile: rosterById[m.student_id] || null }))
+              const availableToAdd = roster.filter(r => !cls.members.some(m => m.student_id === r.student_id))
+              return (
+                <div key={cls.id} style={{ borderBottom: `1px solid ${t.border}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px' }}>
+                    <div style={{ width: 8, height: 36, borderRadius: 4, background: accent, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {renamingId === cls.id ? (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input value={renameValue} onChange={e => setRenameValue(e.target.value)} style={{ ...inputStyle, maxWidth: 280 }} autoFocus />
+                          <button onClick={() => handleRename(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Save</button>
+                          <button onClick={() => { setRenamingId(null); setRenameValue('') }} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.name}</div>
+                          <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
+                            {cls.members.length} student{cls.members.length !== 1 ? 's' : ''}
+                            {cls.subject ? ` · ${cls.subject}` : ''}
+                            {cls.description ? ` · ${cls.description}` : ''}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      {confirmDelete === cls.id ? (
+                        <>
+                          <button onClick={() => handleDelete(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Delete class</button>
+                          <button onClick={() => setConfirmDelete(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => setExpandedClass(expanded ? null : cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${expanded ? GOLD : t.border}`, background: expanded ? 'rgba(241,190,67,0.12)' : 'transparent', color: expanded ? GOLD : t.textMuted, fontSize: 12, fontWeight: expanded ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                            {expanded ? '▾ Hide' : '▸ View'}
+                          </button>
+                          <button onClick={() => { setRenamingId(cls.id); setRenameValue(cls.name) }} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Rename</button>
+                          <button onClick={() => setConfirmDelete(cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Delete</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {expanded && (
+                    <div style={{ padding: '0 20px 16px 38px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {memberRows.length === 0 ? (
+                        <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 0' }}>No students in this class yet.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {memberRows.map(m => (
+                            <div key={m.student_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8, background: t.bg, border: `1px solid ${t.border}` }}>
+                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+                                {(m.profile?.profiles?.display_name || '?')[0].toUpperCase()}
+                              </div>
+                              <div style={{ flex: 1, fontSize: 13, color: t.text }}>{m.profile?.profiles?.display_name || 'Unknown student'}</div>
+                              <button onClick={() => handleRemoveMember(cls, m.student_id)} style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {pickerForClass === cls.id ? (
+                        <div style={{ padding: 12, border: `1px solid ${t.border}`, borderRadius: 10, background: t.bg }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 8 }}>Add students from your roster</div>
+                          {availableToAdd.length === 0 ? (
+                            <div style={{ fontSize: 12, color: t.textMuted }}>All your students are already in this class.</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                              {availableToAdd.map(r => (
+                                <label key={r.student_id} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: t.textMuted }}>
+                                  <input type="checkbox" checked={pickerSelected.includes(r.student_id)} onChange={() => togglePickerStudent(r.student_id)} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                                  {r.profiles?.display_name || 'Unknown'}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => handleAddMembers(cls)} disabled={pickerSelected.length === 0 || pickerSaving} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: pickerSelected.length === 0 || pickerSaving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: pickerSelected.length === 0 || pickerSaving ? t.textMuted : '#0c1037', fontSize: 12, fontWeight: 800, cursor: pickerSelected.length === 0 || pickerSaving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                              {pickerSaving ? 'Adding…' : `Add ${pickerSelected.length} student${pickerSelected.length !== 1 ? 's' : ''}`}
+                            </button>
+                            <button onClick={() => { setPickerForClass(null); setPickerSelected([]) }} style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => openPicker(cls)} style={{ alignSelf: 'flex-start', padding: '6px 12px', borderRadius: 7, border: `1px dashed ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
+                          + Add students to class
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main TutorScreen ──────────────────────────────────────────────────────────
 const TABS = [
   { id: 'students',    label: 'Students',    icon: '👥' },
+  { id: 'classes',     label: 'Classes',     icon: '🏫' },
   { id: 'assignments', label: 'Assignments', icon: '📋' },
   { id: 'progress',    label: 'Progress',    icon: '📊' },
 ]
@@ -781,6 +1206,7 @@ export default function TutorScreen({ profile, theme }) {
       {/* Tab content */}
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 24px' }}>
         {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
+        {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
         {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
         {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
       </div>
