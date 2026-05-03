@@ -626,9 +626,21 @@ export default function QuizScreen({
         }))
         setRemediationQueue(prev => [...prev, ...normalized])
         try {
-          await insertGeneratedQuestionVariants(parentQuestion, generated)
+          const saved = await insertGeneratedQuestionVariants(parentQuestion, generated)
+          if (saved.length < generated.length) {
+            console.error(
+              `[gradefarm] variant storage partial: ${saved.length}/${generated.length} saved for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}". ` +
+              'Unsaved variants will be regenerated next session — check Supabase RLS on question_variants.'
+            )
+          } else {
+            console.info(`[gradefarm] stored ${saved.length} variant(s) for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}"`)
+          }
         } catch (insertErr) {
-          console.warn('[gradefarm] variant storage failed (generateRemediationQueue) — questions will be regenerated next session:', insertErr?.message || insertErr)
+          console.error(
+            `[gradefarm] variant storage failed (0/${generated.length} saved) for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}" — ` +
+            'variants will be regenerated next session. Check Supabase RLS on question_variants. Error:',
+            insertErr?.message || insertErr
+          )
         }
       } catch (aiErr) {
         console.warn('[gradefarm] AI variant generation failed (generateRemediationQueue):', aiErr?.message || aiErr)
