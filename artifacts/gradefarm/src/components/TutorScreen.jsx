@@ -1158,39 +1158,44 @@ export default function TutorScreen({ profile, theme }) {
   const [activeTab, setActiveTab] = useState('students')
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, color: t.text, minHeight: 0, overflow: 'hidden' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, color: t.text, minHeight: 0 }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
 
-      {/* Tab nav */}
-      <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0', borderBottom: `1px solid ${t.border}`, background: t.bgNav }}>
+      {/* Tab nav — fixed header, matches sidebar dark surface */}
+      <div style={{ display: 'flex', gap: 2, padding: '0 24px', borderBottom: `1px solid ${t.border}`, background: t.bgNav, flexShrink: 0 }}>
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             style={{
-              padding: '9px 18px',
-              borderRadius: '8px 8px 0 0',
+              padding: '14px 20px',
+              borderRadius: 0,
               border: 'none',
               fontSize: 13,
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: 'pointer',
               fontFamily: FONT_B,
               color: activeTab === tab.id ? GOLD : t.textMuted,
-              background: activeTab === tab.id ? 'rgba(241,190,67,0.08)' : 'transparent',
+              background: 'transparent',
               borderBottom: activeTab === tab.id ? `2px solid ${GOLD}` : '2px solid transparent',
+              transition: 'color 0.15s, border-color 0.15s',
             }}
+            onMouseEnter={e => { if (activeTab !== tab.id) e.currentTarget.style.color = t.text }}
+            onMouseLeave={e => { if (activeTab !== tab.id) e.currentTarget.style.color = t.textMuted }}
           >
             {tab.icon} {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 24px' }}>
-        {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
-        {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
-        {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
-        {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
+      {/* Tab content — scrollable, full width with a generous max-width cap */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 48px' }}>
+        <div style={{ maxWidth: 960, width: '100%' }}>
+          {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
+          {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
+          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
+          {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
+        </div>
       </div>
     </div>
   )
