@@ -337,7 +337,9 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .hero-grid { flex-direction:column !important; }
           .demo-wrap { display:none !important; }
           .bento-grid { grid-template-columns:1fr !important; }
-          .bento-span, .bc-gold { grid-column:span 1 !important; }
+          .bento-span-2, .bento-span-3, .bc-gold { grid-column:span 1 !important; }
+          /* old .bento-span alias — collapse any remaining uses */
+          .bento-span { grid-column:span 1 !important; }
           .spotlight-row { flex-direction:column !important; }
           .spotlight-visual { display:none !important; }
           .steps-grid { grid-template-columns:1fr !important; }
@@ -510,7 +512,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <div className="bento-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
 
             {/* CARD 1 — Adaptive (span 2, tall) */}
-            <FadeUp delay={0} style={{ gridColumn:'span 2' }}>
+            <FadeUp delay={0} className="bento-span-2" style={{ gridColumn:'span 2' }}>
               <div className="bc-gold" style={{ background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320, height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:200, height:200, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.12) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
@@ -607,7 +609,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             </FadeUp>
 
             {/* CARD 6 — SACE Content (full width banner) */}
-            <FadeUp delay={350} className="bento-span" style={{ gridColumn:'span 3' }}>
+            <FadeUp delay={350} className="bento-span-3" style={{ gridColumn:'span 3' }}>
               <div className="bc lp-sace-banner" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
                 <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
                 <div className="lp-sace-head" style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
@@ -620,7 +622,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <div className="lp-sace-text" style={{ flex:1, minWidth:240 }}>
                   <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Questions written and peer-reviewed by real SACE tutors with proven results. Every question is curriculum-mapped to Stage 1 & Stage 2 Chemistry — nothing off-syllabus, nothing wasted.</p>
                 </div>
-                <div className="lp-stats lp-sace-stats" style={{ display:'flex', gap:20, flexShrink:0, flexWrap:'wrap' }}>
+                <div className="lp-stats lp-sace-stats" style={{ display:'flex', gap:20, minWidth:0, flexWrap:'wrap' }}>
                   {[['175+','SACE questions'],['100%','Curriculum-aligned'],['2','Stages covered']].map(([n,l]) => (
                     <div key={l} style={{ textAlign:'center' }}>
                       <div className="lp-sace-num" style={{ fontFamily:FONT_D, fontSize:28, color:GOLD, letterSpacing:1 }}>{n}</div>
