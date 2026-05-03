@@ -1158,26 +1158,8 @@ export default function TutorScreen({ profile, theme }) {
   const [activeTab, setActiveTab] = useState('students')
 
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, color: t.text }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, color: t.text, minHeight: 0, overflow: 'hidden' }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
-
-      {/* Header */}
-      <div style={{ padding: '14px 24px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 16, background: t.bgNav }}>
-        <button onClick={() => navigate('/question-bank')} style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: FONT_B }}>← Back to app</button>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}>
-            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-          </span>
-          <span style={{ color: t.textMuted, fontSize: 13 }}>·</span>
-          <span style={{ color: GOLD, fontWeight: 800, fontSize: 15 }}>Tutor Dashboard</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#0c1037' }}>
-            {(profile.display_name || '?')[0].toUpperCase()}
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{profile.display_name}</span>
-        </div>
-      </div>
 
       {/* Tab nav */}
       <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0', borderBottom: `1px solid ${t.border}`, background: t.bgNav }}>
