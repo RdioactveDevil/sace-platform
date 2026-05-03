@@ -6,6 +6,8 @@
 export const QUESTIONS_SUBJECT_BY_ID = {
   chemistry_s1: 'Chemistry Stage 1',
   chemistry_s2: 'Chemistry Stage 2',
+  maths_y7: 'Year 7 Mathematics',
+  english_y7: 'Year 7 English',
 }
 
 export const ALL_SUBJECTS = [
@@ -91,6 +93,28 @@ export const ALL_SUBJECTS = [
     icon: '📖',
     color: '#ec4899',
     topics: ['Close Analysis', 'Essay Writing', 'Comparative Study'],
+    questionCount: 0,
+    available: false,
+    comingSoon: true,
+  },
+  {
+    id: 'maths_y7',
+    name: 'Mathematics',
+    stage: 'Year 7',
+    icon: '📐',
+    color: '#6366f1',
+    topics: ['Number', 'Algebra', 'Measurement', 'Space', 'Statistics', 'Probability'],
+    questionCount: 0,
+    available: false,
+    comingSoon: true,
+  },
+  {
+    id: 'english_y7',
+    name: 'English',
+    stage: 'Year 7',
+    icon: '📝',
+    color: '#ec4899',
+    topics: ['Language', 'Literature', 'Literacy'],
     questionCount: 0,
     available: false,
     comingSoon: true,

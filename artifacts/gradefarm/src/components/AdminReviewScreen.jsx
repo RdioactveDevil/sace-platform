@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion } from '../lib/adminDb'
 import { getVariantCountsByConceptTags } from '../lib/db'
-import { S1_TOPICS, S2_TOPICS } from '../lib/adminTopics'
+import { getTopicsBySubject } from '../lib/adminTopics'
 import MathText from './MathText'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -236,8 +236,7 @@ export default function AdminReviewScreen({ profile }) {
 
   const allChecked = drafts.length > 0 && drafts.every(d => checked.has(d.id))
 
-  const topicsForSubject = (subject) =>
-    subject === 'Chemistry Stage 1' ? S1_TOPICS : S2_TOPICS
+  const topicsForSubject = (subject) => getTopicsBySubject(subject)
 
   const inputStyle = {
     width: '100%', padding: '8px 10px', borderRadius: 8,
