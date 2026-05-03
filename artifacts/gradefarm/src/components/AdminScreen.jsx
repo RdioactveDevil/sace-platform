@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
-import AdminUploadScreen   from './AdminUploadScreen'
-import AdminGenerateScreen from './AdminGenerateScreen'
-import AdminReviewScreen   from './AdminReviewScreen'
-import AdminUsersTab       from './AdminUsersTab'
+import AdminUploadScreen         from './AdminUploadScreen'
+import AdminGenerateScreen       from './AdminGenerateScreen'
+import AdminReviewScreen         from './AdminReviewScreen'
+import AdminUsersTab             from './AdminUsersTab'
+import AdminStudentsTab          from './AdminStudentsTab'
 import AdminTutorApplicationsTab from './AdminTutorApplicationsTab'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -10,6 +12,16 @@ const GOLD   = '#f1be43'
 
 export default function AdminScreen({ profile }) {
   const navigate = useNavigate()
+  const [studentCount, setStudentCount] = useState(null)
+
+  const tabs = [
+    { label: 'Students',           badge: studentCount, path: 'students' },
+    { label: 'All Users',          path: 'users' },
+    { label: 'Tutor Applications', path: 'applications' },
+    { label: 'Upload PDF',         path: 'upload' },
+    { label: 'Generate',           path: 'generate' },
+    { label: 'Review Queue',       path: 'review' },
+  ]
 
   return (
     <div style={{ minHeight: '100vh', background: '#080d28', fontFamily: FONT_B, color: '#fff' }}>
@@ -36,19 +48,14 @@ export default function AdminScreen({ profile }) {
         gap: 4,
         padding: '12px 24px 0',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
+        overflowX: 'auto',
       }}>
-        {[
-          { label: 'Users', path: 'users' },
-          { label: 'Tutor Applications', path: 'applications' },
-          { label: 'Upload PDF', path: 'upload' },
-          { label: 'Generate', path: 'generate' },
-          { label: 'Review Queue', path: 'review' },
-        ].map(tab => (
+        {tabs.map(tab => (
           <NavLink
             key={tab.path}
             to={tab.path}
             style={({ isActive }) => ({
-              padding: '8px 16px',
+              padding: '8px 14px',
               borderRadius: '8px 8px 0 0',
               fontSize: 13,
               fontWeight: 700,
@@ -57,17 +64,33 @@ export default function AdminScreen({ profile }) {
               background: isActive ? 'rgba(241,190,67,0.08)' : 'transparent',
               borderBottom: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
               fontFamily: FONT_B,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             })}
           >
             {tab.label}
+            {tab.badge != null && (
+              <span style={{
+                fontSize: 10, fontWeight: 800,
+                background: `${GOLD}22`, color: GOLD,
+                border: `1px solid ${GOLD}44`,
+                borderRadius: 5, padding: '1px 5px', lineHeight: 1.4,
+              }}>
+                {tab.badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </div>
 
       {/* Sub-route content */}
-      <div style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
+      <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
         <Routes>
-          <Route index element={<Navigate to="users" replace />} />
+          <Route index element={<Navigate to="students" replace />} />
+          <Route path="students"     element={<AdminStudentsTab profile={profile} onCountLoad={setStudentCount} />} />
           <Route path="users"        element={<AdminUsersTab profile={profile} />} />
           <Route path="applications" element={<AdminTutorApplicationsTab />} />
           <Route path="upload"       element={<AdminUploadScreen />} />

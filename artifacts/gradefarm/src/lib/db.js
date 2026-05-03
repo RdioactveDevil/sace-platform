@@ -82,6 +82,14 @@ export async function adminSetAdmin(userId, value) {
   if (error) throw error
 }
 
+export async function adminListStudents() {
+  return adminFetch('/api/admin/students')
+}
+
+export async function adminGetStudentStats(studentId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/stats`)
+}
+
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
