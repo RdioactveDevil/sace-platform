@@ -213,6 +213,8 @@ function StudentsTab({ profile, theme }) {
   )
 }
 
+const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed']
+
 // ── Assignments Tab ───────────────────────────────────────────────────────────
 function AssignmentsTab({ profile, theme }) {
   const t = THEMES[theme]
@@ -221,6 +223,8 @@ function AssignmentsTab({ profile, theme }) {
   const [loading, setLoading]         = useState(true)
   const [showForm, setShowForm]       = useState(false)
   const [saving, setSaving]           = useState(false)
+  const [filterStudent, setFilterStudent] = useState('')
+  const [filterStatus, setFilterStatus]   = useState('All')
   const [form, setForm]               = useState({
     type: 'Quiz',
     subject: 'Chemistry Stage 1',
@@ -335,6 +339,12 @@ function AssignmentsTab({ profile, theme }) {
     try { await deleteAssignment(id); await load() } catch {}
     setDeletingId(null)
   }
+
+  const filteredAssignments = assignments.filter(a => {
+    if (filterStudent && a.student_id !== filterStudent) return false
+    if (filterStatus !== 'All' && assignmentStatus(a) !== filterStatus) return false
+    return true
+  })
 
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
@@ -462,16 +472,54 @@ function AssignmentsTab({ profile, theme }) {
 
       <div style={card}>
         <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>All Assignments</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>{assignments.length} total</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>All Assignments</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>
+              {filteredAssignments.length !== assignments.length
+                ? `${filteredAssignments.length} of ${assignments.length} shown`
+                : `${assignments.length} total`}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              value={filterStudent}
+              onChange={e => setFilterStudent(e.target.value)}
+              style={{ padding: '7px 11px', borderRadius: 8, border: `1px solid ${filterStudent ? GOLD : t.border}`, background: t.bgCard, color: filterStudent ? GOLD : t.textMuted, fontSize: 12, fontFamily: FONT_B, outline: 'none', fontWeight: filterStudent ? 700 : 400, cursor: 'pointer' }}
+            >
+              <option value="">All students</option>
+              {roster.map(s => (
+                <option key={s.student_id} value={s.student_id}>{s.profiles?.display_name || 'Unknown'}</option>
+              ))}
+            </select>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              {STATUS_OPTIONS.map(s => {
+                const active = filterStatus === s
+                const col = s === 'Completed' ? '#4ade80' : s === 'Overdue' ? '#f87171' : s === 'Pending' ? GOLD : t.textMuted
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setFilterStatus(s)}
+                    style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${active ? col : t.border}`, background: active ? `${col}18` : 'transparent', color: active ? col : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}
+                  >
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
+
         {loading ? (
           <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
         ) : assignments.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No assignments yet. Create one above.</div>
+        ) : filteredAssignments.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No assignments match the current filters.</div>
         ) : (
           <div>
-            {assignments.map(a => {
+            {filteredAssignments.map(a => {
               const status = assignmentStatus(a)
               const sc = statusColor(status)
               return (
