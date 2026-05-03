@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import {
   adminListStudents,
   adminGetStudentStats,
@@ -7,6 +7,7 @@ import {
   adminApproveTutor,
   adminRejectTutor,
 } from '../lib/db'
+import { supabase } from '../lib/supabase'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -52,8 +53,10 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [busyId, setBusyId]                 = useState(null)
   const [roleError, setRoleError]           = useState('')
 
-  const load = async () => {
-    setLoading(true)
+  const loadRef = useRef(false)
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     setError('')
     try {
       const json = await adminListStudents()
@@ -61,12 +64,34 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
       setStudents(list)
       onCountLoad?.(list.length)
     } catch (e) {
-      setError(e.message)
+      if (!silent) setError(e.message)
     }
-    setLoading(false)
-  }
+    if (!silent) setLoading(false)
+  }, [])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+
+    // Poll every 30 s so newly registered students appear automatically
+    const pollId = setInterval(() => load(true), 30_000)
+
+    // Also refresh when the browser tab regains focus
+    const onFocus = () => load(true)
+    window.addEventListener('focus', onFocus)
+
+    // Supabase realtime: re-fetch on any profiles INSERT or UPDATE
+    const channel = supabase
+      .channel('admin-students-profiles')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profiles' }, () => load(true))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => load(true))
+      .subscribe()
+
+    return () => {
+      clearInterval(pollId)
+      window.removeEventListener('focus', onFocus)
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   const openDetail = (student) => {
     setSelected(student)

@@ -132,7 +132,51 @@ router.get("/admin/tutor-applications", async (req, res) => {
   }
 });
 
-// GET /admin/students — all users with profile + subscriptions + tutor assignment (newest first)
+// ── Row types for admin/students routes ──────────────────────────────────────
+type StudentProfileRow = {
+  id: string;
+  display_name: string | null;
+  school: string | null;
+  xp: number;
+  streak: number;
+  best_streak: number;
+  last_active: string | null;
+  onboarding_completed: boolean;
+  is_admin: boolean;
+  is_tutor: boolean;
+  tutor_application_status: string;
+  created_at: string;
+};
+
+type SubRow = {
+  user_id: string;
+  subject_name: string;
+  stage: string;
+};
+
+type TutorStudentRow = {
+  student_id: string;
+  tutor_id: string;
+};
+
+type TutorNameRow = {
+  id: string;
+  display_name: string | null;
+};
+
+type QuestionRow = {
+  id: string;
+  topic: string;
+  subject: string;
+};
+
+type StruggleRow = {
+  question_id: string;
+  attempts: number;
+  wrong: number;
+};
+
+// GET /admin/students — student-role users with profile + subscriptions + tutor, newest first
 router.get("/admin/students", async (req, res) => {
   try {
     const ctx = await requireAdmin(req, res);
@@ -162,63 +206,63 @@ router.get("/admin/students", async (req, res) => {
 
     if (profilesRes.error) return res.status(500).json({ error: profilesRes.error.message });
 
+    const profiles = (profilesRes.data || []) as StudentProfileRow[];
+
     // Resolve tutor display names
-    const tutorRows = (tutorRes.data || []) as { student_id: string; tutor_id: string }[];
+    const tutorRows = (tutorRes.data || []) as TutorStudentRow[];
     const uniqueTutorIds = [...new Set(tutorRows.map((r) => r.tutor_id))];
-    let tutorNames: Record<string, string> = {};
+    const tutorNames: Record<string, string> = {};
     if (uniqueTutorIds.length > 0) {
       const { data: tutorProfiles } = await admin
         .from("profiles")
         .select("id, display_name")
         .in("id", uniqueTutorIds);
-      (tutorProfiles || []).forEach((p: any) => {
+      (tutorProfiles as TutorNameRow[] | null || []).forEach((p) => {
         tutorNames[p.id] = p.display_name || "Unknown";
       });
     }
 
     // Group subscriptions by user_id
     const subsByUser: Record<string, { subject_name: string; stage: string }[]> = {};
-    (subsRes.data || []).forEach((s: any) => {
+    (subsRes.data as SubRow[] | null || []).forEach((s) => {
       if (!subsByUser[s.user_id]) subsByUser[s.user_id] = [];
       subsByUser[s.user_id].push({ subject_name: s.subject_name, stage: s.stage });
     });
 
-    // Map tutor by student_id
+    // Map tutor assignment by student_id
     const tutorByStudent: Record<string, { name: string; id: string }> = {};
     tutorRows.forEach((r) => {
       tutorByStudent[r.student_id] = { name: tutorNames[r.tutor_id] || "Unknown", id: r.tutor_id };
     });
 
-    const profById = new Map<string, any>(
-      ((profilesRes.data || []) as any[]).map((p) => [p.id, p])
-    );
+    const profById = new Map<string, StudentProfileRow>(profiles.map((p) => [p.id, p]));
 
-    const students = listData.users.map((u) => {
-      const p = profById.get(u.id) || {};
-      const tut = tutorByStudent[u.id] || null;
-      return {
-        id: u.id,
-        email: u.email || "",
-        display_name: p.display_name || null,
-        school: p.school || null,
-        xp: p.xp ?? 0,
-        streak: p.streak ?? 0,
-        best_streak: p.best_streak ?? 0,
-        last_active: p.last_active || null,
-        onboarding_completed: !!p.onboarding_completed,
-        is_admin: !!p.is_admin,
-        is_tutor: !!p.is_tutor,
-        tutor_application_status: p.tutor_application_status || "none",
-        created_at: u.created_at,
-        subjects: subsByUser[u.id] || [],
-        tutor_name: tut?.name || null,
-        tutor_id: tut?.id || null,
-      };
-    });
-
-    students.sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    const students = listData.users
+      .map((u) => {
+        const p = profById.get(u.id);
+        const tut = tutorByStudent[u.id] || null;
+        return {
+          id: u.id,
+          email: u.email || "",
+          display_name: p?.display_name ?? null,
+          school: p?.school ?? null,
+          xp: p?.xp ?? 0,
+          streak: p?.streak ?? 0,
+          best_streak: p?.best_streak ?? 0,
+          last_active: p?.last_active ?? null,
+          onboarding_completed: !!(p?.onboarding_completed),
+          is_admin: !!(p?.is_admin),
+          is_tutor: !!(p?.is_tutor),
+          tutor_application_status: p?.tutor_application_status ?? "none",
+          created_at: u.created_at,
+          subjects: subsByUser[u.id] || [],
+          tutor_name: tut?.name ?? null,
+          tutor_id: tut?.id ?? null,
+        };
+      })
+      // Filter to student-role users only (not admins or tutors)
+      .filter((u) => !u.is_admin && !u.is_tutor)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return res.json({ students });
   } catch (err) {
@@ -227,7 +271,7 @@ router.get("/admin/students", async (req, res) => {
   }
 });
 
-// GET /admin/students/:id/stats — per-student activity stats (answer totals, accuracy, sessions this week, top 3 weak topics)
+// GET /admin/students/:id/stats — activity stats for one student (totals, accuracy, sessions this week, top 3 weak topics)
 router.get("/admin/students/:id/stats", async (req, res) => {
   try {
     const ctx = await requireAdmin(req, res);
@@ -250,12 +294,12 @@ router.get("/admin/students/:id/stats", async (req, res) => {
     const sessionsWeek = sessionsRes.count ?? 0;
 
     const qMap: Record<string, { topic: string; subject: string }> = {};
-    (questionsRes.data || []).forEach((q: any) => {
+    (questionsRes.data as QuestionRow[] | null || []).forEach((q) => {
       qMap[q.id] = { topic: q.topic, subject: q.subject };
     });
 
     const topicMap: Record<string, { topic: string; subject: string; attempts: number; wrong: number }> = {};
-    (strugglesRes.data || []).forEach((r: any) => {
+    (strugglesRes.data as StruggleRow[] | null || []).forEach((r) => {
       const q = qMap[r.question_id];
       if (!q) return;
       if (!topicMap[q.topic]) topicMap[q.topic] = { topic: q.topic, subject: q.subject, attempts: 0, wrong: 0 };
