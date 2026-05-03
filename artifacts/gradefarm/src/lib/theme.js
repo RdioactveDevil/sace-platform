@@ -7,13 +7,13 @@ export const FONTS = {
 export const THEMES = {
   dark: {
     // Background layers — breathable navy, not pure black
-    bg:           '#1a1d2e',
-    bgCard:       '#222639',
-    bgNav:        '#161928',
-    bgInput:      '#222639',
-    bgHover:      '#2c3047',
-    bgSubtle:     '#1f2233',
-    bgElevated:   '#2a2e44',
+    bg:           '#262a40',
+    bgCard:       '#2f334b',
+    bgNav:        '#222640',
+    bgInput:      '#2f334b',
+    bgHover:      '#3a3f5a',
+    bgSubtle:     '#2b2f46',
+    bgElevated:   '#363b54',
 
     // Borders — tiered opacity for depth
     border:       'rgba(255,255,255,0.07)',
