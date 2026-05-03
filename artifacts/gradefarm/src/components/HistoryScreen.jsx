@@ -200,11 +200,32 @@ export default function HistoryScreen({ profile, theme, embedded }) {
                     </div>
                     {isOpen && msgs.length > 0 && (
                       <div style={{ borderTop: `1px solid ${t.border}`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 400, overflowY: 'auto' }}>
-                        {msgs.map((msg, j) => (
-                          <div key={j} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                            <div style={{ maxWidth: '80%', padding: '8px 12px', borderRadius: msg.role === 'user' ? '12px 12px 3px 12px' : '12px 12px 12px 3px', background: msg.role === 'user' ? `linear-gradient(135deg, ${GOLD}, ${GOLDL})` : t.bgHover, color: msg.role === 'user' ? '#0c1037' : t.text, fontSize: 13, lineHeight: 1.6, border: msg.role === 'user' ? 'none' : `1px solid ${t.border}` }}>{msg.content}</div>
-                          </div>
-                        ))}
+                        {msgs.map((msg, j) => {
+                          const blocks = Array.isArray(msg.content) ? msg.content : null
+                          const imageBlocks = blocks ? blocks.filter(b => b && b.type === 'image' && b.source?.data) : []
+                          const textOut = blocks
+                            ? blocks.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n').trim()
+                            : (typeof msg.content === 'string' ? msg.content : '')
+                          return (
+                            <div key={j} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                              <div style={{ maxWidth: '80%', padding: '8px 12px', borderRadius: msg.role === 'user' ? '12px 12px 3px 12px' : '12px 12px 12px 3px', background: msg.role === 'user' ? `linear-gradient(135deg, ${GOLD}, ${GOLDL})` : t.bgHover, color: msg.role === 'user' ? '#0c1037' : t.text, fontSize: 13, lineHeight: 1.6, border: msg.role === 'user' ? 'none' : `1px solid ${t.border}` }}>
+                                {imageBlocks.length > 0 && (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: textOut ? 6 : 0 }}>
+                                    {imageBlocks.map((b, k) => (
+                                      <img
+                                        key={k}
+                                        src={`data:${b.source.media_type};base64,${b.source.data}`}
+                                        alt="attached"
+                                        style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 6, display: 'block', border: `1px solid ${t.border}` }}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                                {textOut}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
