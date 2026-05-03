@@ -709,14 +709,34 @@ export async function fetchStudentProgressForTutor(tutorId, studentId) {
     .limit(10)
   if (raError) throw raError
 
+  // Fetch off-topic attempt counts (grouped by subject+topic)
+  let offTopicAttempts = []
+  try {
+    const { data: otRows } = await supabase
+      .from('off_topic_attempts')
+      .select('subject, topic, attempted_at')
+      .eq('student_id', studentId)
+      .order('attempted_at', { ascending: false })
+    if (otRows && otRows.length > 0) {
+      const countMap = {}
+      otRows.forEach(r => {
+        const key = `${r.subject}||${r.topic}`
+        if (!countMap[key]) countMap[key] = { subject: r.subject, topic: r.topic, count: 0, last_attempt: r.attempted_at }
+        countMap[key].count++
+      })
+      offTopicAttempts = Object.values(countMap).sort((a, b) => b.count - a.count)
+    }
+  } catch {}
+
   return {
-    xp:            prof?.xp ?? 0,
-    streak:        prof?.streak ?? 0,
-    best_streak:   prof?.best_streak ?? 0,
+    xp:              prof?.xp ?? 0,
+    streak:          prof?.streak ?? 0,
+    best_streak:     prof?.best_streak ?? 0,
     accuracy,
     totalAttempts,
     topicBreakdown,
-    assignments:   assignments || [],
-    recentActivity: recentActivity || [],
+    assignments:     assignments || [],
+    recentActivity:  recentActivity || [],
+    offTopicAttempts,
   }
 }

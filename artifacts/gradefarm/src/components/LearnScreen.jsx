@@ -268,6 +268,7 @@ export default function LearnScreen({
           max_tokens: 1000,
           subject: subject || '',
           topic: topic || '',
+          user_id: profile?.id || null,
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests),
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
         })
@@ -305,6 +306,7 @@ export default function LearnScreen({
           max_tokens: 1000,
           subject: subject || '',
           topic: topic || '',
+          user_id: profile?.id || null,
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests),
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
         })

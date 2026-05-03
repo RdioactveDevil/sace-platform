@@ -680,6 +680,34 @@ function ProgressTab({ profile, theme }) {
               </div>
             </div>
           )}
+
+          {progress.offTopicAttempts && progress.offTopicAttempts.length > 0 && (
+            <div style={card}>
+              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Off-Topic Questions</div>
+                  <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontWeight: 700 }}>
+                    {progress.offTopicAttempts.reduce((s, r) => s + r.count, 0)} total
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>Topics where Titan AI redirected this student away from off-subject questions</div>
+              </div>
+              <div>
+                {progress.offTopicAttempts.map((r, i) => (
+                  <div key={i} style={{ padding: '10px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.topic}</div>
+                      <div style={{ fontSize: 11, color: t.textMuted }}>{r.subject}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: r.count >= 3 ? '#f87171' : GOLD }}>{r.count}×</div>
+                      <div style={{ fontSize: 10, color: t.textMuted }}>redirect{r.count !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 

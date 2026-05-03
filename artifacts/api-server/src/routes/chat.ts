@@ -1,7 +1,10 @@
 import { Router } from "express";
+import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger";
 
 const router = Router();
+
+const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 
 const OFF_TOPIC_REDIRECTS = [
   (topic: string) => `That sounds like a different subject — let's keep our focus on ${topic}. What would you like to work through?`,
@@ -19,6 +22,12 @@ function getAnthropicConfig() {
     baseUrl: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "",
   };
+}
+
+function getServiceClient() {
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return null;
+  return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } });
 }
 
 async function classifyMessage(subject: string, topic: string, userMessage: string): Promise<"on_topic" | "off_topic"> {
@@ -67,9 +76,20 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
   }
 }
 
+function logOffTopicAttempt(studentId: string, subject: string, topic: string): void {
+  const db = getServiceClient();
+  if (!db) return;
+  db.from("off_topic_attempts")
+    .insert({ student_id: studentId, subject, topic })
+    .then(({ error }) => {
+      if (error) logger.warn({ error }, "Failed to log off-topic attempt");
+    })
+    .catch((err) => logger.warn({ err }, "Failed to log off-topic attempt"));
+}
+
 router.post("/chat", async (req, res) => {
   try {
-    const { messages, system, max_tokens, subject, topic } = req.body;
+    const { messages, system, max_tokens, subject, topic, user_id } = req.body;
 
     const typedMessages: ChatMessage[] = Array.isArray(messages)
       ? messages.filter(
@@ -86,6 +106,9 @@ router.post("/chat", async (req, res) => {
       if (lastUserMsg && lastUserMsg.content.trim().length > 0) {
         const classification = await classifyMessage(subject, topic, lastUserMsg.content);
         if (classification === "off_topic") {
+          if (typeof user_id === "string" && user_id.trim().length > 0) {
+            logOffTopicAttempt(user_id.trim(), subject.trim(), topic.trim());
+          }
           const redirectFn = OFF_TOPIC_REDIRECTS[Math.floor(Math.random() * OFF_TOPIC_REDIRECTS.length)];
           res.status(200).json({
             content: [{ type: "text", text: redirectFn(topic) }],
