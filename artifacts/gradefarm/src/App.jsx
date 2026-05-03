@@ -577,9 +577,20 @@ function AppInner() {
   }
 
   if (!bootstrapped && loading) return (
-    <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: FONT_B }}>
-      <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}><span style={{ fontFamily: FONT_D, fontSize: 20, color: '#0a0f2e', fontWeight: 900, letterSpacing: 0.5 }}>G</span></div>
-      <div style={{ fontSize: 13, color: '#64748b' }}>Loading…</div>
+    <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <style>{`@keyframes gf-bootspin { to { transform: rotate(360deg); } }`}</style>
+      <div
+        role="status"
+        aria-label="Loading"
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          border: '2px solid rgba(241,190,67,0.18)',
+          borderTopColor: GOLD,
+          animation: 'gf-bootspin 0.8s linear infinite',
+        }}
+      />
     </div>
   )
 
