@@ -513,7 +513,7 @@ export default function LearnScreen({
         .ls-wrap { display:grid; grid-template-columns:minmax(0, 1fr) 280px; gap:0; flex:1; min-height:0; overflow:hidden; align-items:stretch; }
         .ls-main { min-width:0; padding:40px 48px 48px; background:${t.bg}; overflow-y:auto; display:flex; justify-content:center; }
         .ls-main-inner { width:100%; max-width:720px; animation: fadeUp 0.35s ease; }
-        .ls-sidebar { width:280px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; padding:32px 24px; border-left:1px solid ${t.border}; display:flex; flex-direction:column; gap:24px; background:${t.bgNav}; overflow-y:auto; }
+        .ls-sidebar { width:280px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; padding:32px 24px; border-left:1px solid ${t.border}; display:flex; flex-direction:column; gap:24px; background:${t.bgSubtle}; overflow-y:auto; }
         @media(max-width:1100px){
           .ls-wrap { grid-template-columns:minmax(0, 1fr) 248px; }
           .ls-sidebar { width:248px; padding:28px 20px; }
@@ -738,7 +738,7 @@ export default function LearnScreen({
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         .msg-in { animation: fadeUp 0.2s ease; }
         .ls-chat-desktop { display:grid; grid-template-columns:minmax(0, 1fr) 268px; flex:1; min-height:0; }
-        .ls-chat-aside { width:268px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; border-left:1px solid ${t.border}; padding:24px 20px; background:${t.bgNav}; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
+        .ls-chat-aside { width:268px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; border-left:1px solid ${t.border}; padding:24px 20px; background:${t.bgSubtle}; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
         .ls-chat-body { min-width:0; display:flex; flex-direction:column; min-height:0; }
         .ls-quickreply:hover { border-color:${t.borderStrong}; color:${t.text}; background:${t.bgHover}; }
         .ls-composer-btn:hover:not(:disabled) { background:${t.bgHover}; color:${t.text}; }
@@ -752,7 +752,7 @@ export default function LearnScreen({
         }
       `}</style>
 
-      <div style={{ borderBottom: `1px solid ${t.border}`, background: t.bgNav, padding: '14px 22px', flexShrink: 0 }}>
+      <div style={{ borderBottom: `1px solid ${t.border}`, background: t.bgSubtle, padding: '14px 22px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ minWidth: 0, flex: '1 1 auto' }}>
             <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 3 }}>
@@ -885,7 +885,7 @@ export default function LearnScreen({
             </div>
           )}
 
-          <div style={{ borderTop: `1px solid ${t.border}`, background: t.bgNav, padding: '14px 22px 18px', flexShrink: 0 }}>
+          <div style={{ borderTop: `1px solid ${t.border}`, background: t.bgSubtle, padding: '14px 22px 18px', flexShrink: 0 }}>
             {attachedImages.length > 0 && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 {attachedImages.map((img, i) => (
