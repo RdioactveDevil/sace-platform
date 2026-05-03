@@ -1,5 +1,5 @@
 /**
- * Seed script: generates Victorian Year 10 and Year 10A Mathematics questions
+ * Seed script: generates Year 10 Mathematics questions (standard + 10A extension)
  * by calling the running API server's generate-questions endpoint, then
  * auto-approving the drafts (inserting into the live questions table).
  *
@@ -21,7 +21,9 @@ if (!SERVICE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-const VIC_Y10_TOPICS: Record<string, string> = {
+// Combined Year 10 Mathematics topics: standard codes + X-prefix 10A extension codes.
+const Y10_TOPICS: Record<string, string> = {
+  // Standard Year 10
   "N1":  "Percentages, errors and approximations with real numbers",
   "N2":  "Simple and compound interest",
   "A1":  "Expanding, factorising and simplifying algebraic expressions",
@@ -42,9 +44,7 @@ const VIC_Y10_TOPICS: Record<string, string> = {
   "ST3": "Evaluating statistical reports and media claims",
   "P1":  "Conditional probability and independence",
   "P2":  "Two-step and multi-step chance experiments \u2014 tables and tree diagrams",
-};
-
-const VIC_Y10A_TOPICS: Record<string, string> = {
+  // 10A extension
   "XN1":  "The real number system \u2014 surds and irrational numbers",
   "XN2":  "Logarithms \u2014 definition, laws and applications",
   "XA1":  "Binomial expansion and Pascal\u2019s triangle",
@@ -62,6 +62,9 @@ const VIC_Y10A_TOPICS: Record<string, string> = {
   "XP1":  "Counting techniques \u2014 permutations and combinations",
   "XP2":  "Probability distributions \u2014 discrete random variables",
 };
+
+const SUBJECT_API_ID = "maths_y10";
+const SUBJECT_LABEL = "Year 10 Mathematics";
 
 function makeId(): string {
   return `seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -86,7 +89,6 @@ async function generateForTopic(subject: string, topicCode: string, count: numbe
 }
 
 async function approveDrafts(subjectLabel: string, topicCode: string): Promise<number> {
-  // Fetch all pending drafts for this topic
   const { data: drafts, error: fetchErr } = await supabase
     .from("draft_questions")
     .select("*")
@@ -99,7 +101,6 @@ async function approveDrafts(subjectLabel: string, topicCode: string): Promise<n
 
   const now = new Date().toISOString();
 
-  // Insert into live questions table (matches columns in adminDb.js approveDraftQuestion)
   const liveRows = drafts.map((d) => ({
     id: makeId(),
     subject: d.subject,
@@ -118,7 +119,6 @@ async function approveDrafts(subjectLabel: string, topicCode: string): Promise<n
   const { error: insertErr } = await supabase.from("questions").insert(liveRows);
   if (insertErr) throw insertErr;
 
-  // Mark drafts as approved
   const draftIds = drafts.map((d) => d.id);
   const { error: updateErr } = await supabase
     .from("draft_questions")
@@ -137,7 +137,6 @@ async function seedSubject(
   console.log(`\n=== Seeding ${subjectLabel} (${Object.keys(topics).length} topics) ===`);
 
   for (const [code, topicName] of Object.entries(topics)) {
-    // Idempotency: skip if already ≥3 approved drafts for this topic
     const { count: existing } = await supabase
       .from("draft_questions")
       .select("id", { count: "exact", head: true })
@@ -162,12 +161,10 @@ async function seedSubject(
       console.log(`ERROR: ${(err as Error).message}`);
     }
 
-    // Brief pause between topics
     await new Promise((r) => setTimeout(r, 1500));
   }
 }
 
-await seedSubject("vic_maths_y10", "Victorian Year 10 Mathematics", VIC_Y10_TOPICS);
-await seedSubject("vic_maths_y10a", "Victorian Year 10A Mathematics", VIC_Y10A_TOPICS);
+await seedSubject(SUBJECT_API_ID, SUBJECT_LABEL, Y10_TOPICS);
 
 console.log("\n=== Seeding complete ===");

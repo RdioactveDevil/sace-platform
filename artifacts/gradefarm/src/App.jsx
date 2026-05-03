@@ -419,8 +419,17 @@ function AppInner() {
         if (prof) getSubscriptions(user.id).then(subs => {
           setSubscriptions(subs)
           setSubscriptionsLoaded(true)
-          // Evict a persisted subject the user is no longer subscribed to
-          const stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
+          // Migrate legacy Year 10 Maths variants → unified maths_y10 tile,
+          // then evict a persisted subject the user is no longer subscribed to.
+          let stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
+          if (stored && (stored.id === 'vic_maths_y10' || stored.id === 'vic_maths_y10a' || (stored.stage === 'Year 10' && stored.name === 'Mathematics (10A)'))) {
+            const unified = ALL_SUBJECTS.find(s => s.id === 'maths_y10')
+            if (unified) {
+              stored = unified
+              localStorage.setItem('gf-subject', JSON.stringify(unified))
+              setSelectedSubject(unified)
+            }
+          }
           if (stored && subs.length > 0 && !subs.some(s => s.subject_name === stored.name && s.stage === stored.stage)) {
             localStorage.removeItem('gf-subject')
             setSelectedSubject(null)

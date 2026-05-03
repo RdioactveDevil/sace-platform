@@ -210,7 +210,7 @@ const Y7_MATHS_LEARNING_OBJECTIVES: Record<string, string> = {
   "P2":  "AC9M7P02: run repeated chance experiments (e.g. rolling a die, tossing a coin) and record relative frequencies; use digital simulations for large numbers of trials; observe that relative frequency approaches theoretical probability as trial number increases; explain variability in small samples",
 };
 
-// ─── Victorian Curriculum F–10 v2.0 — Year 10 Mathematics ────────────────────
+// ─── Year 10 Mathematics (standard topics) ────────────────────────────────────
 const VIC_Y10_MATHS_TOPICS: Record<string, string> = {
   "N1":  "Percentages, errors and approximations with real numbers",
   "N2":  "Simple and compound interest",
@@ -234,7 +234,7 @@ const VIC_Y10_MATHS_TOPICS: Record<string, string> = {
   "P2":  "Two-step and multi-step chance experiments \u2014 tables and tree diagrams",
 };
 
-// ─── Victorian Curriculum F–10 v2.0 — Year 10A Mathematics ───────────────────
+// ─── Year 10 Mathematics (10A extension topics) ───────────────────────────────
 const VIC_Y10A_MATHS_TOPICS: Record<string, string> = {
   "XN1":  "The real number system \u2014 surds and irrational numbers",
   "XN2":  "Logarithms \u2014 definition, laws and applications",
@@ -254,7 +254,7 @@ const VIC_Y10A_MATHS_TOPICS: Record<string, string> = {
   "XP2":  "Probability distributions \u2014 discrete random variables",
 };
 
-// Victorian Curriculum v2.0 Year 10 Mathematics — learning objectives per topic
+// Year 10 Mathematics — learning objectives per standard topic
 const VIC_Y10_LEARNING_OBJECTIVES: Record<string, string> = {
   "N1":  "VC2M10N01/N02: calculate with percentages including percentage increases, decreases and errors; recognise the effect of using approximations of real numbers in repeated calculations; compare results using exact vs approximate values; apply in financial and scientific contexts",
   "N2":  "VC2M10N03: distinguish between simple interest (I = Prn) and compound interest (A = P(1+r)^n); calculate interest and final amounts for both; compare outcomes over time; solve practical problems involving loans, savings and investments",
@@ -278,7 +278,7 @@ const VIC_Y10_LEARNING_OBJECTIVES: Record<string, string> = {
   "P2":  "VC2M10P02: list sample spaces and calculate probabilities for two-step and multi-step chance experiments; use tables of outcomes and tree diagrams to represent combined events; apply the addition rule for mutually exclusive events; solve practical probability problems",
 };
 
-// Victorian Curriculum v2.0 Year 10A Mathematics — learning objectives per topic
+// Year 10 Mathematics — learning objectives per 10A extension topic
 const VIC_Y10A_LEARNING_OBJECTIVES: Record<string, string> = {
   "XN1":  "VC2M10AN01: define surds as irrational numbers that are square (or cube) roots of non-perfect-square integers; simplify surds by extracting perfect-square factors; perform operations with surds (add, subtract, multiply, divide, rationalise the denominator); distinguish rational from irrational numbers and locate both on the number line",
   "XN2":  "VC2M10AN02: define logarithm as the inverse of exponentiation: log_a(x)=y ↔ a^y=x; apply log laws (product, quotient, power); change of base; solve exponential equations using logarithms; apply to half-life, compound interest and earthquake magnitude (Richter scale)",
@@ -356,16 +356,12 @@ router.post("/generate-questions", async (req, res) => {
 
   // Normalise picker IDs to canonical Supabase subject strings before use.
   const normalizedSubject =
-    resolvedSubject === "maths_y10"     ? "Year 10 Mathematics" :
-    resolvedSubject === "vic_maths_y10"  ? "Victorian Year 10 Mathematics" :
-    resolvedSubject === "vic_maths_y10a" ? "Victorian Year 10A Mathematics" :
+    resolvedSubject === "maths_y10" ? "Year 10 Mathematics" :
     resolvedSubject;
 
   const isY7Maths   = normalizedSubject === "Year 7 Mathematics";
   const isY7English = normalizedSubject === "Year 7 English";
   const isY10       = normalizedSubject === "Year 10 Mathematics";
-  const isVicY10    = normalizedSubject === "Victorian Year 10 Mathematics";
-  const isVicY10A   = normalizedSubject === "Victorian Year 10A Mathematics";
   const isY7 = isY7Maths || isY7English;
 
   // Combined Year 10 topic map (standard codes + X-prefix 10A extension codes)
@@ -397,14 +393,6 @@ router.post("/generate-questions", async (req, res) => {
     curriculumLabel = topicCode.startsWith("X")
       ? "Year 10 Mathematics (10A extension)"
       : "Year 10 Mathematics";
-  } else if (isVicY10) {
-    topicMap = VIC_Y10_MATHS_TOPICS;
-    learningObjectivesMap = VIC_Y10_LEARNING_OBJECTIVES;
-    curriculumLabel = "Victorian Curriculum Year 10 Mathematics";
-  } else if (isVicY10A) {
-    topicMap = VIC_Y10A_MATHS_TOPICS;
-    learningObjectivesMap = VIC_Y10A_LEARNING_OBJECTIVES;
-    curriculumLabel = "Victorian Curriculum Year 10A Mathematics";
   } else {
     const stageKey = resolvedSubject === "Chemistry Stage 1" ? "s1" : "s2";
     topicMap = stageKey === "s1" ? S1_TOPICS : S2_TOPICS;
@@ -428,8 +416,8 @@ router.post("/generate-questions", async (req, res) => {
   let system: string;
   let user: string;
 
-  if (isY10 || isVicY10 || isVicY10A) {
-    const yearLabel = isVicY10A ? "Year 10A" : isVicY10 ? "Year 10" : (topicCode.startsWith("X") ? "Year 10A" : "Year 10");
+  if (isY10) {
+    const yearLabel = topicCode.startsWith("X") ? "Year 10A" : "Year 10";
     system = [
       `You are generating multiple-choice questions for ${curriculumLabel} students.`,
       `CRITICAL CONSTRAINT: All questions must be strictly based on the ${yearLabel} Mathematics curriculum scope.`,
