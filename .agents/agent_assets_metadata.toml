@@ -24,3 +24,9 @@ id = "iQ-mYvHQR95m-niKtrFny"
 uri = "file://artifacts/gradefarm-promo/public/images/ui-tutor.png"
 type = "image"
 title = "Chat UI mockup"
+
+[[generated]]
+id = "wIK4MLTeWRWmjEq6wbSXb"
+uri = "file://artifacts/gradefarm-mobile/assets/images/icon.png"
+type = "image"
+title = "gradefarm mobile app icon"

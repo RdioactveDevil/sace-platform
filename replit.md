@@ -10,6 +10,7 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 
 - **Frontend**: React + Vite app at `artifacts/gradefarm/` (preview path: `/`)
 - **Backend**: Express API server at `artifacts/api-server/` (preview path: `/api`)
+- **Mobile App**: Expo React Native app at `artifacts/gradefarm-mobile/` (preview path: `/mobile/`)
 - **Auth & Data**: Supabase (external) — project `pslpxawrfpcuwnupdfbs.supabase.co`
 
 ### Key Features
