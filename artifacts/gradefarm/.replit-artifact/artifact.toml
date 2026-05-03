@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "gradefarm."
+version = "1.0.0"
+id = "artifacts/gradefarm"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20077
+
+[services.development]
+run = "pnpm --filter @workspace/gradefarm run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gradefarm", "run", "build" ]
+publicDir = "artifacts/gradefarm/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20077"
+BASE_PATH = "/"
