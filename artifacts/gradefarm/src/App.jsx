@@ -727,6 +727,7 @@ function AppInner() {
             setQuizRemediationOriginalQ(null)
             setQuizRemediationUsedIds([])
             setQuizRemediationWrongCount(0)
+            setConsolidateSubtopic(null)
             navigate('/quiz')
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
