@@ -171,6 +171,18 @@ export default function AdminReviewScreen({ profile }) {
     })
   }
 
+  const handleSelectAll = () => {
+    const allIds = drafts.map(d => d.id)
+    const allChecked = allIds.length > 0 && allIds.every(id => checked.has(id))
+    if (allChecked) {
+      setChecked(new Set())
+    } else {
+      setChecked(new Set(allIds))
+    }
+  }
+
+  const allChecked = drafts.length > 0 && drafts.every(d => checked.has(d.id))
+
   const topicsForSubject = (subject) =>
     subject === 'Chemistry Stage 1' ? S1_TOPICS : S2_TOPICS
 
@@ -192,6 +204,21 @@ export default function AdminReviewScreen({ profile }) {
             {!loading && <span style={{ marginLeft: 8, fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>({drafts.length})</span>}
           </h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {drafts.length > 0 && (
+              <button
+                onClick={handleSelectAll}
+                disabled={saving}
+                style={{
+                  padding: '5px 12px', borderRadius: 8,
+                  border: `1px solid ${allChecked ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                  background: allChecked ? 'rgba(241,190,67,0.08)' : 'transparent',
+                  color: allChecked ? GOLD : 'rgba(255,255,255,0.4)',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
+                }}
+              >
+                {allChecked ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
             {checked.size > 0 && (
               <button
                 onClick={handleBulkApprove}

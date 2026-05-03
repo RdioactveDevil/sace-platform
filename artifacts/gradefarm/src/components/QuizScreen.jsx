@@ -605,8 +605,14 @@ export default function QuizScreen({
         }))
         // Append AI questions to whatever is left in the queue
         setRemediationQueue(prev => [...prev, ...normalized])
-        try { await insertGeneratedQuestionVariants(parentQuestion, generated) } catch {}
-      } catch {}
+        try {
+          await insertGeneratedQuestionVariants(parentQuestion, generated)
+        } catch (insertErr) {
+          console.warn('[gradefarm] variant storage failed (generateRemediationQueue) — questions regenerated next session:', insertErr?.message || insertErr)
+        }
+      } catch (aiErr) {
+        console.warn('[gradefarm] AI variant generation failed:', aiErr?.message || aiErr)
+      }
     })()
 
     setRemediationSource('generated')
@@ -659,11 +665,18 @@ export default function QuizScreen({
               variant_type: v.variant_type || 'ai_variant',
             }))
             setRemediationQueue(prev => [...prev, ...normalized])
-            try { await insertGeneratedQuestionVariants(parentQuestion, generated) } catch {}
-          } catch {}
+            try {
+              await insertGeneratedQuestionVariants(parentQuestion, generated)
+            } catch (insertErr) {
+              console.warn('[gradefarm] variant storage failed (enterRemediation) — questions regenerated next session:', insertErr?.message || insertErr)
+            }
+          } catch (aiErr) {
+            console.warn('[gradefarm] AI variant generation failed (enterRemediation):', aiErr?.message || aiErr)
+          }
         })()
       }
-    } catch {
+    } catch (dbErr) {
+      console.warn('[gradefarm] getRemediationVariants DB lookup failed — falling back to generation:', dbErr?.message || dbErr)
       await generateRemediationQueue(parentQuestion, [], diffTarget)
     }
   }, [
