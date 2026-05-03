@@ -15,6 +15,19 @@ export { Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS }
 export const AC_Y7_MATHS_TOPIC_NAMES   = Y7_MATHS_TOPICS.map(t => t.name)
 export const AC_Y7_ENGLISH_TOPIC_NAMES = Y7_ENGLISH_TOPICS.map(t => t.name)
 
+// Lookup of short display labels keyed by the canonical long AC v9 name.
+// UI surfaces (Learn, Study Plan, Topic Progress) should display the short
+// label for readability, while keeping the canonical long name as the stable
+// id for question tagging, normalisation and progress aggregation.
+const _Y7_SHORT_LABELS = Object.fromEntries(
+  [...Y7_MATHS_TOPICS, ...Y7_ENGLISH_TOPICS].map(t => [t.name, t.short])
+)
+
+export function getY7ShortLabel(topicName) {
+  if (!topicName) return topicName
+  return _Y7_SHORT_LABELS[topicName] ?? topicName
+}
+
 // Aliases map common alternative labels to the canonical AC v9 name
 const _m = (code) => Y7_MATHS_TOPICS.find(t => t.code === code).name
 export const AC_Y7_MATHS_ALIASES = {
@@ -96,14 +109,28 @@ export function normalizeY7MathsTopic(topic) {
   return AC_Y7_MATHS_ALIASES[topic] ?? null
 }
 
-// Macro groups per AC v9 strand for the Learn screen
+// Macro groups per AC v9 strand for the Learn screen.
+// `topics` keeps the canonical long name strings (used as the stable id by all
+// existing string-based consumers — selection, normalisation, aggregation).
+// `topicItems` exposes the same entries enriched with their short display
+// label, so UIs can render both without an additional lookup.
+function _macroGroup(id, num, label, entries) {
+  return {
+    id,
+    num,
+    label,
+    topics:     entries.map(e => e.name),
+    topicItems: entries.map(e => ({ name: e.name, short: e.short, code: e.code })),
+  }
+}
+
 export const MACRO_GROUPS_Y7_MATHS = [
-  { id: 'g1', num: 1, label: 'Number',      topics: Y7_MATHS_TOPICS.filter(t => t.code.match(/^N\d/)).map(t => t.name) },
-  { id: 'g2', num: 2, label: 'Algebra',     topics: Y7_MATHS_TOPICS.filter(t => t.code.match(/^A\d/)).map(t => t.name) },
-  { id: 'g3', num: 3, label: 'Measurement', topics: Y7_MATHS_TOPICS.filter(t => t.code.match(/^M\d/)).map(t => t.name) },
-  { id: 'g4', num: 4, label: 'Space',       topics: Y7_MATHS_TOPICS.filter(t => t.code.startsWith('SP')).map(t => t.name) },
-  { id: 'g5', num: 5, label: 'Statistics',  topics: Y7_MATHS_TOPICS.filter(t => t.code.startsWith('ST')).map(t => t.name) },
-  { id: 'g6', num: 6, label: 'Probability', topics: Y7_MATHS_TOPICS.filter(t => t.code.startsWith('P')).map(t => t.name) },
+  _macroGroup('g1', 1, 'Number',      Y7_MATHS_TOPICS.filter(t => t.code.match(/^N\d/))),
+  _macroGroup('g2', 2, 'Algebra',     Y7_MATHS_TOPICS.filter(t => t.code.match(/^A\d/))),
+  _macroGroup('g3', 3, 'Measurement', Y7_MATHS_TOPICS.filter(t => t.code.match(/^M\d/))),
+  _macroGroup('g4', 4, 'Space',       Y7_MATHS_TOPICS.filter(t => t.code.startsWith('SP'))),
+  _macroGroup('g5', 5, 'Statistics',  Y7_MATHS_TOPICS.filter(t => t.code.startsWith('ST'))),
+  _macroGroup('g6', 6, 'Probability', Y7_MATHS_TOPICS.filter(t => t.code.startsWith('P'))),
 ]
 
 // ─── Year 7 English ───────────────────────────────────────────────────────────
@@ -172,9 +199,9 @@ export function normalizeY7EnglishTopic(topic) {
 }
 
 export const MACRO_GROUPS_Y7_ENGLISH = [
-  { id: 'g1', num: 1, label: 'Language',   topics: Y7_ENGLISH_TOPICS.filter(t => /^L\d/.test(t.code)).map(t => t.name) },
-  { id: 'g2', num: 2, label: 'Literature', topics: Y7_ENGLISH_TOPICS.filter(t => t.code.startsWith('LT')).map(t => t.name) },
-  { id: 'g3', num: 3, label: 'Literacy',   topics: Y7_ENGLISH_TOPICS.filter(t => t.code.startsWith('LC')).map(t => t.name) },
+  _macroGroup('g1', 1, 'Language',   Y7_ENGLISH_TOPICS.filter(t => /^L\d/.test(t.code))),
+  _macroGroup('g2', 2, 'Literature', Y7_ENGLISH_TOPICS.filter(t => t.code.startsWith('LT'))),
+  _macroGroup('g3', 3, 'Literacy',   Y7_ENGLISH_TOPICS.filter(t => t.code.startsWith('LC'))),
 ]
 
 export function getY7TopicConfig(subjectId) {

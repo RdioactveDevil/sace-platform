@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
-import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
+import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -627,13 +627,17 @@ export default function LearnScreen({
                     <div key={macro.id}>
                       <div style={{ fontFamily: FONT_D, fontSize: 17, fontWeight: 400, letterSpacing: 0.6, color: t.text, marginBottom: 10 }}>{macro.label}</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {macro.topics.map(topicName => {
+                        {macro.topics.map((topicName, ti) => {
                           const active = topic === topicName
+                          const shortLabel = getY7ShortLabel(topicName)
+                          const prefix = `${macro.num}.${ti + 1}`
                           return (
                             <button
                               key={topicName}
                               className="ls-strand-pill"
                               onClick={() => setTopic(topicName)}
+                              title={topicName}
+                              aria-label={topicName}
                               style={{
                                 padding: '8px 14px',
                                 borderRadius: 999,
@@ -647,7 +651,8 @@ export default function LearnScreen({
                                 transition: 'all 0.15s',
                               }}
                             >
-                              {topicName}
+                              <span style={{ opacity: 0.6, fontWeight: 600, marginRight: 6 }}>{prefix}</span>
+                              {shortLabel}
                             </button>
                           )
                         })}

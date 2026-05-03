@@ -5,7 +5,7 @@ import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
-import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
+import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -92,7 +92,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     ? 'No topics selected'
     : isAllTopicsSelected
       ? 'All topics'
-      : [...new Set(questions.filter(q => selectedSubtopics.includes(q.subtopic)).map(q => q.topic))].join(', ')
+      : [...new Set(questions.filter(q => selectedSubtopics.includes(q.subtopic)).map(q => q.topic))]
+          .map(tn => getY7ShortLabel(topicNormFn ? (topicNormFn(tn) ?? tn) : tn))
+          .join(', ')
 
   const topStruggles = Object.entries(currentStruggleMap)
     .map(([qid, s]) => {
@@ -620,8 +622,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                               {topicPartial && !topicSel && <span style={{ fontSize: 9, color: GOLD, fontWeight: 800 }}>−</span>}
                             </div>
                             <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{mi + 1}.{ti + 1} {topicName}</span>
+                            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} title={topicName}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }} aria-label={topicName}>{mi + 1}.{ti + 1} {getY7ShortLabel(topicName)}</span>
                               <span style={{ fontSize: 11, color: t.textMuted }}> ({tg.attempted}/{tg.total})</span>
                             </div>
                             <span style={{ fontSize: 11, color: t.textFaint, flexShrink: 0 }}>{topicPct}%</span>

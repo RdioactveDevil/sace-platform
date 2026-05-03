@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { THEMES } from '../lib/theme'
-import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
+import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -182,16 +182,23 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {macroTopics.map(topic => {
                               const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
+                              const shortLabel = getY7ShortLabel(topic.topic)
+                              const ti = macro.topics.indexOf(topic.topic)
+                              const prefix = ti >= 0 ? `${macro.num}.${ti + 1}` : null
                               return (
                                 <div
                                   key={topic.topic}
                                   className="sp-focus-card"
                                   onClick={() => onStartSession?.({ mode: topic.attempts > 0 ? 'wrong' : 'new', subtopics: topic.subtopics })}
+                                  title={topic.topic}
                                   style={{ padding: '12px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10 }}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: topic.attempts > 0 ? 8 : 0 }}>
                                     <div>
-                                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{topic.topic}</div>
+                                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text }} aria-label={topic.topic}>
+                                        {prefix && <span style={{ opacity: 0.55, fontWeight: 600, marginRight: 6 }}>{prefix}</span>}
+                                        {shortLabel}
+                                      </div>
                                       <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
                                         {topic.total} questions · {topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}
                                       </div>
