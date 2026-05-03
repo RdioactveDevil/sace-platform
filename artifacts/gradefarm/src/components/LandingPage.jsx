@@ -235,16 +235,73 @@ function DemoCard() {
   )
 }
 
+/* ─── MobileMenu ───────────────────────────────────────────────────────── */
+
+function MobileMenu({ open, onClose, onNavigate }) {
+  const NAV_LINKS = [['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']]
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  return (
+    <>
+      {open && (
+        <div
+          onClick={onClose}
+          style={{ position:'fixed', inset:0, zIndex:98, background:'transparent' }}
+        />
+      )}
+      <div style={{
+        position: 'fixed', top: 64, left: 0, right: 0, zIndex: 99,
+        background: 'rgba(8,13,40,0.98)', backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(241,190,67,0.15)',
+        overflow: 'hidden',
+        maxHeight: open ? 280 : 0,
+        visibility: open ? 'visible' : 'hidden',
+        transition: 'max-height 0.35s cubic-bezier(0.4,0,0.2,1), visibility 0s linear ' + (open ? '0s' : '0.35s'),
+      }}>
+        <div style={{ padding: '12px 24px 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {NAV_LINKS.map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => onNavigate(id)}
+              style={{
+                background: 'none', border: 'none',
+                color: '#94a3b8', fontSize: 16, fontWeight: 600,
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                textAlign: 'left', cursor: 'pointer',
+                padding: '14px 8px',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#f1f5f9' }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 /* ─── main component ───────────────────────────────────────────────────── */
 
 export default function LandingPage({ onGetStarted, onSignIn }) {
   const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 40)
     window.addEventListener('scroll', h)
     return () => window.removeEventListener('scroll', h)
   }, [])
   const scroll = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  const handleMobileNav = id => { scroll(id); setMenuOpen(false) }
 
   return (
     <div style={{ minHeight: '100vh', background: NAVYD, color: '#f1f5f9', fontFamily: FONT_B, overflowX: 'hidden' }}>
@@ -274,6 +331,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         .scan-line { position:absolute; left:0; right:0; height:40%; background:linear-gradient(to bottom,transparent,rgba(241,190,67,0.04),transparent); animation:scan 4s ease-in-out infinite; pointer-events:none; }
         * { box-sizing:border-box; }
         @media(max-width:900px) {
+          .hmenu { display:block !important; }
           .dnav { display:none !important; }
           .hero-grid { flex-direction:column !important; }
           .demo-wrap { display:none !important; }
@@ -303,10 +361,20 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           ))}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <button onClick={onSignIn} style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,0.09)', background:'transparent', color:MUTED, fontSize:13, cursor:'pointer', fontFamily:FONT_B }}>Sign in</button>
-          <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ padding:'9px 20px', borderRadius:9, border:'none', color:NAVYD, fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 4px 16px rgba(241,190,67,0.35)` }}>Get started free</button>
+          <button onClick={onSignIn} className="dnav" style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,0.09)', background:'transparent', color:MUTED, fontSize:13, cursor:'pointer', fontFamily:FONT_B }}>Sign in</button>
+          <button onClick={onGetStarted} className="ctab shimmer-btn dnav" style={{ padding:'9px 20px', borderRadius:9, border:'none', color:NAVYD, fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 4px 16px rgba(241,190,67,0.35)` }}>Get started free</button>
+          {/* hamburger — mobile only */}
+          <button
+            className="hmenu"
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            style={{ display:'none', background:'none', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, color:'#f1f5f9', fontSize:22, lineHeight:1, cursor:'pointer', padding:'6px 10px', fontFamily:'monospace' }}
+          >
+            {menuOpen ? '✕' : '☰'}
+          </button>
         </div>
       </nav>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={handleMobileNav} />
 
       {/* ── HERO ── */}
       <section className="dot-grid" style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'100px 32px 60px', position:'relative', overflow:'hidden' }}>
