@@ -275,7 +275,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .hero-grid { flex-direction:column !important; }
           .demo-wrap { display:none !important; }
           .bento-grid { grid-template-columns:1fr !important; }
-          .bento-span { grid-column:span 1 !important; }
+          .bento-span, .bc-gold { grid-column:span 1 !important; }
           .spotlight-row { flex-direction:column !important; }
           .spotlight-visual { display:none !important; }
           .steps-grid { grid-template-columns:1fr !important; }
