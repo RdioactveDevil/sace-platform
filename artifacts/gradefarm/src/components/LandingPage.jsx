@@ -1,88 +1,238 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const NAVY   = '#0c1037'
 const NAVYD  = '#080d28'
-const NAVYL  = '#141852'
+const PURPLE = '#a78bfa'
+const GREEN  = '#10b981'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const MUTED  = '#94a3b8'
+
+/* ─── helpers ─────────────────────────────────────────────────────────── */
 
 function Counter({ target, suffix = '', duration = 2000 }) {
   const [count, setCount] = useState(0)
   const ref = useRef(null)
   const started = useRef(false)
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !started.current) {
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !started.current) {
         started.current = true
-        const start = Date.now()
+        const t0 = Date.now()
         const tick = () => {
-          const elapsed = Date.now() - start
-          const progress = Math.min(elapsed / duration, 1)
-          const ease = 1 - Math.pow(1 - progress, 3)
-          setCount(Math.round(ease * target))
-          if (progress < 1) requestAnimationFrame(tick)
+          const p = Math.min((Date.now() - t0) / duration, 1)
+          setCount(Math.round((1 - Math.pow(1 - p, 3)) * target))
+          if (p < 1) requestAnimationFrame(tick)
         }
         requestAnimationFrame(tick)
       }
     }, { threshold: 0.5 })
-    if (ref.current) observer.observe(ref.current)
-    return () => observer.disconnect()
+    if (ref.current) obs.observe(ref.current)
+    return () => obs.disconnect()
   }, [target, duration])
   return <span ref={ref}>{count.toLocaleString()}{suffix}</span>
 }
+
+function useFadeUp() {
+  const ref = useRef(null)
+  const [v, setV] = useState(false)
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setV(true); obs.disconnect() } }, { threshold: 0.08 })
+    if (ref.current) obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [])
+  return { ref, visible: v }
+}
+
+function FadeUp({ children, delay = 0, style = {} }) {
+  const { ref, visible } = useFadeUp()
+  return (
+    <div ref={ref} style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(32px)', transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms`, ...style }}>
+      {children}
+    </div>
+  )
+}
+
+/* ─── mini UI mockups ──────────────────────────────────────────────────── */
+
+function TopicGrid() {
+  const topics = [
+    { name: 'Atomic Theory', s: 91 }, { name: 'Chemical Bonds', s: 78 }, { name: 'Organic Naming', s: 45 },
+    { name: 'Equilibrium', s: 19 },   { name: 'Acids & Bases', s: 67 }, { name: 'Redox Reactions', s: 34 },
+    { name: 'Electrochemistry', s: 58 }, { name: 'Solutions', s: 82 },  { name: 'Kinetics', s: 23 },
+  ]
+  const col = s => s > 75 ? GREEN : s > 48 ? GOLD : '#ef4444'
+  const bg  = s => s > 75 ? 'rgba(16,185,129,0.12)' : s > 48 ? 'rgba(241,190,67,0.12)' : 'rgba(239,68,68,0.12)'
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 7 }}>
+      {topics.map(t => (
+        <div key={t.name} style={{ background: bg(t.s), border: `1px solid ${col(t.s)}33`, borderRadius: 8, padding: '8px 9px' }}>
+          <div style={{ fontSize: 9, color: MUTED, marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
+              <div style={{ width: `${t.s}%`, height: '100%', background: col(t.s), borderRadius: 2 }} />
+            </div>
+            <span style={{ fontSize: 9, fontWeight: 800, color: col(t.s) }}>{t.s}%</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TitanChat() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.22)', borderRadius: '14px 14px 4px 14px', padding: '10px 14px', maxWidth: '82%' }}>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.55 }}>I don't get limiting reagents at all 😭</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 0 16px rgba(167,139,250,0.4)' }}>🎓</div>
+        <div style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.22)', borderRadius: '4px 14px 14px 14px', padding: '10px 14px', maxWidth: '88%' }}>
+          <div style={{ fontSize: 10, color: PURPLE, fontWeight: 800, letterSpacing: '0.08em', marginBottom: 6 }}>TITAN AI</div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.65 }}>Think of making burgers — 5 buns, 3 patties. You can only make <span style={{ color: GOLD, fontWeight: 700 }}>3 burgers</span>. The patties limit you. That's exactly what happens in a reaction. 🍔</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎓</div>
+        <div style={{ display: 'flex', gap: 5, padding: '12px 16px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '4px 14px 14px 14px' }}>
+          {[0,1,2].map(i => <div key={i} className={`tdot td${i}`} style={{ width: 6, height: 6, borderRadius: '50%', background: PURPLE }} />)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LeaderboardMini() {
+  const rows = [
+    { rank: '🥇', name: 'Alex K.', xp: 2450, pct: 100, you: false },
+    { rank: '🥈', name: 'You',     xp: 2180, pct: 89,  you: true  },
+    { rank: '🥉', name: 'Sam L.', xp: 1920, pct: 78,  you: false },
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: r.you ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.03)', border: r.you ? `1px solid rgba(241,190,67,0.3)` : '1px solid rgba(255,255,255,0.06)' }}>
+          <span style={{ fontSize: 18 }}>{r.rank}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontSize: 13, fontWeight: r.you ? 800 : 500, color: r.you ? GOLD : '#e2e8f0' }}>{r.name}</span>
+              <span style={{ fontSize: 11, color: MUTED }}>{r.xp.toLocaleString()} XP</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
+              <div style={{ width: `${r.pct}%`, height: '100%', borderRadius: 2, background: r.you ? `linear-gradient(90deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.18)' }} />
+            </div>
+          </div>
+        </div>
+      ))}
+      <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', paddingTop: 4 }}>Weekly · Chemistry Stage 2</div>
+    </div>
+  )
+}
+
+function GapsMini() {
+  const topics = [
+    { name: 'Equilibrium', pct: 19, color: '#ef4444', label: '⚡ Priority' },
+    { name: 'Electrochemistry', pct: 41, color: '#f97316', label: 'Needs work' },
+    { name: 'Acids & Bases', pct: 67, color: GOLD, label: 'Improving' },
+    { name: 'Atomic Theory', pct: 91, color: GREEN, label: 'Strong' },
+  ]
+  const r = 26, C = 2 * Math.PI * r
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 14px', background: 'rgba(241,190,67,0.07)', border: '1px solid rgba(241,190,67,0.18)', borderRadius: 12 }}>
+        <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
+          <svg viewBox="0 0 64 64" style={{ width: 64, height: 64, transform: 'rotate(-90deg)' }}>
+            <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
+            <circle cx="32" cy="32" r={r} fill="none" stroke={GOLD} strokeWidth="8" strokeDasharray={`${C * 0.58} ${C}`} strokeLinecap="round" />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: GOLD }}>58%</div>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Exam Readiness</div>
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>4 topics flagged</div>
+          <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, marginTop: 4 }}>⚡ Review Equilibrium next</div>
+        </div>
+      </div>
+      {topics.map(t => (
+        <div key={t.name}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={{ fontSize: 12, color: '#e2e8f0' }}>{t.name}</span>
+            <span style={{ fontSize: 10, color: t.color, fontWeight: 700 }}>{t.label}</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)' }}>
+            <div style={{ width: `${t.pct}%`, height: '100%', borderRadius: 3, background: t.color }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ─── DemoCard ─────────────────────────────────────────────────────────── */
 
 function DemoCard() {
   const [selected, setSelected] = useState(null)
   const [showAns, setShowAns]   = useState(false)
   const opts    = ['Butanoic acid', 'Propanoic acid', 'Pentanoic acid', 'Ethanoic acid']
   const correct = 0
-  const handle  = (i) => { if (showAns) return; setSelected(i); setShowAns(true) }
+  const handle  = i => { if (showAns) return; setSelected(i); setShowAns(true) }
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Organic Chemistry</span>
-        <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20 }}>⚡ Priority</span>
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>
-        What is the IUPAC name for CH₃CH₂CH₂COOH?
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {opts.map((opt, i) => {
-          let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', letterBg = '#e2e5f0', letterCol = '#0c1037'
-          if (showAns) {
-            if (i === correct)       { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; letterBg = '#bbf7d0'; letterCol = '#166534' }
-            else if (i === selected) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; letterBg = '#fecaca'; letterCol = '#991b1b' }
-            else                     { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; letterBg = '#f0f0f0'; letterCol = '#9ca3af' }
-          } else if (selected === i) { bg = '#fefce8'; border = `1px solid ${GOLD}`; color = '#78350f'; letterBg = '#fef3c7'; letterCol = '#92400e' }
-          return (
-            <button key={i} onClick={() => handle(i)} style={{ background: bg, border, color, padding: '11px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
-              onMouseEnter={e => { if (!showAns) e.currentTarget.style.borderColor = GOLD }}
-              onMouseLeave={e => { if (!showAns && selected !== i) e.currentTarget.style.borderColor = '#e2e5f0' }}
-            >
-              <span style={{ width: 26, height: 26, borderRadius: '50%', background: letterBg, color: letterCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                {showAns && i === correct ? '✓' : showAns && i === selected ? '✗' : String.fromCharCode(65+i)}
-              </span>
-              {opt}
-            </button>
-          )
-        })}
-      </div>
-      {showAns && (
-        <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
-          <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP</div>
-          <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the one in –COOH. 4 carbons = butanoic acid.</div>
+    <div style={{ position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, height: 380, borderRadius: '50%', background: `radial-gradient(circle,rgba(241,190,67,0.32) 0%,transparent 70%)`, filter: 'blur(32px)', pointerEvents: 'none', zIndex: 0 }} />
+      {/* floating badges */}
+      <div style={{ position: 'absolute', top: -16, left: -20, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GOLD, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 5s ease-in-out infinite' }}>⚡ Priority topic</div>
+      <div style={{ position: 'absolute', bottom: 24, right: -24, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GREEN, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 6s ease-in-out infinite 1s' }}>✓ Correct! +24 XP</div>
+      <div style={{ position: 'absolute', top: '40%', right: -32, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 7s ease-in-out infinite 0.5s' }}>🔥 3 day streak</div>
+      <div style={{ position: 'relative', zIndex: 1, background: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Organic Chemistry</span>
+          <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20 }}>⚡ Priority</span>
         </div>
-      )}
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 11, color: '#9ca3af' }}>gradefarm. · by Titanium Tutoring</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>🔥 3 streak</span>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>What is the IUPAC name for CH₃CH₂CH₂COOH?</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {opts.map((opt, i) => {
+            let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lC = '#0c1037'
+            if (showAns) {
+              if (i === correct)       { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lC = '#166534' }
+              else if (i === selected) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lC = '#991b1b' }
+              else                     { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lC = '#9ca3af' }
+            } else if (selected === i) { bg = '#fefce8'; border = `1px solid ${GOLD}`; color = '#78350f'; lBg = '#fef3c7'; lC = '#92400e' }
+            return (
+              <button key={i} onClick={() => handle(i)} style={{ background: bg, border, color, padding: '11px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
+                onMouseEnter={e => { if (!showAns) e.currentTarget.style.borderColor = GOLD }}
+                onMouseLeave={e => { if (!showAns && selected !== i) e.currentTarget.style.borderColor = '#e2e5f0' }}>
+                <span style={{ width: 26, height: 26, borderRadius: '50%', background: lBg, color: lC, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                  {showAns && i === correct ? '✓' : showAns && i === selected ? '✗' : String.fromCharCode(65+i)}
+                </span>
+                {opt}
+              </button>
+            )
+          })}
+        </div>
+        {showAns && (
+          <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
+            <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP · 🔥 Streak extended</div>
+            <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the –COOH carbon. 4 carbons = butanoic acid.</div>
+          </div>
+        )}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>gradefarm. · by Titanium Tutoring</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>🔥 3 streak</span>
+        </div>
       </div>
     </div>
   )
 }
+
+/* ─── main component ───────────────────────────────────────────────────── */
 
 export default function LandingPage({ onGetStarted, onSignIn }) {
   const [scrolled, setScrolled] = useState(false)
@@ -91,253 +241,616 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
     window.addEventListener('scroll', h)
     return () => window.removeEventListener('scroll', h)
   }, [])
-
-  const scroll = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  const scroll = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
   return (
-    <div style={{ minHeight: '100vh', background: NAVY, color: '#f1f5f9', fontFamily: FONT_B, overflowX: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: NAVYD, color: '#f1f5f9', fontFamily: FONT_B, overflowX: 'hidden' }}>
       <style>{`
-        @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes float   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
-        @keyframes glow    { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
-        .nl:hover { color: #f1f5f9 !important; }
-        .fc:hover { transform: translateY(-4px); box-shadow: 0 24px 60px rgba(0,0,0,0.5) !important; }
-        .fc { transition: transform 0.2s, box-shadow 0.2s; }
-        .ctab { transition: transform 0.15s, opacity 0.15s; }
-        .ctab:hover { transform: translateY(-2px); opacity: 0.9; }
-        * { box-sizing: border-box; }
-        @media(max-width:768px) { .dnav { display:none !important; } .hero-grid { flex-direction: column !important; } .demo-hide { display: none !important; } }
+        @font-face { font-family:'Sifonn Pro'; src:url('/SIFONN_PRO.otf') format('opentype'); font-display:swap; }
+        @keyframes fadeUp  { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes float   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+        @keyframes glow    { 0%,100%{opacity:0.25} 50%{opacity:0.65} }
+        @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes spin    { to{transform:rotate(360deg)} }
+        @keyframes typing  { 0%,100%{opacity:0.25;transform:scale(0.9)} 50%{opacity:1;transform:scale(1.1)} }
+        @keyframes scan    { 0%{top:-40%} 100%{top:110%} }
+        .tdot { animation:typing 1.4s ease-in-out infinite; }
+        .td0  { animation-delay:0ms; }
+        .td1  { animation-delay:220ms; }
+        .td2  { animation-delay:440ms; }
+        .nl:hover { color:#f1f5f9 !important; }
+        .ctab { transition:transform 0.15s,box-shadow 0.15s; }
+        .ctab:hover { transform:translateY(-2px); box-shadow:0 14px 40px rgba(241,190,67,0.45) !important; }
+        .bc { transition:transform 0.25s,box-shadow 0.25s,border-color 0.25s; }
+        .bc:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(0,0,0,0.55) !important; }
+        .bc-gold:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(241,190,67,0.2) !important; }
+        .pill { animation:fadeUp 0.5s ease; }
+        .dot-grid { background-image:radial-gradient(rgba(241,190,67,0.11) 1px,transparent 1px); background-size:32px 32px; }
+        .grad-text { background:linear-gradient(135deg,${GOLD} 0%,${GOLDL} 50%,#fff 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+        .shimmer-btn { background:linear-gradient(90deg,${GOLD} 0%,${GOLDL} 30%,#fff8e1 50%,${GOLDL} 70%,${GOLD} 100%); background-size:200% auto; animation:shimmer 3s linear infinite; }
+        .scan-line { position:absolute; left:0; right:0; height:40%; background:linear-gradient(to bottom,transparent,rgba(241,190,67,0.04),transparent); animation:scan 4s ease-in-out infinite; pointer-events:none; }
+        * { box-sizing:border-box; }
+        @media(max-width:900px) {
+          .dnav { display:none !important; }
+          .hero-grid { flex-direction:column !important; }
+          .demo-wrap { display:none !important; }
+          .bento-grid { grid-template-columns:1fr !important; }
+          .bento-span { grid-column:span 1 !important; }
+          .spotlight-row { flex-direction:column !important; }
+          .spotlight-visual { display:none !important; }
+          .steps-grid { grid-template-columns:1fr !important; }
+          .tgrid { flex-direction:column !important; }
+          .subjects-grid { grid-template-columns:repeat(2,1fr) !important; }
+          .pricing-grid { grid-template-columns:1fr !important; }
+          .footer-row { flex-direction:column !important; gap:12px !important; }
+        }
       `}</style>
 
-      {/* NAV */}
-      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, padding: '0 32px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: scrolled ? 'rgba(12,16,55,0.97)' : 'transparent', borderBottom: scrolled ? '1px solid rgba(241,190,67,0.1)' : 'none', backdropFilter: scrolled ? 'blur(20px)' : 'none', transition: 'all 0.3s ease' }}>
-        {/* Logo — no icon, farm in gold */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: 1 }}>
-            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+      {/* ── NAV ── */}
+      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, padding:'0 32px', height:64, display:'flex', alignItems:'center', justifyContent:'space-between', background: scrolled ? 'rgba(8,13,40,0.96)' : 'transparent', borderBottom: scrolled ? '1px solid rgba(241,190,67,0.1)' : 'none', backdropFilter: scrolled ? 'blur(20px)' : 'none', transition:'all 0.3s ease' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <span style={{ fontFamily:FONT_D, fontSize:20, letterSpacing:1 }}>
+            <span style={{ color:'#fff' }}>grade</span><span style={{ color:GOLD }}>farm.</span>
           </span>
-          <span style={{ fontSize: 10, color: '#334155' }}>by Titanium Tutoring</span>
+          <span style={{ fontSize:10, color:'#2d3a5e' }}>by Titanium Tutoring</span>
         </div>
-
-        <div className="dnav" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          {['features','how','subjects','pricing'].map(id => (
-            <button key={id} className="nl" onClick={() => scroll(id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: FONT_B, textTransform: 'capitalize' }}>{id}</button>
+        <div className="dnav" style={{ display:'flex', alignItems:'center', gap:28 }}>
+          {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
+            <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'#4a5a7a', fontSize:14, fontWeight:500, cursor:'pointer', fontFamily:FONT_B }}>{label}</button>
           ))}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={onSignIn} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>Sign in</button>
-          <button onClick={onGetStarted} className="ctab" style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVYD, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 4px 16px rgba(241,190,67,0.35)` }}>Get started free</button>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <button onClick={onSignIn} style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,0.09)', background:'transparent', color:MUTED, fontSize:13, cursor:'pointer', fontFamily:FONT_B }}>Sign in</button>
+          <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ padding:'9px 20px', borderRadius:9, border:'none', color:NAVYD, fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 4px 16px rgba(241,190,67,0.35)` }}>Get started free</button>
         </div>
       </nav>
 
-      {/* HERO */}
-      <section style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '100px 32px 60px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 700, borderRadius: '50%', background: `radial-gradient(circle,rgba(241,190,67,0.1) 0%,transparent 65%)`, animation: 'glow 5s ease-in-out infinite', pointerEvents: 'none' }} />
+      {/* ── HERO ── */}
+      <section className="dot-grid" style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'100px 32px 60px', position:'relative', overflow:'hidden' }}>
+        <div style={{ position:'absolute', top:'15%', left:'50%', transform:'translateX(-50%)', width:800, height:800, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.08) 0%,transparent 65%)`, animation:'glow 6s ease-in-out infinite', pointerEvents:'none' }} />
+        <div style={{ position:'absolute', top:'60%', left:'10%', width:400, height:400, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.06) 0%,transparent 65%)`, animation:'glow 8s ease-in-out infinite 2s', pointerEvents:'none' }} />
+        <div className="scan-line" />
 
-        <div className="hero-grid" style={{ maxWidth: 1100, width: '100%', display: 'flex', alignItems: 'center', gap: 60, position: 'relative', zIndex: 1 }}>
-          <div style={{ flex: 1, animation: 'fadeUp 0.6s ease' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.25)', borderRadius: 20, padding: '6px 14px', marginBottom: 24 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD }} />
-              <span style={{ fontSize: 12, color: GOLD, fontWeight: 700 }}>Built for Australia, in Australia</span>
+        <div className="hero-grid" style={{ maxWidth:1160, width:'100%', display:'flex', alignItems:'center', gap:80, position:'relative', zIndex:1 }}>
+          {/* left */}
+          <div style={{ flex:1, animation:'fadeUp 0.6s ease' }}>
+            <div className="pill" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(241,190,67,0.1)', border:'1px solid rgba(241,190,67,0.28)', borderRadius:20, padding:'6px 14px', marginBottom:28 }}>
+              <div style={{ width:6, height:6, borderRadius:'50%', background:GOLD }} />
+              <span style={{ fontSize:12, color:GOLD, fontWeight:700 }}>AI-powered · Built for Australia · Free to start</span>
             </div>
 
-            <h1 style={{ fontFamily: FONT_D, fontSize: 'clamp(38px,5vw,62px)', lineHeight: 1.05, margin: '0 0 20px', color: '#fff', letterSpacing: 1 }}>
-              THE STUDY PLATFORM THAT{' '}
-              <span style={{ color: GOLD }}>ADAPTS</span>{' '}
+            <h1 style={{ fontFamily:FONT_D, fontSize:'clamp(36px,5.5vw,68px)', lineHeight:1.02, margin:'0 0 24px', color:'#fff', letterSpacing:1 }}>
+              THE STUDY PLATFORM<br />
+              THAT <span className="grad-text">ADAPTS</span><br />
               TO YOU.
             </h1>
 
-            <p style={{ fontSize: 18, color: '#64748b', lineHeight: 1.7, margin: '0 0 32px', maxWidth: 480, fontFamily: FONT_B }}>
-              gradefarm. learns what you struggle with and keeps drilling until you don't. Backed by Titanium Tutoring. Free to start.
+            <p style={{ fontSize:18, color:MUTED, lineHeight:1.75, margin:'0 0 36px', maxWidth:500 }}>
+              gradefarm. uses AI to track every question you get wrong and keeps drilling until you nail it — then moves to your next weakness. Backed by Titanium Tutoring.
             </p>
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button onClick={onGetStarted} className="ctab" style={{ padding: '14px 32px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVYD, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 8px 32px rgba(241,190,67,0.35)` }}>
+            <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:40 }}>
+              <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ padding:'15px 36px', borderRadius:12, border:'none', color:NAVYD, fontSize:15, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 10px 36px rgba(241,190,67,0.4)` }}>
                 Start for free →
               </button>
-              <button onClick={() => scroll('how')} className="ctab" style={{ padding: '14px 28px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
-                See how it works
+              <button onClick={() => scroll('features')} className="ctab" style={{ padding:'15px 28px', borderRadius:12, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.03)', color:MUTED, fontSize:15, fontWeight:600, cursor:'pointer', fontFamily:FONT_B }}>
+                See all features
               </button>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 32, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ display: 'flex' }}>
-                {['A','J','M','S','P'].map((l,i) => (
-                  <div key={i} style={{ width: 32, height: 32, borderRadius: '50%', background: `hsl(${i*40+200},55%,35%)`, border: '2px solid #0c1037', marginLeft: i > 0 ? -10 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>{l}</div>
+            {/* trust row */}
+            <div style={{ display:'flex', alignItems:'center', gap:16, paddingTop:28, borderTop:'1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display:'flex' }}>
+                {['A','J','M','S','P','R'].map((l,i) => (
+                  <div key={i} style={{ width:34, height:34, borderRadius:'50%', background:`hsl(${i*40+200},50%,32%)`, border:'2px solid #080d28', marginLeft: i>0?-10:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:'#fff' }}>{l}</div>
                 ))}
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Join students already using gradefarm.</div>
-                <div style={{ fontSize: 12, color: '#475569' }}>Free during beta · No credit card needed</div>
+                <div style={{ fontSize:13, fontWeight:700, color:'#e2e8f0' }}>Trusted by students preparing for their ATAR</div>
+                <div style={{ fontSize:12, color:MUTED }}>Free during beta · No credit card · Cancel anytime</div>
               </div>
             </div>
           </div>
 
-          <div className="demo-hide" style={{ flexShrink: 0, animation: 'fadeUp 0.8s ease 0.2s both' }}>
-            <div style={{ animation: 'float 6s ease-in-out infinite' }}>
+          {/* right — DemoCard */}
+          <div className="demo-wrap" style={{ flexShrink:0, animation:'fadeUp 0.8s ease 0.25s both' }}>
+            <div style={{ animation:'float 6s ease-in-out infinite' }}>
               <DemoCard />
             </div>
           </div>
         </div>
       </section>
 
-      {/* STATS */}
-      <section style={{ padding: '0 32px 80px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 2 }}>
-          {[
-            { val: 175, suffix: '+', label: 'SACE questions', sub: 'Stage 1 & 2 Chemistry' },
-            { val: 100, suffix: '%', label: 'Adaptive', sub: 'Targets your exact weaknesses' },
-            { val: 0, suffix: '$', label: 'Cost to start', sub: 'Free during beta' },
-          ].map((s, i) => (
-            <div key={i} style={{ textAlign: 'center', padding: '32px 20px', background: i === 1 ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.02)', borderRadius: i === 0 ? '14px 0 0 14px' : i === 2 ? '0 14px 14px 0' : 0, border: `1px solid ${i === 1 ? 'rgba(241,190,67,0.2)' : 'rgba(255,255,255,0.05)'}` }}>
-              <div style={{ fontFamily: FONT_D, fontSize: 48, color: i === 1 ? GOLD : '#f1f5f9', lineHeight: 1, letterSpacing: 1 }}>
-                <Counter target={s.val} suffix={s.suffix} />
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginTop: 6 }}>{s.label}</div>
-              <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{s.sub}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* ── SEPARATOR ── */}
+      <div style={{ height:1, background:'linear-gradient(90deg,transparent 0%,rgba(241,190,67,0.3) 30%,rgba(241,190,67,0.5) 50%,rgba(241,190,67,0.3) 70%,transparent 100%)' }} />
 
-      {/* FEATURES */}
-      <section id="features" style={{ padding: '80px 32px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 }}>Why gradefarm.</div>
-            <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,4vw,44px)', margin: 0, color: '#f1f5f9', letterSpacing: 1 }}>NOT JUST ANOTHER STUDY APP.</h2>
-            <p style={{ fontSize: 16, color: '#64748b', marginTop: 12, maxWidth: 500, margin: '12px auto 0' }}>Most apps give you the same questions every time. gradefarm. watches what you get wrong and comes back for it.</p>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+      {/* ── STATS ── */}
+      <FadeUp>
+        <section style={{ padding:'56px 32px' }}>
+          <div style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
             {[
-              { icon: '🎯', color: GOLD,      title: 'Adaptive by design',        desc: 'Every session is different. The algorithm tracks your error rate per topic and difficulty, always serving questions where you need them most.' },
-              { icon: '🎓', color: '#a78bfa', title: 'Learn with Titan AI',        desc: 'Our AI tutor explains concepts using real-world analogies — sport, gaming, everyday life. Teaches from your actual class notes.' },
-              { icon: '⚡', color: GOLD,      title: 'XP & leaderboards',          desc: 'Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.' },
-              { icon: '📊', color: '#10b981', title: 'Know your gaps',             desc: 'After every session, see exactly which topics need work and a personalised study plan to fix them. No guessing what to revise.' },
-              { icon: '📄', color: GOLDL,     title: 'Your notes, your tutor',     desc: "Upload your teacher's slides. Titan AI reads them and teaches you from your exact school content — not some textbook you've never seen." },
-              { icon: '⭐', color: GOLD,      title: 'Backed by Titanium Tutoring',desc: 'Questions written and reviewed by real SACE tutors. Actual exam-relevant content aligned to the SACE curriculum.' },
-            ].map(f => (
-              <div key={f.title} className="fc" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 28, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: `${f.color}20`, border: `1px solid ${f.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 16 }}>{f.icon}</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', marginBottom: 8 }}>{f.title}</div>
-                <div style={{ fontSize: 14, color: '#64748b', lineHeight: 1.65 }}>{f.desc}</div>
+              { val:175, suf:'+', label:'SACE Questions', sub:'Stage 1 & 2 Chemistry', hi:false },
+              { val:100, suf:'%', label:'Adaptive',       sub:'Tracks your exact weaknesses', hi:true  },
+              { val:0,   suf:'$', label:'Cost to Start',  sub:'Free during beta', hi:false },
+            ].map((s,i) => (
+              <div key={i} style={{ textAlign:'center', padding:'40px 24px', background: s.hi ? 'rgba(241,190,67,0.07)' : 'rgba(255,255,255,0.02)', borderRadius: i===0?'16px 0 0 16px':i===2?'0 16px 16px 0':0, border:`1px solid ${s.hi?'rgba(241,190,67,0.22)':'rgba(255,255,255,0.05)'}` }}>
+                <div style={{ fontFamily:FONT_D, fontSize:62, color: s.hi ? GOLD : '#f1f5f9', lineHeight:1, letterSpacing:1 }}><Counter target={s.val} suffix={s.suf} /></div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#e2e8f0', marginTop:10 }}>{s.label}</div>
+                <div style={{ fontSize:12, color:MUTED, marginTop:4 }}>{s.sub}</div>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
+      </FadeUp>
 
-      {/* HOW IT WORKS */}
-      <section id="how" style={{ padding: '80px 32px', background: 'rgba(255,255,255,0.015)' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 }}>How it works</div>
-            <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,4vw,44px)', margin: 0, color: '#f1f5f9', letterSpacing: 1 }}>SIMPLE. EFFECTIVE. YOURS.</h2>
-          </div>
-          {[
-            { num: '01', title: 'Sign up free',          desc: 'Create an account in 30 seconds. No credit card, no commitment. Pick your subject and stage.', icon: '✍️' },
-            { num: '02', title: 'Do a session',           desc: "Answer adaptive questions. The algorithm starts learning what you know and what you don't from your very first question.", icon: '⚡' },
-            { num: '03', title: 'Get taught by Titan',    desc: "Struggling with a topic? Switch to Learn mode. Titan explains it using sport analogies, checks your understanding, and adjusts in real time.", icon: '🎓' },
-            { num: '04', title: 'Watch the gaps close',   desc: 'Your struggle profile updates after every session. The Priority Queue shows exactly what to fix next.', icon: '📈' },
-          ].map((step, i) => (
-            <div key={i} style={{ display: 'flex', gap: 24, padding: '32px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.05)' : 'none', alignItems: 'flex-start' }}>
-              <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 14, background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{step.icon}</div>
-              <div>
-                <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>{step.num}</div>
-                <div style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', marginBottom: 6, letterSpacing: 0.5 }}>{step.title.toUpperCase()}</div>
-                <div style={{ fontSize: 14, color: '#64748b', lineHeight: 1.65 }}>{step.desc}</div>
-              </div>
+      {/* ── BENTO FEATURES ── */}
+      <FadeUp>
+        <section id="features" style={{ padding:'80px 32px' }}>
+          <div style={{ maxWidth:1160, margin:'0 auto' }}>
+            <div style={{ textAlign:'center', marginBottom:60 }}>
+              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Everything you need</div>
+              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,50px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>BUILT FOR THE ATAR GENERATION.</h2>
+              <p style={{ fontSize:17, color:MUTED, maxWidth:560, margin:'0 auto', lineHeight:1.7 }}>Six next-generation capabilities working together — so you stop guessing what to study and start making real progress.</p>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* SUBJECTS */}
-      <section id="subjects" style={{ padding: '80px 32px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 }}>Subjects</div>
-          <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,4vw,44px)', margin: '0 0 12px', color: '#f1f5f9', letterSpacing: 1 }}>STARTING WITH CHEMISTRY.</h2>
-          <p style={{ fontSize: 16, color: '#64748b', marginBottom: 40 }}>More subjects dropping soon. Stage 1 and Stage 2 covered.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-            {[
-              { name: 'Chemistry',              stage: 'Stage 1 & 2', icon: '⚗️', color: GOLD,      available: true,  count: '175+ questions' },
-              { name: 'Mathematical Methods',   stage: 'Stage 2',     icon: '∫',  color: '#a78bfa', available: false },
-              { name: 'Physics',                stage: 'Stage 2',     icon: '⚛️', color: GOLDL,     available: false },
-              { name: 'Biology',                stage: 'Stage 2',     icon: '🧬', color: '#10b981', available: false },
-              { name: 'English Literary Studies',stage: 'Stage 2',    icon: '📖', color: '#f87171', available: false },
-              { name: 'Economics',              stage: 'Stage 2',     icon: '📈', color: GOLD,      available: false },
-            ].map(s => (
-              <div key={s.name} onClick={s.available ? onGetStarted : undefined} style={{ padding: '20px 16px', borderRadius: 14, border: `1px solid ${s.available ? 'rgba(241,190,67,0.3)' : 'rgba(255,255,255,0.06)'}`, background: s.available ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.02)', textAlign: 'center', opacity: s.available ? 1 : 0.5, cursor: s.available ? 'pointer' : 'default', transition: 'all 0.15s' }}>
-                <div style={{ fontSize: 26, marginBottom: 8 }}>{s.icon}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: s.available ? '#f1f5f9' : '#475569', marginBottom: 3 }}>{s.name}</div>
-                <div style={{ fontSize: 11, color: s.available ? GOLD : '#334155' }}>{s.available ? s.count : s.stage + ' · Coming soon'}</div>
+            <div className="bento-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
+
+              {/* CARD 1 — Adaptive (span 2, tall) */}
+              <div className="bc-gold" style={{ gridColumn:'span 2', background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320 }}>
+                <div style={{ position:'absolute', top:0, right:0, width:200, height:200, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.12) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+                  <div style={{ width:44, height:44, borderRadius:12, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>🎯</div>
+                  <div>
+                    <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Core Technology</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Adaptive Intelligence Engine</div>
+                  </div>
+                </div>
+                <p style={{ fontSize:14, color:MUTED, lineHeight:1.7, marginBottom:24, maxWidth:420 }}>Every session is different. The algorithm tracks your error rate per topic and difficulty tier — always serving questions where you're weakest. It learns you, not just from you.</p>
+                <TopicGrid />
+                <div style={{ marginTop:14, display:'flex', gap:8, flexWrap:'wrap' }}>
+                  {['Error-rate tracking','Difficulty weighting','Priority queue','Per-topic analysis'].map(t => (
+                    <span key={t} style={{ fontSize:11, background:'rgba(241,190,67,0.1)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:20, padding:'4px 10px', color:GOLD, fontWeight:700 }}>{t}</span>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* PRICING */}
-      <section id="pricing" style={{ padding: '80px 32px', background: 'rgba(255,255,255,0.015)' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 }}>Pricing</div>
-          <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,4vw,44px)', margin: '0 0 12px', color: '#f1f5f9', letterSpacing: 1 }}>FREE WHILE IN BETA.</h2>
-          <p style={{ fontSize: 16, color: '#64748b', marginBottom: 48, maxWidth: 420, margin: '0 auto 48px' }}>Everything is free right now. Beta users get locked in at the lowest rate forever.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, maxWidth: 700, margin: '0 auto' }}>
-            {[
-              { name: 'Beta', price: 'Free', sub: 'While in beta', highlight: true, features: ['All subjects (Chemistry now)', 'Unlimited quiz sessions', 'Learn with Titan', 'Struggle tracking', 'Leaderboard', 'Priority beta pricing later'] },
-              { name: 'Coming Soon', price: '$12', sub: '/month after beta', highlight: false, features: ['Everything in Beta', 'All SACE subjects', 'Parent dashboard', 'School assignments', 'Exam countdown', 'Priority support'] },
-            ].map(plan => (
-              <div key={plan.name} style={{ background: plan.highlight ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${plan.highlight ? 'rgba(241,190,67,0.3)' : 'rgba(255,255,255,0.06)'}`, borderRadius: 18, padding: '32px 28px', textAlign: 'left', position: 'relative' }}>
-                {plan.highlight && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVYD, fontSize: 11, fontWeight: 800, padding: '4px 14px', borderRadius: 20 }}>AVAILABLE NOW</div>}
-                <div style={{ fontSize: 14, fontWeight: 700, color: plan.highlight ? GOLD : '#64748b', marginBottom: 4 }}>{plan.name}</div>
-                <div style={{ fontFamily: FONT_D, fontSize: 42, color: '#f1f5f9', marginBottom: 2, letterSpacing: 1 }}>{plan.price}</div>
-                <div style={{ fontSize: 13, color: '#475569', marginBottom: 24 }}>{plan.sub}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                  {plan.features.map(f => (
-                    <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#94a3b8' }}>
-                      <span style={{ color: plan.highlight ? GOLD : '#334155' }}>✓</span> {f}
+              {/* CARD 2 — Titan AI (span 1, tall) */}
+              <div className="bc" style={{ background:'rgba(167,139,250,0.04)', border:'1px solid rgba(167,139,250,0.22)', borderRadius:20, padding:28, position:'relative', overflow:'hidden' }}>
+                <div style={{ position:'absolute', top:0, right:0, width:140, height:140, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)`, filter:'blur(16px)', pointerEvents:'none' }} />
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(167,139,250,0.15)', border:'1px solid rgba(167,139,250,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>🎓</div>
+                  <div>
+                    <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>AI Tutor</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Titan AI</div>
+                  </div>
+                </div>
+                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:20 }}>Explains using sport, gaming, and everyday life. Doesn't just check answers — understands how you think.</p>
+                <TitanChat />
+              </div>
+
+              {/* CARD 3 — XP & Leaderboards */}
+              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>⚡</div>
+                  <div>
+                    <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gamification</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>XP & Leaderboards</div>
+                  </div>
+                </div>
+                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:18 }}>Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.</p>
+                <LeaderboardMini />
+              </div>
+
+              {/* CARD 4 — Know Your Gaps */}
+              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📊</div>
+                  <div>
+                    <div style={{ fontSize:10, color:GREEN, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gap Analysis</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Know Your Gaps</div>
+                  </div>
+                </div>
+                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:18 }}>After every session, see exactly which topics are holding your ATAR back. Real-time readiness score. No more guessing what to revise.</p>
+                <GapsMini />
+              </div>
+
+              {/* CARD 5 — Your Notes */}
+              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                  <div style={{ width:40, height:40, borderRadius:12, background:'rgba(249,216,122,0.15)', border:'1px solid rgba(249,216,122,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📄</div>
+                  <div>
+                    <div style={{ fontSize:10, color:GOLDL, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Smart Upload</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Your Notes, Your Tutor</div>
+                  </div>
+                </div>
+                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:24 }}>Upload your teacher's slides or class notes. Titan AI reads them and teaches from your exact school content — not a textbook you've never seen.</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:10 }}>
+                    <span style={{ fontSize:22 }}>📁</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#e2e8f0' }}>Chem_Unit3_Reactions.pdf</div>
+                      <div style={{ fontSize:10, color:MUTED }}>Uploading... 84%</div>
+                      <div style={{ height:3, borderRadius:2, background:'rgba(255,255,255,0.08)', marginTop:5 }}>
+                        <div style={{ width:'84%', height:'100%', borderRadius:2, background:`linear-gradient(90deg,${GOLD},${GOLDL})` }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(167,139,250,0.07)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:10 }}>
+                    <span style={{ fontSize:18 }}>🎓</span>
+                    <div style={{ fontSize:12, color:'#e2e8f0' }}>Titan has read your notes — ready to teach from <span style={{ color:GOLD, fontWeight:700 }}>your content</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 6 — SACE Content (full width banner) */}
+              <div className="bento-span bc" style={{ gridColumn:'span 3', background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
+                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
+                <div style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
+                  <div style={{ width:52, height:52, borderRadius:14, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26 }}>⭐</div>
+                  <div>
+                    <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:4 }}>Curriculum</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Backed by Titanium Tutoring</div>
+                  </div>
+                </div>
+                <div style={{ flex:1, minWidth:240 }}>
+                  <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Questions written and peer-reviewed by real SACE tutors with proven results. Every question is curriculum-mapped to Stage 1 & Stage 2 Chemistry — nothing off-syllabus, nothing wasted.</p>
+                </div>
+                <div style={{ display:'flex', gap:20, flexShrink:0, flexWrap:'wrap' }}>
+                  {[['175+','SACE questions'],['100%','Curriculum-aligned'],['2','Stages covered']].map(([n,l]) => (
+                    <div key={l} style={{ textAlign:'center' }}>
+                      <div style={{ fontFamily:FONT_D, fontSize:28, color:GOLD, letterSpacing:1 }}>{n}</div>
+                      <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>{l}</div>
                     </div>
                   ))}
                 </div>
-                {plan.highlight && (
-                  <button onClick={onGetStarted} className="ctab" style={{ width: '100%', padding: 13, borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVYD, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 6px 20px rgba(241,190,67,0.3)` }}>
-                    Get started free →
-                  </button>
-                )}
               </div>
+
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── SPOTLIGHT 1: TITAN AI ── */}
+      <FadeUp>
+        <section style={{ padding:'80px 32px', background:'rgba(167,139,250,0.03)', borderTop:'1px solid rgba(167,139,250,0.08)', borderBottom:'1px solid rgba(167,139,250,0.08)' }}>
+          <div style={{ maxWidth:1160, margin:'0 auto' }}>
+            <div className="spotlight-row" style={{ display:'flex', alignItems:'center', gap:80 }}>
+              {/* text */}
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:PURPLE, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:16 }}>Deep dive</div>
+                <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.5vw,44px)', margin:'0 0 20px', color:'#fff', letterSpacing:1, lineHeight:1.1 }}>
+                  MEET TITAN AI.<br />
+                  <span style={{ color:PURPLE }}>YOUR TUTOR THAT</span><br />
+                  ACTUALLY GETS YOU.
+                </h2>
+                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most tutors explain things once and move on. Titan explains it differently — using sport, gaming, pop culture — until your brain actually clicks. Then it checks you actually got it.</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
+                  {[
+                    { icon:'🍔', text:'Explains with sport, gaming, and everyday analogies — whatever makes it stick for you' },
+                    { icon:'📁', text:'Upload your class notes — Titan reads them and teaches from your exact school content' },
+                    { icon:'🔄', text:'Real-time comprehension checks after every concept — no passive reading' },
+                    { icon:'🌙', text:'Available 24/7 — no scheduling, no waiting, no minimum booking' },
+                  ].map((f,i) => (
+                    <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+                      <div style={{ width:36, height:36, borderRadius:10, background:'rgba(167,139,250,0.1)', border:'1px solid rgba(167,139,250,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{f.icon}</div>
+                      <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={onGetStarted} className="ctab" style={{ padding:'14px 32px', borderRadius:12, border:'none', background:`linear-gradient(135deg,${PURPLE},#6d28d9)`, color:'#fff', fontSize:14, fontWeight:800, cursor:'pointer', fontFamily:FONT_B, boxShadow:'0 8px 28px rgba(167,139,250,0.35)' }}>
+                  Try Titan AI free →
+                </button>
+              </div>
+              {/* visual */}
+              <div className="spotlight-visual" style={{ flex:1, maxWidth:480 }}>
+                <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(167,139,250,0.25)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)', position:'relative' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20, paddingBottom:16, borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 0 20px rgba(167,139,250,0.4)' }}>🎓</div>
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>Titan AI</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }} /><span style={{ fontSize:11, color:GREEN }}>Online · Organic Chemistry</span></div>
+                    </div>
+                    <div style={{ marginLeft:'auto', fontSize:11, color:MUTED }}>From your notes ✓</div>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                    <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>Why is carbon so special in organic chemistry?</div>
+                    </div>
+                    <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>🎓</div>
+                      <div style={{ background:'rgba(167,139,250,0.1)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:'4px 14px 14px 14px', padding:'10px 14px', maxWidth:'88%' }}>
+                        <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.08em', marginBottom:6 }}>TITAN AI</div>
+                        <div style={{ fontSize:13, color:'#e2e8f0', lineHeight:1.65 }}>Carbon is like a universal LEGO brick — it has 4 bonding "hands" and can connect to almost anything: other carbons, hydrogen, oxygen, nitrogen. That flexibility is why life itself is carbon-based. <span style={{ color:GOLD, fontWeight:700 }}>4 bonds = infinite combinations.</span> 🧱</div>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>So what makes a compound "organic"?</div>
+                    </div>
+                    <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>🎓</div>
+                      <div style={{ display:'flex', gap:5, padding:'12px 16px', background:'rgba(167,139,250,0.07)', border:'1px solid rgba(167,139,250,0.15)', borderRadius:'4px 14px 14px 14px' }}>
+                        {[0,1,2].map(i => <div key={i} className={`tdot td${i}`} style={{ width:6, height:6, borderRadius:'50%', background:PURPLE }} />)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── SPOTLIGHT 2: ADAPTIVE ALGORITHM ── */}
+      <FadeUp>
+        <section style={{ padding:'80px 32px' }}>
+          <div style={{ maxWidth:1160, margin:'0 auto' }}>
+            <div className="spotlight-row" style={{ display:'flex', alignItems:'center', gap:80 }}>
+              {/* visual */}
+              <div className="spotlight-visual" style={{ flex:1, maxWidth:500 }}>
+                <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)' }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:GOLD, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:16 }}>Your topic mastery map</div>
+                  <TopicGrid />
+                  <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
+                    <span style={{ fontSize:22 }}>⚡</span>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:'#fca5a5' }}>Priority queue: Equilibrium (19%)</div>
+                      <div style={{ fontSize:12, color:MUTED }}>Next 8 questions will target this topic</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop:10, padding:'14px 16px', background:'rgba(241,190,67,0.06)', border:'1px solid rgba(241,190,67,0.15)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
+                    <span style={{ fontSize:22 }}>📈</span>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:GOLD }}>Session progress: +12% on Redox</div>
+                      <div style={{ fontSize:12, color:MUTED }}>Difficulty unlocked: Level 3 questions</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* text */}
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:16 }}>Deep dive</div>
+                <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.5vw,44px)', margin:'0 0 20px', color:'#fff', letterSpacing:1, lineHeight:1.1 }}>
+                  AN ALGORITHM THAT<br />
+                  <span style={{ color:GOLD }}>LEARNS YOU.</span><br />
+                  NOT JUST FROM YOU.
+                </h2>
+                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most study apps give you a random bank of questions. gradefarm. tracks your error rate at the topic-and-difficulty level — so every session zeros in on exactly what your exam will punish you for.</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
+                  {[
+                    { icon:'📊', text:'Error rate tracked per topic and per difficulty tier — not just "right or wrong"' },
+                    { icon:'🔢', text:'Weighted priority queue updates in real time after every answer you give' },
+                    { icon:'🧠', text:'Difficulty scales automatically — easier when you\'re struggling, harder when you\'re confident' },
+                    { icon:'🔁', text:'Questions you\'ve missed come back in spaced intervals until they stick permanently' },
+                  ].map((f,i) => (
+                    <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+                      <div style={{ width:36, height:36, borderRadius:10, background:'rgba(241,190,67,0.1)', border:'1px solid rgba(241,190,67,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{f.icon}</div>
+                      <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ padding:'14px 32px', borderRadius:12, border:'none', color:NAVYD, fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 8px 28px rgba(241,190,67,0.4)` }}>
+                  See it in action →
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── SPOTLIGHT 3: PROGRESS & GAPS ── */}
+      <FadeUp>
+        <section style={{ padding:'80px 32px', background:'rgba(16,185,129,0.02)', borderTop:'1px solid rgba(16,185,129,0.07)', borderBottom:'1px solid rgba(16,185,129,0.07)' }}>
+          <div style={{ maxWidth:1160, margin:'0 auto' }}>
+            <div className="spotlight-row" style={{ display:'flex', alignItems:'center', gap:80 }}>
+              {/* text */}
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:GREEN, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:16 }}>Deep dive</div>
+                <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.5vw,44px)', margin:'0 0 20px', color:'#fff', letterSpacing:1, lineHeight:1.1 }}>
+                  SEE EXACTLY<br />
+                  <span style={{ color:GREEN }}>WHERE YOU STAND.</span><br />
+                  FIX WHAT'S BROKEN.
+                </h2>
+                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>After every session, your struggle profile updates. You get a real-time exam readiness score, a topic-by-topic breakdown, and a personalised action plan — not a vague "keep studying" message.</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
+                  {[
+                    { icon:'🎯', text:'Exam readiness score shows you the honest number — not a feel-good estimate' },
+                    { icon:'🗺️', text:'Topic heatmap shows which areas are red (danger), yellow (watch), and green (solid)' },
+                    { icon:'📋', text:'Personalised study plan generated after every session with specific next steps' },
+                    { icon:'📈', text:'Progress tracking over time so you can see the gaps actually closing' },
+                  ].map((f,i) => (
+                    <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+                      <div style={{ width:36, height:36, borderRadius:10, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{f.icon}</div>
+                      <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={onGetStarted} className="ctab" style={{ padding:'14px 32px', borderRadius:12, border:'none', background:`linear-gradient(135deg,${GREEN},#059669)`, color:'#fff', fontSize:14, fontWeight:800, cursor:'pointer', fontFamily:FONT_B, boxShadow:'0 8px 28px rgba(16,185,129,0.35)' }}>
+                  Track my progress →
+                </button>
+              </div>
+              {/* visual */}
+              <div className="spotlight-visual" style={{ flex:1, maxWidth:460 }}>
+                <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)' }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:GREEN, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:20 }}>Session summary · Oct 28</div>
+                  <GapsMini />
+                  <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:12 }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:GREEN, marginBottom:8 }}>📋 Your action plan</div>
+                    {['Review equilibrium Le Chatelier shifts (Titan can help)', '3 more sessions on Electrochemistry needed', 'Redox is improving — keep momentum'].map((a,i) => (
+                      <div key={i} style={{ display:'flex', gap:8, fontSize:12, color:MUTED, lineHeight:1.55, marginBottom: i<2?6:0 }}>
+                        <span style={{ color:GREEN, flexShrink:0 }}>→</span>{a}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── HOW IT WORKS ── */}
+      <FadeUp>
+        <section id="how" style={{ padding:'80px 32px' }}>
+          <div style={{ maxWidth:1100, margin:'0 auto' }}>
+            <div style={{ textAlign:'center', marginBottom:64 }}>
+              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>How it works</div>
+              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,48px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>FROM SIGN-UP TO RESULTS.</h2>
+              <p style={{ fontSize:16, color:MUTED, maxWidth:480, margin:'0 auto', lineHeight:1.7 }}>Four steps. One outcome: fewer gaps, more confidence, better exam performance.</p>
+            </div>
+            <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
+              {[
+                { num:'01', icon:'✍️', color:GOLD,   title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
+                { num:'02', icon:'⚡', color:GOLD,   title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
+                { num:'03', icon:'🎓', color:PURPLE, title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
+                { num:'04', icon:'📈', color:GREEN,  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
+              ].map((s,i) => (
+                <div key={i} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:18, padding:28, position:'relative' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+                    <div style={{ width:48, height:48, borderRadius:14, background:`rgba(${s.color===GOLD?'241,190,67':s.color===PURPLE?'167,139,250':'16,185,129'},0.12)`, border:`1px solid rgba(${s.color===GOLD?'241,190,67':s.color===PURPLE?'167,139,250':'16,185,129'},0.25)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>{s.icon}</div>
+                    <div style={{ fontFamily:FONT_D, fontSize:32, color:'rgba(255,255,255,0.06)', letterSpacing:2 }}>{s.num}</div>
+                  </div>
+                  <div style={{ fontFamily:FONT_D, fontSize:17, color:'#fff', marginBottom:10, letterSpacing:0.5 }}>{s.title.toUpperCase()}</div>
+                  <div style={{ fontSize:14, color:MUTED, lineHeight:1.65 }}>{s.desc}</div>
+                  {i < 3 && <div style={{ position:'absolute', top:'50%', right:-9, transform:'translateY(-50%)', width:18, height:18, borderRadius:'50%', background:NAVYD, border:`1px solid rgba(241,190,67,0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:GOLD, zIndex:1 }}>→</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── TESTIMONIALS ── */}
+      <FadeUp>
+        <section style={{ padding:'0 32px 80px' }}>
+          <div style={{ maxWidth:1100, margin:'0 auto' }}>
+            <div style={{ textAlign:'center', marginBottom:48 }}>
+              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>What students say</div>
+              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(24px,3.5vw,40px)', margin:0, color:'#fff', letterSpacing:1 }}>REAL STUDENTS. REAL RESULTS.</h2>
+            </div>
+            <div className="tgrid" style={{ display:'flex', gap:16 }}>
+              {[
+                { quote:'I bombed my first Chem SAT but after two weeks on gradefarm. my topic scores are genuinely going up. The algorithm kept hammering Equilibrium until I actually got it.', name:'Aiden M.', sub:'Stage 2 Chemistry', init:'AM', hue:210 },
+                { quote:'Titan explains things in a way that actually makes sense. I uploaded my teacher\'s notes and it explained limiting reagents with a burger analogy. It clicked immediately.', name:'Sophie R.', sub:'Stage 2 Chemistry', init:'SR', hue:270 },
+                { quote:'The Priority Queue is insane — it always knows exactly what I need to drill. My exam readiness score went from 41% to 74% in three weeks. I actually feel prepared now.', name:'Jake T.', sub:'Stage 1 Chemistry', init:'JT', hue:160 },
+              ].map((t,i) => (
+                <div key={i} style={{ flex:1, background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:18, padding:28, display:'flex', flexDirection:'column', gap:16 }}>
+                  <div style={{ display:'flex', gap:3 }}>{[0,1,2,3,4].map(s => <span key={s} style={{ color:GOLD, fontSize:14 }}>★</span>)}</div>
+                  <p style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.8, margin:0, flex:1, fontStyle:'italic' }}>"{t.quote}"</p>
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div style={{ width:40, height:40, borderRadius:'50%', background:`hsl(${t.hue},40%,30%)`, border:`2px solid rgba(241,190,67,0.2)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#fff', flexShrink:0 }}>{t.init}</div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>{t.name}</div>
+                      <div style={{ fontSize:11, color:GOLD }}>{t.sub}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── SUBJECTS ── */}
+      <FadeUp>
+        <section id="subjects" style={{ padding:'80px 32px', background:'rgba(255,255,255,0.015)', borderTop:'1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ maxWidth:960, margin:'0 auto', textAlign:'center' }}>
+            <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Subjects</div>
+            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>STARTING WITH CHEMISTRY.</h2>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:44, lineHeight:1.7 }}>More subjects are coming. Stage 1 and Stage 2 covered from day one.</p>
+            <div className="subjects-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+              {[
+                { name:'Chemistry',               stage:'Stage 1 & 2', icon:'⚗️', color:GOLD,    available:true,  count:'175+ questions' },
+                { name:'Mathematical Methods',    stage:'Stage 2',     icon:'∫',  color:'#a78bfa',available:false },
+                { name:'Physics',                 stage:'Stage 2',     icon:'⚛️', color:GOLDL,   available:false },
+                { name:'Biology',                 stage:'Stage 2',     icon:'🧬', color:GREEN,   available:false },
+                { name:'English Literary Studies',stage:'Stage 2',     icon:'📖', color:'#f87171',available:false },
+                { name:'Economics',               stage:'Stage 2',     icon:'📈', color:GOLD,    available:false },
+              ].map(s => (
+                <div key={s.name} onClick={s.available ? onGetStarted : undefined} style={{ padding:'24px 18px', borderRadius:16, border:`1px solid ${s.available?'rgba(241,190,67,0.32)':'rgba(255,255,255,0.06)'}`, background: s.available?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', textAlign:'center', opacity: s.available?1:0.45, cursor: s.available?'pointer':'default', transition:'all 0.18s', boxShadow: s.available?'0 4px 24px rgba(241,190,67,0.12)':'none' }}>
+                  <div style={{ fontSize:28, marginBottom:10 }}>{s.icon}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color: s.available?'#f1f5f9':'#475569', marginBottom:4 }}>{s.name}</div>
+                  <div style={{ fontSize:11, color: s.available?GOLD:'#334155' }}>{s.available ? s.count : s.stage+' · Coming soon'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── PRICING ── */}
+      <FadeUp>
+        <section id="pricing" style={{ padding:'80px 32px' }}>
+          <div style={{ maxWidth:820, margin:'0 auto', textAlign:'center' }}>
+            <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Pricing</div>
+            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>FREE WHILE IN BETA.</h2>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:52, maxWidth:440, margin:'0 auto 52px', lineHeight:1.7 }}>Everything is free right now. Beta users lock in the lowest price forever.</p>
+            <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:16, maxWidth:720, margin:'0 auto' }}>
+              {[
+                { name:'Beta', price:'Free', sub:'While in beta', hi:true, features:['All subjects (Chemistry live now)','Unlimited quiz sessions','Learn with Titan AI','Struggle tracking & readiness score','Weekly leaderboard','Priority beta pricing forever'] },
+                { name:'Full Release', price:'$12', sub:'/month · after beta', hi:false, features:['Everything in Beta','All SACE subjects','Parent dashboard','School assignment mode','Exam countdown planner','Priority support'] },
+              ].map(p => (
+                <div key={p.name} style={{ background: p.hi?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${p.hi?'rgba(241,190,67,0.3)':'rgba(255,255,255,0.06)'}`, borderRadius:20, padding:'36px 30px', textAlign:'left', position:'relative' }}>
+                  {p.hi && <div style={{ position:'absolute', top:-12, left:'50%', transform:'translateX(-50%)', background:`linear-gradient(135deg,${GOLD},${GOLDL})`, color:NAVYD, fontSize:11, fontWeight:900, padding:'5px 16px', borderRadius:20 }}>AVAILABLE NOW</div>}
+                  <div style={{ fontSize:14, fontWeight:800, color: p.hi?GOLD:MUTED, marginBottom:6 }}>{p.name}</div>
+                  <div style={{ fontFamily:FONT_D, fontSize:44, color:'#f1f5f9', marginBottom:4, letterSpacing:1 }}>{p.price}</div>
+                  <div style={{ fontSize:13, color:MUTED, marginBottom:28 }}>{p.sub}</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:28 }}>
+                    {p.features.map(f => (
+                      <div key={f} style={{ display:'flex', alignItems:'center', gap:10, fontSize:13, color:MUTED }}>
+                        <span style={{ color: p.hi?GOLD:'#334155', fontWeight:800 }}>✓</span> {f}
+                      </div>
+                    ))}
+                  </div>
+                  {p.hi && (
+                    <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ width:'100%', padding:14, borderRadius:11, border:'none', color:NAVYD, fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 6px 20px rgba(241,190,67,0.35)` }}>
+                      Get started free →
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── FINAL CTA ── */}
+      <FadeUp>
+        <section style={{ padding:'100px 32px', position:'relative', overflow:'hidden' }}>
+          <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:700, height:400, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.1) 0%,transparent 70%)`, filter:'blur(40px)', pointerEvents:'none' }} />
+          <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:400, height:200, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.15) 0%,transparent 60%)`, filter:'blur(20px)', pointerEvents:'none' }} />
+          <div style={{ maxWidth:680, margin:'0 auto', textAlign:'center', position:'relative', zIndex:1 }}>
+            <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:20 }}>Ready?</div>
+            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(24px,4.5vw,52px)', margin:'0 0 20px', color:'#fff', lineHeight:1.1, letterSpacing:1 }}>
+              YOUR ATAR DOESN'T CARE HOW GOOD <span style={{ color:GOLD }}>YOUR TEACHER IS AT EXPLAINING.</span> GRADEFARM. DOES.
+            </h2>
+            <p style={{ fontSize:17, color:MUTED, marginBottom:40, lineHeight:1.75, maxWidth:520, margin:'0 auto 40px' }}>
+              Start free today. No credit card, no commitment. The algorithm gets to work on your first question.
+            </p>
+            <div style={{ position:'relative', display:'inline-block' }}>
+              <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:300, height:120, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.45) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
+              <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ position:'relative', padding:'18px 56px', borderRadius:14, border:'none', color:NAVYD, fontSize:17, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 12px 40px rgba(241,190,67,0.5)` }}>
+                Start for free →
+              </button>
+            </div>
+            <div style={{ marginTop:20, fontSize:13, color:MUTED }}>No credit card · No commitment · Beta is free</div>
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ borderTop:'1px solid rgba(241,190,67,0.1)', padding:'28px 32px' }}>
+        <div className="footer-row" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontFamily:FONT_D, fontSize:16, letterSpacing:1 }}><span style={{ color:'#f1f5f9' }}>grade</span><span style={{ color:GOLD }}>farm.</span></span>
+            <span style={{ fontSize:11, color:'#2d3a5e' }}>by Titanium Tutoring</span>
+          </div>
+          <div style={{ display:'flex', gap:24 }}>
+            {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id,l]) => (
+              <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'#2d3a5e', fontSize:12, cursor:'pointer', fontFamily:FONT_B }}>{l}</button>
             ))}
           </div>
+          <div style={{ fontSize:12, color:'#2d3a5e' }}>© 2026 Titanium Tutoring · Adelaide, SA · Per aspera ad astra</div>
         </div>
-      </section>
-
-      {/* FINAL CTA */}
-      <section style={{ padding: '80px 32px' }}>
-        <div style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
-          <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(26px,4vw,38px)', margin: '0 0 16px', color: '#f1f5f9', lineHeight: 1.15, letterSpacing: 1 }}>
-            "IT'S OKAY. GRADEFARM. WILL SAVE ME AT HOME."
-          </h2>
-          <p style={{ fontSize: 16, color: '#64748b', marginBottom: 32, lineHeight: 1.7 }}>
-            If you didn't get it in class, that's fine. Titan explains it a different way. The quiz finds exactly what you're missing. Your ATAR doesn't have to depend on how good your teacher is at explaining things.
-          </p>
-          <button onClick={onGetStarted} className="ctab" style={{ padding: '16px 40px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVYD, fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 10px 36px rgba(241,190,67,0.35)` }}>
-            Start for free →
-          </button>
-          <div style={{ marginTop: 16, fontSize: 12, color: '#334155' }}>No credit card · No commitment · Beta is free</div>
-        </div>
-      </section>
-
-      {/* FOOTER — no icon, farm in gold */}
-      <footer style={{ borderTop: '1px solid rgba(241,190,67,0.1)', padding: '28px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}>
-            <span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-          </span>
-          <span style={{ fontSize: 11, color: '#334155' }}>by Titanium Tutoring</span>
-        </div>
-        <div style={{ fontSize: 12, color: '#334155' }}>© 2025 Titanium Tutoring · Adelaide, SA · Per aspera ad astra</div>
       </footer>
     </div>
   )
