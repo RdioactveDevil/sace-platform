@@ -1,30 +1,32 @@
-import { S1_TOPICS, S2_TOPICS, getTopicByCode } from './adminTopics'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { S1_TOPICS, S2_TOPICS, getTopicByCode } from './adminTopics.js'
 
 test('S1_TOPICS has 20 entries', () => {
-  expect(S1_TOPICS).toHaveLength(20)
+  assert.equal(S1_TOPICS.length, 20)
 })
 
 test('S2_TOPICS has 22 entries', () => {
-  expect(S2_TOPICS).toHaveLength(22)
+  assert.equal(S2_TOPICS.length, 22)
 })
 
 test('every topic has a code and name', () => {
-  ;[...S1_TOPICS, ...S2_TOPICS].forEach(t => {
-    expect(typeof t.code).toBe('string')
-    expect(typeof t.name).toBe('string')
-    expect(t.code.length).toBeGreaterThan(0)
-    expect(t.name.length).toBeGreaterThan(0)
-  })
+  for (const t of [...S1_TOPICS, ...S2_TOPICS]) {
+    assert.equal(typeof t.code, 'string')
+    assert.equal(typeof t.name, 'string')
+    assert.ok(t.code.length > 0)
+    assert.ok(t.name.length > 0)
+  }
 })
 
 test('getTopicByCode returns correct S1 topic', () => {
-  expect(getTopicByCode('s1', '2.2')).toEqual({ code: '2.2', name: 'Bonding between atoms' })
+  assert.deepEqual(getTopicByCode('s1', '2.2'), { code: '2.2', name: 'Bonding between atoms' })
 })
 
 test('getTopicByCode returns correct S2 topic', () => {
-  expect(getTopicByCode('s2', '2.2')).toEqual({ code: '2.2', name: 'Equilibrium and yield' })
+  assert.deepEqual(getTopicByCode('s2', '2.2'), { code: '2.2', name: 'Equilibrium and yield' })
 })
 
 test('getTopicByCode returns null for unknown code', () => {
-  expect(getTopicByCode('s1', '9.9')).toBeNull()
+  assert.equal(getTopicByCode('s1', '9.9'), null)
 })

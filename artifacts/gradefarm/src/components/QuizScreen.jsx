@@ -8,7 +8,6 @@ import {
   getLevelProgress,
   getQuestionCounts,
   getQuestionConceptTag,
-  buildRemediationQueue,
   RANKS,
   RANK_ICONS,
 } from '../lib/engine'
@@ -25,6 +24,15 @@ import {
   completeAssignment,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
+import {
+  withTimeout,
+  normalizeVariantRecord,
+  generateRemediationVariantsViaAI,
+  runEnterRemediation,
+  runGenerateRemediationQueue,
+  runLoadNextRemediationQuestion,
+  REMEDIATION_DB_TIMEOUT_MS,
+} from '../lib/remediation'
 import MathText from './MathText'
 
 const GOLD = '#f1be43'
@@ -42,147 +50,6 @@ const NAV_ITEMS = [
   { icon: '📚', label: 'Study Plan', path: '/study-plan' },
   { icon: '🕐', label: 'History', path: '/history' },
 ]
-
-function withTimeout(promise, ms, label = 'operation') {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`[gradefarm] ${label} timed out after ${ms}ms`))
-    }, ms)
-    Promise.resolve(promise)
-      .then(value => { clearTimeout(timer); resolve(value) })
-      .catch(err => { clearTimeout(timer); reject(err) })
-  })
-}
-
-const REMEDIATION_DB_TIMEOUT_MS = 5000
-
-async function fetchRemediationVariantsSafe(parentId, conceptTag, excludeIds, label) {
-  try {
-    return await withTimeout(
-      getRemediationVariants(parentId, conceptTag, excludeIds),
-      REMEDIATION_DB_TIMEOUT_MS,
-      `getRemediationVariants (${label})`
-    )
-  } catch (err) {
-    console.warn(`[gradefarm] DB variant lookup failed in ${label}:`, err?.message || err)
-    return { directVariants: [], conceptVariants: [] }
-  }
-}
-
-function extractJsonArray(text = '') {
-  try {
-    const parsed = JSON.parse(text)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {}
-
-  const start = text.indexOf('[')
-  const end = text.lastIndexOf(']')
-  if (start === -1 || end === -1 || end <= start) return []
-
-  try {
-    const parsed = JSON.parse(text.slice(start, end + 1))
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function scoreLocalCandidate(q, parentQuestion, target) {
-  // Concept-tag match > subtopic > topic, then difficulty proximity.
-  let s = 0
-  if (q.concept_tag && q.concept_tag === parentQuestion.concept_tag) s += 100
-  if (q.subtopic === parentQuestion.subtopic) s += 50
-  if (q.topic === parentQuestion.topic) s += 20
-  const d = q.difficulty ?? 3
-  s -= Math.abs(d - target) * 5
-  if (d <= target) s += 10
-  s += Math.random() * 3
-  return s
-}
-
-function createLocalFallbackVariants(parentQuestion, allQuestions = [], targetDifficulty = null) {
-  // Returns up to 5 same-topic / same-concept questions scored by relevance to
-  // the parent. Returns [] when no genuine related question exists — the
-  // caller must handle that case rather than ever showing the parent again.
-  const target = targetDifficulty ?? (parentQuestion.difficulty ?? 3)
-
-  const eligible = allQuestions.filter(q =>
-    q.id !== parentQuestion.id &&
-    !q.is_variant &&
-    (q.topic === parentQuestion.topic ||
-      (q.concept_tag && q.concept_tag === parentQuestion.concept_tag))
-  )
-
-  const candidates = eligible
-    .map(q => ({ q, s: scoreLocalCandidate(q, parentQuestion, target) }))
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 5)
-    .map(x => x.q)
-
-  return candidates.map((q, index) => ({
-    ...q,
-    id: `local_fallback__${parentQuestion.id}__${Date.now()}__${index}`,
-    variant_record_id: `local_fallback__${parentQuestion.id}__${index}`,
-    variant_type: `related_${index + 1}`,
-    parent_question_id: parentQuestion.id,
-    source: 'related',
-    is_variant: true,
-    // Preserve the real bank id so a correct answer here counts toward the
-    // no-repeat rule (recordAnswer needs a real questions.id).
-    bank_question_id: q.id,
-  }))
-}
-
-async function generateRemediationVariantsViaAI(parentQuestion, conceptTag, targetDifficulty = null) {
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-
-    const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
-    const diffTarget = Math.max(1, Math.min(5, targetDifficulty ?? (parentQuestion.difficulty ?? 3)))
-    const system = [
-      'You are generating adaptive remediation MCQs for a SACE Chemistry student.',
-      'Return only a valid JSON array containing exactly 5 objects.',
-      'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
-      'Each options array must contain exactly 4 strings.',
-      'Keep the same underlying concept, but vary wording, values, or structure.',
-      'Do not include markdown or commentary outside the JSON array.',
-    ].join(' ')
-
-    const user = [
-      `Topic: ${parentQuestion.topic}`,
-      `Subtopic: ${parentQuestion.subtopic}`,
-      `Concept tag: ${conceptTag}`,
-      `Original question: ${parentQuestion.question}`,
-      `Correct answer: ${correctAnswer}`,
-      `Original solution: ${parentQuestion.solution}`,
-      `Target difficulty: ${diffTarget} out of 5 — make these questions easier/more accessible than the original.`,
-      'Generate 5 targeted remediation questions that test the same concept but are not copies.',
-      'Vary wording, values, or scenario. Each question difficulty should be at or below the target.',
-    ].join('\n')
-
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        max_tokens: 2000,
-        system,
-        messages: [{ role: 'user', content: user }],
-      }),
-    })
-
-    clearTimeout(timeout)
-
-    if (!res.ok) return []
-
-    const data = await res.json()
-    const rawText = data?.content?.[0]?.text || ''
-    return extractJsonArray(rawText)
-  } catch {
-    return []
-  }
-}
 
 async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
   try {
@@ -251,22 +118,6 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
     return null
   } catch {
     return null
-  }
-}
-
-function normalizeVariantRecord(parentQuestion, variant, index = 0) {
-  return {
-    ...variant,
-    id: variant.id || variant.variant_record_id || `variant__${parentQuestion.id}__${Date.now()}__${index}`,
-    variant_record_id: variant.variant_record_id || variant.id || `variant__${parentQuestion.id}__${index}`,
-    parent_question_id: variant.parent_question_id || parentQuestion.id,
-    concept_tag: variant.concept_tag || parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion),
-    topic: variant.topic || parentQuestion.topic,
-    subtopic: variant.subtopic || parentQuestion.subtopic,
-    difficulty: Math.max(1, Math.min(5, Number(variant.difficulty || parentQuestion.difficulty || 1))),
-    options: Array.isArray(variant.options) ? variant.options : (parentQuestion.options || []),
-    source: variant.source || 'prebuilt',
-    is_variant: true,
   }
 }
 
@@ -604,247 +455,68 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
   }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
 
-  const generateRemediationQueue = useCallback(async (parentQuestion, existingUsedIds = [], difficultyTarget = null, options = {}) => {
-    const { skipDbLookup = false } = options
-    const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
-    const diffTarget = difficultyTarget ?? Math.max(1, (parentQuestion?.difficulty ?? 3) - 1)
-    setRemediationStatus('generating')
+  const remediationDeps = {
+    getRemediationVariants,
+    generateAIVariants: generateRemediationVariantsViaAI,
+    insertVariants: insertGeneratedQuestionVariants,
+    insertToBank: insertGeneratedQuestionsToBank,
+    dbTimeoutMs: REMEDIATION_DB_TIMEOUT_MS,
+  }
 
-    let resolvedQueue = []
-    let resolvedSource = 'generated'
+  const generateRemediationQueue = useCallback(
+    async (parentQuestion, existingUsedIds = [], difficultyTarget = null, options = {}) =>
+      runGenerateRemediationQueue({
+        parentQuestion,
+        existingUsedIds,
+        difficultyTarget,
+        options,
+        questions,
+        deps: remediationDeps,
+        setRemediationStatus,
+        setRemediationQueue,
+        setRemediationSource,
+        pendingBankIds: pendingBankIdsRef.current,
+        onBankQuestionsAdded,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questions, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
+  )
 
-    try {
-      // Step 1: Try DB variants first (with usedIds excluded) before touching AI.
-      // Bounded by a timeout so a hung Supabase call can never freeze remediation.
-      // Callers who already attempted the DB lookup (e.g. enterRemediation) can pass
-      // skipDbLookup=true to avoid paying the timeout twice when Supabase is unreachable.
-      if (!skipDbLookup) {
-        const { directVariants, conceptVariants } = await fetchRemediationVariantsSafe(
-          parentQuestion.id, conceptTag, existingUsedIds, 'generateRemediationQueue'
-        )
-        const dbQueue = buildRemediationQueue({
-          directVariants: (directVariants || []).map((v, i) => normalizeVariantRecord(parentQuestion, v, i)),
-          conceptVariants: (conceptVariants || []).map((v, i) => normalizeVariantRecord(parentQuestion, v, i)),
-          excludeIds: existingUsedIds,
-          limit: 5,
-        }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
-
-        if (dbQueue.length) {
-          resolvedQueue = dbQueue
-          resolvedSource = 'prebuilt'
-          return dbQueue
-        }
-      }
-
-      console.warn('[gradefarm] no DB variants available — falling back to local related questions')
-
-      // Step 2: Build the local fallback (related questions from the in-memory bank).
-      const localFallback = createLocalFallbackVariants(parentQuestion, questions, diffTarget).map((variant, index) =>
-        normalizeVariantRecord(parentQuestion, variant, index)
-      )
-
-      const localQueue = buildRemediationQueue({
-        generatedVariants: localFallback,
-        excludeIds: existingUsedIds,
-        limit: 5,
-      }).map(v => ({ ...v, is_variant: true, source: v.source || 'related' }))
-
-      // Skip the AI call when the bank already supplies at least 3 strong
-      // matches (concept_tag or same-subtopic at the target difficulty).
-      // Saves API spend on well-covered concepts.
-      const strongLocalCount = localQueue.filter(v =>
-        ((v.concept_tag && v.concept_tag === parentQuestion.concept_tag) ||
-         v.subtopic === parentQuestion.subtopic) &&
-        (v.difficulty ?? 3) <= diffTarget + 1
-      ).length
-
-      if (strongLocalCount >= 3) {
-        console.info(`[gradefarm] local bank has ${strongLocalCount} strong matches — skipping AI generation`)
-        resolvedQueue = localQueue
-        resolvedSource = 'generated'
-        return localQueue
-      }
-
-      // AI promise resolves as soon as the model returns. Bank persistence runs
-      // off the critical path; pendingBankIdsRef carries the real ids back to
-      // handleAnswer so variant attempts are still tracked for no-repeat.
-      const aiPromise = (async () => {
-        try {
-          const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag, diffTarget)
-          if (!generated.length) {
-            console.warn('[gradefarm] AI variant generation returned 0 variants')
-            return { normalized: [], generated: [] }
-          }
-
-          const normalized = generated.map((v, i) => ({
-            ...normalizeVariantRecord(parentQuestion, v, i),
-            is_variant: true,
-            source: 'ai_generated',
-            variant_type: v.variant_type || 'ai_variant',
-          }))
-
-          // Background bank persistence — bounded but off the critical path.
-          void (async () => {
-            try {
-              const bankRows = await withTimeout(
-                insertGeneratedQuestionsToBank(parentQuestion, generated),
-                5000,
-                'insertGeneratedQuestionsToBank'
-              )
-              if (!bankRows.length) return
-              if (typeof onBankQuestionsAdded === 'function') {
-                try { onBankQuestionsAdded(bankRows) } catch {}
-              }
-              bankRows.forEach((row, i) => {
-                const vid = normalized[i]?.variant_record_id
-                if (vid) pendingBankIdsRef.current.set(vid, row.id)
-              })
-              console.info(`[gradefarm] background-persisted ${bankRows.length}/${generated.length} AI question(s) to the bank`)
-            } catch (bankErr) {
-              console.warn('[gradefarm] background bank persistence failed:', bankErr?.message || bankErr)
-            }
-          })()
-
-          return { normalized, generated }
-        } catch (aiErr) {
-          console.warn('[gradefarm] AI variant generation failed (generateRemediationQueue):', aiErr?.message || aiErr)
-          return { normalized: [], generated: [] }
-        }
-      })()
-
-      // Persistence runs in the background regardless of which path consumes the AI output.
-      const persistPromise = aiPromise.then(async ({ generated }) => {
-        if (!generated.length) return
-        try {
-          const saved = await insertGeneratedQuestionVariants(parentQuestion, generated)
-          if (saved.length < generated.length) {
-            console.error(
-              `[gradefarm] variant storage partial: ${saved.length}/${generated.length} saved for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}". ` +
-              'Unsaved variants will be regenerated next session — check Supabase RLS on question_variants.'
-            )
-          } else {
-            console.info(`[gradefarm] stored ${saved.length} variant(s) for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}"`)
-          }
-        } catch (insertErr) {
-          console.error(
-            `[gradefarm] variant storage failed (0/${generated.length} saved) for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}" — ` +
-            'variants will be regenerated next session. Check Supabase RLS on question_variants. Error:',
-            insertErr?.message || insertErr
-          )
-        }
-      })
-      // Don't let unhandled rejections from the background persist surface to the console as errors.
-      persistPromise.catch(() => {})
-
-      // localQueue is either real related questions or empty — never the parent.
-      const hasRelatedLocal = localQueue.length > 0
-
-      if (hasRelatedLocal) {
-        // We have real related questions to show immediately. Append AI variants to the
-        // live queue in the background when they arrive.
-        aiPromise.then(({ normalized }) => {
-          if (normalized.length) setRemediationQueue(prev => [...prev, ...normalized])
-        })
-        resolvedQueue = localQueue
-        resolvedSource = 'generated'
-        return localQueue
-      }
-
-      // Step 4: No DB variants and no related local questions — block on AI so the
-      // student gets a genuinely new remediation question instead of a duplicate of
-      // the original.
-      console.warn('[gradefarm] no related local variants — awaiting AI generation synchronously to seed the queue')
-      const { normalized: aiQueue } = await aiPromise
-
-      if (aiQueue.length) {
-        resolvedQueue = aiQueue
-        resolvedSource = 'generated'
-        return aiQueue
-      }
-
-      // No DB variants, no related local questions, AI returned nothing.
-      // Exit remediation gracefully rather than re-showing the parent question.
-      console.warn('[gradefarm] no variants available from any source — activating with empty queue; click handler will exit remediation gracefully')
-      resolvedQueue = []
-      resolvedSource = 'generated'
-      return []
-    } catch (err) {
-      console.warn('[gradefarm] generateRemediationQueue unexpected error:', err?.message || err)
-      resolvedQueue = []
-      resolvedSource = 'generated'
-      return []
-    } finally {
-      // Single exit point — always clear the 'generating' status no matter what happened above.
-      setRemediationSource(resolvedSource)
-      setRemediationQueue(resolvedQueue)
-      setRemediationStatus('activated')
-    }
-  }, [questions, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded])
-
-  const enterRemediation = useCallback(async (parentQuestion) => {
-    if (!parentQuestion) return
-
-    const conceptTag = parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion)
-    const diffTarget = Math.max(1, (parentQuestion.difficulty ?? 3) - 1)
-
-    setRemediationMode(true)
-    setRemediationStreak(0)
-    setRemediationTarget(3)
-    setRemediationDifficultyTarget(diffTarget)
-    // status stays 'generating' (set by handleAnswer) — button stays disabled until queue loads
-    setRemediationSource('prebuilt')
-    setRemediationConcept(conceptTag)
-    setRemediationParentId(parentQuestion.id)
-    setRemediationOriginalQ(parentQuestion)
-    setRemediationUsedIds([])
-
-    try {
-      // Prefer prefetched variants if available; fall back to a bounded live lookup.
-      let dbResult = variantPrefetchRef.current.get(parentQuestion.id)
-      if (dbResult) {
-        console.info(`[gradefarm] using prefetched variants for question ${parentQuestion.id}`)
-      } else {
-        dbResult = await fetchRemediationVariantsSafe(
-          parentQuestion.id, conceptTag, [], 'enterRemediation'
-        )
-      }
-      const { directVariants, conceptVariants } = dbResult
-      const queue = buildRemediationQueue({
-        directVariants: (directVariants || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index)),
-        conceptVariants: (conceptVariants || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index)),
-        excludeIds: [],
-        limit: 5,
-      }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
-
-      if (!queue.length) {
-        // DB has no stored variants (or DB timed out) — go straight to local fallback + AI.
-        // Pass skipDbLookup so we don't pay the Supabase timeout a second time when Supabase is unreachable.
-        await generateRemediationQueue(parentQuestion, [], diffTarget, { skipDbLookup: true })
-      } else {
-        // DB variants found — use them and preserve API credits. AI is only called when these are exhausted.
-        setRemediationQueue(queue)
-        setRemediationStatus('activated')
-      }
-    } catch (err) {
-      // Belt-and-braces: if anything unexpected escapes, never leave the user stuck on 'generating'.
-      console.warn('[gradefarm] enterRemediation unexpected error — activating with empty queue:', err?.message || err)
-      setRemediationQueue([])
-      setRemediationStatus('activated')
-    }
-  }, [
-    generateRemediationQueue,
-    setRemediationConcept,
-    setRemediationMode,
-    setRemediationOriginalQ,
-    setRemediationParentId,
-    setRemediationQueue,
-    setRemediationSource,
-    setRemediationStatus,
-    setRemediationStreak,
-    setRemediationTarget,
-    setRemediationUsedIds,
-    setRemediationWrongCount,
-  ])
+  const enterRemediation = useCallback(
+    async (parentQuestion) =>
+      runEnterRemediation({
+        parentQuestion,
+        prefetched: variantPrefetchRef.current,
+        deps: remediationDeps,
+        setRemediationMode,
+        setRemediationStreak,
+        setRemediationTarget,
+        setRemediationDifficultyTarget,
+        setRemediationSource,
+        setRemediationConcept,
+        setRemediationParentId,
+        setRemediationOriginalQ,
+        setRemediationUsedIds,
+        setRemediationQueue,
+        setRemediationStatus,
+        generateRemediationQueue,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      generateRemediationQueue,
+      setRemediationConcept,
+      setRemediationMode,
+      setRemediationOriginalQ,
+      setRemediationParentId,
+      setRemediationQueue,
+      setRemediationSource,
+      setRemediationStatus,
+      setRemediationStreak,
+      setRemediationTarget,
+      setRemediationUsedIds,
+      setRemediationWrongCount,
+    ],
+  )
 
   useEffect(() => {
     async function init() {
@@ -1156,56 +828,20 @@ export default function QuizScreen({
     }
   }
 
-  const loadNextRemediationQuestion = async () => {
-    let queue = remediationQueue
-
-    if (!queue.length && remediationOriginalQ) {
-      // Step 1: Check DB for stored variants not yet used before calling AI.
-      const conceptTag = remediationOriginalQ.concept_tag || getQuestionConceptTag(remediationOriginalQ)
-      const { directVariants, conceptVariants } = await fetchRemediationVariantsSafe(
-        remediationOriginalQ.id, conceptTag, remediationUsedIds, 'loadNextRemediationQuestion'
-      )
-      const dbQueue = buildRemediationQueue({
-        directVariants: (directVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
-        conceptVariants: (conceptVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
-        excludeIds: remediationUsedIds,
-        limit: 5,
-      }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
-
-      if (dbQueue.length) {
-        queue = dbQueue
-        setRemediationQueue(dbQueue)
-        setRemediationSource('prebuilt')
-        setRemediationStatus('activated')
-      }
-
-      // Step 2: DB had nothing new — generateRemediationQueue handles local fallback + AI.
-      // Skip its internal DB lookup since we already attempted (and possibly timed out on) one above.
-      if (!queue.length) {
-        queue = await generateRemediationQueue(
-          remediationOriginalQ,
-          remediationUsedIds,
-          remediationDifficultyTarget,
-          { skipDbLookup: true }
-        )
-      }
-    }
-
-    if (!queue.length) {
-      // Nothing left to show — exit remediation cleanly rather than re-presenting
-      // the parent question. Caller advances to the next quiz question.
-      setRemediationQueue([])
-      setRemediationSource('generated')
-      setRemediationStatus('activated')
-      return false
-    }
-
-    const [nextVariant, ...rest] = queue
-    setRemediationQueue(rest)
-    setRemediationUsedIds(prev => [...new Set([...prev, nextVariant.variant_record_id || nextVariant.id])])
-    setDisplayQuestion({ ...nextVariant, is_variant: true })
-    return true
-  }
+  const loadNextRemediationQuestion = async () =>
+    runLoadNextRemediationQuestion({
+      remediationQueue,
+      remediationOriginalQ,
+      remediationUsedIds,
+      remediationDifficultyTarget,
+      deps: remediationDeps,
+      setRemediationQueue,
+      setRemediationSource,
+      setRemediationStatus,
+      setRemediationUsedIds,
+      setDisplayQuestion,
+      generateRemediationQueue,
+    })
 
   const nextQ = async () => {
     if (!currentQ) return
