@@ -582,6 +582,27 @@ export default function QuizScreen({
     const diffTarget = difficultyTarget ?? Math.max(1, (parentQuestion?.difficulty ?? 3) - 1)
     setRemediationStatus('generating')
 
+    // Step 1: Try DB variants first (with usedIds excluded) before touching AI.
+    try {
+      const { directVariants, conceptVariants } = await getRemediationVariants(parentQuestion.id, conceptTag, existingUsedIds)
+      const dbQueue = buildRemediationQueue({
+        directVariants: (directVariants || []).map((v, i) => normalizeVariantRecord(parentQuestion, v, i)),
+        conceptVariants: (conceptVariants || []).map((v, i) => normalizeVariantRecord(parentQuestion, v, i)),
+        excludeIds: existingUsedIds,
+        limit: 5,
+      }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
+
+      if (dbQueue.length) {
+        setRemediationSource('prebuilt')
+        setRemediationStatus('activated')
+        setRemediationQueue(dbQueue)
+        return dbQueue
+      }
+    } catch (dbErr) {
+      console.warn('[gradefarm] DB variant lookup failed in generateRemediationQueue:', dbErr?.message || dbErr)
+    }
+
+    // Step 2: DB had nothing — use local related questions as an immediate fallback while AI generates.
     const localFallback = createLocalFallbackVariants(parentQuestion, questions, diffTarget).map((variant, index) =>
       normalizeVariantRecord(parentQuestion, variant, index)
     )
@@ -592,7 +613,7 @@ export default function QuizScreen({
       limit: 5,
     }).map(v => ({ ...v, is_variant: true, source: 'related' }))
 
-    // Fire AI generation in background — append results to live queue when ready
+    // Fire AI generation in background — append results to live queue when ready and store for future sessions.
     ;(async () => {
       try {
         const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag, diffTarget)
@@ -603,15 +624,14 @@ export default function QuizScreen({
           source: 'ai_generated',
           variant_type: v.variant_type || 'ai_variant',
         }))
-        // Append AI questions to whatever is left in the queue
         setRemediationQueue(prev => [...prev, ...normalized])
         try {
           await insertGeneratedQuestionVariants(parentQuestion, generated)
         } catch (insertErr) {
-          console.warn('[gradefarm] variant storage failed (generateRemediationQueue) — questions regenerated next session:', insertErr?.message || insertErr)
+          console.warn('[gradefarm] variant storage failed (generateRemediationQueue) — questions will be regenerated next session:', insertErr?.message || insertErr)
         }
       } catch (aiErr) {
-        console.warn('[gradefarm] AI variant generation failed:', aiErr?.message || aiErr)
+        console.warn('[gradefarm] AI variant generation failed (generateRemediationQueue):', aiErr?.message || aiErr)
       }
     })()
 
@@ -640,7 +660,7 @@ export default function QuizScreen({
 
     try {
       const { directVariants, conceptVariants } = await getRemediationVariants(parentQuestion.id, conceptTag, [])
-      let queue = buildRemediationQueue({
+      const queue = buildRemediationQueue({
         directVariants: (directVariants || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index)),
         conceptVariants: (conceptVariants || []).map((variant, index) => normalizeVariantRecord(parentQuestion, variant, index)),
         excludeIds: [],
@@ -648,32 +668,12 @@ export default function QuizScreen({
       }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
 
       if (!queue.length) {
-        // generateRemediationQueue sets status to 'activated' once the fallback queue is ready
-        queue = await generateRemediationQueue(parentQuestion, [], diffTarget)
+        // DB has no stored variants — generateRemediationQueue handles local fallback + AI generation + storage
+        await generateRemediationQueue(parentQuestion, [], diffTarget)
       } else {
-        // DB variants loaded — enable the button now, also fire AI for adaptive replenishment
+        // DB variants found — use them and preserve API credits. AI is only called when these are exhausted.
         setRemediationQueue(queue)
         setRemediationStatus('activated')
-        ;(async () => {
-          try {
-            const generated = await generateRemediationVariantsViaAI(parentQuestion, conceptTag, diffTarget)
-            if (!generated.length) return
-            const normalized = generated.map((v, i) => ({
-              ...normalizeVariantRecord(parentQuestion, v, i),
-              is_variant: true,
-              source: 'ai_generated',
-              variant_type: v.variant_type || 'ai_variant',
-            }))
-            setRemediationQueue(prev => [...prev, ...normalized])
-            try {
-              await insertGeneratedQuestionVariants(parentQuestion, generated)
-            } catch (insertErr) {
-              console.warn('[gradefarm] variant storage failed (enterRemediation) — questions regenerated next session:', insertErr?.message || insertErr)
-            }
-          } catch (aiErr) {
-            console.warn('[gradefarm] AI variant generation failed (enterRemediation):', aiErr?.message || aiErr)
-          }
-        })()
       }
     } catch (dbErr) {
       console.warn('[gradefarm] getRemediationVariants DB lookup failed — falling back to generation:', dbErr?.message || dbErr)
@@ -849,7 +849,31 @@ export default function QuizScreen({
     let queue = remediationQueue
 
     if (!queue.length && remediationOriginalQ) {
-      queue = await generateRemediationQueue(remediationOriginalQ, remediationUsedIds, remediationDifficultyTarget)
+      // Step 1: Check DB for stored variants not yet used before calling AI.
+      try {
+        const conceptTag = remediationOriginalQ.concept_tag || getQuestionConceptTag(remediationOriginalQ)
+        const { directVariants, conceptVariants } = await getRemediationVariants(remediationOriginalQ.id, conceptTag, remediationUsedIds)
+        const dbQueue = buildRemediationQueue({
+          directVariants: (directVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
+          conceptVariants: (conceptVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
+          excludeIds: remediationUsedIds,
+          limit: 5,
+        }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
+
+        if (dbQueue.length) {
+          queue = dbQueue
+          setRemediationQueue(dbQueue)
+          setRemediationSource('prebuilt')
+          setRemediationStatus('activated')
+        }
+      } catch (dbErr) {
+        console.warn('[gradefarm] DB lookup failed in loadNextRemediationQuestion:', dbErr?.message || dbErr)
+      }
+
+      // Step 2: DB had nothing new — generateRemediationQueue handles DB check + local fallback + AI.
+      if (!queue.length) {
+        queue = await generateRemediationQueue(remediationOriginalQ, remediationUsedIds, remediationDifficultyTarget)
+      }
     }
 
     if (!queue.length) {
