@@ -12,26 +12,29 @@ const MUTED  = '#94a3b8'
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
 
-function Counter({ target, suffix = '', duration = 2000 }) {
+function Counter({ target, suffix = '', duration = 2000, delay = 0 }) {
   const [count, setCount] = useState(0)
   const ref = useRef(null)
   const started = useRef(false)
   useEffect(() => {
+    let timerId = null
     const obs = new IntersectionObserver(([e]) => {
       if (e.isIntersecting && !started.current) {
         started.current = true
-        const t0 = Date.now()
-        const tick = () => {
-          const p = Math.min((Date.now() - t0) / duration, 1)
-          setCount(Math.round((1 - Math.pow(1 - p, 3)) * target))
-          if (p < 1) requestAnimationFrame(tick)
-        }
-        requestAnimationFrame(tick)
+        timerId = setTimeout(() => {
+          const t0 = Date.now()
+          const tick = () => {
+            const p = Math.min((Date.now() - t0) / duration, 1)
+            setCount(Math.round((1 - Math.pow(1 - p, 3)) * target))
+            if (p < 1) requestAnimationFrame(tick)
+          }
+          requestAnimationFrame(tick)
+        }, delay)
       }
     }, { threshold: 0.5 })
     if (ref.current) obs.observe(ref.current)
-    return () => obs.disconnect()
-  }, [target, duration])
+    return () => { obs.disconnect(); if (timerId !== null) clearTimeout(timerId) }
+  }, [target, duration, delay])
   return <span ref={ref}>{count.toLocaleString()}{suffix}</span>
 }
 
@@ -46,10 +49,10 @@ function useFadeUp() {
   return { ref, visible: v }
 }
 
-function FadeUp({ children, delay = 0, style = {} }) {
+function FadeUp({ children, delay = 0, style = {}, className = '' }) {
   const { ref, visible } = useFadeUp()
   return (
-    <div ref={ref} style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(32px)', transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms`, ...style }}>
+    <div ref={ref} className={className} style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(32px)', transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms`, ...style }}>
       {children}
     </div>
   )
@@ -365,38 +368,40 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
       <div style={{ height:1, background:'linear-gradient(90deg,transparent 0%,rgba(241,190,67,0.3) 30%,rgba(241,190,67,0.5) 50%,rgba(241,190,67,0.3) 70%,transparent 100%)' }} />
 
       {/* ── STATS ── */}
-      <FadeUp>
-        <section style={{ padding:'56px 32px' }}>
-          <div style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
-            {[
-              { val:175, suf:'+', label:'SACE Questions', sub:'Stage 1 & 2 Chemistry', hi:false },
-              { val:100, suf:'%', label:'Adaptive',       sub:'Tracks your exact weaknesses', hi:true  },
-              { val:0,   suf:'$', label:'Cost to Start',  sub:'Free during beta', hi:false },
-            ].map((s,i) => (
-              <div key={i} style={{ textAlign:'center', padding:'40px 24px', background: s.hi ? 'rgba(241,190,67,0.07)' : 'rgba(255,255,255,0.02)', borderRadius: i===0?'16px 0 0 16px':i===2?'0 16px 16px 0':0, border:`1px solid ${s.hi?'rgba(241,190,67,0.22)':'rgba(255,255,255,0.05)'}` }}>
-                <div style={{ fontFamily:FONT_D, fontSize:62, color: s.hi ? GOLD : '#f1f5f9', lineHeight:1, letterSpacing:1 }}><Counter target={s.val} suffix={s.suf} /></div>
+      <section style={{ padding:'56px 32px' }}>
+        <div style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
+          {[
+            { val:175, suf:'+', label:'SACE Questions', sub:'Stage 1 & 2 Chemistry', hi:false },
+            { val:100, suf:'%', label:'Adaptive',       sub:'Tracks your exact weaknesses', hi:true  },
+            { val:0,   suf:'$', label:'Cost to Start',  sub:'Free during beta', hi:false },
+          ].map((s,i) => (
+            <FadeUp key={i} delay={i * 70}>
+              <div style={{ textAlign:'center', padding:'40px 24px', background: s.hi ? 'rgba(241,190,67,0.07)' : 'rgba(255,255,255,0.02)', borderRadius: i===0?'16px 0 0 16px':i===2?'0 16px 16px 0':0, border:`1px solid ${s.hi?'rgba(241,190,67,0.22)':'rgba(255,255,255,0.05)'}` }}>
+                <div style={{ fontFamily:FONT_D, fontSize:62, color: s.hi ? GOLD : '#f1f5f9', lineHeight:1, letterSpacing:1 }}><Counter target={s.val} suffix={s.suf} delay={i * 70 + 400} /></div>
                 <div style={{ fontSize:15, fontWeight:700, color:'#e2e8f0', marginTop:10 }}>{s.label}</div>
                 <div style={{ fontSize:12, color:MUTED, marginTop:4 }}>{s.sub}</div>
               </div>
-            ))}
-          </div>
-        </section>
-      </FadeUp>
+            </FadeUp>
+          ))}
+        </div>
+      </section>
 
       {/* ── BENTO FEATURES ── */}
-      <FadeUp>
-        <section id="features" style={{ padding:'80px 32px' }}>
-          <div style={{ maxWidth:1160, margin:'0 auto' }}>
+      <section id="features" style={{ padding:'80px 32px' }}>
+        <div style={{ maxWidth:1160, margin:'0 auto' }}>
+          <FadeUp>
             <div style={{ textAlign:'center', marginBottom:60 }}>
               <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Everything you need</div>
               <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,50px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>BUILT FOR THE ATAR GENERATION.</h2>
               <p style={{ fontSize:17, color:MUTED, maxWidth:560, margin:'0 auto', lineHeight:1.7 }}>Six next-generation capabilities working together — so you stop guessing what to study and start making real progress.</p>
             </div>
+          </FadeUp>
 
-            <div className="bento-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
+          <div className="bento-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
 
-              {/* CARD 1 — Adaptive (span 2, tall) */}
-              <div className="bc-gold" style={{ gridColumn:'span 2', background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320 }}>
+            {/* CARD 1 — Adaptive (span 2, tall) */}
+            <FadeUp delay={0} style={{ gridColumn:'span 2' }}>
+              <div className="bc-gold" style={{ background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320, height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:200, height:200, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.12) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
                   <div style={{ width:44, height:44, borderRadius:12, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>🎯</div>
@@ -413,9 +418,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   ))}
                 </div>
               </div>
+            </FadeUp>
 
-              {/* CARD 2 — Titan AI (span 1, tall) */}
-              <div className="bc" style={{ background:'rgba(167,139,250,0.04)', border:'1px solid rgba(167,139,250,0.22)', borderRadius:20, padding:28, position:'relative', overflow:'hidden' }}>
+            {/* CARD 2 — Titan AI (span 1, tall) */}
+            <FadeUp delay={70}>
+              <div className="bc" style={{ background:'rgba(167,139,250,0.04)', border:'1px solid rgba(167,139,250,0.22)', borderRadius:20, padding:28, position:'relative', overflow:'hidden', height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:140, height:140, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)`, filter:'blur(16px)', pointerEvents:'none' }} />
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
                   <div style={{ width:40, height:40, borderRadius:12, background:'rgba(167,139,250,0.15)', border:'1px solid rgba(167,139,250,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>🎓</div>
@@ -427,9 +434,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:20 }}>Explains using sport, gaming, and everyday life. Doesn't just check answers — understands how you think.</p>
                 <TitanChat />
               </div>
+            </FadeUp>
 
-              {/* CARD 3 — XP & Leaderboards */}
-              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative' }}>
+            {/* CARD 3 — XP & Leaderboards */}
+            <FadeUp delay={140}>
+              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
                   <div style={{ width:40, height:40, borderRadius:12, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>⚡</div>
                   <div>
@@ -440,9 +449,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:18 }}>Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.</p>
                 <LeaderboardMini />
               </div>
+            </FadeUp>
 
-              {/* CARD 4 — Know Your Gaps */}
-              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative' }}>
+            {/* CARD 4 — Know Your Gaps */}
+            <FadeUp delay={210}>
+              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
                   <div style={{ width:40, height:40, borderRadius:12, background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📊</div>
                   <div>
@@ -453,9 +464,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:18 }}>After every session, see exactly which topics are holding your ATAR back. Real-time readiness score. No more guessing what to revise.</p>
                 <GapsMini />
               </div>
+            </FadeUp>
 
-              {/* CARD 5 — Your Notes */}
-              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative' }}>
+            {/* CARD 5 — Your Notes */}
+            <FadeUp delay={280}>
+              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
                   <div style={{ width:40, height:40, borderRadius:12, background:'rgba(249,216,122,0.15)', border:'1px solid rgba(249,216,122,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📄</div>
                   <div>
@@ -481,9 +494,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   </div>
                 </div>
               </div>
+            </FadeUp>
 
-              {/* CARD 6 — SACE Content (full width banner) */}
-              <div className="bento-span bc" style={{ gridColumn:'span 3', background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
+            {/* CARD 6 — SACE Content (full width banner) */}
+            <FadeUp delay={350} className="bento-span" style={{ gridColumn:'span 3' }}>
+              <div className="bc" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
                 <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
                 <div style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
                   <div style={{ width:52, height:52, borderRadius:14, background:'rgba(241,190,67,0.15)', border:'1px solid rgba(241,190,67,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26 }}>⭐</div>
@@ -504,11 +519,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   ))}
                 </div>
               </div>
+            </FadeUp>
 
-            </div>
           </div>
-        </section>
-      </FadeUp>
+        </div>
+      </section>
 
       {/* ── SPOTLIGHT 1: TITAN AI ── */}
       <FadeUp>
@@ -689,22 +704,24 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
       </FadeUp>
 
       {/* ── HOW IT WORKS ── */}
-      <FadeUp>
-        <section id="how" style={{ padding:'80px 32px' }}>
-          <div style={{ maxWidth:1100, margin:'0 auto' }}>
+      <section id="how" style={{ padding:'80px 32px' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
+          <FadeUp>
             <div style={{ textAlign:'center', marginBottom:64 }}>
               <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>How it works</div>
               <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,48px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>FROM SIGN-UP TO RESULTS.</h2>
               <p style={{ fontSize:16, color:MUTED, maxWidth:480, margin:'0 auto', lineHeight:1.7 }}>Four steps. One outcome: fewer gaps, more confidence, better exam performance.</p>
             </div>
-            <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
-              {[
-                { num:'01', icon:'✍️', color:GOLD,   title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
-                { num:'02', icon:'⚡', color:GOLD,   title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
-                { num:'03', icon:'🎓', color:PURPLE, title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
-                { num:'04', icon:'📈', color:GREEN,  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
-              ].map((s,i) => (
-                <div key={i} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:18, padding:28, position:'relative' }}>
+          </FadeUp>
+          <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
+            {[
+              { num:'01', icon:'✍️', color:GOLD,   title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
+              { num:'02', icon:'⚡', color:GOLD,   title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
+              { num:'03', icon:'🎓', color:PURPLE, title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
+              { num:'04', icon:'📈', color:GREEN,  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
+            ].map((s,i) => (
+              <FadeUp key={i} delay={i * 80}>
+                <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:18, padding:28, position:'relative', height:'100%' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
                     <div style={{ width:48, height:48, borderRadius:14, background:`rgba(${s.color===GOLD?'241,190,67':s.color===PURPLE?'167,139,250':'16,185,129'},0.12)`, border:`1px solid rgba(${s.color===GOLD?'241,190,67':s.color===PURPLE?'167,139,250':'16,185,129'},0.25)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>{s.icon}</div>
                     <div style={{ fontFamily:FONT_D, fontSize:32, color:'rgba(255,255,255,0.06)', letterSpacing:2 }}>{s.num}</div>
@@ -713,27 +730,29 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   <div style={{ fontSize:14, color:MUTED, lineHeight:1.65 }}>{s.desc}</div>
                   {i < 3 && <div style={{ position:'absolute', top:'50%', right:-9, transform:'translateY(-50%)', width:18, height:18, borderRadius:'50%', background:NAVYD, border:`1px solid rgba(241,190,67,0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:GOLD, zIndex:1 }}>→</div>}
                 </div>
-              ))}
-            </div>
+              </FadeUp>
+            ))}
           </div>
-        </section>
-      </FadeUp>
+        </div>
+      </section>
 
       {/* ── TESTIMONIALS ── */}
-      <FadeUp>
-        <section style={{ padding:'0 32px 80px' }}>
-          <div style={{ maxWidth:1100, margin:'0 auto' }}>
+      <section style={{ padding:'0 32px 80px' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
+          <FadeUp>
             <div style={{ textAlign:'center', marginBottom:48 }}>
               <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>What students say</div>
               <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(24px,3.5vw,40px)', margin:0, color:'#fff', letterSpacing:1 }}>REAL STUDENTS. REAL RESULTS.</h2>
             </div>
-            <div className="tgrid" style={{ display:'flex', gap:16 }}>
-              {[
-                { quote:'I bombed my first Chem SAT but after two weeks on gradefarm. my topic scores are genuinely going up. The algorithm kept hammering Equilibrium until I actually got it.', name:'Aiden M.', sub:'Stage 2 Chemistry', init:'AM', hue:210 },
-                { quote:'Titan explains things in a way that actually makes sense. I uploaded my teacher\'s notes and it explained limiting reagents with a burger analogy. It clicked immediately.', name:'Sophie R.', sub:'Stage 2 Chemistry', init:'SR', hue:270 },
-                { quote:'The Priority Queue is insane — it always knows exactly what I need to drill. My exam readiness score went from 41% to 74% in three weeks. I actually feel prepared now.', name:'Jake T.', sub:'Stage 1 Chemistry', init:'JT', hue:160 },
-              ].map((t,i) => (
-                <div key={i} style={{ flex:1, background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:18, padding:28, display:'flex', flexDirection:'column', gap:16 }}>
+          </FadeUp>
+          <div className="tgrid" style={{ display:'flex', gap:16 }}>
+            {[
+              { quote:'I bombed my first Chem SAT but after two weeks on gradefarm. my topic scores are genuinely going up. The algorithm kept hammering Equilibrium until I actually got it.', name:'Aiden M.', sub:'Stage 2 Chemistry', init:'AM', hue:210 },
+              { quote:'Titan explains things in a way that actually makes sense. I uploaded my teacher\'s notes and it explained limiting reagents with a burger analogy. It clicked immediately.', name:'Sophie R.', sub:'Stage 2 Chemistry', init:'SR', hue:270 },
+              { quote:'The Priority Queue is insane — it always knows exactly what I need to drill. My exam readiness score went from 41% to 74% in three weeks. I actually feel prepared now.', name:'Jake T.', sub:'Stage 1 Chemistry', init:'JT', hue:160 },
+            ].map((t,i) => (
+              <FadeUp key={i} delay={i * 100} style={{ flex:1 }}>
+                <div style={{ background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:18, padding:28, display:'flex', flexDirection:'column', gap:16, height:'100%' }}>
                   <div style={{ display:'flex', gap:3 }}>{[0,1,2,3,4].map(s => <span key={s} style={{ color:GOLD, fontSize:14 }}>★</span>)}</div>
                   <p style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.8, margin:0, flex:1, fontStyle:'italic' }}>"{t.quote}"</p>
                   <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -744,11 +763,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </FadeUp>
+            ))}
           </div>
-        </section>
-      </FadeUp>
+        </div>
+      </section>
 
       {/* ── SUBJECTS ── */}
       <FadeUp>
