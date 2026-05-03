@@ -3,6 +3,12 @@
 // re-exports them and adds normalisation helpers and Learn-screen macro groups.
 
 import { Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS } from './adminTopics.js'
+import {
+  MACRO_GROUPS_VIC_Y10,
+  MACRO_GROUPS_VIC_Y10A,
+  normalizeVicY10Topic,
+  normalizeVicY10ATopic,
+} from './vicMathsTopics.js'
 
 export { Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS }
 
@@ -177,6 +183,12 @@ export function getY7TopicConfig(subjectId) {
   }
   if (subjectId === 'english_y7') {
     return { macroGroups: MACRO_GROUPS_Y7_ENGLISH, normFn: normalizeY7EnglishTopic }
+  }
+  if (subjectId === 'vic_maths_y10') {
+    return { macroGroups: MACRO_GROUPS_VIC_Y10, normFn: normalizeVicY10Topic }
+  }
+  if (subjectId === 'vic_maths_y10a') {
+    return { macroGroups: MACRO_GROUPS_VIC_Y10A, normFn: normalizeVicY10ATopic }
   }
   return null
 }

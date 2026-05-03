@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
+import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -80,6 +81,8 @@ export default function LearnScreen({
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
   const fileRef   = useRef(null)
+
+  const subjectTopicConfig = useMemo(() => getY7TopicConfig(subject?.id), [subject?.id])
 
   const struggleTopics = useMemo(() => {
     const bySubtopic = new Map()
@@ -409,6 +412,46 @@ export default function LearnScreen({
             <button onClick={startLesson} disabled={!topic.trim() || uploadingDoc} style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: topic.trim() && !uploadingDoc ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.border, color: topic.trim() ? '#0c1037' : t.textFaint, fontSize: 15, fontWeight: 800, cursor: topic.trim() && !uploadingDoc ? 'pointer' : 'default', fontFamily: FONT_B, boxShadow: topic.trim() && !uploadingDoc ? `0 8px 28px rgba(241,190,67,0.35)` : 'none', transition: 'all 0.2s' }}>
               Start lesson with Titan AI →
             </button>
+
+            {subjectTopicConfig && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>Browse topics by strand</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  {subjectTopicConfig.macroGroups.map(macro => (
+                    <div key={macro.id}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>{macro.label}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {macro.topics.map(topicName => {
+                          const active = topic === topicName
+                          return (
+                            <button
+                              key={topicName}
+                              onClick={() => setTopic(topicName)}
+                              style={{
+                                padding: '8px 14px',
+                                borderRadius: 8,
+                                border: `1px solid ${active ? GOLD : t.border}`,
+                                background: active ? 'rgba(241,190,67,0.15)' : t.bgCard,
+                                color: active ? GOLD : t.textMuted,
+                                fontSize: 12,
+                                fontWeight: active ? 700 : 500,
+                                cursor: 'pointer',
+                                fontFamily: FONT_B,
+                                textAlign: 'left',
+                                transition: 'all 0.15s',
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {topicName}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           </div>
         </div>
