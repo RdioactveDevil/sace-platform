@@ -124,7 +124,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
       {/* Nav items */}
       <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
         {NAV_ITEMS.map(item => {
-          const active = location.pathname === item.path || (item.path === '/home' && location.pathname === '/')
+          const active = location.pathname === item.path || (item.path === '/home' && location.pathname === '/') || (item.path === '/question-bank' && location.pathname === '/quiz')
           return (
             <button key={item.id} onClick={() => go(item.path)}
               style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px 9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.10)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.60)', fontSize: 13.5, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'color 0.15s, background 0.15s, border-color 0.15s', letterSpacing: active ? '-0.01em' : '0' }}
@@ -645,11 +645,12 @@ function AppInner() {
           : <GetAccessScreen profile={profile} onAccessGranted={refreshSubscriptions} />
       } />
 
-      {/* Quiz — full screen, no shell */}
+      {/* Quiz — wrapped in AppShell so the shared sidebar appears */}
       <Route path="/quiz" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
-          : <QuizScreen {...commonProps} {...quizState}
+          : <AppShell {...shellProps}>
+              <QuizScreen {...commonProps} {...quizState}
               profile={profile} setProfile={setProfile}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')}
@@ -675,6 +676,7 @@ function AppInner() {
                   return fresh.length ? [...prev, ...fresh] : prev
                 })
               }} />
+            </AppShell>
       } />
 
       {/* Admin — is_admin only */}

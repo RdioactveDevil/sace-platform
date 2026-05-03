@@ -1,5 +1,4 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
 import {
   selectNextQuestion,
   calcXP,
@@ -8,8 +7,6 @@ import {
   getLevelProgress,
   getQuestionCounts,
   getQuestionConceptTag,
-  RANKS,
-  RANK_ICONS,
 } from '../lib/engine'
 import {
   recordAnswer,
@@ -38,18 +35,8 @@ import MathText from './MathText'
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
 const NAVY = '#0c1037'
-const NAVYD = '#080d28'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
-
-const NAV_ITEMS = [
-  { icon: '⚡', label: 'Question Bank', path: '/question-bank' },
-  { icon: '🎓', label: 'Learn', path: '/learn' },
-  { icon: '📊', label: 'My Progress', path: '/my-progress' },
-  { icon: '🏆', label: 'Leaderboard', path: '/leaderboard' },
-  { icon: '📚', label: 'Study Plan', path: '/study-plan' },
-  { icon: '🕐', label: 'History', path: '/history' },
-]
 
 async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
   try {
@@ -121,8 +108,9 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
   }
 }
 
-function RemediationChip({ remediationMode, remediationStreak, remediationTarget, remediationStatus, remediationSource }) {
+function RemediationChip({ remediationMode, remediationStreak, remediationTarget, remediationStatus, remediationSource, theme = 'dark' }) {
   if (!remediationMode) return null
+  const t = THEMES[theme]
 
   const statusText = remediationStatus === 'generating'
     ? 'Generating more similar questions for this same concept.'
@@ -134,27 +122,27 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
           ? 'This topic has been added to your study plan for focused practice later.'
           : `You are in targeted reinforcement. Get ${remediationTarget} correct in a row to continue.`
 
-  const streakBg = remediationStatus === 'complete' ? 'rgba(16,185,129,0.12)'
-    : remediationStatus === 'struggling' ? 'rgba(241,190,67,0.12)'
-    : remediationStatus === 'needs_review' ? 'rgba(99,102,241,0.12)'
-    : 'rgba(255,255,255,0.05)'
-  const streakBorder = remediationStatus === 'complete' ? 'rgba(16,185,129,0.3)'
-    : remediationStatus === 'struggling' ? 'rgba(241,190,67,0.3)'
-    : remediationStatus === 'needs_review' ? 'rgba(99,102,241,0.3)'
-    : 'rgba(255,255,255,0.08)'
-  const streakColor = remediationStatus === 'complete' ? '#4ade80'
+  const streakBg = remediationStatus === 'complete' ? t.successBg
+    : remediationStatus === 'struggling' ? t.accentGlow
+    : remediationStatus === 'needs_review' ? t.purpleBg
+    : t.bgHover
+  const streakBorder = remediationStatus === 'complete' ? `${t.success}55`
+    : remediationStatus === 'struggling' ? t.borderAccent
+    : remediationStatus === 'needs_review' ? `${t.purple}55`
+    : t.border
+  const streakColor = remediationStatus === 'complete' ? t.success
     : remediationStatus === 'struggling' ? GOLD
-    : remediationStatus === 'needs_review' ? '#818cf8'
-    : '#e2e8f0'
+    : remediationStatus === 'needs_review' ? t.purple
+    : t.text
 
   return (
     <div style={{
       marginBottom: 14,
       padding: '14px 16px',
       borderRadius: 16,
-      background: 'linear-gradient(135deg, rgba(8,13,40,0.92), rgba(12,16,55,0.94))',
-      border: '1px solid rgba(241,190,67,0.22)',
-      boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
+      background: t.bgCard,
+      border: `1px solid ${t.borderAccent}`,
+      boxShadow: t.shadowCard,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -164,8 +152,8 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
             gap: 8,
             padding: '6px 12px',
             borderRadius: 999,
-            background: 'rgba(241,190,67,0.09)',
-            border: '1px solid rgba(241,190,67,0.28)',
+            background: t.accentGlow,
+            border: `1px solid ${t.borderAccent}`,
             color: GOLD,
             fontSize: 11,
             fontWeight: 800,
@@ -174,7 +162,7 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
           }}>
             ⚡ Remediation Mode
           </span>
-          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+          <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>
             {remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}
           </span>
         </div>
@@ -190,30 +178,31 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
           Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
         </span>
       </div>
-      <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 10, lineHeight: 1.6 }}>{statusText}</div>
+      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10, lineHeight: 1.6 }}>{statusText}</div>
     </div>
   )
 }
 
-function StatusToast({ status, onReturnToQuiz }) {
+function StatusToast({ status, onReturnToQuiz, theme = 'dark' }) {
   if (!status || status === 'idle' || status === 'activated') return null
+  const t = THEMES[theme]
 
   const isComplete = status === 'complete'
   const isStruggling = status === 'struggling'
   const isNeedsReview = status === 'needs_review'
 
-  const borderColor = isComplete ? 'rgba(16,185,129,0.35)'
-    : isStruggling ? 'rgba(241,190,67,0.35)'
-    : isNeedsReview ? 'rgba(99,102,241,0.35)'
-    : 'rgba(241,190,67,0.24)'
-  const iconBg = isComplete ? 'rgba(16,185,129,0.12)'
-    : isStruggling ? 'rgba(241,190,67,0.12)'
-    : isNeedsReview ? 'rgba(99,102,241,0.12)'
-    : 'rgba(241,190,67,0.12)'
-  const iconBorder = isComplete ? 'rgba(16,185,129,0.22)'
-    : isStruggling ? 'rgba(241,190,67,0.22)'
-    : isNeedsReview ? 'rgba(99,102,241,0.22)'
-    : 'rgba(241,190,67,0.18)'
+  const borderColor = isComplete ? `${t.success}66`
+    : isStruggling ? t.borderAccent
+    : isNeedsReview ? `${t.purple}66`
+    : t.borderAccent
+  const iconBg = isComplete ? t.successBg
+    : isStruggling ? t.accentGlow
+    : isNeedsReview ? t.purpleBg
+    : t.accentGlow
+  const iconBorder = isComplete ? `${t.success}44`
+    : isStruggling ? t.borderAccent
+    : isNeedsReview ? `${t.purple}44`
+    : t.borderAccent
   const icon = isComplete ? '\u2705' : isStruggling ? '\uD83D\uDCA1' : isNeedsReview ? '\uD83D\uDCDA' : '\uD83E\uDDE0'
   const title = isComplete ? 'Reinforcement Complete'
     : isStruggling ? 'Need a Break?'
@@ -231,9 +220,9 @@ function StatusToast({ status, onReturnToQuiz }) {
     <div style={{
       marginTop: 12,
       borderRadius: 14,
-      background: 'linear-gradient(135deg, rgba(8,13,40,0.96), rgba(12,16,55,0.98))',
+      background: t.bgCard,
       border: `1px solid ${borderColor}`,
-      boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+      boxShadow: t.shadowCard,
       padding: '14px 16px',
       animation: 'popIn 0.18s ease',
     }}>
@@ -254,8 +243,8 @@ function StatusToast({ status, onReturnToQuiz }) {
           {icon}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>{title}</div>
-          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, marginTop: 2 }}>{subtitle}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{title}</div>
+          <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5, marginTop: 2 }}>{subtitle}</div>
           {isStruggling && onReturnToQuiz && (
             <button
               onClick={onReturnToQuiz}
@@ -263,8 +252,8 @@ function StatusToast({ status, onReturnToQuiz }) {
                 marginTop: 10,
                 padding: '6px 14px',
                 borderRadius: 8,
-                border: '1px solid rgba(241,190,67,0.35)',
-                background: 'rgba(241,190,67,0.08)',
+                border: `1px solid ${t.borderAccent}`,
+                background: t.accentGlow,
                 color: GOLD,
                 fontSize: 12,
                 fontWeight: 700,
@@ -318,7 +307,6 @@ export default function QuizScreen({
 
   const [floatXP, setFloatXP] = useState(null)
   const [showExit, setShowExit] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const [finished, setFinished] = useState(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
@@ -339,7 +327,7 @@ export default function QuizScreen({
   const sessionPrewarmedRef = useRef(new Set())
 
   useEffect(() => {
-    const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
+    const h = () => { setIsMobile(window.innerWidth < 860) }
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
@@ -370,8 +358,6 @@ export default function QuizScreen({
   const remediationOriginalQ = _remediationOriginalQ ?? null
   const remediationUsedIds = Array.isArray(_remediationUsedIds) ? _remediationUsedIds : []
 
-  const navigate = useNavigate()
-  const location = useLocation()
 
   const handleFlag = async (tag) => {
     if (!currentQ || flagging) return
@@ -963,7 +949,7 @@ export default function QuizScreen({
         : 'Session Complete!'
 
     return (
-      <div style={{ minHeight: '100vh', background: NAVYD, fontFamily: FONT_B, overflowY: 'auto', position: 'relative' }}>
+      <div style={{ minHeight: '100%', background: t.bg, fontFamily: FONT_B, overflowY: 'auto', position: 'relative' }}>
         <style>{`
           @keyframes ss-fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
           .ss-grid { background-image: linear-gradient(rgba(241,190,67,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(241,190,67,0.03) 1px, transparent 1px); background-size: 52px 52px; }
@@ -975,10 +961,10 @@ export default function QuizScreen({
           {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <div style={{ fontSize: 52, marginBottom: 12 }}>{accEmoji}</div>
-            <div style={{ fontFamily: FONT_D, fontSize: 26, color: '#fff', letterSpacing: 1, marginBottom: 6 }}>
+            <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text, letterSpacing: 1, marginBottom: 6 }}>
               {headlineText}
             </div>
-            <div style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
+            <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
               {quizMode === 'new' && sessTotal > 0
                 ? "You've worked through every question in this set."
                 : 'Good work finishing the session.'}
@@ -987,13 +973,13 @@ export default function QuizScreen({
 
           {/* Assignments completed banner */}
           {assignmentsCompleted.length > 0 && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}55`, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 20 }}>✅</span>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#4ade80' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.success }}>
                   {assignmentsCompleted.length === 1 ? 'Assignment completed!' : `${assignmentsCompleted.length} assignments completed!`}
                 </div>
-                <div style={{ fontSize: 11, color: '#475569', marginTop: 1 }}>Your tutor has been notified.</div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>Your tutor has been notified.</div>
               </div>
             </div>
           )}
@@ -1001,38 +987,38 @@ export default function QuizScreen({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
               { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor, isXP: false },
-              { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: '#e2e8f0', isXP: false },
+              { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: t.text, isXP: false },
               { label: 'XP Earned', val: `+${sessionXP}`,         color: GOLD, isXP: true },
             ].map(s => (
               <div key={s.label} style={{
-                background: s.isXP ? 'linear-gradient(135deg, rgba(241,190,67,0.10), rgba(241,190,67,0.04))' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${s.isXP ? 'rgba(241,190,67,0.25)' : 'rgba(255,255,255,0.07)'}`,
+                background: s.isXP ? t.accentGlow : t.bgCard,
+                border: `1px solid ${s.isXP ? t.borderAccent : t.border}`,
                 borderRadius: 14,
                 padding: '16px 10px',
                 textAlign: 'center',
-                boxShadow: s.isXP ? '0 4px 18px rgba(241,190,67,0.12), inset 0 1px 0 rgba(255,255,255,0.04)' : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                boxShadow: t.shadowCard,
               }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: s.color, fontFamily: FONT_D, letterSpacing: 0.5 }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: s.isXP ? GOLD : '#64748b', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>{s.label}</div>
+                <div style={{ fontSize: 10, color: s.isXP ? GOLD : t.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>{s.label}</div>
               </div>
             ))}
           </div>
 
           {/* Topic breakdown */}
           {topicBreakdown.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Topic Breakdown</div>
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowCard }}>
+              <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Topic Breakdown</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {topicBreakdown.map(t => {
-                  const tc = t.pct >= 70 ? '#4ade80' : t.pct >= 40 ? GOLD : '#f87171'
+                {topicBreakdown.map(tb => {
+                  const tc = tb.pct >= 70 ? t.success : tb.pct >= 40 ? GOLD : t.danger
                   return (
-                    <div key={t.topic}>
+                    <div key={tb.topic}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>{t.topic}</span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: tc }}>{t.correct}/{t.total}</span>
+                        <span style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{tb.topic}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: tc }}>{tb.correct}/{tb.total}</span>
                       </div>
-                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 999, height: 5, overflow: 'hidden' }}>
-                        <div style={{ width: `${t.pct}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width 0.6s ease' }} />
+                      <div style={{ background: t.borderMid || t.border, borderRadius: 999, height: 5, overflow: 'hidden' }}>
+                        <div style={{ width: `${tb.pct}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width 0.6s ease' }} />
                       </div>
                     </div>
                   )
@@ -1043,11 +1029,11 @@ export default function QuizScreen({
 
           {/* Weak spots callout */}
           {weakSubtopics.length > 0 && (
-            <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: 14, padding: '14px 18px', marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: '#f87171', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Needs Work</div>
+            <div style={{ background: t.dangerBg, border: `1px solid ${t.danger}33`, borderRadius: 14, padding: '14px 18px', marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Needs Work</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {weakSubtopics.map(sub => (
-                  <span key={sub} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#fca5a5' }}>{sub}</span>
+                  <span key={sub} style={{ background: t.dangerBg, border: `1px solid ${t.danger}44`, borderRadius: 6, padding: '4px 10px', fontSize: 12, color: t.danger }}>{sub}</span>
                 ))}
               </div>
             </div>
@@ -1063,7 +1049,7 @@ export default function QuizScreen({
             )}
             {counts.wrong === 0 && quizMode !== 'all' && (
               <button onClick={() => startMode('all')}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#e2e8f0', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                 Repeat all questions
               </button>
             )}
@@ -1079,7 +1065,7 @@ export default function QuizScreen({
 
   if (!currentQ && sessionResults.length === 0) {
     return (
-      <div style={{ minHeight: '100vh', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontFamily: FONT_B }}>
+      <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textFaint, fontFamily: FONT_B }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚡</div>
           <div style={{ fontSize: 13 }}>Loading questions…</div>
@@ -1088,8 +1074,7 @@ export default function QuizScreen({
     )
   }
 
-  const { pct, level } = getLevelProgress(profile.xp)
-  const rank = RANKS[Math.min(level, RANKS.length - 1)]
+  const { pct } = getLevelProgress(profile.xp)
   const baseQuestionId = remediationMode && remediationParentId ? remediationParentId : currentQ.id
   const isStruggle = (struggleMap[baseQuestionId]?.wrong ?? 0) >= 2
   const sessionCorrect = sessionResults.filter(r => r.correct).length
@@ -1110,82 +1095,12 @@ export default function QuizScreen({
       ? 'Next Similar Question →'
       : 'Next Question →'
 
-  const SidebarContent = ({ onClose }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: NAVYD, fontFamily: FONT_B }}>
-      <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }} onClick={() => { onHome(); onClose?.() }}>
-          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-        </span>
-      </div>
-
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: NAVYD, flexShrink: 0 }}>
-            {profile.display_name[0].toUpperCase()}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</div>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 600 }}>{RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]} {rank}</div>
-          </div>
-        </div>
-        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
-        </div>
-      </div>
-
-      <nav style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {NAV_ITEMS.map(item => {
-          const active = location.pathname === item.path || (item.path === '/question-bank' && location.pathname === '/quiz')
-          return (
-            <button key={item.path} onClick={() => { navigate(item.path); onClose?.() }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? 'rgba(241,190,67,0.12)' : 'transparent', borderLeft: `2px solid ${active ? GOLD : 'transparent'}`, color: active ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%', transition: 'all 0.15s' }}>
-              <span style={{ fontSize: 15 }}>{item.icon}</span>
-              {item.label}
-            </button>
-          )
-        })}
-      </nav>
-
-      <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>This session</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
-          {[
-            { label: 'Correct', val: sessionCorrect, color: '#10b981' },
-            { label: 'Wrong', val: sessionTotal - sessionCorrect, color: '#ef4444' },
-            { label: 'XP', val: `+${sessionXP}`, color: GOLD },
-            { label: 'Streak', val: streak > 0 ? `🔥 ${streak}` : '—', color: '#f59e0b' },
-          ].map(stat => (
-            <div key={stat.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: stat.color }}>{stat.val}</div>
-              <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
-        {remediationMode && (
-          <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.2)', background: 'rgba(241,190,67,0.06)' }}>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Remediation</div>
-            <div style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 700 }}>Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}</div>
-            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}</div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ flex: 1 }} />
-      <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        <button onClick={() => { setShowExit(true); onClose?.() }} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
-          ✕ End Session
-        </button>
-      </div>
-    </div>
-  )
-
   return (
-    <div style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT_B, display: 'flex' }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, overflow: isMobile ? 'visible' : 'hidden' }}>
       <style>{`
-        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
         @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
         @keyframes popIn   { 0%{transform:scale(0.95);opacity:0} 100%{transform:scale(1);opacity:1} }
-        @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
         .qopt { transition: all 0.13s ease; cursor: pointer; }
         .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
       `}</style>
@@ -1197,178 +1112,162 @@ export default function QuizScreen({
       )}
 
       {showExit && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
-          <div style={{ background: 'rgba(8,13,40,0.98)', border: '1px solid rgba(241,190,67,0.18)', borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease', boxShadow: '0 32px 80px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04)' }}>
-            <div style={{ position: 'absolute', top: 0, left: '25%', right: '25%', height: 1, background: 'linear-gradient(90deg, transparent, rgba(241,190,67,0.5), transparent)', borderRadius: 99 }} />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
+          <div style={{ background: t.bgCard, border: `1px solid ${t.borderAccent}`, borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease', boxShadow: t.shadowModal }}>
             <div style={{ fontSize: 36, marginBottom: 14 }}>⏸</div>
-            <div style={{ fontFamily: FONT_D, fontSize: 20, color: '#fff', marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
-            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.65 }}>
+            <div style={{ fontFamily: FONT_D, fontSize: 20, color: t.text, marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.65 }}>
               You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved — you can resume anytime.
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '13px', borderRadius: 11, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>Keep going</button>
+              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '13px', borderRadius: 11, border: `1px solid ${t.border}`, background: t.bgSubtle, color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>Keep going</button>
               <button onClick={onHome} style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, boxShadow: '0 4px 16px rgba(239,68,68,0.3)' }}>End session</button>
             </div>
           </div>
         </div>
       )}
 
-      {isMobile && menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
-          <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'absolute', top: 0, left: 0, width: 260, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 1000 }}>
-            <SidebarContent onClose={() => setMenuOpen(false)} />
-          </div>
+      {/* Top status bar — gold gradient (brand) */}
+      <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
+          <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
+          {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20 }}>⚡ Priority</span>}
+          {inRemediationQuestion && <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: 'rgba(255,255,255,0.2)', padding: '2px 9px', borderRadius: 20 }}>Remediation</span>}
+          <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
         </div>
-      )}
-
-      {!isMobile && (
-        <div style={{ width: 228, flexShrink: 0, height: '100vh', position: 'sticky', top: 0, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
-          <SidebarContent />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
+          {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
+          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
+          <button onClick={() => setShowExit(true)} style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End Session</button>
         </div>
-      )}
+      </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {isMobile && (
-          <div style={{ background: NAVYD, borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
-              <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
-              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
-            </button>
-            <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}>
-              <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-            </span>
-            <button onClick={() => setShowExit(true)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>End</button>
-          </div>
+      {/* Level progress bar */}
+      <div style={{ height: 3, background: t.borderMid, flexShrink: 0 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
+      </div>
+
+      {/* Session stats strip */}
+      <div style={{ background: t.bgSubtle, borderBottom: `1px solid ${t.border}`, padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>This session</span>
+        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.success }}>{sessionCorrect}</span> correct</span>
+        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</span> wrong</span>
+        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>+{sessionXP}</span> XP</span>
+        {streak > 0 && <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}>🔥 {streak}</span>}
+        {remediationMode && (
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow2, fontSize: 11, fontWeight: 700, color: GOLD }}>
+            Remediation · {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
+          </span>
         )}
+      </div>
 
-        <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
-            <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
-            {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20 }}>⚡ Priority</span>}
-            {inRemediationQuestion && <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: 'rgba(255,255,255,0.2)', padding: '2px 9px', borderRadius: 20 }}>Remediation</span>}
-            <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
-            {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
-            <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
-            {!isMobile && (
-              <button onClick={() => setShowExit(true)} style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End Session</button>
-            )}
-          </div>
-        </div>
-
-        <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'auto' : 'hidden' }}>
-          <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
-              {consolidateSubtopic && (
-                <div style={{
-                  marginBottom: 14,
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  background: 'rgba(99,102,241,0.1)',
-                  border: '1px solid rgba(99,102,241,0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#a5b4fc' }}>
-                    📌 Consolidating: <span style={{ color: '#c7d2fe' }}>{consolidateSubtopic}</span>
-                  </span>
-                  <button
-                    onClick={onClearConsolidate}
-                    style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: 16, cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
-                    title="Return to full quiz"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-              <RemediationChip
-                remediationMode={remediationMode}
-                remediationStreak={remediationStreak}
-                remediationTarget={remediationTarget}
-                remediationStatus={remediationStatus}
-                remediationSource={remediationSource}
-              />
-
-              <div style={{ background: '#ffffff', borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: '0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)', marginBottom: showAns ? 14 : 0 }}>
-                <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: NAVY, lineHeight: 1.7, marginBottom: 22 }}>
-                  <MathText text={currentQ.question} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {currentQ.options.map((opt, i) => {
-                    const isCorrectOpt = i === currentQ.answer_index
-                    const isSelectedOpt = i === selected
-                    let bg = '#f5f6ff'
-                    let border = '1px solid #e2e5f0'
-                    let color = '#334155'
-                    let lBg = '#e2e5f0'
-                    let lCol = '#0c1037'
-
-                    if (showAns) {
-                      if (isCorrectOpt) {
-                        bg = '#f0fdf4'
-                        border = '1px solid #86efac'
-                        color = '#166534'
-                        lBg = '#bbf7d0'
-                        lCol = '#166534'
-                      } else if (isSelectedOpt && !correct) {
-                        bg = '#fef2f2'
-                        border = '1px solid #fca5a5'
-                        color = '#991b1b'
-                        lBg = '#fecaca'
-                        lCol = '#991b1b'
-                      } else {
-                        bg = '#fafafa'
-                        border = '1px solid #f0f0f0'
-                        color = '#9ca3af'
-                        lBg = '#f0f0f0'
-                        lCol = '#9ca3af'
-                      }
-                    }
-
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => handleAnswer(i)}
-                        className={showAns ? '' : 'qopt'}
-                        style={{
-                          background: bg,
-                          border,
-                          color,
-                          padding: '12px 16px',
-                          borderRadius: 11,
-                          fontSize: 14,
-                          fontWeight: 600,
-                          textAlign: 'left',
-                          cursor: showAns ? 'default' : 'pointer',
-                          fontFamily: FONT_B,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          transition: 'all 0.13s',
-                        }}
-                      >
-                        <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                          {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
-                        </span>
-                        <MathText text={opt} />
-                      </button>
-                    )
-                  })}
-                </div>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
+        <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
+            {consolidateSubtopic && (
+              <div style={{
+                marginBottom: 14,
+                padding: '10px 14px',
+                borderRadius: 12,
+                background: t.purpleBg,
+                border: `1px solid ${t.purple}55`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: t.purple }}>
+                  📌 Consolidating: <span style={{ color: t.text }}>{consolidateSubtopic}</span>
+                </span>
+                <button
+                  onClick={onClearConsolidate}
+                  style={{ background: 'transparent', border: 'none', color: t.purple, fontSize: 16, cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
+                  title="Return to full quiz"
+                >
+                  ✕
+                </button>
               </div>
+            )}
+            <RemediationChip
+              remediationMode={remediationMode}
+              remediationStreak={remediationStreak}
+              remediationTarget={remediationTarget}
+              remediationStatus={remediationStatus}
+              remediationSource={remediationSource}
+              theme={theme}
+            />
+
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: t.shadowCard, marginBottom: showAns ? 14 : 0 }}>
+              <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
+                <MathText text={currentQ.question} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {currentQ.options.map((opt, i) => {
+                  const isCorrectOpt = i === currentQ.answer_index
+                  const isSelectedOpt = i === selected
+                  let bg = t.bgSubtle
+                  let border = `1px solid ${t.border}`
+                  let color = t.textSub
+                  let lBg = t.borderMid
+                  let lCol = t.text
+
+                  if (showAns) {
+                    if (isCorrectOpt) {
+                      bg = t.successBg
+                      border = `1px solid ${t.success}55`
+                      color = t.success
+                      lBg = `${t.success}33`
+                      lCol = t.success
+                    } else if (isSelectedOpt && !correct) {
+                      bg = t.dangerBg
+                      border = `1px solid ${t.danger}55`
+                      color = t.danger
+                      lBg = `${t.danger}33`
+                      lCol = t.danger
+                    } else {
+                      bg = 'transparent'
+                      border = `1px solid ${t.border}`
+                      color = t.textFaint
+                      lBg = t.borderMid
+                      lCol = t.textFaint
+                    }
+                  }
+
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => handleAnswer(i)}
+                      className={showAns ? '' : 'qopt'}
+                      style={{
+                        background: bg,
+                        border,
+                        color,
+                        padding: '12px 16px',
+                        borderRadius: 11,
+                        fontSize: 14,
+                        fontWeight: 600,
+                        textAlign: 'left',
+                        cursor: showAns ? 'default' : 'pointer',
+                        fontFamily: FONT_B,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        transition: 'all 0.13s',
+                      }}
+                    >
+                      <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                        {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
+                      </span>
+                      <MathText text={opt} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
               {showAns && (
                 <div style={{ animation: 'popIn 0.2s ease' }}>
@@ -1425,15 +1324,16 @@ export default function QuizScreen({
                   <StatusToast
                     status={['complete', 'struggling', 'needs_review', 'generating'].includes(remediationStatus) ? remediationStatus : null}
                     onReturnToQuiz={handleReturnToQuiz}
+                    theme={theme}
                   />
 
                   {remediationMode && (
                     <div style={{
                       marginTop: 12,
                       padding: '12px 14px',
-                      background: 'rgba(241,190,67,0.06)',
+                      background: t.accentGlow2,
                       borderRadius: 12,
-                      border: '1px solid rgba(241,190,67,0.16)',
+                      border: `1px solid ${t.borderAccent}`,
                       animation: 'popIn 0.18s ease',
                     }}>
                       <div style={{
@@ -1446,10 +1346,10 @@ export default function QuizScreen({
                       }}>
                         Remediation State
                       </div>
-                      <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 700, marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, color: t.text, fontWeight: 700, marginBottom: 4 }}>
                         Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
                       </div>
-                      <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>
                         {remediationStatus === 'complete'
                           ? 'Mastery confirmed. Return to the main quiz when you are ready.'
                           : remediationStatus === 'struggling'
@@ -1464,22 +1364,22 @@ export default function QuizScreen({
               )}
 
               {isMobile && showAns && (
-                <div style={{ marginTop: 14, background: NAVYD, borderRadius: 14, padding: '18px', border: '1px solid rgba(255,255,255,0.07)', animation: 'popIn 0.25s ease' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 12, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
+                <div style={{ marginTop: 14, background: t.bgCard, borderRadius: 14, padding: '18px', border: `1px solid ${t.border}`, animation: 'popIn 0.25s ease' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 12, fontWeight: 700, color: correct ? t.success : t.danger }}>
                     {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
                   </div>
-                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
-                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>
+                  <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>
                     <MathText text={currentQ.solution} />
                   </div>
                   {currentQ.tip && (
-                    <div style={{ marginTop: 10, padding: '9px 12px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65 }}>
+                    <div style={{ marginTop: 10, padding: '9px 12px', background: t.accentGlow2, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65 }}>
                       💡 <MathText text={currentQ.tip} />
                     </div>
                   )}
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: t.textFaint, fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
                   {aiTip && (
-                    <div style={{ marginTop: 8, padding: '9px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 8px 8px 0', borderLeft: '2px solid #6366f1', fontSize: 12, color: '#a5b4fc', lineHeight: 1.65 }}>
+                    <div style={{ marginTop: 8, padding: '9px 12px', background: t.purpleBg, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${t.purple}`, fontSize: 12, color: t.purple, lineHeight: 1.65 }}>
                       🤖 <MathText text={aiTip} />
                     </div>
                   )}
@@ -1488,7 +1388,7 @@ export default function QuizScreen({
                     const myFlags = flaggedMap[qid] || new Set()
                     return (
                       <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 10, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                           {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => {
                             const active = myFlags.has(tag)
@@ -1498,9 +1398,9 @@ export default function QuizScreen({
                                 style={{
                                   padding: '4px 9px', borderRadius: 6, fontSize: 11, cursor: flagging ? 'default' : 'pointer',
                                   fontFamily: FONT_B, transition: 'all 0.15s',
-                                  border: `1px solid ${active ? 'rgba(241,190,67,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                                  background: active ? 'rgba(241,190,67,0.12)' : 'transparent',
-                                  color: active ? GOLD : saving ? '#64748b' : '#475569',
+                                  border: `1px solid ${active ? t.borderAccent : t.border}`,
+                                  background: active ? t.accentGlow2 : 'transparent',
+                                  color: active ? GOLD : saving ? t.textMuted : t.textFaint,
                                   opacity: flagging && !saving ? 0.5 : 1,
                                 }}
                               >{saving ? '…' : active ? `✓ ${tag}` : tag}</button>
@@ -1516,30 +1416,30 @@ export default function QuizScreen({
           </div>
 
           {!isMobile && (
-            <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.07)', background: NAVYD, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ width: 340, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
               {!showAns ? (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-                  <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>💡</div>
-                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.65, maxWidth: 200 }}>Select an answer to see the explanation</div>
+                  <div style={{ width: 52, height: 52, borderRadius: 14, background: t.bgCard, border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>💡</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.65, maxWidth: 200 }}>Select an answer to see the explanation</div>
                 </div>
               ) : (
                 <div style={{ animation: 'popIn 0.25s ease', maxWidth: 500 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 20, background: correct ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: 13, fontWeight: 700, color: correct ? '#4ade80' : '#f87171' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 20, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 13, fontWeight: 700, color: correct ? t.success : t.danger }}>
                     {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
                   </div>
 
-                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Explanation</div>
-                  <div style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.8, marginBottom: 16 }}><MathText text={currentQ.solution} /></div>
+                  <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Explanation</div>
+                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.8, marginBottom: 16 }}><MathText text={currentQ.solution} /></div>
 
                   {currentQ.tip && (
-                    <div style={{ padding: '12px 14px', background: 'rgba(241,190,67,0.06)', borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16 }}>
+                    <div style={{ padding: '12px 14px', background: t.accentGlow2, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16 }}>
                       💡 <MathText text={currentQ.tip} />
                     </div>
                   )}
 
-                  {loadingTip && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
+                  {loadingTip && <div style={{ fontSize: 12, color: t.textFaint, fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
                   {aiTip && (
-                    <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: '0 10px 10px 0', borderLeft: '3px solid #6366f1', fontSize: 13, color: '#a5b4fc', lineHeight: 1.65, marginBottom: 16 }}>
+                    <div style={{ padding: '12px 14px', background: t.purpleBg, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${t.purple}`, fontSize: 13, color: t.purple, lineHeight: 1.65, marginBottom: 16 }}>
                       🤖 <MathText text={aiTip} />
                     </div>
                   )}
@@ -1549,7 +1449,7 @@ export default function QuizScreen({
                     const myFlags = flaggedMap[qid] || new Set()
                     return (
                       <div>
-                        <div style={{ fontSize: 11, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
+                        <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => {
                             const active = myFlags.has(tag)
@@ -1562,9 +1462,9 @@ export default function QuizScreen({
                                 style={{
                                   padding: '5px 10px', borderRadius: 7, fontSize: 12, cursor: flagging ? 'default' : 'pointer',
                                   fontFamily: FONT_B, transition: 'all 0.15s',
-                                  border: `1px solid ${active ? 'rgba(241,190,67,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                                  background: active ? 'rgba(241,190,67,0.12)' : saving ? 'rgba(255,255,255,0.04)' : 'transparent',
-                                  color: active ? GOLD : saving ? '#64748b' : '#475569',
+                                  border: `1px solid ${active ? t.borderAccent : t.border}`,
+                                  background: active ? t.accentGlow2 : saving ? t.bgHover : 'transparent',
+                                  color: active ? GOLD : saving ? t.textMuted : t.textFaint,
                                   opacity: flagging && !saving ? 0.5 : 1,
                                 }}
                               >
@@ -1582,6 +1482,5 @@ export default function QuizScreen({
           )}
         </div>
       </div>
-    </div>
   )
 }
