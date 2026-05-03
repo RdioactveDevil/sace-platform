@@ -363,6 +363,37 @@ export async function flagTopicForStudyPlan(userId, { subject, topic, subtopic, 
   if (error) throw error
 }
 
+/**
+ * Returns a map of { [conceptTag]: count } for all provided concept tags.
+ * Concept tags not present in question_variants will not appear (treat as 0).
+ *
+ * Draft questions reference variants through a shared concept_tag
+ * (built as `${subject}|${topic}|${subtopic || topic}`.toLowerCase()).
+ * Variants are keyed on live questions.id (text), NOT draft_questions.id (uuid),
+ * so we group by concept_tag instead of parent_question_id.
+ */
+export async function getVariantCountsByConceptTags(conceptTags) {
+  const tags = [...new Set((conceptTags || []).filter(Boolean))]
+  if (tags.length === 0) return {}
+
+  // Use a high limit to avoid PostgREST's default 1 000-row truncation.
+  // Typical variant volumes for an admin review queue are well under this ceiling.
+  const { data, error } = await supabase
+    .from('question_variants')
+    .select('concept_tag')
+    .in('concept_tag', tags)
+    .limit(10000)
+
+  if (error) throw error
+
+  const counts = {}
+  for (const row of data || []) {
+    const ct = row.concept_tag
+    if (ct) counts[ct] = (counts[ct] || 0) + 1
+  }
+  return counts
+}
+
 export async function incrementQuestionVariantUsage(variantId) {
   if (!variantId) return
 

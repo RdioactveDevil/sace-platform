@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion } from '../lib/adminDb'
+import { getVariantCountsByConceptTags } from '../lib/db'
 import { S1_TOPICS, S2_TOPICS } from '../lib/adminTopics'
 import MathText from './MathText'
 
@@ -26,15 +27,27 @@ function StatusBadge({ status }) {
 }
 
 export default function AdminReviewScreen({ profile }) {
-  const [drafts,       setDrafts]       = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [filterStatus, setFilterStatus] = useState('pending')
-  const [selected,     setSelected]     = useState(null)
-  const [editState,    setEditState]    = useState(null)
-  const [saving,       setSaving]       = useState(false)
-  const [checked,      setChecked]      = useState(new Set())
-  const [actionError,  setActionError]  = useState(null)
-  const [actionOk,     setActionOk]     = useState(null)
+  const [drafts,         setDrafts]         = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [filterStatus,   setFilterStatus]   = useState('pending')
+  const [selected,       setSelected]       = useState(null)
+  const [editState,      setEditState]      = useState(null)
+  const [saving,         setSaving]         = useState(false)
+  const [checked,        setChecked]        = useState(new Set())
+  const [actionError,    setActionError]    = useState(null)
+  const [actionOk,       setActionOk]       = useState(null)
+  // null  = counts not yet loaded / unavailable (hide badge rather than show false 0)
+  // {}    = loaded but no variants found for any draft
+  // {...} = loaded with real per-conceptTag counts
+  const [variantCounts,       setVariantCounts]       = useState(null)
+  // map from draft.id → derived conceptTag, built alongside variantCounts
+  const [draftConceptTagMap,  setDraftConceptTagMap]  = useState({})
+
+  /** Mirror the concept_tag formula used in approveDraftQuestion */
+  const deriveConceptTag = (draft) => {
+    if (!draft.subject || !draft.topic) return null
+    return `${draft.subject}|${draft.topic}|${draft.subtopic || draft.topic}`.toLowerCase()
+  }
 
   const load = useCallback(async (opts = {}) => {
     const { skipLoading } = opts
@@ -44,6 +57,28 @@ export default function AdminReviewScreen({ profile }) {
         status: filterStatus === 'all' ? undefined : filterStatus,
       })
       setDrafts(data)
+
+      if (data.length > 0) {
+        // Build draft-id → conceptTag map so the render can look up counts
+        const ctMap = {}
+        data.forEach(d => {
+          const ct = deriveConceptTag(d)
+          if (ct) ctMap[d.id] = ct
+        })
+        setDraftConceptTagMap(ctMap)
+
+        try {
+          const uniqueTags = [...new Set(Object.values(ctMap))]
+          const counts = await getVariantCountsByConceptTags(uniqueTags)
+          setVariantCounts(counts)
+        } catch (e) {
+          console.warn('Could not load variant counts:', e)
+          setVariantCounts(null)   // explicitly unavailable — don't show false zeros
+        }
+      } else {
+        setDraftConceptTagMap({})
+        setVariantCounts({})
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -70,8 +105,26 @@ export default function AdminReviewScreen({ profile }) {
     setSaving(true)
     try {
       await upsertDraftQuestion(editState)
-      setDrafts(prev => prev.map(d => (String(d.id) === String(editState.id) ? { ...editState } : d)))
+      const updatedDrafts = drafts.map(d => (String(d.id) === String(editState.id) ? { ...editState } : d))
+      setDrafts(updatedDrafts)
       setSelected({ ...editState })
+
+      // Recompute concept tag map in case subject/topic/subtopic changed, then
+      // re-fetch counts so the badge reflects the new concept's variants immediately.
+      const newCtMap = {}
+      updatedDrafts.forEach(d => {
+        const ct = deriveConceptTag(d)
+        if (ct) newCtMap[d.id] = ct
+      })
+      setDraftConceptTagMap(newCtMap)
+      try {
+        const uniqueTags = [...new Set(Object.values(newCtMap))]
+        const counts = await getVariantCountsByConceptTags(uniqueTags)
+        setVariantCounts(counts)
+      } catch (e) {
+        console.warn('Could not refresh variant counts after save:', e)
+        setVariantCounts(null)
+      }
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
   }
@@ -315,6 +368,23 @@ export default function AdminReviewScreen({ profile }) {
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
                   D{draft.difficulty ?? '?'}
                 </span>
+                {(() => {
+                  if (variantCounts === null) return null   // counts unavailable — don't show false zeros
+                  const ct = draftConceptTagMap[draft.id]
+                  if (!ct) return null                       // no concept_tag derivable from draft
+                  const vc = variantCounts[ct] ?? 0
+                  const isZero = vc === 0
+                  return (
+                    <span style={{
+                      padding: '2px 7px', borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0,
+                      background: isZero ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.08)',
+                      border: `1px solid ${isZero ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.2)'}`,
+                      color: isZero ? '#f87171' : '#4ade80',
+                    }}>
+                      {vc} concept variant{vc !== 1 ? 's' : ''}
+                    </span>
+                  )
+                })()}
                 <span style={{ flexShrink: 0 }}><StatusBadge status={draft.status} /></span>
               </div>
             ))}
@@ -335,6 +405,51 @@ export default function AdminReviewScreen({ profile }) {
             <span style={{ fontSize: 13, fontWeight: 700, color: GOLD }}>Edit Draft</span>
             <button onClick={closePanel} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
           </div>
+
+          {/* Variant count info */}
+          {(() => {
+            if (variantCounts === null) {
+              // counts fetch failed — show neutral unavailable state, not a false zero
+              return (
+                <div style={{
+                  marginBottom: 16, padding: '10px 12px', borderRadius: 10,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Stored Variants</span>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>unavailable</span>
+                </div>
+              )
+            }
+            const ct = draftConceptTagMap[editState.id]
+            if (!ct) return null
+            const vc = variantCounts[ct] ?? 0
+            const isZero = vc === 0
+            return (
+              <div style={{
+                marginBottom: 16, padding: '10px 12px', borderRadius: 10,
+                background: isZero ? 'rgba(239,68,68,0.07)' : 'rgba(16,185,129,0.06)',
+                border: `1px solid ${isZero ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.18)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              }}>
+                <div>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Concept Variants</span>
+                  <div style={{ marginTop: 2, fontSize: 18, fontWeight: 800, color: isZero ? '#f87171' : '#4ade80' }}>
+                    {vc}
+                  </div>
+                </div>
+                {isZero && (
+                  <span style={{
+                    padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                    background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171',
+                  }}>
+                    No variants — needs generation
+                  </span>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Topic */}
           <div style={{ marginBottom: 12 }}>
