@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/gradefarm-promo/"
+title = "gradefarm. Promo Video"
+version = "1.0.0"
+id = "artifacts/gradefarm-promo"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/gradefarm-promo/" ]
+localPort = 18283
+
+[services.development]
+run = "pnpm --filter @workspace/gradefarm-promo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gradefarm-promo", "run", "build" ]
+publicDir = "artifacts/gradefarm-promo/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18283"
+BASE_PATH = "/gradefarm-promo/"

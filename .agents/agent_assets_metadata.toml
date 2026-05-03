@@ -1,0 +1,26 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "wmJyXlyDPX6xgElr1HSDS"
+uri = "file://artifacts/gradefarm-promo/public/images/bg-navy.png"
+type = "image"
+title = "Premium deep navy background"
+
+[[generated]]
+id = "a_d58Up_4yV-FaSpwBzdr"
+uri = "file://artifacts/gradefarm-promo/public/images/bg-abstract.png"
+type = "image"
+title = "Navy gold abstract background"
+
+[[generated]]
+id = "ghAJCZ3oOFA8GwWUKL6V3"
+uri = "file://artifacts/gradefarm-promo/public/images/ui-streak.png"
+type = "image"
+title = "Streak UI element"
+
+[[generated]]
+id = "iQ-mYvHQR95m-niKtrFny"
+uri = "file://artifacts/gradefarm-promo/public/images/ui-tutor.png"
+type = "image"
+title = "Chat UI mockup"
