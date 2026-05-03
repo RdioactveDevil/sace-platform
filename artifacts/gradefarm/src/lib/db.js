@@ -53,8 +53,8 @@ async function adminFetch(path, opts = {}) {
   return json
 }
 
-export async function adminListUsers(page = 1, perPage = 100) {
-  return adminFetch(`/api/admin/users?page=${page}&perPage=${perPage}`)
+export async function adminListUsers() {
+  return adminFetch('/api/admin/users')
 }
 
 export async function adminListTutorApplications() {

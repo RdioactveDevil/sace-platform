@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { adminApiPost } from '../lib/adminApi'
+import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -7,10 +8,18 @@ const GOLD   = '#f1be43'
 /** ~3 MB raw PDF keeps base64+JSON under Vercel serverless ~4.5 MB body limit */
 const MAX_PDF_BYTES = 3 * 1024 * 1024
 
-const STAGES = ['Chemistry Stage 1', 'Chemistry Stage 2']
+/** Build the stage list from the shared subjects source so newly added subjects
+ *  automatically appear here. Each option's `value` is the canonical
+ *  `questions.subject` string sent to /api/extract-pdf. */
+const STAGE_OPTIONS = ALL_SUBJECTS
+  .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
+  .map(s => ({
+    value: QUESTIONS_SUBJECT_BY_ID[s.id],
+    label: QUESTIONS_SUBJECT_BY_ID[s.id],
+  }))
 
 export default function AdminUploadScreen() {
-  const [stage, setStage]     = useState('Chemistry Stage 1')
+  const [stage, setStage]     = useState(STAGE_OPTIONS[0]?.value || '')
   const [file, setFile]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
@@ -67,20 +76,20 @@ export default function AdminUploadScreen() {
       {/* Stage selector */}
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stage</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {STAGES.map(s => (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {STAGE_OPTIONS.map(opt => (
             <button
-              key={s}
-              onClick={() => setStage(s)}
+              key={opt.value}
+              onClick={() => setStage(opt.value)}
               style={{
                 padding: '8px 16px', borderRadius: 8,
-                border: `1px solid ${stage === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
-                background: stage === s ? 'rgba(241,190,67,0.1)' : 'transparent',
-                color: stage === s ? GOLD : 'rgba(255,255,255,0.5)',
+                border: `1px solid ${stage === opt.value ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                background: stage === opt.value ? 'rgba(241,190,67,0.1)' : 'transparent',
+                color: stage === opt.value ? GOLD : 'rgba(255,255,255,0.5)',
                 fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
               }}
             >
-              {s}
+              {opt.label}
             </button>
           ))}
         </div>

@@ -38,28 +38,41 @@ async function requireAdmin(req: any, res: any) {
   return { admin, callerUserId: callerUser.user.id };
 }
 
-// List users (paginated). Joins auth.users emails with profile flags.
+// Paginate through every auth user so callers can build a complete email map.
+async function listAllAuthUsers(admin: ReturnType<typeof getAdmin>) {
+  const all: { id: string; email: string; created_at: string }[] = [];
+  let page = 1;
+  const perPage = 200;
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error(error.message);
+    for (const u of data.users) {
+      all.push({ id: u.id, email: u.email || "", created_at: u.created_at });
+    }
+    if (data.users.length < perPage) break;
+    page++;
+  }
+  return all;
+}
+
+// List all users with profile flags. Paginates through every auth user.
 router.get("/admin/users", async (req, res) => {
   try {
     const ctx = await requireAdmin(req, res);
     if (!ctx) return;
     const { admin } = ctx;
 
-    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
-    const perPage = Math.min(200, Math.max(1, parseInt(String(req.query.perPage || "100"), 10) || 100));
+    let allAuthUsers: { id: string; email: string; created_at: string }[];
+    try {
+      allAuthUsers = await listAllAuthUsers(admin);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to list users";
+      return res.status(500).json({ error: message });
+    }
 
-    const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page, perPage });
-    if (listError) return res.status(500).json({ error: listError.message });
+    if (allAuthUsers.length === 0) return res.json({ users: [] });
 
-    const ids = listData.users.map(u => u.id).filter(Boolean);
-    if (ids.length === 0) return res.json({ users: [], page, perPage });
-
-    const { data: profiles, error: profErr } = await admin
-      .from("profiles")
-      .select("id, display_name, school, is_admin, is_tutor, tutor_application_status, tutor_application_at, created_at")
-      .in("id", ids);
-
-    if (profErr) return res.status(500).json({ error: profErr.message });
+    const ids = allAuthUsers.map(u => u.id).filter(Boolean);
 
     type ProfRow = {
       id: string; display_name: string | null; school: string | null;
@@ -67,10 +80,25 @@ router.get("/admin/users", async (req, res) => {
       tutor_application_status: string; tutor_application_at: string | null;
       created_at: string;
     };
-    const profById = new Map<string, ProfRow>(
-      ((profiles || []) as ProfRow[]).map(p => [p.id, p])
-    );
-    const users = listData.users.map(u => {
+
+    // Batch the profile join so we stay well under PostgREST's default
+    // 1000-row cap and avoid hitting URL length limits on `.in()`.
+    const PROFILE_BATCH = 200;
+    const profById = new Map<string, ProfRow>();
+    for (let i = 0; i < ids.length; i += PROFILE_BATCH) {
+      const chunk = ids.slice(i, i + PROFILE_BATCH);
+      const { data: profiles, error: profErr } = await admin
+        .from("profiles")
+        .select("id, display_name, school, is_admin, is_tutor, tutor_application_status, tutor_application_at, created_at")
+        .in("id", chunk);
+      if (profErr) {
+        return res.status(500).json({
+          error: `Failed to load profiles (batch ${i}-${i + chunk.length}): ${profErr.message}`,
+        });
+      }
+      for (const p of (profiles || []) as ProfRow[]) profById.set(p.id, p);
+    }
+    const users = allAuthUsers.map(u => {
       const p = profById.get(u.id) || ({} as Partial<ProfRow>);
       return {
         id: u.id,
@@ -85,7 +113,7 @@ router.get("/admin/users", async (req, res) => {
       };
     });
 
-    return res.json({ users, page, perPage });
+    return res.json({ users });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -109,11 +137,16 @@ router.get("/admin/tutor-applications", async (req, res) => {
     const ids = new Set((pending || []).map(p => p.id));
     if (ids.size === 0) return res.json({ applications: [] });
 
-    const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    if (listError) return res.status(500).json({ error: listError.message });
+    let allAuthUsers: { id: string; email: string; created_at: string }[];
+    try {
+      allAuthUsers = await listAllAuthUsers(admin);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to list users";
+      return res.status(500).json({ error: message });
+    }
 
     const emailById = new Map<string, string>();
-    for (const u of listData.users) {
+    for (const u of allAuthUsers) {
       if (u.id && u.email && ids.has(u.id)) emailById.set(u.id, u.email);
     }
 

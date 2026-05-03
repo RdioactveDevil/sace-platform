@@ -21,7 +21,7 @@ export default function AdminUsersTab({ profile }) {
     setLoading(true)
     setError('')
     try {
-      const json = await adminListUsers(1, 200)
+      const json = await adminListUsers()
       setUsers(json.users || [])
     } catch (e) {
       setError(e.message)
