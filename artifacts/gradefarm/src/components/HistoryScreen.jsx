@@ -96,7 +96,7 @@ export default function HistoryScreen({ profile, theme, embedded }) {
       <style>{`
         @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .hist-scroll { flex: 1; min-height: 0; overflow-y: auto; }
-        .hist-inner { max-width: 980px; padding: 28px 32px 32px; animation: fadeUp 0.3s ease; }
+        .hist-inner { padding: 28px 32px 32px; animation: fadeUp 0.3s ease; }
         @media (max-width: 860px) { .hist-inner { padding: 18px 14px 22px; } }
       `}</style>
 

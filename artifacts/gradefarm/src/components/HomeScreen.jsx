@@ -394,14 +394,14 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         .hs-wrap  { display: flex; align-items: flex-start; gap: 24px; flex: 1; min-height: 0; }
-        .hs-main  { flex: 1; min-width: 0; max-width: 980px; padding: 32px 24px 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-main  { flex: 1; min-width: 0; padding: 32px 24px 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-right { width: 328px; flex-shrink: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
         .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
         .hs-topic-grid { display: grid; grid-template-columns: minmax(280px, 340px) 180px 56px; align-items: center; column-gap: 18px; width: 100%; }
         .hs-topic-track { width: 180px; height: 4px; border-radius: 999px; overflow: hidden; justify-self: start; }
         @media (max-width: 1240px) {
-          .hs-main  { max-width: none; padding-right: 16px; }
+          .hs-main  { padding-right: 16px; }
           .hs-right { width: 300px; padding-right: 24px; }
         }
         @media (max-width: 1100px) {

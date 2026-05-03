@@ -85,7 +85,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
       <style>{`
         @keyframes sp-fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         .sp-scroll { flex: 1; min-height: 0; overflow-y: auto; }
-        .sp-inner  { max-width: 980px; padding: 28px 32px 32px; animation: sp-fadeUp 0.3s ease; }
+        .sp-inner  { padding: 28px 32px 32px; animation: sp-fadeUp 0.3s ease; }
         .sp-focus-card { transition: border-color 0.15s, box-shadow 0.15s; cursor: pointer; }
         .sp-focus-card:hover { border-color: ${GOLD} !important; box-shadow: 0 0 0 1px ${GOLD}22; }
         @media (max-width: 860px) { .sp-inner { padding: 18px 14px 22px; } }
