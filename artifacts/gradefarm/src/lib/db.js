@@ -712,12 +712,14 @@ export async function fetchStudentProgressForTutor(tutorId, studentId) {
   // Fetch off-topic attempt counts (grouped by subject+topic)
   let offTopicAttempts = []
   try {
-    const { data: otRows } = await supabase
+    const { data: otRows, error: otError } = await supabase
       .from('off_topic_attempts')
       .select('subject, topic, attempted_at')
       .eq('student_id', studentId)
       .order('attempted_at', { ascending: false })
-    if (otRows && otRows.length > 0) {
+    if (otError) {
+      console.warn('[db] fetchStudentProgressForTutor: could not fetch off_topic_attempts —', otError.message, '(migration may not be applied yet)')
+    } else if (otRows && otRows.length > 0) {
       const countMap = {}
       otRows.forEach(r => {
         const key = `${r.subject}||${r.topic}`
@@ -726,7 +728,9 @@ export async function fetchStudentProgressForTutor(tutorId, studentId) {
       })
       offTopicAttempts = Object.values(countMap).sort((a, b) => b.count - a.count)
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[db] fetchStudentProgressForTutor: unexpected error fetching off_topic_attempts —', err)
+  }
 
   return {
     xp:              prof?.xp ?? 0,

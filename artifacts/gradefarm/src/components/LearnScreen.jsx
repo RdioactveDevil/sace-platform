@@ -260,15 +260,18 @@ export default function LearnScreen({
     setInput('')
     setLoading(true)
     try {
+      const { data: { session: chatSession } } = await supabase.auth.getSession()
+      const authHeaders = chatSession?.access_token
+        ? { Authorization: `Bearer ${chatSession.access_token}` }
+        : {}
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
           subject: subject || '',
           topic: topic || '',
-          user_id: profile?.id || null,
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests),
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
         })
@@ -298,15 +301,18 @@ export default function LearnScreen({
     setMessages(newMessages)
     setLoading(true)
     try {
+      const { data: { session: presetSession } } = await supabase.auth.getSession()
+      const authHeaders = presetSession?.access_token
+        ? { Authorization: `Bearer ${presetSession.access_token}` }
+        : {}
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
           subject: subject || '',
           topic: topic || '',
-          user_id: profile?.id || null,
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests),
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
         })

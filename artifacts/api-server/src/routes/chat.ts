@@ -30,6 +30,18 @@ function getServiceClient() {
   return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } });
 }
 
+async function verifyJwt(jwt: string): Promise<string | null> {
+  try {
+    const admin = getServiceClient();
+    if (!admin) return null;
+    const { data, error } = await admin.auth.getUser(jwt);
+    if (error || !data?.user?.id) return null;
+    return data.user.id;
+  } catch {
+    return null;
+  }
+}
+
 async function classifyMessage(subject: string, topic: string, userMessage: string): Promise<"on_topic" | "off_topic"> {
   try {
     const classifierSystem = [
@@ -76,11 +88,11 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
   }
 }
 
-function logOffTopicAttempt(studentId: string, subject: string, topic: string): void {
+function logOffTopicAttempt(verifiedUserId: string, subject: string, topic: string): void {
   const db = getServiceClient();
   if (!db) return;
   db.from("off_topic_attempts")
-    .insert({ student_id: studentId, subject, topic })
+    .insert({ student_id: verifiedUserId, subject, topic })
     .then(({ error }) => {
       if (error) logger.warn({ error }, "Failed to log off-topic attempt");
     })
@@ -89,7 +101,7 @@ function logOffTopicAttempt(studentId: string, subject: string, topic: string): 
 
 router.post("/chat", async (req, res) => {
   try {
-    const { messages, system, max_tokens, subject, topic, user_id } = req.body;
+    const { messages, system, max_tokens, subject, topic } = req.body;
 
     const typedMessages: ChatMessage[] = Array.isArray(messages)
       ? messages.filter(
@@ -106,8 +118,14 @@ router.post("/chat", async (req, res) => {
       if (lastUserMsg && lastUserMsg.content.trim().length > 0) {
         const classification = await classifyMessage(subject, topic, lastUserMsg.content);
         if (classification === "off_topic") {
-          if (typeof user_id === "string" && user_id.trim().length > 0) {
-            logOffTopicAttempt(user_id.trim(), subject.trim(), topic.trim());
+          // Derive student identity server-side from the Bearer JWT — never trust a client-provided user_id.
+          const authHeader = req.headers.authorization;
+          if (authHeader?.startsWith("Bearer ")) {
+            const jwt = authHeader.slice(7);
+            const verifiedUserId = await verifyJwt(jwt);
+            if (verifiedUserId) {
+              logOffTopicAttempt(verifiedUserId, subject.trim(), topic.trim());
+            }
           }
           const redirectFn = OFF_TOPIC_REDIRECTS[Math.floor(Math.random() * OFF_TOPIC_REDIRECTS.length)];
           res.status(200).json({
