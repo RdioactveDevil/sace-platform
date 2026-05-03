@@ -26,7 +26,16 @@ interface ImageBlock {
   };
 }
 
-type ContentBlock = TextBlock | ImageBlock;
+interface DocumentBlock {
+  type: "document";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+}
+
+type ContentBlock = TextBlock | ImageBlock | DocumentBlock;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -51,20 +60,34 @@ function isImageBlock(b: unknown): b is ImageBlock {
   return src.type === "base64" && typeof src.media_type === "string" && typeof src.data === "string";
 }
 
+function isDocumentBlock(b: unknown): b is DocumentBlock {
+  if (b === null || typeof b !== "object") return false;
+  const blk = b as { type?: unknown; source?: unknown };
+  if (blk.type !== "document") return false;
+  if (blk.source === null || typeof blk.source !== "object") return false;
+  const src = blk.source as { type?: unknown; media_type?: unknown; data?: unknown };
+  return src.type === "base64" && typeof src.media_type === "string" && typeof src.data === "string";
+}
+
 const ALLOWED_IMAGE_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_IMAGES_PER_MESSAGE = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 32 * 1024 * 1024;
 
 function isContentBlockArray(content: unknown): content is ContentBlock[] {
   if (!Array.isArray(content) || content.length === 0) return false;
   let imageCount = 0;
   for (const b of content) {
     if (isTextBlock(b)) continue;
+    if (isDocumentBlock(b)) {
+      const approxBytes = Math.floor((b.source.data.length * 3) / 4);
+      if (approxBytes > MAX_DOCUMENT_BYTES) return false;
+      continue;
+    }
     if (!isImageBlock(b)) return false;
     if (!ALLOWED_IMAGE_MEDIA_TYPES.has(b.source.media_type)) return false;
     imageCount += 1;
     if (imageCount > MAX_IMAGES_PER_MESSAGE) return false;
-    // Approx decoded byte size from base64 length.
     const approxBytes = Math.floor((b.source.data.length * 3) / 4);
     if (approxBytes > MAX_IMAGE_BYTES) return false;
   }
