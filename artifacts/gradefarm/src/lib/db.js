@@ -430,6 +430,51 @@ export async function insertGeneratedQuestionVariants(parentQuestion, variants =
   return (data || []).map(v => normalizeVariant(v, parentQuestion.id, parentQuestion.concept_tag))
 }
 
+/**
+ * Persist AI-generated remediation questions into the main `questions` bank so they
+ * become reusable across sessions and users (rather than being one-time remediation
+ * variants). Returns the inserted rows with their real DB-assigned ids so callers can
+ * use those ids when recording answers (which keeps the no-repeat rule intact via
+ * struggle_profiles).
+ *
+ * Each row is given an explicit difficulty (clamped 1..5, falling back to the parent
+ * question's difficulty) so the adaptive engine can identify which topics/subtopics
+ * the student is struggling with.
+ */
+export async function insertGeneratedQuestionsToBank(parentQuestion, variants = []) {
+  if (!Array.isArray(variants) || variants.length === 0) return []
+
+  const payload = variants.map(v => ({
+    subject: v.subject || parentQuestion.subject || 'Chemistry',
+    topic: v.topic || parentQuestion.topic,
+    subtopic: v.subtopic || parentQuestion.subtopic,
+    concept_tag:
+      v.concept_tag ||
+      parentQuestion.concept_tag ||
+      `${(v.subject || parentQuestion.subject || 'Chemistry')}|${v.topic || parentQuestion.topic}|${v.subtopic || parentQuestion.subtopic}`.toLowerCase(),
+    difficulty: Math.max(1, Math.min(5, Number(v.difficulty || parentQuestion.difficulty || 1))),
+    question: v.question,
+    options: v.options,
+    answer_index: v.answer_index,
+    solution: v.solution || parentQuestion.solution || '',
+  }))
+
+  const { data, error } = await supabase
+    .from('questions')
+    .insert(payload)
+    .select('*')
+
+  if (error) throw error
+
+  return (data || []).map(q => ({
+    ...q,
+    options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+    concept_tag:
+      q.concept_tag ||
+      `${q.subject}|${q.topic}|${q.subtopic}`.toLowerCase(),
+  }))
+}
+
 export async function flagTopicForStudyPlan(userId, { subject, topic, subtopic, concept_tag, reason = 'remediation' }) {
   const { error } = await supabase
     .from('study_plan_items')

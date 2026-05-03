@@ -666,6 +666,14 @@ function AppInner() {
               onAssignmentComplete={() => {
                 setActiveAssignmentId(null)
                 setAssignmentsVersion(v => v + 1)
+              }}
+              onBankQuestionsAdded={(newQs) => {
+                if (!Array.isArray(newQs) || newQs.length === 0) return
+                setQuestions(prev => {
+                  const existing = new Set(prev.map(q => q.id))
+                  const fresh = newQs.filter(q => !existing.has(q.id))
+                  return fresh.length ? [...prev, ...fresh] : prev
+                })
               }} />
       } />
 
