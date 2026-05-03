@@ -1,25 +1,30 @@
 import { useMemo } from 'react'
 import { THEMES } from '../lib/theme'
+import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export default function StudyPlanScreen({ profile, questions, struggleMap, theme, onStartSession }) {
+export default function StudyPlanScreen({ profile, questions, struggleMap, theme, onStartSession, subject }) {
   const t = THEMES[theme]
 
-  // Per-topic aggregated stats
+  const y7Config = getY7TopicConfig(subject?.id)
+
+  // Per-topic aggregated stats (normalize topic names for Y7 subjects)
   const topicStats = useMemo(() => {
+    const normFn = y7Config?.normFn
     const map = {}
     for (const q of questions) {
-      if (!map[q.topic]) map[q.topic] = { topic: q.topic, subtopics: new Set(), total: 0, attempts: 0, wrong: 0 }
-      map[q.topic].subtopics.add(q.subtopic)
-      map[q.topic].total++
+      const topicKey = normFn ? (normFn(q.topic) ?? q.topic) : q.topic
+      if (!map[topicKey]) map[topicKey] = { topic: topicKey, subtopics: new Set(), total: 0, attempts: 0, wrong: 0 }
+      map[topicKey].subtopics.add(q.subtopic)
+      map[topicKey].total++
       const s = struggleMap[q.id]
       if (s) {
-        map[q.topic].attempts += s.attempts
-        map[q.topic].wrong += s.wrong
+        map[topicKey].attempts += s.attempts
+        map[topicKey].wrong += s.wrong
       }
     }
     return Object.values(map).map(r => ({
@@ -33,7 +38,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
       if (a.attempts === 0 && b.attempts > 0) return 1
       return b.errorRate - a.errorRate
     })
-  }, [questions, struggleMap])
+  }, [questions, struggleMap, y7Config])
 
   // Questions due within 48h, grouped by topic
   const todayFocus = useMemo(() => {
@@ -156,38 +161,93 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
               {/* Topic Mastery */}
               <section>
                 <div style={{ fontSize: 12, fontWeight: 700, color: t.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Topic Mastery</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {topicStats.map(topic => {
-                    const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
-                    return (
-                      <div
-                        key={topic.topic}
-                        className="sp-focus-card"
-                        onClick={() => onStartSession?.({ mode: topic.attempts > 0 ? 'wrong' : 'new', subtopics: topic.subtopics })}
-                        style={{ padding: '14px 18px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: topic.attempts > 0 ? 10 : 0 }}>
-                          <div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{topic.topic}</div>
-                            <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
-                              {topic.total} questions · {topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}
-                            </div>
+                {y7Config ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {y7Config.macroGroups.map(macro => {
+                      const macroTopics = topicStats.filter(ts => macro.topics.includes(ts.topic))
+                      if (macroTopics.length === 0) return null
+                      const macroAttempts = macroTopics.reduce((s, ts) => s + ts.attempts, 0)
+                      const macroWrong    = macroTopics.reduce((s, ts) => s + ts.wrong, 0)
+                      const macroMastery  = macroAttempts > 0 ? Math.max(0, Math.round((1 - macroWrong / macroAttempts) * 100)) : null
+                      const macroColor    = macroMastery >= 70 ? '#4ade80' : macroMastery >= 40 ? GOLD : '#f87171'
+                      return (
+                        <div key={macro.id}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, letterSpacing: '0.05em' }}>{macro.label}</div>
+                            {macroMastery !== null && (
+                              <div style={{ fontSize: 12, fontWeight: 700, color: macroColor }}>{macroMastery}% strand avg</div>
+                            )}
                           </div>
-                          {topic.attempts > 0 ? (
-                            <div style={{ fontSize: 18, fontWeight: 800, color: barColor, flexShrink: 0 }}>{topic.mastery}%</div>
-                          ) : (
-                            <div style={{ fontSize: 11, color: t.textFaint, fontStyle: 'italic', flexShrink: 0 }}>Not started</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {macroTopics.map(topic => {
+                              const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
+                              return (
+                                <div
+                                  key={topic.topic}
+                                  className="sp-focus-card"
+                                  onClick={() => onStartSession?.({ mode: topic.attempts > 0 ? 'wrong' : 'new', subtopics: topic.subtopics })}
+                                  style={{ padding: '12px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10 }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: topic.attempts > 0 ? 8 : 0 }}>
+                                    <div>
+                                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{topic.topic}</div>
+                                      <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
+                                        {topic.total} questions · {topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}
+                                      </div>
+                                    </div>
+                                    {topic.attempts > 0 ? (
+                                      <div style={{ fontSize: 16, fontWeight: 800, color: barColor, flexShrink: 0 }}>{topic.mastery}%</div>
+                                    ) : (
+                                      <div style={{ fontSize: 11, color: t.textFaint, fontStyle: 'italic', flexShrink: 0 }}>Not started</div>
+                                    )}
+                                  </div>
+                                  {topic.attempts > 0 && (
+                                    <div style={{ background: t.bg, borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                                      <div style={{ width: `${topic.mastery}%`, height: '100%', background: barColor, transition: 'width 0.6s ease' }} />
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {topicStats.map(topic => {
+                      const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
+                      return (
+                        <div
+                          key={topic.topic}
+                          className="sp-focus-card"
+                          onClick={() => onStartSession?.({ mode: topic.attempts > 0 ? 'wrong' : 'new', subtopics: topic.subtopics })}
+                          style={{ padding: '14px 18px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: topic.attempts > 0 ? 10 : 0 }}>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{topic.topic}</div>
+                              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
+                                {topic.total} questions · {topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                            {topic.attempts > 0 ? (
+                              <div style={{ fontSize: 18, fontWeight: 800, color: barColor, flexShrink: 0 }}>{topic.mastery}%</div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: t.textFaint, fontStyle: 'italic', flexShrink: 0 }}>Not started</div>
+                            )}
+                          </div>
+                          {topic.attempts > 0 && (
+                            <div style={{ background: t.bg, borderRadius: 4, height: 5, overflow: 'hidden' }}>
+                              <div style={{ width: `${topic.mastery}%`, height: '100%', background: barColor, transition: 'width 0.6s ease' }} />
+                            </div>
                           )}
                         </div>
-                        {topic.attempts > 0 && (
-                          <div style={{ background: t.bg, borderRadius: 4, height: 5, overflow: 'hidden' }}>
-                            <div style={{ width: `${topic.mastery}%`, height: '100%', background: barColor, transition: 'width 0.6s ease' }} />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
               </section>
             </>
           )}

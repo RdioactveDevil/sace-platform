@@ -9,6 +9,7 @@ import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
 import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS } from './lib/subjects'
 import { getTopicConfig } from './lib/saceTopics'
+import { getY7TopicConfig } from './lib/australianCurriculumTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -258,7 +259,7 @@ function AppShellScreens({
       <div style={show('study-plan')}>
         <StudyPlanScreen
           profile={profile} questions={questions} struggleMap={struggleMap}
-          theme={theme} onStartSession={onStartSession} />
+          theme={theme} onStartSession={onStartSession} subject={subject} />
       </div>
       <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />
@@ -679,7 +680,7 @@ function AppInner() {
             // names to their matching subtopics; keep direct subtopic matches as-is.
             let expandedSubtopics = nextSubtopics
             if (opts?.assignmentId && nextSubtopics.length > 0) {
-              const { normFn } = getTopicConfig(activeSubject?.stage)
+              const { normFn } = getY7TopicConfig(activeSubject?.id) ?? getTopicConfig(activeSubject?.stage)
               const allSubtopicsLower = new Map()
               activeQuestions.forEach(q => {
                 if (q.subtopic) allSubtopicsLower.set(q.subtopic.toLowerCase(), q.subtopic)
