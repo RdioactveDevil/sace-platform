@@ -12,9 +12,60 @@ const OFF_TOPIC_REDIRECTS = [
   (topic: string) => `I'm all yours for ${topic}, but that one's outside my lane for this session. What would you like to tackle in ${topic}?`,
 ];
 
+interface TextBlock {
+  type: "text";
+  text: string;
+}
+
+interface ImageBlock {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+}
+
+type ContentBlock = TextBlock | ImageBlock;
+
 interface ChatMessage {
   role: "user" | "assistant";
-  content: string;
+  content: string | ContentBlock[];
+}
+
+function isTextBlock(b: unknown): b is TextBlock {
+  return (
+    b !== null &&
+    typeof b === "object" &&
+    (b as { type?: unknown }).type === "text" &&
+    typeof (b as { text?: unknown }).text === "string"
+  );
+}
+
+function isImageBlock(b: unknown): b is ImageBlock {
+  if (b === null || typeof b !== "object") return false;
+  const blk = b as { type?: unknown; source?: unknown };
+  if (blk.type !== "image") return false;
+  if (blk.source === null || typeof blk.source !== "object") return false;
+  const src = blk.source as { type?: unknown; media_type?: unknown; data?: unknown };
+  return src.type === "base64" && typeof src.media_type === "string" && typeof src.data === "string";
+}
+
+function isContentBlockArray(content: unknown): content is ContentBlock[] {
+  return (
+    Array.isArray(content) &&
+    content.length > 0 &&
+    content.every((b) => isTextBlock(b) || isImageBlock(b))
+  );
+}
+
+function extractTextFromContent(content: string | ContentBlock[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter(isTextBlock)
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
 }
 
 function getAnthropicConfig() {
@@ -111,14 +162,15 @@ router.post("/chat", async (req, res) => {
             m !== null &&
             typeof m === "object" &&
             (m.role === "user" || m.role === "assistant") &&
-            typeof m.content === "string"
+            (typeof m.content === "string" || isContentBlockArray(m.content))
         )
       : [];
 
     if (typeof subject === "string" && subject.trim().length > 0 && typeof topic === "string" && topic.trim().length > 0 && typedMessages.length > 0) {
       const lastUserMsg = [...typedMessages].reverse().find((m) => m.role === "user");
-      if (lastUserMsg && lastUserMsg.content.trim().length > 0) {
-        const classification = await classifyMessage(subject, topic, lastUserMsg.content);
+      const lastUserText = lastUserMsg ? extractTextFromContent(lastUserMsg.content) : "";
+      if (lastUserMsg && lastUserText.length > 0) {
+        const classification = await classifyMessage(subject, topic, lastUserText);
         if (classification === "off_topic") {
           // Derive student identity server-side from the Bearer JWT — never trust a client-provided user_id.
           const authHeader = req.headers.authorization;
