@@ -555,6 +555,36 @@ export async function removeStudentFromRoster(tutorId, studentId) {
   if (error) throw error
 }
 
+/** Send an assignment notification email to a student. Returns { ok, error }. */
+export async function sendAssignmentNotification(studentId, assignment) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const jwt = sessionData?.session?.access_token
+  if (!jwt) return { ok: false, error: 'Not authenticated.' }
+  const res = await fetch('/api/tutor/notify-assignment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+    body: JSON.stringify({ student_id: studentId, assignment }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: json.error || 'Failed to send notification.' }
+  return { ok: true }
+}
+
+/** Send a custom notification email to a student. Returns { ok, error }. */
+export async function notifyStudent(studentId, message) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const jwt = sessionData?.session?.access_token
+  if (!jwt) return { ok: false, error: 'Not authenticated.' }
+  const res = await fetch('/api/tutor/notify-student', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+    body: JSON.stringify({ student_id: studentId, message }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: json.error || 'Failed to send notification.' }
+  return { ok: true }
+}
+
 /** Create an assignment for a single student. */
 export async function createAssignment(tutorId, studentId, { type, subject, topics, due_date }) {
   const { data, error } = await supabase

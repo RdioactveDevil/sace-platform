@@ -11,6 +11,8 @@ import {
   fetchStudentProgressForTutor,
   fetchStudentEmails,
   getQuestions,
+  sendAssignmentNotification,
+  notifyStudent,
 } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
 import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
@@ -53,6 +55,10 @@ function StudentsTab({ profile, theme }) {
   const [addError, setAddError]   = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
+  const [notifyStudentId, setNotifyStudentId] = useState(null)
+  const [notifyMessage, setNotifyMessage] = useState('')
+  const [notifySending, setNotifySending] = useState(false)
+  const [notifyResult, setNotifyResult] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -90,6 +96,19 @@ function StudentsTab({ profile, theme }) {
       setConfirmRemove(null)
       await load()
     } catch {}
+  }
+
+  const handleNotifySend = async (studentId) => {
+    setNotifySending(true)
+    setNotifyResult(null)
+    const result = await notifyStudent(studentId, notifyMessage.trim() || undefined)
+    setNotifySending(false)
+    if (result.ok) {
+      setNotifyResult({ ok: true, msg: 'Email sent!' })
+      setTimeout(() => { setNotifyStudentId(null); setNotifyMessage(''); setNotifyResult(null) }, 1800)
+    } else {
+      setNotifyResult({ ok: false, msg: result.error || 'Failed to send.' })
+    }
   }
 
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
@@ -130,24 +149,60 @@ function StudentsTab({ profile, theme }) {
         ) : (
           <div>
             {roster.map(s => (
-              <div key={s.student_id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: `1px solid ${t.border}` }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
-                  {(s.profiles?.display_name || '?')[0].toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.profiles?.display_name || 'Unknown'}</div>
-                  {emails[s.student_id] && (
-                    <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emails[s.student_id]}</div>
-                  )}
-                  <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{s.profiles?.xp ?? 0} XP · Streak {s.profiles?.streak ?? 0} · Joined {fmtDate(s.invited_at)}</div>
-                </div>
-                {confirmRemove === s.student_id ? (
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button onClick={() => handleRemove(s.student_id)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
-                    <button onClick={() => setConfirmRemove(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+              <div key={s.student_id} style={{ borderBottom: `1px solid ${t.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+                    {(s.profiles?.display_name || '?')[0].toUpperCase()}
                   </div>
-                ) : (
-                  <button onClick={() => setConfirmRemove(s.student_id)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>Remove</button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.profiles?.display_name || 'Unknown'}</div>
+                    {emails[s.student_id] && (
+                      <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emails[s.student_id]}</div>
+                    )}
+                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{s.profiles?.xp ?? 0} XP · Streak {s.profiles?.streak ?? 0} · Joined {fmtDate(s.invited_at)}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    {confirmRemove === s.student_id ? (
+                      <>
+                        <button onClick={() => handleRemove(s.student_id)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
+                        <button onClick={() => setConfirmRemove(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setNotifyStudentId(notifyStudentId === s.student_id ? null : s.student_id); setNotifyMessage(''); setNotifyResult(null) }}
+                          style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${notifyStudentId === s.student_id ? GOLD : t.border}`, background: notifyStudentId === s.student_id ? 'rgba(241,190,67,0.12)' : 'transparent', color: notifyStudentId === s.student_id ? GOLD : t.textMuted, fontSize: 12, fontWeight: notifyStudentId === s.student_id ? 700 : 400, cursor: 'pointer', fontFamily: FONT_B }}
+                        >
+                          ✉ Notify
+                        </button>
+                        <button onClick={() => setConfirmRemove(s.student_id)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {notifyStudentId === s.student_id && (
+                  <div style={{ padding: '0 20px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: t.textMuted }}>Send an email to <strong style={{ color: t.text }}>{s.profiles?.display_name || 'this student'}</strong>. Leave blank for a default "check your assignments" message.</div>
+                    <textarea
+                      value={notifyMessage}
+                      onChange={e => setNotifyMessage(e.target.value)}
+                      placeholder="Optional message… (leave blank for default)"
+                      rows={3}
+                      style={{ padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button
+                        onClick={() => handleNotifySend(s.student_id)}
+                        disabled={notifySending}
+                        style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: notifySending ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: notifySending ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: notifySending ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
+                      >
+                        {notifySending ? 'Sending…' : 'Send Email'}
+                      </button>
+                      {notifyResult && (
+                        <span style={{ fontSize: 12, color: notifyResult.ok ? '#4ade80' : '#f87171', fontWeight: 600 }}>{notifyResult.msg}</span>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
@@ -175,6 +230,7 @@ function AssignmentsTab({ profile, theme }) {
   })
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
+  const [notifyStatus, setNotifyStatus] = useState(null)
 
   // Topic list for current subject
   const stageMap = {
@@ -240,22 +296,34 @@ function AssignmentsTab({ profile, theme }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setFormError('')
+    setNotifyStatus(null)
     if (form.topics.length === 0) { setFormError('Select at least one topic.'); return }
     if (form.student_ids.length === 0) { setFormError('Select at least one student.'); return }
     if (!form.due_date) { setFormError('Please set a due date.'); return }
     setSaving(true)
     try {
+      const assignmentDetails = {
+        type: form.type,
+        subject: form.subject,
+        topics: form.topics,
+        due_date: form.due_date,
+      }
       for (const sid of form.student_ids) {
-        await createAssignment(profile.id, sid, {
-          type: form.type,
-          subject: form.subject,
-          topics: form.topics,
-          due_date: form.due_date,
-        })
+        await createAssignment(profile.id, sid, assignmentDetails)
       }
       setShowForm(false)
       setForm({ type: 'Quiz', subject: 'Chemistry Stage 1', topics: [], due_date: '', student_ids: [] })
       await load()
+      const notifyResults = await Promise.all(
+        form.student_ids.map(sid => sendAssignmentNotification(sid, assignmentDetails))
+      )
+      const failed = notifyResults.filter(r => !r.ok)
+      if (failed.length > 0) {
+        setNotifyStatus({ ok: false, msg: `Assignment created, but email notification failed: ${failed[0].error}` })
+      } else {
+        setNotifyStatus({ ok: true, msg: `Assignment created and ${notifyResults.length > 1 ? `${notifyResults.length} students notified` : 'student notified'} by email.` })
+        setTimeout(() => setNotifyStatus(null), 4000)
+      }
     } catch (err) {
       setFormError(err.message || 'Failed to create assignment.')
     }
@@ -281,6 +349,12 @@ function AssignmentsTab({ profile, theme }) {
           {showForm ? '✕ Cancel' : '+ New Assignment'}
         </button>
       </div>
+
+      {notifyStatus && (
+        <div style={{ padding: '12px 16px', borderRadius: 10, border: `1px solid ${notifyStatus.ok ? '#4ade8040' : '#f8717140'}`, background: notifyStatus.ok ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)', fontSize: 13, color: notifyStatus.ok ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+          {notifyStatus.msg}
+        </div>
+      )}
 
       {showForm && (
         <div style={{ ...card, padding: '20px 22px' }}>

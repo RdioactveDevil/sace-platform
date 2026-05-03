@@ -23,15 +23,20 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - Leaderboard, progress tracking, study plans
 - Subject picker with subscription gating
 - **Tutor Dashboard** (`/tutor`): 3-tab dashboard for users with `is_tutor=true` on their profile
-  - Students tab: add students by email (looked up server-side via service role), view/remove roster
-  - Assignments tab: create Quiz/Test/Worksheet/Homework assignments with topics and due dates
+  - Students tab: add students by email (looked up server-side via service role), view/remove roster; "✉ Notify" button per student opens an inline email composer to send a custom message
+  - Assignments tab: create Quiz/Test/Worksheet/Homework assignments with topics and due dates; auto-sends assignment notification email to each selected student on creation
   - Progress tab: per-student XP, accuracy, topic breakdown, recent activity
 - **Assigned Tasks widget**: appears on student Home screen when they have pending tutor assignments
 - **Assignment auto-completion**: assignments are marked complete when a student finishes a quiz session
+- **Email notifications** (Resend): two API endpoints for tutor→student email
+  - `POST /api/tutor/notify-assignment` — sends styled HTML assignment email (type, subject, topics, due date)
+  - `POST /api/tutor/notify-student` — sends a custom message email from tutor to student
 
 ### Required Environment Variables
 - `ANTHROPIC_API_KEY` — for AI chat/question generation features
 - `SUPABASE_SERVICE_KEY` — for admin operations (question generation, PDF extraction)
+- `RESEND_API_KEY` — for sending tutor→student email notifications (resend.com)
+- Note: Resend Replit integration was dismissed by user; API key stored directly as a secret instead
 
 ### Custom Assets
 - `artifacts/gradefarm/public/SIFONN_PRO.otf` — custom Sifonn Pro font used for the brand logo

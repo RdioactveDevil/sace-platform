@@ -1,23 +1,59 @@
-import { Router } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { Router, type Request, type Response } from "express";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 
-function getAdmin() {
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  if (!serviceKey) throw new Error("No SUPABASE_SERVICE_KEY configured");
-  return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } });
+interface AuthUser {
+  id: string;
+  email?: string;
 }
 
-async function requireTutor(req: any, res: any) {
+interface AdminAuthClient {
+  listUsers(opts: { perPage: number }): Promise<{ data: { users: AuthUser[] }; error: { message: string } | null }>;
+}
+
+interface SupabaseAdminAuth {
+  getUser(jwt: string): Promise<{ data: { user: AuthUser | null }; error: { message: string } | null }>;
+  admin: AdminAuthClient;
+}
+
+function getAdminClient(): SupabaseClient & { auth: SupabaseAdminAuth } {
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) throw new Error("No SUPABASE_SERVICE_KEY configured");
+  return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } }) as SupabaseClient & { auth: SupabaseAdminAuth };
+}
+
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+interface TutorContext {
+  admin: SupabaseClient & { auth: SupabaseAdminAuth };
+  callerUserId: string;
+  tutorName: string;
+}
+
+async function requireTutor(req: Request, res: Response): Promise<TutorContext | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
     return null;
   }
   const callerJwt = authHeader.slice(7);
-  const admin = getAdmin();
+  const admin = getAdminClient();
 
   const { data: callerUser, error: callerError } = await admin.auth.getUser(callerJwt);
   if (callerError || !callerUser?.user) {
@@ -27,18 +63,53 @@ async function requireTutor(req: any, res: any) {
 
   const { data: callerProfile, error: profErr } = await admin
     .from("profiles")
-    .select("id, is_tutor")
+    .select("id, is_tutor, display_name")
     .eq("id", callerUser.user.id)
-    .single();
+    .single<{ id: string; is_tutor: boolean; display_name: string | null }>();
 
   if (profErr || !callerProfile?.is_tutor) {
     res.status(403).json({ error: "Forbidden: caller is not a tutor" });
     return null;
   }
-  return { admin, callerUserId: callerUser.user.id };
+  return {
+    admin,
+    callerUserId: callerUser.user.id,
+    tutorName: callerProfile.display_name ?? "Your tutor",
+  };
 }
 
-router.post("/tutor/find-student", async (req, res) => {
+async function getStudentEmail(
+  admin: SupabaseClient & { auth: SupabaseAdminAuth },
+  tutorId: string,
+  studentId: string,
+): Promise<string | null> {
+  const { data: rosterRow, error: rosterErr } = await admin
+    .from("tutor_students")
+    .select("student_id")
+    .eq("tutor_id", tutorId)
+    .eq("student_id", studentId)
+    .single<{ student_id: string }>();
+  if (rosterErr || !rosterRow) return null;
+
+  const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  if (listError) return null;
+  const user = listData.users.find((u) => u.id === studentId);
+  return user?.email ?? null;
+}
+
+async function getStudentName(
+  admin: SupabaseClient & { auth: SupabaseAdminAuth },
+  studentId: string,
+): Promise<string> {
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("display_name")
+    .eq("id", studentId)
+    .single<{ display_name: string | null }>();
+  return profile?.display_name ?? "Student";
+}
+
+router.post("/tutor/find-student", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
@@ -51,7 +122,7 @@ router.post("/tutor/find-student", async (req, res) => {
     const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (listError) return res.status(500).json({ error: listError.message });
 
-    const found = listData.users.find(u => u.email?.toLowerCase() === normalizedEmail);
+    const found = listData.users.find((u) => u.email?.toLowerCase() === normalizedEmail);
     if (!found) {
       return res.status(404).json({ error: "No user found with that email address." });
     }
@@ -63,7 +134,7 @@ router.post("/tutor/find-student", async (req, res) => {
       .from("profiles")
       .select("id, display_name")
       .eq("id", found.id)
-      .single();
+      .single<{ id: string; display_name: string | null }>();
 
     if (studentProfError || !studentProfile) {
       return res.status(404).json({ error: "User has not completed setup." });
@@ -76,7 +147,7 @@ router.post("/tutor/find-student", async (req, res) => {
   }
 });
 
-router.post("/tutor/student-emails", async (req, res) => {
+router.post("/tutor/student-emails", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
@@ -94,7 +165,7 @@ router.post("/tutor/student-emails", async (req, res) => {
       .in("student_id", ids);
 
     if (rosterErr) return res.status(500).json({ error: rosterErr.message });
-    const allowed = new Set((rosterRows || []).map(r => r.student_id));
+    const allowed = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
 
     const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (listError) return res.status(500).json({ error: listError.message });
@@ -104,6 +175,160 @@ router.post("/tutor/student-emails", async (req, res) => {
       if (u.id && u.email && allowed.has(u.id)) emails[u.id] = u.email;
     }
     return res.json({ emails });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+router.post("/tutor/notify-assignment", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId, tutorName } = ctx;
+
+    const { student_id, assignment } = req.body as {
+      student_id: string;
+      assignment: { type: string; subject: string; topics: string[]; due_date: string };
+    };
+    if (!student_id || !assignment) {
+      return res.status(400).json({ error: "student_id and assignment are required" });
+    }
+
+    const studentEmail = await getStudentEmail(admin, callerUserId, student_id);
+    if (!studentEmail) {
+      return res.status(404).json({ error: "Student not found on your roster or has no email." });
+    }
+
+    const resend = getResend();
+    if (!resend) {
+      return res.status(503).json({ error: "Email service not configured. Please add RESEND_API_KEY." });
+    }
+
+    const studentName = await getStudentName(admin, student_id);
+    const topicsList = (assignment.topics ?? []).join(", ") || assignment.subject;
+    const dueDate = assignment.due_date
+      ? new Date(assignment.due_date).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
+      : "No due date set";
+
+    const safeStudentName = escapeHtml(studentName);
+    const safeTutorName = escapeHtml(tutorName);
+    const safeType = escapeHtml(assignment.type);
+    const safeSubject = escapeHtml(assignment.subject);
+    const safeTopics = escapeHtml(topicsList);
+    const safeDueDate = escapeHtml(dueDate);
+
+    const { error: sendErr } = await resend.emails.send({
+      from: "gradefarm. <notifications@gradefarm.au>",
+      to: studentEmail,
+      subject: `New ${safeType} assigned — ${safeSubject}`,
+      html: `
+        <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
+            <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
+          </div>
+          <div style="padding: 32px;">
+            <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">New Assignment</h2>
+            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${safeStudentName}, your tutor ${safeTutorName} has assigned you new work.</p>
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px; width: 90px;">Type</td>
+                  <td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeType}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Subject</td>
+                  <td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeSubject}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Topics</td>
+                  <td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeTopics}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Due</td>
+                  <td style="padding: 6px 0; color: #f1be43; font-size: 13px; font-weight: 700;">${safeDueDate}</td>
+                </tr>
+              </table>
+            </div>
+            <a href="https://gradefarm.au" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
+          </div>
+          <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
+            You're receiving this because your tutor ${safeTutorName} sent you an assignment via gradefarm.
+          </div>
+        </div>
+      `,
+    });
+
+    if (sendErr) {
+      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      return res.status(500).json({ error: msg || "Failed to send email" });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+router.post("/tutor/notify-student", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId, tutorName } = ctx;
+
+    const { student_id, message } = req.body as { student_id: string; message?: string };
+    if (!student_id) {
+      return res.status(400).json({ error: "student_id is required" });
+    }
+
+    const studentEmail = await getStudentEmail(admin, callerUserId, student_id);
+    if (!studentEmail) {
+      return res.status(404).json({ error: "Student not found on your roster or has no email." });
+    }
+
+    const resend = getResend();
+    if (!resend) {
+      return res.status(503).json({ error: "Email service not configured. Please add RESEND_API_KEY." });
+    }
+
+    const studentName = await getStudentName(admin, student_id);
+    const customMessage = message?.trim() || "You have assignments waiting. Log in to gradefarm. to check your progress and complete your work.";
+
+    const safeStudentName = escapeHtml(studentName);
+    const safeTutorName = escapeHtml(tutorName);
+    const safeMessage = escapeHtml(customMessage);
+
+    const { error: sendErr } = await resend.emails.send({
+      from: "gradefarm. <notifications@gradefarm.au>",
+      to: studentEmail,
+      subject: `Message from your tutor — ${safeTutorName}`,
+      html: `
+        <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
+            <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
+          </div>
+          <div style="padding: 32px;">
+            <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">Message from ${safeTutorName}</h2>
+            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${safeStudentName},</p>
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+              <p style="margin: 0; color: #f0f4ff; font-size: 15px; line-height: 1.6;">${safeMessage}</p>
+            </div>
+            <a href="https://gradefarm.au" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
+          </div>
+          <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
+            You're receiving this because your tutor ${safeTutorName} sent you a notification via gradefarm.
+          </div>
+        </div>
+      `,
+    });
+
+    if (sendErr) {
+      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      return res.status(500).json({ error: msg || "Failed to send email" });
+    }
+
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
