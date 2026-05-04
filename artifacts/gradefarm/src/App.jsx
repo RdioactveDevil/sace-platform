@@ -440,6 +440,7 @@ function AppInner() {
   const [quizRemediationUsedIds,   setQuizRemediationUsedIds]   = useState([])
   const [quizRemediationWrongCount, setQuizRemediationWrongCount] = useState(0)
   const [activeAssignmentId, setActiveAssignmentId] = useState(null)
+  const [quizFinished, setQuizFinished] = useState(false)
   const [assignmentsVersion, setAssignmentsVersion] = useState(0)
 
   const toggleTheme = () => {
@@ -534,6 +535,7 @@ function AppInner() {
     setQuizQNumber(1)
     setQuizSessionXP(0)
     setQuizMode('new')
+    setQuizFinished(false)
     setQuizSubtopics([])
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
@@ -563,6 +565,7 @@ function AppInner() {
     setQuizQNumber(1)
     setQuizSessionXP(0)
     setQuizMode('new')
+    setQuizFinished(false)
     setQuizSubtopics([])
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
@@ -606,6 +609,7 @@ function AppInner() {
     remediationOriginalQ: quizRemediationOriginalQ, setRemediationOriginalQ: setQuizRemediationOriginalQ,
     remediationUsedIds: quizRemediationUsedIds,     setRemediationUsedIds: setQuizRemediationUsedIds,
     remediationWrongCount: quizRemediationWrongCount, setRemediationWrongCount: setQuizRemediationWrongCount,
+    finished: quizFinished, setFinished: setQuizFinished,
   }
 
   const learnState   = {
@@ -866,6 +870,7 @@ function AppInner() {
             setQuizRemediationUsedIds([])
             setQuizRemediationWrongCount(0)
             setConsolidateSubtopic(null)
+            setQuizFinished(false)
             navigate('/quiz')
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />

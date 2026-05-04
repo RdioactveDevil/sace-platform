@@ -15,12 +15,14 @@ import {
   getRemediationVariants,
   insertGeneratedQuestionVariants,
   insertGeneratedQuestionsToBank,
+  fetchAndPersistMoreQuestions,
   incrementQuestionVariantUsage,
   flagQuestion,
   flagTopicForStudyPlan,
   completeAssignment,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
+import { getTopicCodeByName } from '../lib/adminTopics'
 import {
   withTimeout,
   normalizeVariantRecord,
@@ -302,13 +304,15 @@ export default function QuizScreen({
   activeAssignmentId,
   onAssignmentComplete,
   onBankQuestionsAdded,
+  finished: _finished, setFinished,
 }) {
   const t = THEMES[theme]
 
   const [floatXP, setFloatXP] = useState(null)
   const [showExit, setShowExit] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
-  const [finished, setFinished] = useState(false)
+  const [generatingMore, setGeneratingMore] = useState(false)
+  const generatingMoreRef = useRef(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
@@ -357,6 +361,7 @@ export default function QuizScreen({
   const remediationParentId = _remediationParentId ?? null
   const remediationOriginalQ = _remediationOriginalQ ?? null
   const remediationUsedIds = Array.isArray(_remediationUsedIds) ? _remediationUsedIds : []
+  const finished = _finished ?? false
 
 
   const handleFlag = async (tag) => {
@@ -538,6 +543,42 @@ export default function QuizScreen({
   useEffect(() => {
     if (!finished && _currentQ) sessionCompletedRef.current = false
   }, [_currentQ, finished])
+
+  // Bank exhaustion: when 'new' mode runs out of questions, generate more via AI
+  // and persist them directly to the live questions table so they're reusable.
+  useEffect(() => {
+    if (!finished || quizMode !== 'new') return
+    if (generatingMoreRef.current) return
+
+    // Derive subject + topic from the most-recently-answered main question.
+    const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
+    const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
+    const subject   = lastQ?.subject
+    const topicName = lastQ?.topic
+    if (!subject || !topicName) return
+
+    const topicCode = getTopicCodeByName(subject, topicName)
+    if (!topicCode) return
+
+    generatingMoreRef.current = true
+    setGeneratingMore(true)
+    setFinished(false)
+
+    fetchAndPersistMoreQuestions(subject, topicCode, 10)
+      .then(newQs => {
+        if (!newQs.length) { setFinished(true); return }
+        if (typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(newQs)
+        // Show the first new question immediately; loadNext will use the full
+        // updated questions array for all subsequent picks.
+        setDisplayQuestion(newQs[0])
+      })
+      .catch(() => { setFinished(true) })
+      .finally(() => {
+        generatingMoreRef.current = false
+        setGeneratingMore(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished])
 
   // Prefetch DB variants for the current question while the student reads it
   // so enterRemediation can skip the live lookup. Bounded by withTimeout.
@@ -907,6 +948,8 @@ export default function QuizScreen({
 
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode) => {
+      generatingMoreRef.current = false
+      setGeneratingMore(false)
       setQuizMode(mode)
       setSessionAnswered([])
       setSessionResults([])
@@ -1058,6 +1101,18 @@ export default function QuizScreen({
               ← Back to Question Bank
             </button>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (generatingMore) {
+    return (
+      <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textFaint, fontFamily: FONT_B }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <style>{`@keyframes gf-spin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', border: `2px solid rgba(241,190,67,0.18)`, borderTopColor: GOLD, animation: 'gf-spin 0.8s linear infinite' }} />
+          <div style={{ fontSize: 13 }}>Generating more questions…</div>
         </div>
       </div>
     )
