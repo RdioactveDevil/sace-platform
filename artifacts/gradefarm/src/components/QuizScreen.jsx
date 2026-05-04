@@ -305,6 +305,9 @@ export default function QuizScreen({
   onAssignmentComplete,
   onBankQuestionsAdded,
   finished: _finished, setFinished,
+  sessionTip: _sessionTip, setSessionTip,
+  sessionTipLoading: _sessionTipLoading, setSessionTipLoading,
+  onGoToStudyPlan,
 }) {
   const t = THEMES[theme]
 
@@ -362,6 +365,8 @@ export default function QuizScreen({
   const remediationOriginalQ = _remediationOriginalQ ?? null
   const remediationUsedIds = Array.isArray(_remediationUsedIds) ? _remediationUsedIds : []
   const finished = _finished ?? false
+  const sessionTip = _sessionTip ?? ''
+  const sessionTipLoading = _sessionTipLoading ?? false
 
 
   const handleFlag = async (tag) => {
@@ -577,6 +582,40 @@ export default function QuizScreen({
         generatingMoreRef.current = false
         setGeneratingMore(false)
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished])
+
+  // Fetch one-sentence AI coaching tip when the session finishes.
+  useEffect(() => {
+    if (!finished) return
+    if (!sessionResults || sessionResults.length === 0) return
+    if (sessionTipLoading || sessionTip) return
+
+    const mainResults = sessionResults.filter(r => !r.remediation)
+    if (mainResults.length === 0) return
+
+    const sessCorrect = mainResults.filter(r => r.correct).length
+    const sessTotal = mainResults.length
+    const wrongByTopic = {}
+    mainResults.filter(r => !r.correct).forEach(r => {
+      if (r.topic) wrongByTopic[r.topic] = (wrongByTopic[r.topic] || 0) + 1
+    })
+    const subjectName = questions[0]?.subject || 'this subject'
+
+    setSessionTipLoading(true)
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        max_tokens: 120,
+        system: "You are a supportive SACE tutor. Write exactly ONE sentence of coaching advice based on this student's quiz session. Be specific, actionable, and encouraging. No preamble, no markdown.",
+        messages: [{ role: 'user', content: `Subject: ${subjectName}. Questions answered: ${sessTotal}. Correct: ${sessCorrect}. Wrong by topic: ${JSON.stringify(wrongByTopic)}.` }],
+      }),
+    })
+      .then(r => r.json())
+      .then(d => setSessionTip(d?.content?.[0]?.text || ''))
+      .catch(() => {})
+      .finally(() => setSessionTipLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished])
 
@@ -1082,6 +1121,17 @@ export default function QuizScreen({
             </div>
           )}
 
+          {/* AI Coaching Tip */}
+          {(sessionTipLoading || sessionTip) && (
+            <div style={{ background: t.purpleBg, border: `1px solid ${t.purple}33`, borderRadius: 14, padding: '14px 18px', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>AI Coach</div>
+              {sessionTipLoading
+                ? <div style={{ fontSize: 13, color: t.textFaint, fontStyle: 'italic' }}>Getting your coaching tip…</div>
+                : <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.65 }}>🤖 {sessionTip}</div>
+              }
+            </div>
+          )}
+
           {/* Action buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {weakTopics.length > 0 && counts.wrong > 0 && (
@@ -1094,6 +1144,12 @@ export default function QuizScreen({
               <button onClick={() => startMode('all')}
                 style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                 Repeat all questions
+              </button>
+            )}
+            {onGoToStudyPlan && (
+              <button onClick={onGoToStudyPlan}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                Go to Study Plan →
               </button>
             )}
             <button onClick={onHome}

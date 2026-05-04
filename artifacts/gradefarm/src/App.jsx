@@ -316,7 +316,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
   onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
-  assignmentsVersion,
+  assignmentsVersion, lastSessionAt, onOpenLearn,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
@@ -365,7 +365,8 @@ function AppShellScreens({
       <div style={show('study-plan')}>
         <StudyPlanScreen
           profile={profile} questions={questions} struggleMap={struggleMap}
-          theme={theme} onStartSession={onStartSession} subject={subject} />
+          theme={theme} onStartSession={onStartSession} subject={subject}
+          lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
       </div>
       <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />
@@ -472,6 +473,9 @@ function AppInner() {
   const [quizRemediationWrongCount, setQuizRemediationWrongCount] = useState(0)
   const [activeAssignmentId, setActiveAssignmentId] = useState(null)
   const [quizFinished, setQuizFinished] = useState(false)
+  const [quizSessionTip, setQuizSessionTip] = useState('')
+  const [quizSessionTipLoading, setQuizSessionTipLoading] = useState(false)
+  const [lastSessionAt, setLastSessionAt] = useState(null)
   const [assignmentsVersion, setAssignmentsVersion] = useState(0)
 
   const toggleTheme = () => {
@@ -567,6 +571,8 @@ function AppInner() {
     setQuizSessionXP(0)
     setQuizMode('new')
     setQuizFinished(false)
+    setQuizSessionTip('')
+    setQuizSessionTipLoading(false)
     setQuizSubtopics([])
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
@@ -597,6 +603,8 @@ function AppInner() {
     setQuizSessionXP(0)
     setQuizMode('new')
     setQuizFinished(false)
+    setQuizSessionTip('')
+    setQuizSessionTipLoading(false)
     setQuizSubtopics([])
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
@@ -641,6 +649,8 @@ function AppInner() {
     remediationUsedIds: quizRemediationUsedIds,     setRemediationUsedIds: setQuizRemediationUsedIds,
     remediationWrongCount: quizRemediationWrongCount, setRemediationWrongCount: setQuizRemediationWrongCount,
     finished: quizFinished, setFinished: setQuizFinished,
+    sessionTip: quizSessionTip, setSessionTip: setQuizSessionTip,
+    sessionTipLoading: quizSessionTipLoading, setSessionTipLoading: setQuizSessionTipLoading,
   }
 
   const quizIsActive = location.pathname === '/quiz' && quizAnswered.length > 0 && !quizFinished
@@ -650,6 +660,10 @@ function AppInner() {
       currentLocation.pathname === '/quiz' &&
       nextLocation.pathname !== '/quiz'
   )
+
+  useEffect(() => {
+    if (quizFinished && quizAnswered.length > 0) setLastSessionAt(Date.now())
+  }, [quizFinished, quizAnswered.length])
 
   const learnState   = {
     phase: learnPhase,       setPhase: setLearnPhase,
@@ -801,7 +815,8 @@ function AppInner() {
                   const fresh = newQs.filter(q => !existing.has(q.id))
                   return fresh.length ? [...prev, ...fresh] : prev
                 })
-              }} />
+              }}
+              onGoToStudyPlan={() => navigate('/study-plan')} />
             </AppShell>
       } />
 
@@ -835,6 +850,12 @@ function AppInner() {
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
           assignmentsVersion={assignmentsVersion}
+          lastSessionAt={lastSessionAt}
+          onOpenLearn={(nextTopic) => {
+            if (nextTopic) setLearnTopic(nextTopic)
+            setLearnPhase('setup')
+            navigate('/learn')
+          }}
           onStartSession={async (opts) => {
             const nextMode = opts?.mode || 'new'
             const nextSubtopics = Array.isArray(opts?.subtopics) ? opts.subtopics : []
@@ -911,6 +932,8 @@ function AppInner() {
             setQuizRemediationWrongCount(0)
             setConsolidateSubtopic(null)
             setQuizFinished(false)
+            setQuizSessionTip('')
+            setQuizSessionTipLoading(false)
             navigate('/quiz')
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
