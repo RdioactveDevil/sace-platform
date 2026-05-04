@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useBlocker } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions } from './lib/db'
 import { THEMES } from './lib/theme'
@@ -377,8 +377,39 @@ function AppShellScreens({
   )
 }
 
+function NavBlockerModal({ blocker, theme }) {
+  const t = THEMES[theme]
+  if (blocker.state !== 'blocked') return null
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, backdropFilter: 'blur(8px)' }}>
+      <div style={{ background: t?.bgCard || '#0c1037', border: `1px solid rgba(241,190,67,0.3)`, borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', fontFamily: FONT_B }}>
+        <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
+        <div style={{ fontFamily: FONT_D, fontSize: 20, color: t?.text || '#f1f5f9', marginBottom: 8, letterSpacing: 0.5 }}>LEAVE QUIZ?</div>
+        <div style={{ fontSize: 14, color: t?.textMuted || '#94a3b8', marginBottom: 28, lineHeight: 1.65 }}>
+          Your session progress will be lost if you navigate away now.
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => blocker.reset()}
+            style={{ flex: 1, padding: '13px', borderRadius: 11, border: `1px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.05)', color: t?.textMuted || '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+          >
+            Stay in Quiz
+          </button>
+          <button
+            onClick={() => blocker.proceed()}
+            style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+          >
+            Leave Anyway
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AppInner() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [user, setUser]                       = useState(null)
   const [profile, setProfile]                 = useState(null)
   const [questions, setQuestions]             = useState([])
@@ -612,6 +643,14 @@ function AppInner() {
     finished: quizFinished, setFinished: setQuizFinished,
   }
 
+  const quizIsActive = location.pathname === '/quiz' && quizAnswered.length > 0 && !quizFinished
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      quizIsActive &&
+      currentLocation.pathname === '/quiz' &&
+      nextLocation.pathname !== '/quiz'
+  )
+
   const learnState   = {
     phase: learnPhase,       setPhase: setLearnPhase,
     topic: learnTopic,       setTopic: setLearnTopic,
@@ -680,6 +719,7 @@ function AppInner() {
 
   return (
     <>
+    <NavBlockerModal blocker={blocker} theme={theme} />
     <Routes>
       {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
