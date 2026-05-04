@@ -3,6 +3,6 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "artifacts/gradefarm/dist/public",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
