@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useBlocker } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useNavigate, useLocation, useBlocker } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions } from './lib/db'
 import { THEMES } from './lib/theme'
@@ -942,10 +942,8 @@ function AppInner() {
   )
 }
 
+const router = createBrowserRouter([{ path: '*', element: <AppInner /> }])
+
 export default function App() {
-  return (
-    <BrowserRouter>
-      <AppInner />
-    </BrowserRouter>
-  )
+  return <RouterProvider router={router} />
 }
