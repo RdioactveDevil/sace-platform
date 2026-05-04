@@ -25,7 +25,9 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// Reflect request Origin so split deployments (static app on one host, API on another)
+// can send Bearer tokens from the browser after a successful CORS preflight.
+app.use(cors({ origin: true }));
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 

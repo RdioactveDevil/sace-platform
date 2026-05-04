@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { nextReviewTime } from './engine'
+import { apiUrl } from './apiBase'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function signUp(email, password, displayName, school, applyForTutor = false) {
@@ -40,7 +41,7 @@ async function adminFetch(path, opts = {}) {
   const session = await getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not signed in')
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
@@ -585,7 +586,7 @@ export async function addStudentToRoster(tutorId, studentEmail) {
   const jwt = sessionData?.session?.access_token
   if (!jwt) throw new Error('Not authenticated.')
 
-  const res = await fetch('/api/tutor/find-student', {
+  const res = await fetch(apiUrl('/api/tutor/find-student'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -613,7 +614,7 @@ export async function fetchStudentEmails(studentIds) {
   const jwt = sessionData?.session?.access_token
   if (!jwt) throw new Error('Not authenticated.')
 
-  const res = await fetch('/api/tutor/student-emails', {
+  const res = await fetch(apiUrl('/api/tutor/student-emails'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -641,7 +642,7 @@ export async function sendAssignmentNotification(studentId, assignment) {
   const { data: sessionData } = await supabase.auth.getSession()
   const jwt = sessionData?.session?.access_token
   if (!jwt) return { ok: false, error: 'Not authenticated.' }
-  const res = await fetch('/api/tutor/notify-assignment', {
+  const res = await fetch(apiUrl('/api/tutor/notify-assignment'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
     body: JSON.stringify({ student_id: studentId, assignment }),
@@ -656,7 +657,7 @@ export async function notifyStudent(studentId, message) {
   const { data: sessionData } = await supabase.auth.getSession()
   const jwt = sessionData?.session?.access_token
   if (!jwt) return { ok: false, error: 'Not authenticated.' }
-  const res = await fetch('/api/tutor/notify-student', {
+  const res = await fetch(apiUrl('/api/tutor/notify-student'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
     body: JSON.stringify({ student_id: studentId, message }),
@@ -694,7 +695,7 @@ async function tutorFetch(path, opts = {}) {
   const session = await getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not authenticated.')
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     ...opts,
     headers: {
       'Content-Type': 'application/json',

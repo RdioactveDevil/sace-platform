@@ -20,6 +20,7 @@ import {
   flagTopicForStudyPlan,
   completeAssignment,
 } from '../lib/db'
+import { apiUrl } from '../lib/apiBase'
 import { THEMES } from '../lib/theme'
 import {
   withTimeout,
@@ -70,7 +71,7 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
       'The hint/concept MUST be in the question stem itself. Make the student reason from the hint to the answer.',
     ].join('\n')
 
-    const res = await fetch('/api/chat', {
+    const res = await fetch(apiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -796,7 +797,7 @@ export default function QuizScreen({
 
       setLoadingTip(true)
       try {
-        const res = await fetch('/api/chat', {
+        const res = await fetch(apiUrl('/api/chat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

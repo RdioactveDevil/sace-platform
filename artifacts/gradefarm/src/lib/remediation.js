@@ -9,6 +9,7 @@
 // remediationStatus AWAY from 'generating' — never leaves it stuck.
 
 import { buildRemediationQueue, getQuestionConceptTag } from './engine.js'
+import { apiUrl } from './apiBase.js'
 
 export const REMEDIATION_DB_TIMEOUT_MS = 5000
 export const AI_TIMEOUT_MS = 8000
@@ -154,7 +155,7 @@ export async function generateRemediationVariantsViaAI(
       'Vary wording, values, or scenario. Each question difficulty should be at or below the target.',
     ].join('\n')
 
-    const res = await fetchFn('/api/chat', {
+    const res = await fetchFn(apiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,

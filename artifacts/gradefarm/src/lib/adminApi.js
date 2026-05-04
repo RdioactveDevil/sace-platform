@@ -1,9 +1,11 @@
+import { apiUrl } from './apiBase'
+
 /**
- * POST to same-origin /api/* routes with JSON body.
- * Parses JSON safely — Vercel SPA rewrites and some errors return HTML, which breaks res.json().
+ * POST to /api/* routes with JSON body (see VITE_API_ORIGIN for split deployments).
+ * Parses JSON safely — SPA rewrites and some errors return HTML, which breaks JSON.parse.
  */
 export async function adminApiPost(path, body) {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

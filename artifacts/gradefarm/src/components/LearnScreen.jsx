@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
+import { apiUrl } from '../lib/apiBase'
 import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
@@ -212,7 +213,7 @@ export default function LearnScreen({
       `Keep it brief — 3 to 4 sentences max — then ask them a question to check their starting knowledge.`,
     ].join(' ')
 
-    fetch('/api/chat', {
+    fetch(apiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -258,7 +259,7 @@ export default function LearnScreen({
       const reader = new FileReader()
       reader.onload = async (ev) => {
         try {
-          const res = await fetch('/api/chat', {
+          const res = await fetch(apiUrl('/api/chat'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -344,7 +345,7 @@ export default function LearnScreen({
     const systemPrompt = buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests)
     const openingPrompt = `Start the lesson on "${topic}". Warmly greet ${profile.display_name.split(' ')[0]} and open with a short engaging question to find out what they already know. Keep it brief and natural.`
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, subject: subject || '', topic: topic || '', system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
@@ -386,7 +387,7 @@ export default function LearnScreen({
       const authHeaders = chatSession?.access_token
         ? { Authorization: `Bearer ${chatSession.access_token}` }
         : {}
-      const res = await fetch('/api/chat', {
+      const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
@@ -429,7 +430,7 @@ export default function LearnScreen({
       const authHeaders = presetSession?.access_token
         ? { Authorization: `Bearer ${presetSession.access_token}` }
         : {}
-      const res = await fetch('/api/chat', {
+      const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
