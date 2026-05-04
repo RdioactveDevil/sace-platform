@@ -225,3 +225,20 @@ export function topicsAsPromptList(stage) {
   const list = stage === 's1' ? S1_TOPICS : S2_TOPICS
   return list.map(t => `${t.code}: ${t.name}`).join('\n')
 }
+
+/**
+ * Reverse lookup: given a subject label and a topic name (as stored in the
+ * questions table), returns the topic code needed by the generate-questions API.
+ * Returns null if no match is found.
+ *
+ * @param {string} subject  e.g. 'Chemistry Stage 1', 'Year 7 Mathematics'
+ * @param {string} topicName  the `topic` field from a questions row
+ * @returns {string|null}
+ */
+export function getTopicCodeByName(subject, topicName) {
+  const topics = getTopicsBySubject(subject)
+  if (!topics || !topicName) return null
+  const norm = topicName.trim().toLowerCase()
+  const match = topics.find(t => t.name.trim().toLowerCase() === norm)
+  return match?.code ?? null
+}

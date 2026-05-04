@@ -317,7 +317,7 @@ function extractJsonArray(text = '') {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { stage, subject, topicCode, count = 10, difficulty = 'mixed' } = req.body
+  const { stage, subject, topicCode, count = 10, difficulty = 'mixed', autoApprove = false } = req.body
   const resolvedSubject = subject || stage
   if (!resolvedSubject || !topicCode) {
     return res.status(400).json({ error: 'subject (or stage) and topicCode required' })
@@ -495,6 +495,59 @@ export default async function handler(req, res) {
     return res.status(200).json({ inserted: 0, message: 'No questions generated' })
   }
 
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY
+
+  // ── autoApprove: insert directly into the live questions table ───────────
+  if (autoApprove) {
+    // Fetch existing question texts for this subject+topic to skip duplicates.
+    const existingRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/questions?select=question&subject=eq.${encodeURIComponent(normalizedSubject)}&topic=eq.${encodeURIComponent(topicName)}&limit=1000`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } },
+    )
+    const existingData = existingRes.ok ? await existingRes.json() : []
+    const existingTexts = new Set((existingData || []).map(r => (r.question || '').trim().toLowerCase()))
+
+    const now = new Date().toISOString()
+    const liveRows = questions
+      .filter(q => q.question && !existingTexts.has(q.question.trim().toLowerCase()))
+      .map(q => ({
+        id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        subject: normalizedSubject,
+        topic: topicName,
+        subtopic: q.subtopic || topicName,
+        concept_tag: `${normalizedSubject}|${topicName}|${q.subtopic || topicName}`.toLowerCase(),
+        difficulty: q.difficulty || 3,
+        question: q.question,
+        options: q.options,
+        answer_index: q.answer_index,
+        solution: q.solution || '',
+        tip: null,
+        created_at: now,
+      }))
+
+    if (!liveRows.length) {
+      return res.status(200).json({ inserted: 0, questions: [], message: 'All generated questions already exist in the bank' })
+    }
+
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/questions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify(liveRows),
+    })
+    if (!insertRes.ok) {
+      const errText = await insertRes.text()
+      return res.status(500).json({ error: errText })
+    }
+    const inserted = await insertRes.json()
+    return res.status(200).json({ inserted: inserted.length, questions: inserted })
+  }
+
+  // ── Default: insert into draft queue for admin review ────────────────────
   const rows = questions.map(q => ({
     source: 'ai_generated',
     subject: normalizedSubject,
@@ -509,7 +562,6 @@ export default async function handler(req, res) {
     status: 'pending',
   }))
 
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY
   const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/draft_questions`, {
     method: 'POST',
     headers: {

@@ -54,6 +54,22 @@ export async function approveDraftQuestion(draftId, adminId) {
     throw new Error('Question text is empty; fix the draft before approving.')
   }
 
+  // Reject if the exact question text already exists in the live bank for this subject
+  const { data: existing } = await supabase
+    .from('questions')
+    .select('id')
+    .eq('subject', draft.subject)
+    .eq('question', draft.question.trim())
+    .limit(1)
+  if (existing && existing.length > 0) {
+    // Mark draft approved (so it doesn't clog the queue) without inserting a duplicate
+    await supabase
+      .from('draft_questions')
+      .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: adminId })
+      .eq('id', draftId)
+    return
+  }
+
   const questionId = `admin_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const conceptTag = `${draft.subject}|${draft.topic}|${draft.subtopic || draft.topic}`.toLowerCase()
 
