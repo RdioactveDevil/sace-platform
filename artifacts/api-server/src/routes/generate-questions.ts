@@ -346,7 +346,7 @@ function extractJsonArray(text = ""): unknown[] {
 }
 
 router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode, count = 10, difficulty = "mixed" } = req.body;
+  const { stage, subject, topicCode, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
 
   const resolvedSubject: string = subject || stage;
   if (!resolvedSubject || !topicCode) {
@@ -552,6 +552,60 @@ router.post("/generate-questions", async (req, res) => {
     return;
   }
 
+  const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+
+  // ── autoApprove: insert directly into the live questions table ───────────
+  if (autoApprove) {
+    // Fetch existing question texts for this subject+topic to skip duplicates.
+    const { data: existingData } = await supabaseAdmin
+      .from("questions")
+      .select("question")
+      .eq("subject", normalizedSubject)
+      .eq("topic", topicName)
+      .limit(1000);
+
+    const existingTexts = new Set(
+      (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
+    );
+
+    const now = new Date().toISOString();
+    const liveRows = questions
+      .filter((q) => q.question && !existingTexts.has(q.question.trim().toLowerCase()))
+      .map((q) => ({
+        id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        subject: normalizedSubject,
+        topic: topicName,
+        subtopic: q.subtopic || topicName,
+        concept_tag: `${normalizedSubject}|${topicName}|${q.subtopic || topicName}`.toLowerCase(),
+        difficulty: q.difficulty || 3,
+        question: q.question,
+        options: q.options,
+        answer_index: q.answer_index,
+        solution: q.solution || "",
+        tip: null,
+        created_at: now,
+      }));
+
+    if (!liveRows.length) {
+      res.status(200).json({ inserted: 0, questions: [], message: "All generated questions already exist in the bank" });
+      return;
+    }
+
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from("questions")
+      .insert(liveRows)
+      .select();
+
+    if (insertError) {
+      res.status(500).json({ error: insertError.message });
+      return;
+    }
+
+    res.status(200).json({ inserted: (inserted || []).length, questions: inserted || [] });
+    return;
+  }
+
+  // ── Default: insert into draft queue for admin review ────────────────────
   const rows = questions.map((q) => ({
     source: "ai_generated",
     subject: normalizedSubject,
@@ -566,7 +620,6 @@ router.post("/generate-questions", async (req, res) => {
     status: "pending",
   }));
 
-  const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
   const { error } = await supabaseAdmin.from("draft_questions").insert(rows);
   if (error) {
     res.status(500).json({ error: error.message });

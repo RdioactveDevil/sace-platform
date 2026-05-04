@@ -158,13 +158,24 @@ export async function getQuestions(subject = 'Chemistry') {
 
   if (error) throw error
 
-  return data.map(q => ({
+  const mapped = data.map(q => ({
     ...q,
     options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
     concept_tag:
       q.concept_tag ||
       `${q.subject || subject}|${q.topic}|${q.subtopic}`.toLowerCase(),
   }))
+
+  // Deduplicate by question text to prevent the same question showing twice
+  // when the bank has duplicate content with different IDs (e.g. from multiple
+  // generation runs or seed scripts run more than once).
+  const seen = new Set()
+  return mapped.filter(q => {
+    const key = (q.question || '').trim().toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 // â”€â”€â”€ STRUGGLE PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -472,20 +483,44 @@ export async function insertGeneratedQuestionVariants(parentQuestion, variants =
 export async function insertGeneratedQuestionsToBank(parentQuestion, variants = []) {
   if (!Array.isArray(variants) || variants.length === 0) return []
 
-  const payload = variants.map(v => ({
-    subject: v.subject || parentQuestion.subject || 'Chemistry',
-    topic: v.topic || parentQuestion.topic,
-    subtopic: v.subtopic || parentQuestion.subtopic,
-    concept_tag:
-      v.concept_tag ||
-      parentQuestion.concept_tag ||
-      `${(v.subject || parentQuestion.subject || 'Chemistry')}|${v.topic || parentQuestion.topic}|${v.subtopic || parentQuestion.subtopic}`.toLowerCase(),
-    difficulty: Math.max(1, Math.min(5, Number(v.difficulty || parentQuestion.difficulty || 1))),
-    question: v.question,
-    options: v.options,
-    answer_index: v.answer_index,
-    solution: v.solution || parentQuestion.solution || '',
-  }))
+  // Fetch existing question texts for this subject+topic to avoid content duplicates.
+  const subject = parentQuestion.subject || 'Chemistry'
+  const topic   = parentQuestion.topic   || ''
+  const { data: existing } = await supabase
+    .from('questions')
+    .select('question')
+    .eq('subject', subject)
+    .eq('topic', topic)
+    .limit(1000)
+  const existingTexts = new Set((existing || []).map(q => (q.question || '').trim().toLowerCase()))
+
+  const now = new Date().toISOString()
+  const payload = variants
+    .filter(v => v.question && !existingTexts.has(v.question.trim().toLowerCase()))
+    .map(v => {
+      const sub = v.subject || subject
+      const top = v.topic   || topic
+      const stp = v.subtopic || parentQuestion.subtopic || top
+      return {
+        id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        subject: sub,
+        topic: top,
+        subtopic: stp,
+        concept_tag:
+          v.concept_tag ||
+          parentQuestion.concept_tag ||
+          `${sub}|${top}|${stp}`.toLowerCase(),
+        difficulty: Math.max(1, Math.min(5, Number(v.difficulty || parentQuestion.difficulty || 1))),
+        question: v.question,
+        options: v.options,
+        answer_index: v.answer_index,
+        solution: v.solution || parentQuestion.solution || '',
+        tip: null,
+        created_at: now,
+      }
+    })
+
+  if (!payload.length) return []
 
   const { data, error } = await supabase
     .from('questions')
@@ -495,6 +530,34 @@ export async function insertGeneratedQuestionsToBank(parentQuestion, variants = 
   if (error) throw error
 
   return (data || []).map(q => ({
+    ...q,
+    options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+    concept_tag:
+      q.concept_tag ||
+      `${q.subject}|${q.topic}|${q.subtopic}`.toLowerCase(),
+  }))
+}
+
+/**
+ * Ask the AI to generate `count` new questions for the given subject + topic
+ * and persist them directly to the live questions table (autoApprove=true).
+ * Returns the newly inserted question rows, normalized for the engine.
+ *
+ * @param {string} subject   e.g. 'Chemistry Stage 1'
+ * @param {string} topicCode e.g. '2.2'
+ * @param {number} count
+ * @returns {Promise<object[]>}
+ */
+export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 10) {
+  const res = await fetch('/api/generate-questions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject, topicCode, count, difficulty: 'mixed', autoApprove: true }),
+  })
+  if (!res.ok) throw new Error(`generate-questions API error: ${res.status}`)
+  const data = await res.json()
+  const rows = data.questions || []
+  return rows.map(q => ({
     ...q,
     options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
     concept_tag:
