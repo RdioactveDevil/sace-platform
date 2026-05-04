@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { THEMES } from '../lib/theme'
 import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 
@@ -8,7 +8,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export default function StudyPlanScreen({ profile, questions, struggleMap, theme, onStartSession, subject }) {
+export default function StudyPlanScreen({ profile, questions, struggleMap, theme, onStartSession, subject, lastSessionAt, onOpenLearn }) {
   const t = THEMES[theme]
 
   const y7Config = getY7TopicConfig(subject?.id)
@@ -86,6 +86,74 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
   const maxDue      = Math.max(...weeklyDue.map(d => d.count), 1)
   const hasActivity = Object.keys(struggleMap).length > 0
 
+  // ── To-Do List ──────────────────────────────────────────────────────────────
+  const todoKey = profile?.id ? `gradefarm_todo_${profile.id}` : null
+
+  const [todoList, setTodoList] = useState(() => {
+    if (!todoKey) return []
+    try { return JSON.parse(localStorage.getItem(todoKey)) || [] } catch { return [] }
+  })
+  const [todoGenerating, setTodoGenerating] = useState(false)
+
+  const saveTodo = useCallback((list) => {
+    setTodoList(list)
+    if (todoKey) localStorage.setItem(todoKey, JSON.stringify(list))
+  }, [todoKey])
+
+  const generateTodoList = useCallback(async () => {
+    if (todoGenerating) return
+    setTodoGenerating(true)
+    try {
+      const weakTopics = topicStats
+        .filter(ts => ts.attempts > 0)
+        .sort((a, b) => a.mastery - b.mastery)
+        .slice(0, 8)
+        .map(ts => ({ topic: ts.topic, mastery: ts.mastery, attempts: ts.attempts }))
+      const subjectName = subject?.name || 'this subject'
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          max_tokens: 600,
+          system: [
+            'You are a study coach. Generate a JSON array of 5-8 study tasks for a student.',
+            'Each task: { "topic": string, "action": "practice"|"revise", "estimatedMinutes": number }.',
+            '"practice" means quiz-based drill. "revise" means concept study with AI.',
+            'Weight toward low-mastery topics. Mix practice and revise.',
+            'Return ONLY the JSON array, no markdown, no explanation.',
+          ].join(' '),
+          messages: [{ role: 'user', content: `Subject: ${subjectName}. Topic mastery: ${JSON.stringify(weakTopics)}` }],
+        }),
+      })
+      const d = await res.json()
+      const raw = d?.content?.[0]?.text || '[]'
+      const start = raw.indexOf('[')
+      const end = raw.lastIndexOf(']')
+      const parsed = JSON.parse(start !== -1 && end > start ? raw.slice(start, end + 1) : '[]')
+      const list = parsed.map(item => ({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        topic: item.topic || '',
+        subject: subjectName,
+        action: item.action === 'revise' ? 'revise' : 'practice',
+        estimatedMinutes: typeof item.estimatedMinutes === 'number' ? item.estimatedMinutes : 15,
+        done: false,
+      }))
+      saveTodo(list)
+    } catch {}
+    setTodoGenerating(false)
+  }, [topicStats, subject, todoGenerating, saveTodo])
+
+  const lastSessionAtRef = useRef(null)
+  useEffect(() => {
+    if (!lastSessionAt) return
+    if (lastSessionAt === lastSessionAtRef.current) return
+    lastSessionAtRef.current = lastSessionAt
+    if (todoList.length === 0) return
+    generateTodoList()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSessionAt])
+
   return (
     <div style={{ height: '100%', color: t.text, fontFamily: FONT_B, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
@@ -111,6 +179,65 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
             </div>
           ) : (
             <>
+              {/* To-Do List */}
+              <section style={{ marginBottom: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.textSub, letterSpacing: '0.1em', textTransform: 'uppercase' }}>To-Do List</div>
+                  <button
+                    onClick={generateTodoList}
+                    disabled={todoGenerating}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.3)`, background: todoGenerating ? 'transparent' : 'rgba(241,190,67,0.08)', color: GOLD, fontSize: 12, fontWeight: 700, cursor: todoGenerating ? 'default' : 'pointer', fontFamily: FONT_B, opacity: todoGenerating ? 0.6 : 1 }}
+                  >
+                    {todoGenerating ? 'Generating…' : todoList.length > 0 ? '↺ Regenerate' : '✦ Generate To-Do List'}
+                  </button>
+                </div>
+
+                {todoList.length === 0 && !todoGenerating && (
+                  <div style={{ padding: '20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, color: t.textMuted }}>Click "Generate To-Do List" to get personalised study tasks based on your performance.</div>
+                  </div>
+                )}
+
+                {todoGenerating && todoList.length === 0 && (
+                  <div style={{ padding: '20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, color: t.textFaint, fontStyle: 'italic' }}>Analysing your performance…</div>
+                  </div>
+                )}
+
+                {todoList.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {todoList.map(task => (
+                      <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, opacity: task.done ? 0.55 : 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={task.done}
+                          onChange={() => {
+                            const updated = todoList.map(t2 => t2.id === task.id ? { ...t2, done: !t2.done } : t2)
+                            saveTodo(updated)
+                          }}
+                          style={{ width: 16, height: 16, accentColor: GOLD, cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, textDecoration: task.done ? 'line-through' : 'none' }}>{task.topic}</div>
+                          <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
+                            <span style={{ display: 'inline-block', padding: '1px 7px', borderRadius: 4, marginRight: 6, background: task.action === 'practice' ? 'rgba(241,190,67,0.12)' : 'rgba(139,92,246,0.12)', color: task.action === 'practice' ? GOLD : '#a78bfa', fontSize: 10, fontWeight: 700 }}>
+                              {task.action === 'practice' ? 'Practice Quiz' : 'Study & Revise'}
+                            </span>
+                            {task.estimatedMinutes} min
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => task.action === 'practice' ? onStartSession?.({ mode: 'new', subtopics: [] }) : onOpenLearn?.(task.topic)}
+                          style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.3)`, background: 'rgba(241,190,67,0.08)', color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0, whiteSpace: 'nowrap' }}
+                        >
+                          Start →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               {/* Today's Focus */}
               {todayFocus.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
