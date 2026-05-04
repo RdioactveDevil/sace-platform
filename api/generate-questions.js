@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
-
 const SUPABASE_URL = 'https://pslpxawrfpcuwnupdfbs.supabase.co'
 
 const S1_TOPICS = {
@@ -511,9 +509,21 @@ export default async function handler(req, res) {
     status: 'pending',
   }))
 
-  const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
-  const { error } = await supabaseAdmin.from('draft_questions').insert(rows)
-  if (error) return res.status(500).json({ error: error.message })
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/draft_questions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': serviceKey,
+      'Authorization': `Bearer ${serviceKey}`,
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify(rows),
+  })
+  if (!insertRes.ok) {
+    const errText = await insertRes.text()
+    return res.status(500).json({ error: errText })
+  }
 
   return res.status(200).json({ inserted: rows.length })
 }
