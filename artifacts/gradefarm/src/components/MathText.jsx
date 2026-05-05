@@ -90,7 +90,7 @@ export default function MathText({ text = '', style = {} }) {
   if (!processed.includes('$')) return <span style={outerStyle}>{processed}</span>
 
   const parts = []
-  const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
+  const pattern = /(\$\$[\s\S]+?\$\$|\$(?!\d)[^$\n]+?\$)/g
   let lastIndex = 0
   let match
 
