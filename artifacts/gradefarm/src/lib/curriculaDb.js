@@ -196,9 +196,30 @@ export async function loadManagedCurriculaTopics() {
   return result
 }
 
+/**
+ * Seed built-in hardcoded subjects into the curricula table if they don't exist yet.
+ * Subjects already present (matched by name) are skipped.
+ * @param {Array<{ name: string, description: string, topics: Array }>} builtIns
+ */
+export async function seedBuiltInSubjectsIfNeeded(builtIns) {
+  const { data: existing } = await supabase.from('curricula').select('name')
+  const existingNames = new Set((existing || []).map(c => c.name))
+
+  for (const { name, description, topics } of builtIns) {
+    if (existingNames.has(name)) continue
+    const { data: c, error } = await supabase
+      .from('curricula')
+      .insert({ name, subject_description: description || name, status: 'live' })
+      .select('id')
+      .single()
+    if (error || !c) continue
+    await _replaceTopicsAndSubtopics(c.id, topics, 'done')
+  }
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-async function _replaceTopicsAndSubtopics(curriculumId, topics) {
+async function _replaceTopicsAndSubtopics(curriculumId, topics, defaultGenStatus = 'pending') {
   // Delete existing topics (cascade deletes subtopics)
   const { error: delErr } = await supabase
     .from('curriculum_topics')
@@ -222,7 +243,7 @@ async function _replaceTopicsAndSubtopics(curriculumId, topics) {
         curriculum_id: curriculumId,
         name: s.name,
         order_index: si,
-        gen_status: 'pending',
+        gen_status: defaultGenStatus,
         questions_generated: 0,
       }))
       const { error: sErr } = await supabase.from('curriculum_subtopics').insert(subRows)
