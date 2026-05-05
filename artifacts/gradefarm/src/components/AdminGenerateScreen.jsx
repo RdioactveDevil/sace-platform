@@ -11,7 +11,7 @@ const SUBJECTS = [
   { id: 'Chemistry Stage 2',  label: 'Chemistry Stage 2' },
   { id: 'Year 7 Mathematics', label: 'Year 7 Mathematics' },
   { id: 'Year 7 English',     label: 'Year 7 English' },
-  { id: 'maths_y10', label: 'Year 10 Maths' },
+  { id: 'maths_y10', label: 'Year 10 Mathematics' },
 ]
 
 const COUNTS = [5, 10, 20]
