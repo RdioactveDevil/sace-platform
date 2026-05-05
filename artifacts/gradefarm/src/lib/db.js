@@ -448,8 +448,8 @@ export async function insertGeneratedQuestionVariants(parentQuestion, variants =
     parent_question_id: v.parent_question_id || parentQuestion.id,
     variant_type: v.variant_type || 'generated',
     subject: v.subject || parentQuestion.subject || 'Chemistry',
-    topic: v.topic || parentQuestion.topic,
-    subtopic: v.subtopic || parentQuestion.subtopic,
+    topic: parentQuestion.topic,
+    subtopic: parentQuestion.subtopic,
     concept_tag: v.concept_tag || parentQuestion.concept_tag,
     difficulty: v.difficulty || parentQuestion.difficulty || 1,
     question: v.question,
@@ -498,16 +498,15 @@ export async function insertGeneratedQuestionsToBank(parentQuestion, variants = 
   const payload = variants
     .filter(v => v.question && !existingTexts.has(v.question.trim().toLowerCase()))
     .map(v => {
-      const sub = v.subject || subject
-      const top = v.topic   || topic
-      const stp = v.subtopic || parentQuestion.subtopic || top
+      const sub = parentQuestion.subject || subject
+      const top = parentQuestion.topic
+      const stp = parentQuestion.subtopic || top
       return {
         id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         subject: sub,
         topic: top,
         subtopic: stp,
         concept_tag:
-          v.concept_tag ||
           parentQuestion.concept_tag ||
           `${sub}|${top}|${stp}`.toLowerCase(),
         difficulty: Math.max(1, Math.min(5, Number(v.difficulty || parentQuestion.difficulty || 1))),
