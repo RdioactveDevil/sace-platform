@@ -576,13 +576,21 @@ export default function QuizScreen({
     setGeneratingMore(true)
     setFinished(false)
 
-    fetchAndPersistMoreQuestions(subject, topicCode, 10)
+    // Generate 3 questions first so the user gets back into the quiz quickly,
+    // then immediately fire a background top-up of 10 more while they answer.
+    fetchAndPersistMoreQuestions(subject, topicCode, 3)
       .then(newQs => {
         if (!newQs.length) { setFinished(true); return }
         if (typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(newQs)
-        // Show the first new question immediately; loadNext will use the full
-        // updated questions array for all subsequent picks.
         setDisplayQuestion(newQs[0])
+        // Background top-up: generate 10 more while the user answers the 3.
+        fetchAndPersistMoreQuestions(subject, topicCode, 10)
+          .then(moreQs => {
+            if (moreQs.length && typeof onBankQuestionsAdded === 'function') {
+              onBankQuestionsAdded(moreQs)
+            }
+          })
+          .catch(() => {})
       })
       .catch(() => { setFinished(true) })
       .finally(() => {
