@@ -811,8 +811,12 @@ function AppInner() {
               onBankQuestionsAdded={(newQs) => {
                 if (!Array.isArray(newQs) || newQs.length === 0) return
                 setQuestions(prev => {
-                  const existing = new Set(prev.map(q => q.id))
-                  const fresh = newQs.filter(q => !existing.has(q.id))
+                  const existingIds = new Set(prev.map(q => q.id))
+                  const existingTexts = new Set(prev.map(q => (q.question || '').trim().toLowerCase()))
+                  const fresh = newQs.filter(q =>
+                    !existingIds.has(q.id) &&
+                    !existingTexts.has((q.question || '').trim().toLowerCase())
+                  )
                   return fresh.length ? [...prev, ...fresh] : prev
                 })
               }}

@@ -602,9 +602,12 @@ router.post("/generate-questions", async (req, res) => {
       insertedCount = (insertedData || []).length;
     }
 
-    // Always return ALL generated questions so the quiz can continue immediately,
-    // regardless of whether they were new to the DB.
-    res.status(200).json({ inserted: insertedCount, questions: allRows });
+    // Return only the rows that were actually new (not already in the DB).
+    // Returning duplicates would give them fresh synthetic IDs and add them to
+    // the quiz bank alongside their originals, causing repeated questions.
+    // The bankExhaustionAttempted ref in QuizScreen prevents infinite retries
+    // when this returns an empty array.
+    res.status(200).json({ inserted: insertedCount, questions: newRows });
     return;
   }
 
