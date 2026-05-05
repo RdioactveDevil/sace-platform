@@ -556,21 +556,11 @@ router.post("/generate-questions", async (req, res) => {
 
   // ── autoApprove: insert directly into the live questions table ───────────
   if (autoApprove) {
-    // Fetch existing question texts for this subject+topic to skip duplicates.
-    const { data: existingData } = await supabaseAdmin
-      .from("questions")
-      .select("question")
-      .eq("subject", normalizedSubject)
-      .eq("topic", topicName)
-      .limit(1000);
-
-    const existingTexts = new Set(
-      (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
-    );
-
+    // Build all rows first so we can always return them to the quiz,
+    // even if some/all are skipped by dedup.
     const now = new Date().toISOString();
-    const liveRows = questions
-      .filter((q) => q.question && !existingTexts.has(q.question.trim().toLowerCase()))
+    const allRows = questions
+      .filter((q) => q.question)
       .map((q) => ({
         id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         subject: normalizedSubject,
@@ -586,22 +576,35 @@ router.post("/generate-questions", async (req, res) => {
         created_at: now,
       }));
 
-    if (!liveRows.length) {
-      res.status(200).json({ inserted: 0, questions: [], message: "All generated questions already exist in the bank" });
-      return;
-    }
-
-    const { data: inserted, error: insertError } = await supabaseAdmin
+    // Fetch existing question texts to skip DB duplicates (dedup for storage only).
+    const { data: existingData } = await supabaseAdmin
       .from("questions")
-      .insert(liveRows)
-      .select();
+      .select("question")
+      .eq("subject", normalizedSubject)
+      .eq("topic", topicName)
+      .limit(1000);
 
-    if (insertError) {
-      res.status(500).json({ error: insertError.message });
-      return;
+    const existingTexts = new Set(
+      (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
+    );
+
+    const newRows = allRows.filter(
+      (r) => !existingTexts.has(r.question.trim().toLowerCase())
+    );
+
+    // Insert only non-duplicates (best-effort — don't fail the response if insert errors).
+    let insertedCount = 0;
+    if (newRows.length > 0) {
+      const { data: insertedData } = await supabaseAdmin
+        .from("questions")
+        .insert(newRows)
+        .select("id");
+      insertedCount = (insertedData || []).length;
     }
 
-    res.status(200).json({ inserted: (inserted || []).length, questions: inserted || [] });
+    // Always return ALL generated questions so the quiz can continue immediately,
+    // regardless of whether they were new to the DB.
+    res.status(200).json({ inserted: insertedCount, questions: allRows });
     return;
   }
 

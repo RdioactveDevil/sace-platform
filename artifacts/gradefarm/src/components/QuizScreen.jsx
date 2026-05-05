@@ -316,6 +316,7 @@ export default function QuizScreen({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const [generatingMore, setGeneratingMore] = useState(false)
   const generatingMoreRef = useRef(false)
+  const bankExhaustionAttempted = useRef(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
@@ -554,6 +555,8 @@ export default function QuizScreen({
   useEffect(() => {
     if (!finished || quizMode !== 'new') return
     if (generatingMoreRef.current) return
+    // Only attempt generation once per session to prevent infinite retry loops.
+    if (bankExhaustionAttempted.current) return
 
     // Derive subject + topic from the most-recently-answered main question.
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
@@ -566,6 +569,7 @@ export default function QuizScreen({
     if (!topicCode) return
 
     generatingMoreRef.current = true
+    bankExhaustionAttempted.current = true
     setGeneratingMore(true)
     setFinished(false)
 
@@ -988,6 +992,7 @@ export default function QuizScreen({
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode) => {
       generatingMoreRef.current = false
+      bankExhaustionAttempted.current = false
       setGeneratingMore(false)
       setQuizMode(mode)
       setSessionAnswered([])
