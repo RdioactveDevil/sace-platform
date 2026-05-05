@@ -183,8 +183,36 @@ export const Y10_MATHS_TOPICS = [
   { code: 'XP2',  name: 'Probability distributions \u2014 discrete random variables' },
 ]
 
+// ── Managed curricula cache ───────────────────────────────────────────────────
+// Populated by refreshManagedTopicsCache() called on admin dashboard mount.
+// Keys are curriculum names (e.g. "Year 9 Biology").
+// Values are arrays of { code, name, topicName }.
+let _managedTopicsCache = {}
+
+/**
+ * Populate the managed topics cache from the DB.
+ * Call once on admin dashboard mount and after a curriculum goes live.
+ * @param {() => Promise<Object>} fetcher - loadManagedCurriculaTopics from curriculaDb.js
+ */
+export async function refreshManagedTopicsCache(fetcher) {
+  try {
+    _managedTopicsCache = await fetcher()
+  } catch (e) {
+    console.warn('[adminTopics] Could not load managed curricula topics:', e)
+  }
+}
+
+/**
+ * Returns all managed curriculum subject names currently in cache.
+ * @returns {string[]}
+ */
+export function getManagedSubjectNames() {
+  return Object.keys(_managedTopicsCache)
+}
+
 /**
  * Returns the topic list for a given subject ID.
+ * Falls back to managed curricula cache for dynamic subjects.
  * @param {string} subjectId  e.g. 'chemistry_s1', 'maths_y7', 'english_y7'
  * @returns {{ code: string, name: string }[]}
  */
@@ -202,7 +230,8 @@ export function getTopicsBySubject(subjectId) {
     case 'Year 10 Mathematics':
     case 'Victorian Year 10 Mathematics':
     case 'Victorian Year 10A Mathematics': return Y10_MATHS_TOPICS
-    default: return S1_TOPICS
+    default:
+      return _managedTopicsCache[subjectId] || S1_TOPICS
   }
 }
 

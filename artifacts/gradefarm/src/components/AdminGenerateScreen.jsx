@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { getTopicsBySubject } from '../lib/adminTopics'
+import { getTopicsBySubject, refreshManagedTopicsCache, getManagedSubjectNames } from '../lib/adminTopics'
 import { adminApiPost } from '../lib/adminApi'
+import { loadManagedCurriculaTopics } from '../lib/curriculaDb'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -31,15 +32,22 @@ const NON_SACE_SUBJECT_IDS = new Set([
 ])
 
 export default function AdminGenerateScreen() {
-  const [subject,    setSubject]    = useState('Chemistry Stage 1')
-  const [topicCode,  setTopicCode]  = useState('')
-  const [count,      setCount]      = useState(10)
-  const [difficulty, setDifficulty] = useState('mixed')
-  const [loading,    setLoading]    = useState(false)
-  const [elapsed,    setElapsed]    = useState(0)
-  const [result,     setResult]     = useState(null)
-  const [error,      setError]      = useState(null)
+  const [subject,         setSubject]         = useState('Chemistry Stage 1')
+  const [topicCode,       setTopicCode]       = useState('')
+  const [count,           setCount]           = useState(10)
+  const [difficulty,      setDifficulty]      = useState('mixed')
+  const [loading,         setLoading]         = useState(false)
+  const [elapsed,         setElapsed]         = useState(0)
+  const [result,          setResult]          = useState(null)
+  const [error,           setError]           = useState(null)
+  const [managedSubjects, setManagedSubjects] = useState([])
   const timerRef = useRef(null)
+
+  useEffect(() => {
+    refreshManagedTopicsCache(loadManagedCurriculaTopics)
+      .then(() => setManagedSubjects(getManagedSubjectNames()))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (loading) {
@@ -67,7 +75,8 @@ export default function AdminGenerateScreen() {
     setError(null)
 
     try {
-      const payload = NON_SACE_SUBJECT_IDS.has(subject)
+      const isManaged = managedSubjects.includes(subject)
+      const payload = (NON_SACE_SUBJECT_IDS.has(subject) || isManaged)
         ? { subject, topicCode, count, difficulty }
         : { stage: subject, topicCode, count, difficulty }
 
@@ -114,6 +123,30 @@ export default function AdminGenerateScreen() {
             </button>
           ))}
         </div>
+        {managedSubjects.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Managed Curricula
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {managedSubjects.map(s => (
+                <button
+                  key={s}
+                  onClick={() => handleSubjectChange(s)}
+                  style={{
+                    padding: '8px 16px', borderRadius: 8,
+                    border: `1px solid ${subject === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                    background: subject === s ? 'rgba(241,190,67,0.1)' : 'transparent',
+                    color: subject === s ? GOLD : 'rgba(255,255,255,0.5)',
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Topic */}
