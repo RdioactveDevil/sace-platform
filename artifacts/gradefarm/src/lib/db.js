@@ -547,11 +547,14 @@ export async function insertGeneratedQuestionsToBank(parentQuestion, variants = 
  * @param {number} count
  * @returns {Promise<object[]>}
  */
-export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 10) {
+export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 10, targetDifficulty = null) {
+  // targetDifficulty: 1–5 numeric or null (→ 'mixed').  The API uses it to
+  // bias the AI's difficulty distribution towards the student's current level.
+  const difficulty = targetDifficulty != null ? targetDifficulty : 'mixed'
   const res = await fetch('/api/generate-questions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subject, topicCode, count, difficulty: 'mixed', autoApprove: true }),
+    body: JSON.stringify({ subject, topicCode, count, difficulty, autoApprove: true }),
   })
   if (!res.ok) throw new Error(`generate-questions API error: ${res.status}`)
   const data = await res.json()

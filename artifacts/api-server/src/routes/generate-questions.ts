@@ -406,10 +406,15 @@ router.post("/generate-questions", async (req, res) => {
     return;
   }
 
+  const numDiff = Number(difficulty);
   const difficultyInstruction =
-    difficulty === "mixed"
+    !difficulty || difficulty === "mixed" || isNaN(numDiff)
       ? "Vary difficulty across questions: include easy (1\u20132), medium (3), and hard (4\u20135) questions."
-      : `All questions should have difficulty ${difficulty} out of 5.`;
+      : numDiff <= 2
+        ? "All questions must be difficulty 1\u20132 out of 5 (easy). The student has been struggling with recent questions \u2014 keep questions accessible and confidence-building."
+        : numDiff >= 4
+          ? "All questions must be difficulty 4\u20135 out of 5 (challenging). The student has been answering recent questions correctly and is ready for harder material."
+          : `Questions should be around difficulty ${Math.round(numDiff)} out of 5. You may vary between ${Math.max(1, Math.round(numDiff) - 1)} and ${Math.min(5, Math.round(numDiff) + 1)}.`;
 
   const learningObjectives = learningObjectivesMap[topicCode] || topicName;
 
@@ -509,6 +514,32 @@ router.post("/generate-questions", async (req, res) => {
     ].join("\n");
   }
 
+  // ── Pre-fetch existing questions BEFORE calling the AI ────────────────────
+  // We pass a sample to the AI so it generates genuinely different content,
+  // not just text-matched deduplication after the fact.
+  const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+  const { data: existingData } = await supabaseAdmin
+    .from("questions")
+    .select("question")
+    .eq("subject", normalizedSubject)
+    .eq("topic", topicName)
+    .limit(500);
+
+  // Full set used for dedup at insert time
+  const existingTexts = new Set(
+    (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
+  );
+
+  // Compact sample included in the prompt (first 25, truncated to 120 chars each)
+  const existingSamplesText = (existingData || [])
+    .slice(0, 25)
+    .map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 120)}`)
+    .join("\n");
+
+  if (existingSamplesText) {
+    user += `\n\nCRITICAL — your questions must be ENTIRELY DIFFERENT from these already-existing questions (different scenarios, numbers, concepts, and phrasing):\n${existingSamplesText}`;
+  }
+
   const anthropicBaseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const anthropicApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 
@@ -552,13 +583,10 @@ router.post("/generate-questions", async (req, res) => {
     return;
   }
 
-  const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
-
   // ── autoApprove: insert directly into the live questions table ───────────
   if (autoApprove) {
-    // Build all rows first so we can always return them to the quiz,
-    // even if some/all are skipped by dedup.
     const now = new Date().toISOString();
+    // Build rows for all AI-generated questions
     const allRows = questions
       .filter((q) => q.question)
       .map((q) => ({
@@ -576,18 +604,7 @@ router.post("/generate-questions", async (req, res) => {
         created_at: now,
       }));
 
-    // Fetch existing question texts to skip DB duplicates (dedup for storage only).
-    const { data: existingData } = await supabaseAdmin
-      .from("questions")
-      .select("question")
-      .eq("subject", normalizedSubject)
-      .eq("topic", topicName)
-      .limit(1000);
-
-    const existingTexts = new Set(
-      (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
-    );
-
+    // Dedup against the pre-fetched existingTexts set (built before the AI call).
     const newRows = allRows.filter(
       (r) => !existingTexts.has(r.question.trim().toLowerCase())
     );
@@ -602,11 +619,10 @@ router.post("/generate-questions", async (req, res) => {
       insertedCount = (insertedData || []).length;
     }
 
-    // Return only the rows that were actually new (not already in the DB).
-    // Returning duplicates would give them fresh synthetic IDs and add them to
-    // the quiz bank alongside their originals, causing repeated questions.
-    // The bankExhaustionAttempted ref in QuizScreen prevents infinite retries
-    // when this returns an empty array.
+    // Return only the truly new rows. Returning duplicates would give them fresh
+    // synthetic IDs and add them alongside their originals, causing repeated questions.
+    // The bankExhaustionAttempted ref in QuizScreen prevents infinite retries when
+    // this returns an empty array.
     res.status(200).json({ inserted: insertedCount, questions: newRows });
     return;
   }

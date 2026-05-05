@@ -40,6 +40,35 @@ const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
+/**
+ * Derive a target difficulty (1–5) from the last 5 main-quiz results.
+ * Returns null when there isn't enough data yet (first 2 questions of a session).
+ *
+ * Logic:
+ *   accuracy ≥ 70% → step up by 1 from the recent average difficulty
+ *   accuracy ≤ 40% → step down by 1
+ *   otherwise      → hold at the recent average
+ */
+function getTargetDifficulty(sessionResults, questions) {
+  const mainResults = (sessionResults || []).filter(r => !r.remediation)
+  const recent = mainResults.slice(-5)
+  if (recent.length < 2) return null
+
+  const accuracy = recent.filter(r => r.correct).length / recent.length
+
+  const recentDiffs = recent.flatMap(r => {
+    const q = (questions || []).find(qq => qq.id === r.id)
+    return q?.difficulty ? [q.difficulty] : []
+  })
+  const avgDiff = recentDiffs.length > 0
+    ? recentDiffs.reduce((a, b) => a + b, 0) / recentDiffs.length
+    : 3
+
+  if (accuracy >= 0.7) return Math.min(5, Math.round(avgDiff) + 1)
+  if (accuracy <= 0.4) return Math.max(1, Math.round(avgDiff) - 1)
+  return Math.round(avgDiff)
+}
+
 async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
   try {
     const controller = new AbortController()
@@ -397,8 +426,8 @@ export default function QuizScreen({
     startTime.current = Date.now()
   }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns])
 
-  const loadNext = useCallback((answered, map, mode = 'new', subtopics = []) => {
-    const q = selectNextQuestion(questions, map, answered, mode, subtopics)
+  const loadNext = useCallback((answered, map, mode = 'new', subtopics = [], targetDiff = null) => {
+    const q = selectNextQuestion(questions, map, answered, mode, subtopics, targetDiff)
     if (!q) {
       setFinished(true)
       return
@@ -450,8 +479,9 @@ export default function QuizScreen({
     }
     clearRemediation()
     setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
-  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
+    const _targetDiff = getTargetDifficulty(sessionAnswered, questions)
+    setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, _targetDiff); return prev })
+  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, questions, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
 
   const remediationDeps = {
     getRemediationVariants,
@@ -576,15 +606,18 @@ export default function QuizScreen({
     setGeneratingMore(true)
     setFinished(false)
 
+    // Derive target difficulty from recent session performance.
+    const exhaustionDiff = getTargetDifficulty(sessionResults, questions)
+
     // Generate 3 questions first so the user gets back into the quiz quickly,
     // then immediately fire a background top-up of 10 more while they answer.
-    fetchAndPersistMoreQuestions(subject, topicCode, 3)
+    fetchAndPersistMoreQuestions(subject, topicCode, 3, exhaustionDiff)
       .then(newQs => {
         if (!newQs.length) { setFinished(true); return }
         if (typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(newQs)
         setDisplayQuestion(newQs[0])
         // Background top-up: generate 10 more while the user answers the 3.
-        fetchAndPersistMoreQuestions(subject, topicCode, 10)
+        fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff)
           .then(moreQs => {
             if (moreQs.length && typeof onBankQuestionsAdded === 'function') {
               onBankQuestionsAdded(moreQs)
@@ -631,7 +664,8 @@ export default function QuizScreen({
     backgroundPrefetchAttempted.current = true
 
     // Fire-and-forget: no loading state, no UI change.
-    fetchAndPersistMoreQuestions(subject, topicCode, 10)
+    const prefetchDiff = getTargetDifficulty(sessionResults, questions)
+    fetchAndPersistMoreQuestions(subject, topicCode, 10, prefetchDiff)
       .then(newQs => {
         if (newQs.length && typeof onBankQuestionsAdded === 'function') {
           onBankQuestionsAdded(newQs)
@@ -971,6 +1005,9 @@ export default function QuizScreen({
   const nextQ = async () => {
     if (!currentQ) return
 
+    // Compute target difficulty once for all loadNext calls in this transition.
+    const targetDiff = getTargetDifficulty(sessionResults, questions)
+
     const remediationPendingEntry = remediationMode && !currentQ.is_variant && remediationOriginalQ?.id === currentQ.id
 
     if (remediationPendingEntry) {
@@ -980,7 +1017,7 @@ export default function QuizScreen({
       if (!loaded) {
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(answered, prev, quizMode, effectiveSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(answered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
       }
       return
     }
@@ -989,7 +1026,7 @@ export default function QuizScreen({
       if (remediationStatus === 'complete') {
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
         return
       }
 
@@ -1001,7 +1038,7 @@ export default function QuizScreen({
           console.warn('[gradefarm] no remediation questions available after "Keep Going" — exiting remediation')
           clearRemediation()
           setQNumber(n => n + 1)
-          setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
+          setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
         }
         return
       }
@@ -1022,7 +1059,7 @@ export default function QuizScreen({
         }
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
         return
       }
 
@@ -1031,7 +1068,7 @@ export default function QuizScreen({
         console.warn('[gradefarm] no remediation questions available — exiting remediation gracefully')
         clearRemediation()
         setQNumber(n => n + 1)
-        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics); return prev })
+        setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
       }
       return
     }
@@ -1039,7 +1076,7 @@ export default function QuizScreen({
     const newAnswered = [...sessionAnswered, currentQ.id]
     setSessionAnswered(newAnswered)
     setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics); return prev })
+    setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
   }
 
   const counts = getQuestionCounts(questions, struggleMap, effectiveSubtopics)

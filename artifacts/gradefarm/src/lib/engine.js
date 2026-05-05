@@ -2,39 +2,50 @@
 // Pure functions — no Supabase calls here, just logic
 
 /**
- * Compute a priority weight for each question given the user's struggle profile.
- * Higher weight = show sooner.
+ * Compute a priority weight for each question given the user's struggle profile
+ * and an optional target difficulty derived from recent session performance.
  *
- * Formula:
+ * Formula (base):
  *   errorRate   = wrong / attempts         (0–1, how often they fail it)
  *   recency     = exp decay over 48h       (1 = just seen, 0 = long ago)
- *   weight      = errorRate*0.65 + recency*0.25 + difficultyBonus*0.10
+ *   base weight = errorRate*0.65 + recency*0.25 + difficultyBonus*0.10
+ *
+ * Adaptive difficulty bonus (when targetDifficulty is supplied):
+ *   proximity   = 1 – |q.difficulty – target| / 4   (0–1)
+ *   adds 0.30 * proximity — strong enough to steer selection without
+ *   overriding high-struggle prioritisation.
  *
  * Unseen questions get a base weight of 0.3 so they do appear, but
  * struggled questions always outrank them.
  */
-export function computeWeights(questions, struggleMap) {
+export function computeWeights(questions, struggleMap, targetDifficulty = null) {
   const now = Date.now()
   const DECAY_MS = 1000 * 60 * 60 * 48 // 48 hours
 
   return questions.map(q => {
     const s = struggleMap[q.id]
 
+    let weight
     if (!s || s.attempts === 0) {
       // Random jitter (0–0.15) shuffles unseen questions each session while
       // keeping them ranked below any meaningfully-struggled question (max ~1.0)
-      return { id: q.id, weight: 0.3 + (q.difficulty / 5) * 0.1 + Math.random() * 0.15 }
+      weight = 0.3 + (q.difficulty / 5) * 0.1 + Math.random() * 0.15
+    } else {
+      const errorRate = s.wrong / s.attempts
+      const msSince = now - new Date(s.last_seen).getTime()
+      const recency = Math.exp(-msSince / DECAY_MS)
+      const diffBonus = ((q.difficulty - 1) / 4) * 0.1
+      weight = errorRate * 0.65 + recency * 0.25 + diffBonus
     }
 
-    const errorRate = s.wrong / s.attempts
-    const msSince = now - new Date(s.last_seen).getTime()
-    const recency = Math.exp(-msSince / DECAY_MS)
-    const diffBonus = ((q.difficulty - 1) / 4) * 0.1
-
-    return {
-      id: q.id,
-      weight: errorRate * 0.65 + recency * 0.25 + diffBonus,
+    // Adaptive difficulty: bias towards questions near the target difficulty level.
+    if (targetDifficulty !== null) {
+      const qDiff = q.difficulty || 3
+      const proximity = 1 - Math.abs(qDiff - targetDifficulty) / 4 // 0–1
+      weight += proximity * 0.30
     }
+
+    return { id: q.id, weight }
   })
 }
 
@@ -46,9 +57,12 @@ export function computeWeights(questions, struggleMap) {
  *   'wrong'  — only questions answered wrong at least once
  *   'all'    — all questions including already-seen
  *
+ * targetDifficulty (1–5 or null): when provided, biases selection towards
+ *   questions at that difficulty level for adaptive pacing.
+ *
  * Within the eligible pool, adaptive weighting still applies.
  */
-export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new', subtopics = []) {
+export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new', subtopics = [], targetDifficulty = null) {
   const questionPool = subtopics.length > 0
     ? questions.filter(q => subtopics.includes(q.subtopic))
     : questions
@@ -70,7 +84,7 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
 
   if (!pool.length) return null
 
-  const weights = computeWeights(pool, struggleMap)
+  const weights = computeWeights(pool, struggleMap, targetDifficulty)
   weights.sort((a, b) => b.weight - a.weight)
 
   const top = weights.slice(0, Math.min(5, weights.length))
