@@ -317,6 +317,7 @@ export default function QuizScreen({
   const [generatingMore, setGeneratingMore] = useState(false)
   const generatingMoreRef = useRef(false)
   const bankExhaustionAttempted = useRef(false)
+  const backgroundPrefetchAttempted = useRef(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
@@ -570,6 +571,8 @@ export default function QuizScreen({
 
     generatingMoreRef.current = true
     bankExhaustionAttempted.current = true
+    // Also mark prefetch done so we don't double-generate.
+    backgroundPrefetchAttempted.current = true
     setGeneratingMore(true)
     setFinished(false)
 
@@ -588,6 +591,50 @@ export default function QuizScreen({
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished])
+
+  // Background prefetch: when the unseen question pool drops to ≤ 3, silently
+  // generate more questions in the background so the bank is replenished before
+  // the user reaches the end — they never see a loading screen.
+  useEffect(() => {
+    if (finished || quizMode !== 'new') return
+    if (backgroundPrefetchAttempted.current || generatingMoreRef.current) return
+
+    // Count questions still available to pick (unseen + not answered this session).
+    const pool = effectiveSubtopics.length > 0
+      ? questions.filter(q => effectiveSubtopics.includes(q.subtopic))
+      : questions
+    const remaining = pool.filter(q => {
+      const s = struggleMap[q.id]
+      return (!s || s.attempts === 0) && !sessionAnswered.includes(q.id)
+    }).length
+
+    if (remaining > 3) return   // still plenty — don't prefetch yet
+
+    // Derive subject + topic from the most-recently-answered main question.
+    const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
+    const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
+    const subject   = lastQ?.subject
+    const topicName = lastQ?.topic
+    if (!subject || !topicName) return
+
+    const topicCode = getTopicCodeByName(subject, topicName)
+    if (!topicCode) return
+
+    backgroundPrefetchAttempted.current = true
+
+    // Fire-and-forget: no loading state, no UI change.
+    fetchAndPersistMoreQuestions(subject, topicCode, 10)
+      .then(newQs => {
+        if (newQs.length && typeof onBankQuestionsAdded === 'function') {
+          onBankQuestionsAdded(newQs)
+        }
+      })
+      .catch(() => {
+        // Silent failure — exhaustion handler will retry when the bank runs dry.
+        backgroundPrefetchAttempted.current = false
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionAnswered.length])
 
   // Fetch one-sentence AI coaching tip when the session finishes.
   useEffect(() => {
@@ -993,6 +1040,7 @@ export default function QuizScreen({
     const startMode = (mode) => {
       generatingMoreRef.current = false
       bankExhaustionAttempted.current = false
+      backgroundPrefetchAttempted.current = false
       setGeneratingMore(false)
       setQuizMode(mode)
       setSessionAnswered([])
