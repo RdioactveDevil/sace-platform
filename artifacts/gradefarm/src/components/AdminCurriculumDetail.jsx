@@ -67,6 +67,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [generating, setGenerating]   = useState(false)
   const [progress, setProgress]       = useState(null)
   const [genError, setGenError]       = useState('')
+  const [reviseInstruction, setReviseInstruction] = useState('')
+  const [reviseDoc, setReviseDoc]     = useState(null) // { base64, mediaType, name }
+  const [revising, setRevising]       = useState(false)
   const pollRef = useRef(null)
 
   useEffect(() => {
@@ -152,6 +155,39 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     if (si === t.subtopics.length - 1) return t
     const a = [...t.subtopics]; [a[si], a[si + 1]] = [a[si + 1], a[si]]; return { ...t, subtopics: a }
   }))
+
+  // ── Revise with AI ────────────────────────────────────────────────────────
+
+  const handleReviseFileUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1]
+      setReviseDoc({ base64, mediaType: file.type || 'application/pdf', name: file.name })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRevise = async () => {
+    if (!reviseInstruction.trim() && !reviseDoc) return
+    setRevising(true); setError('')
+    try {
+      const payload = {
+        currentTopics: topics,
+        instruction: reviseInstruction.trim(),
+        subjectName: curriculum.name,
+      }
+      if (reviseDoc) { payload.base64Doc = reviseDoc.base64; payload.mediaType = reviseDoc.mediaType }
+      const { topics: revised } = await adminApiPost('/api/admin/curriculum-revise', payload)
+      setTopics(revised.map(t => ({ ...t, subtopics: (t.subtopics || []).map(s => ({ ...s })) })))
+      setReviseInstruction('')
+      setReviseDoc(null)
+    } catch (e) {
+      setError(e.message)
+    }
+    setRevising(false)
+  }
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
@@ -297,6 +333,61 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
       {error && <div style={errorBox}>{error}</div>}
       {genError && <div style={errorBox}>{genError}</div>}
+
+      {/* AI revise panel */}
+      {!generating && (
+        <div style={{
+          marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)',
+        }}>
+          <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Revise with AI
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <textarea
+              value={reviseInstruction}
+              onChange={e => setReviseInstruction(e.target.value)}
+              placeholder='e.g. "Add a topic on plant biology with 4 subtopics" or "Split Topic 3 into two separate topics"'
+              rows={2}
+              disabled={revising}
+              style={{
+                flex: 1, minWidth: 220, padding: '8px 10px', borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
+                color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+              }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                borderRadius: 8, cursor: revising ? 'not-allowed' : 'pointer',
+                border: reviseDoc ? '1px solid rgba(74,222,128,0.3)' : '1px dashed rgba(255,255,255,0.12)',
+                background: reviseDoc ? 'rgba(74,222,128,0.05)' : 'transparent',
+                fontSize: 12, color: reviseDoc ? '#4ade80' : '#64748b', whiteSpace: 'nowrap',
+              }}>
+                <input type="file" accept=".pdf,.txt" disabled={revising} onChange={handleReviseFileUpload} style={{ display: 'none' }} />
+                {reviseDoc ? `✓ ${reviseDoc.name}` : '↑ Upload doc'}
+                {reviseDoc && (
+                  <span onClick={e => { e.preventDefault(); setReviseDoc(null) }} style={{ marginLeft: 4, cursor: 'pointer', color: '#64748b' }}>×</span>
+                )}
+              </label>
+              <button
+                onClick={handleRevise}
+                disabled={revising || (!reviseInstruction.trim() && !reviseDoc)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: 'none',
+                  background: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
+                  color: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? '#64748b' : '#38bdf8',
+                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? 'not-allowed' : 'pointer',
+                  fontFamily: FONT_B, border: '1px solid rgba(56,189,248,0.2)',
+                }}
+              >
+                {revising ? 'Revising…' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 

@@ -95,6 +95,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [error, setError]               = useState('')
   const [showModal, setShowModal]       = useState(false)
   const [description, setDescription]  = useState('')
+  const [uploadedDoc, setUploadedDoc]  = useState(null) // { base64, mediaType, name }
   const [creating, setCreating]         = useState(false)
   const [createError, setCreateError]  = useState('')
 
@@ -111,16 +112,30 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   useEffect(() => { load() }, [load])
 
-  const openModal = () => { setShowModal(true); setCreateError(''); setDescription('') }
+  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null) }
   const closeModal = () => { if (!creating) setShowModal(false) }
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      const base64 = result.split(',')[1]
+      setUploadedDoc({ base64, mediaType: file.type || 'application/pdf', name: file.name })
+    }
+    reader.readAsDataURL(file)
+  }
+
   const handleGeneratePlan = async () => {
-    if (!description.trim()) return
+    if (!description.trim() && !uploadedDoc) return
     setCreating(true)
     setCreateError('')
     try {
-      const { topics } = await adminApiPost('/api/admin/curriculum-plan', { subjectDescription: description.trim() })
-      const name = description.trim().split('\n')[0].slice(0, 120)
+      const payload = { subjectDescription: description.trim() }
+      if (uploadedDoc) { payload.base64Doc = uploadedDoc.base64; payload.mediaType = uploadedDoc.mediaType }
+      const { topics } = await adminApiPost('/api/admin/curriculum-plan', payload)
+      const name = (description.trim() || uploadedDoc.name.replace(/\.[^.]+$/, '')).split('\n')[0].slice(0, 120)
       const id = await createCurriculum({ name, subject_description: description.trim(), topics })
       setShowModal(false)
       onSelectCurriculum(id)
@@ -233,14 +248,14 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
           <div onClick={closeModal} style={backdrop} />
           <div style={modal}>
             <h3 style={{ margin: '0 0 6px', color: '#f1f5f9', fontSize: 16 }}>New Curriculum</h3>
-            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
-              Describe the subject and level. Claude will generate a full topic and subtopic plan.
+            <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
+              Describe the subject, upload a curriculum document, or both. Claude will generate a topic and subtopic plan.
             </p>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="e.g. Year 11 SACE Biology — Australian curriculum, covering cells, genetics, ecosystems, and evolution"
-              rows={4}
+              rows={3}
               disabled={creating}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: 9,
@@ -251,16 +266,35 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                 opacity: creating ? 0.6 : 1,
               }}
             />
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Upload curriculum document (optional)
+              </label>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '9px 12px', borderRadius: 8, cursor: creating ? 'not-allowed' : 'pointer',
+                border: uploadedDoc ? '1px solid rgba(74,222,128,0.3)' : '1px dashed rgba(255,255,255,0.15)',
+                background: uploadedDoc ? 'rgba(74,222,128,0.05)' : 'transparent',
+              }}>
+                <input type="file" accept=".pdf,.txt" disabled={creating} onChange={handleFileUpload} style={{ display: 'none' }} />
+                <span style={{ fontSize: 13, color: uploadedDoc ? '#4ade80' : '#64748b' }}>
+                  {uploadedDoc ? `✓ ${uploadedDoc.name}` : 'Choose PDF or text file…'}
+                </span>
+                {uploadedDoc && (
+                  <button onClick={e => { e.preventDefault(); setUploadedDoc(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                )}
+              </label>
+            </div>
             {createError && <div style={{ ...errorBox, marginTop: 10 }}>{createError}</div>}
             <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
               <button onClick={closeModal} disabled={creating} style={cancelBtn}>Cancel</button>
               <button
                 onClick={handleGeneratePlan}
-                disabled={!description.trim() || creating}
+                disabled={(!description.trim() && !uploadedDoc) || creating}
                 style={{
                   ...goldBtn,
-                  opacity: (!description.trim() || creating) ? 0.5 : 1,
-                  cursor: (!description.trim() || creating) ? 'not-allowed' : 'pointer',
+                  opacity: ((!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
+                  cursor: ((!description.trim() && !uploadedDoc) || creating) ? 'not-allowed' : 'pointer',
                 }}
               >
                 {creating ? 'Generating plan…' : 'Generate Plan'}

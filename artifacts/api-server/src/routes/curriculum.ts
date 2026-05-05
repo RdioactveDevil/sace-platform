@@ -20,12 +20,12 @@ function extractJson(text: string): unknown {
 }
 
 // POST /api/admin/curriculum-plan
-// Body: { subjectDescription: string }
+// Body: { subjectDescription: string, base64Doc?: string, mediaType?: string }
 // Returns: { topics: [{ name: string, subtopics: [{ name: string }] }] }
 router.post("/admin/curriculum-plan", async (req, res) => {
-  const { subjectDescription } = req.body || {};
-  if (!subjectDescription?.trim()) {
-    res.status(400).json({ error: "subjectDescription required" });
+  const { subjectDescription, base64Doc, mediaType } = req.body || {};
+  if (!subjectDescription?.trim() && !base64Doc) {
+    res.status(400).json({ error: "subjectDescription or a document is required" });
     return;
   }
 
@@ -38,9 +38,26 @@ router.post("/admin/curriculum-plan", async (req, res) => {
     "Each topic object has: name (string), subtopics (array of objects with a single key: name (string)).",
     "Produce a realistic, well-structured curriculum tree: 5–10 topics, each with 3–6 subtopics.",
     "Subtopic names should be specific and teachable (e.g. 'Mitosis and cell division', not 'Cell processes').",
+    "If a curriculum document is provided, extract the topic and subtopic structure from it directly.",
   ].join("\n");
 
-  const user = `Generate a complete topic and subtopic breakdown for: ${subjectDescription.trim()}`;
+  const descText = subjectDescription?.trim()
+    ? `Subject description: ${subjectDescription.trim()}\n\n`
+    : "";
+  const userText = base64Doc
+    ? `${descText}Generate a complete topic and subtopic breakdown based on the attached curriculum document.`
+    : `Generate a complete topic and subtopic breakdown for: ${subjectDescription.trim()}`;
+
+  const userContent = base64Doc
+    ? [
+        { type: "document", source: { type: "base64", media_type: mediaType || "application/pdf", data: base64Doc } },
+        { type: "text", text: userText },
+      ]
+    : userText;
+
+  const extraHeaders: Record<string, string> = base64Doc
+    ? { "anthropic-beta": "pdfs-2024-09-25" }
+    : {};
 
   let claudeRes: Response;
   try {
@@ -50,12 +67,13 @@ router.post("/admin/curriculum-plan", async (req, res) => {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        ...extraHeaders,
       },
       body: JSON.stringify({
         model: "claude-opus-4-6",
         max_tokens: 4000,
         system,
-        messages: [{ role: "user", content: user }],
+        messages: [{ role: "user", content: userContent }],
       }),
     });
   } catch (err) {
@@ -231,6 +249,87 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     .eq("id", subtopicId);
 
   res.json({ inserted: rows.length });
+});
+
+// POST /api/admin/curriculum-revise
+// Body: { currentTopics, instruction, subjectName, base64Doc?, mediaType? }
+// Returns: { topics: [{ name, subtopics: [{ name }] }] }
+router.post("/admin/curriculum-revise", async (req, res) => {
+  const { currentTopics, instruction, subjectName, base64Doc, mediaType } = req.body || {};
+  if (!currentTopics || (!instruction?.trim() && !base64Doc)) {
+    res.status(400).json({ error: "currentTopics and either instruction or a document are required" });
+    return;
+  }
+
+  const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+  const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+
+  const currentTree = JSON.stringify(currentTopics, null, 2);
+
+  const system = [
+    "You are a curriculum designer. Return ONLY a valid JSON object — no markdown, no commentary.",
+    "The object must have a single key 'topics' whose value is an array.",
+    "Each topic object has: name (string), subtopics (array of objects with a single key: name (string)).",
+    "You will be given the current curriculum tree and either a revision instruction, an uploaded document, or both.",
+    "Apply the requested changes while preserving the rest of the tree structure.",
+    "If a document is provided, use it to inform or replace the curriculum structure as appropriate.",
+  ].join("\n");
+
+  const instructionText = instruction?.trim()
+    ? `Revision instruction: ${instruction.trim()}\n\n`
+    : "";
+  const userText = base64Doc
+    ? `${instructionText}Current curriculum tree for "${subjectName}":\n${currentTree}\n\nRevise the curriculum tree based on the attached document${instruction?.trim() ? " and the instruction above" : ""}.`
+    : `Current curriculum tree for "${subjectName}":\n${currentTree}\n\nRevision instruction: ${instruction.trim()}`;
+
+  const userContent = base64Doc
+    ? [
+        { type: "document", source: { type: "base64", media_type: mediaType || "application/pdf", data: base64Doc } },
+        { type: "text", text: userText },
+      ]
+    : userText;
+
+  const extraHeaders: Record<string, string> = base64Doc ? { "anthropic-beta": "pdfs-2024-09-25" } : {};
+
+  let claudeRes: Response;
+  try {
+    claudeRes = await fetch(`${baseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        ...extraHeaders,
+      },
+      body: JSON.stringify({
+        model: "claude-opus-4-6",
+        max_tokens: 4000,
+        system,
+        messages: [{ role: "user", content: userContent }],
+      }),
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to reach Claude API");
+    res.status(500).json({ error: "Failed to reach Claude API" });
+    return;
+  }
+
+  if (!claudeRes.ok) {
+    const text = await claudeRes.text();
+    res.status(500).json({ error: "Claude API error", detail: text });
+    return;
+  }
+
+  const claudeData = await claudeRes.json() as { content?: { text: string }[] };
+  const rawText = claudeData?.content?.[0]?.text || "";
+  const parsed = extractJson(rawText) as { topics?: unknown[] } | null;
+
+  if (!parsed?.topics?.length) {
+    res.status(500).json({ error: "Could not parse revised curriculum from AI response", raw: rawText.slice(0, 500) });
+    return;
+  }
+
+  res.json({ topics: parsed.topics });
 });
 
 export default router;
