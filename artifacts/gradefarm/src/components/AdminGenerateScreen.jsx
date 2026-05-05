@@ -124,25 +124,22 @@ export default function AdminGenerateScreen() {
           ))}
         </div>
         {managedSubjects.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {managedSubjects.map(s => (
-                <button
-                  key={s}
-                  onClick={() => handleSubjectChange(s)}
-                  style={{
-                    padding: '8px 16px', borderRadius: 8,
-                    border: `1px solid ${subject === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
-                    background: subject === s ? 'rgba(241,190,67,0.1)' : 'transparent',
-                    color: subject === s ? GOLD : 'rgba(255,255,255,0.5)',
-                    fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                  }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {managedSubjects.map(s => (
+              <button
+                key={s}
+                onClick={() => handleSubjectChange(s)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8,
+                  border: `1px solid ${subject === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                  background: subject === s ? 'rgba(241,190,67,0.1)' : 'transparent',
+                  color: subject === s ? GOLD : 'rgba(255,255,255,0.5)',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
+                }}
+              >
+                {s}
+              </button>
+            ))}
           </div>
         )}
       </div>
