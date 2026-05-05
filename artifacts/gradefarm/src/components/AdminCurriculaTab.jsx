@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded } from '../lib/curriculaDb'
+import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded, deleteCurriculum } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
 import { S1_TOPICS, S2_TOPICS, Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS, Y10_MATHS_TOPICS } from '../lib/adminTopics'
 
@@ -130,6 +130,17 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
     setCreating(false)
   }
 
+  const handleDelete = async (e, c) => {
+    e.stopPropagation()
+    if (!window.confirm(`Delete "${c.name}"? This cannot be undone.`)) return
+    try {
+      await deleteCurriculum(c.id)
+      setCurricula(prev => prev.filter(x => x.id !== c.id))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
@@ -173,7 +184,24 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.3, flex: 1 }}>{c.name}</div>
-                <StatusBadge status={c.status} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <StatusBadge status={c.status} />
+                  <button
+                    onClick={e => handleDelete(e, c)}
+                    title="Delete curriculum"
+                    style={{
+                      background: 'none', border: '1px solid rgba(248,113,113,0.2)',
+                      borderRadius: 5, color: 'rgba(248,113,113,0.5)', fontSize: 13,
+                      cursor: 'pointer', width: 22, height: 22, display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', padding: 0,
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.5)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(248,113,113,0.5)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.2)' }}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#64748b', marginBottom: 10 }}>
                 <span>{c.topic_count} topic{c.topic_count !== 1 ? 's' : ''}</span>

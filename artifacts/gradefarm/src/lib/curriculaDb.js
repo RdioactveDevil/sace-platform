@@ -197,6 +197,15 @@ export async function loadManagedCurriculaTopics() {
 }
 
 /**
+ * Delete a curriculum and all its topics/subtopics (cascade).
+ * @param {string} id
+ */
+export async function deleteCurriculum(id) {
+  const { error } = await supabase.from('curricula').delete().eq('id', id)
+  if (error) throw error
+}
+
+/**
  * Seed built-in hardcoded subjects into the curricula table if they don't exist yet.
  * Subjects already present (matched by name) are skipped.
  * @param {Array<{ name: string, description: string, topics: Array }>} builtIns
