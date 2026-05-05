@@ -107,7 +107,7 @@ export default function AdminGenerateScreen() {
       <div style={{ marginBottom: 18 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {SUBJECTS.map(s => (
+          {SUBJECTS.filter(s => !managedSubjects.includes(s.label) && !managedSubjects.includes(s.id)).map(s => (
             <button
               key={s.id}
               onClick={() => handleSubjectChange(s.id)}
@@ -124,10 +124,8 @@ export default function AdminGenerateScreen() {
           ))}
         </div>
         {managedSubjects.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Managed Curricula
-            </div>
+          <div style={{ marginTop: 8 }}>
+            <div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {managedSubjects.map(s => (
                 <button
