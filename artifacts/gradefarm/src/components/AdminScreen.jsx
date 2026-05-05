@@ -8,9 +8,26 @@ import AdminStudentsTab          from './AdminStudentsTab'
 import AdminTutorsTab            from './AdminTutorsTab'
 import AdminAssignmentsTab       from './AdminAssignmentsTab'
 import AdminTutorApplicationsTab from './AdminTutorApplicationsTab'
+import AdminCurriculaTab         from './AdminCurriculaTab'
+import AdminCurriculumDetail     from './AdminCurriculumDetail'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
+
+function CurriculaRouter() {
+  const [selectedId, setSelectedId] = useState(null)
+
+  if (selectedId) {
+    return (
+      <AdminCurriculumDetail
+        curriculumId={selectedId}
+        onBack={() => setSelectedId(null)}
+        onGoLive={() => {}}
+      />
+    )
+  }
+  return <AdminCurriculaTab onSelectCurriculum={setSelectedId} />
+}
 
 export default function AdminScreen({ profile }) {
   const navigate = useNavigate()
@@ -20,6 +37,7 @@ export default function AdminScreen({ profile }) {
     { label: 'Students',           badge: studentCount, path: '/admin/students' },
     { label: 'Tutors',             path: '/admin/tutors' },
     { label: 'Assignments',        path: '/admin/assignments' },
+    { label: 'Curricula',          path: '/admin/curricula' },
     { label: 'All Users',          path: '/admin/users' },
     { label: 'Tutor Applications', path: '/admin/applications' },
     { label: 'Upload PDF',         path: '/admin/upload' },
@@ -97,6 +115,7 @@ export default function AdminScreen({ profile }) {
           <Route path="students"     element={<AdminStudentsTab profile={profile} onCountLoad={setStudentCount} />} />
           <Route path="tutors"       element={<AdminTutorsTab />} />
           <Route path="assignments"  element={<AdminAssignmentsTab />} />
+          <Route path="curricula"    element={<CurriculaRouter />} />
           <Route path="users"        element={<AdminUsersTab profile={profile} />} />
           <Route path="applications" element={<AdminTutorApplicationsTab />} />
           <Route path="upload"       element={<AdminUploadScreen />} />
