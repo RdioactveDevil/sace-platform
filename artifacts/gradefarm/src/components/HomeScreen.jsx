@@ -52,11 +52,34 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     return raw
   }
 
+  // Set of all canonical topic keys from MACRO_GROUPS
+  const canonicalTopicKeys = new Set(MACRO_GROUPS.flatMap(m => m.topics))
+
+  // Pass 1: build normTopicToSubs from canonical-topic questions only,
+  // then build subtopic → canonical topic reverse map for fallback
   const normTopicToSubs = {}
-  const normTopicGroups = {}
   questions.forEach(q => {
     const n = topicNorm(q.topic)
+    if (!n || !canonicalTopicKeys.has(n)) return
+    if (!normTopicToSubs[n]) normTopicToSubs[n] = []
+    if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
+  })
+  // Reverse map: subtopic string → canonical topic key
+  const subToCanonicalTopic = {}
+  Object.entries(normTopicToSubs).forEach(([normKey, subs]) => {
+    subs.forEach(sub => { subToCanonicalTopic[sub] = normKey })
+  })
+
+  // Pass 2: count every question, using subtopic fallback for old/AI-topic records
+  const normTopicGroups = {}
+  questions.forEach(q => {
+    let n = topicNorm(q.topic)
+    if (!n || !canonicalTopicKeys.has(n)) {
+      // Fallback: look up canonical topic via subtopic (handles old DB records with wrong topic strings)
+      n = q.subtopic ? subToCanonicalTopic[q.subtopic] : null
+    }
     if (!n) return
+    // Ensure normTopicToSubs is populated for questions resolved via subtopic fallback
     if (!normTopicToSubs[n]) normTopicToSubs[n] = []
     if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
     if (!normTopicGroups[n]) normTopicGroups[n] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
