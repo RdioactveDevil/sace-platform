@@ -530,9 +530,9 @@ router.post("/generate-questions", async (req, res) => {
     (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
   );
 
-  // Compact sample included in the prompt (first 25, truncated to 120 chars each)
+  // Compact sample included in the prompt (first 15, truncated to 120 chars each)
   const existingSamplesText = (existingData || [])
-    .slice(0, 25)
+    .slice(0, 15)
     .map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 120)}`)
     .join("\n");
 
