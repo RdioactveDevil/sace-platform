@@ -856,7 +856,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           :               <TutorRoute profile={profile}>
-              <AppShell {...shellProps} writingNav={selectedSubject?.type === 'writing'}>
+              <AppShell {...shellProps} writingNav={false}>
                 <TutorScreen profile={profile} theme={theme} />
               </AppShell>
             </TutorRoute>
