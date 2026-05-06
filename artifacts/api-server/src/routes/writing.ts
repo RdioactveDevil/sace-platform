@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -26,7 +27,7 @@ async function callClaude(system: string, user: string, maxTokens = 1000): Promi
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],

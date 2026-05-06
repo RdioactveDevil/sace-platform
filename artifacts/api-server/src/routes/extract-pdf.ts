@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -114,7 +115,7 @@ router.post("/extract-pdf", async (req, res) => {
         "anthropic-beta": "pdfs-2024-09-25",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: CLAUDE_MODEL,
         max_tokens: 8000,
         system,
         messages: [

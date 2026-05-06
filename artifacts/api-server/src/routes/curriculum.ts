@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -70,7 +71,7 @@ router.post("/admin/curriculum-plan", async (req, res) => {
         ...extraHeaders,
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: CLAUDE_MODEL,
         max_tokens: 4000,
         system,
         messages: [{ role: "user", content: userContent }],
@@ -174,7 +175,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: CLAUDE_MODEL,
         max_tokens: 8000,
         system,
         messages: [{ role: "user", content: user }],
@@ -302,7 +303,7 @@ router.post("/admin/curriculum-revise", async (req, res) => {
         ...extraHeaders,
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: CLAUDE_MODEL,
         max_tokens: 4000,
         system,
         messages: [{ role: "user", content: userContent }],
