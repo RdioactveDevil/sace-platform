@@ -216,7 +216,7 @@ export default function LearnScreen({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 800,
         subject: subject || '',
         topic: contextTopic || '',
@@ -262,7 +262,7 @@ export default function LearnScreen({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model: 'claude-sonnet-4-20250514',
+              model: 'claude-haiku-4-5-20251001',
               max_tokens: 1000,
               messages: [{
                 role: 'user',
@@ -347,7 +347,7 @@ export default function LearnScreen({
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, subject: subject || '', topic: topic || '', system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, subject: subject || '', topic: topic || '', system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
       })
       const data = await res.json()
       const firstMsg = { role: 'assistant', content: data.content?.[0]?.text || "Hey! Let's dive in. What do you already know about this topic?" }
@@ -390,7 +390,7 @@ export default function LearnScreen({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
           subject: subject || '',
           topic: topic || '',
@@ -433,7 +433,7 @@ export default function LearnScreen({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
           subject: subject || '',
           topic: topic || '',

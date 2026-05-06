@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -153,7 +154,7 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: CLAUDE_MODEL,
         max_tokens: 10,
         system: classifierSystem,
         messages: [
@@ -240,7 +241,7 @@ router.post("/chat", async (req, res) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: CLAUDE_MODEL,
         max_tokens: max_tokens || 1000,
         system,
         messages: typedMessages,
