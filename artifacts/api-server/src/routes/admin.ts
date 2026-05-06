@@ -238,48 +238,68 @@ router.get("/admin/students", async (req, res) => {
     const allIds = allAuthUsers.map((u) => u.id);
     const warnings: string[] = [];
 
-    const [profilesRes, subsRes, tutorRes] = await Promise.all([
-      admin
+    const { data: tutorStudentsData, error: tutorResError } = await admin
+      .from("tutor_students")
+      .select("student_id, tutor_id");
+
+    if (tutorResError) warnings.push(`tutor assignments unavailable: ${tutorResError.message}`);
+
+    const IN_BATCH = 200;
+    const profiles: StudentProfileRow[] = [];
+    for (let i = 0; i < allIds.length; i += IN_BATCH) {
+      const chunk = allIds.slice(i, i + IN_BATCH);
+      const { data: profChunk, error: profErr } = await admin
         .from("profiles")
-        .select("id, display_name, school, xp, streak, best_streak, last_active, onboarding_completed, is_admin, is_tutor, tutor_application_status, created_at")
-        .in("id", allIds),
-      admin
+        .select(
+          "id, display_name, school, xp, streak, best_streak, last_active, onboarding_completed, is_admin, is_tutor, tutor_application_status, created_at",
+        )
+        .in("id", chunk);
+      if (profErr) {
+        return res.status(500).json({ error: `Failed to load profiles (batch ${i}-${i + chunk.length}): ${profErr.message}` });
+      }
+      profiles.push(...((profChunk || []) as StudentProfileRow[]));
+    }
+
+    const subsRows: SubRow[] = [];
+    for (let i = 0; i < allIds.length; i += IN_BATCH) {
+      const chunk = allIds.slice(i, i + IN_BATCH);
+      const { data: subChunk, error: subErr } = await admin
         .from("user_subscriptions")
         .select("user_id, subject_name, stage")
         .eq("active", true)
-        .in("user_id", allIds),
-      admin
-        .from("tutor_students")
-        .select("student_id, tutor_id"),
-    ]);
+        .in("user_id", chunk);
+      if (subErr) {
+        warnings.push(`subscriptions unavailable (batch ${i}-${i + chunk.length}): ${subErr.message}`);
+        continue;
+      }
+      subsRows.push(...((subChunk || []) as SubRow[]));
+    }
 
-    if (profilesRes.error) return res.status(500).json({ error: profilesRes.error.message });
-    if (subsRes.error)     warnings.push(`subscriptions unavailable: ${subsRes.error.message}`);
-    if (tutorRes.error)    warnings.push(`tutor assignments unavailable: ${tutorRes.error.message}`);
-
-    const profiles = (profilesRes.data || []) as StudentProfileRow[];
+    const tutorRows = (tutorStudentsData || []) as TutorStudentRow[];
 
     // Resolve tutor display names
-    const tutorRows = (tutorRes.data || []) as TutorStudentRow[];
     const uniqueTutorIds = [...new Set(tutorRows.map((r) => r.tutor_id))];
     const tutorNames: Record<string, string> = {};
     if (uniqueTutorIds.length > 0) {
-      const { data: tutorProfiles, error: tnError } = await admin
-        .from("profiles")
-        .select("id, display_name")
-        .in("id", uniqueTutorIds);
-      if (tnError) {
-        warnings.push(`tutor names unavailable: ${tnError.message}`);
-      } else {
-        (tutorProfiles as TutorNameRow[]).forEach((p) => {
-          tutorNames[p.id] = p.display_name || "Unknown";
-        });
+      for (let i = 0; i < uniqueTutorIds.length; i += IN_BATCH) {
+        const chunkT = uniqueTutorIds.slice(i, i + IN_BATCH);
+        const { data: tutorProfiles, error: tnError } = await admin
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", chunkT);
+        if (tnError) {
+          warnings.push(`tutor names unavailable (batch ${i}-${i + chunkT.length}): ${tnError.message}`);
+        } else {
+          (tutorProfiles as TutorNameRow[]).forEach((p) => {
+            tutorNames[p.id] = p.display_name || "Unknown";
+          });
+        }
       }
     }
 
     // Group subscriptions by user_id
     const subsByUser: Record<string, { subject_name: string; stage: string }[]> = {};
-    (subsRes.data as SubRow[] | null || []).forEach((s) => {
+    subsRows.forEach((s) => {
       if (!subsByUser[s.user_id]) subsByUser[s.user_id] = [];
       subsByUser[s.user_id].push({ subject_name: s.subject_name, stage: s.stage });
     });
