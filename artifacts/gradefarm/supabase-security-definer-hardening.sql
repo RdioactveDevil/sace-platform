@@ -48,7 +48,8 @@ REVOKE ALL ON FUNCTION public.increment_variant_usage(uuid) FROM anon;
 REVOKE ALL ON FUNCTION public.increment_variant_usage(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.increment_variant_usage(uuid) TO service_role;
 
--- RLS policies reference these; keep for anon + authenticated
+-- RLS policies reference these on authenticated sessions. Grant anon until you run
+-- supabase-security-revoke-anon-helpers.sql (short-circuit policies + revoke anon).
 REVOKE ALL ON FUNCTION public.is_current_user_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO anon;
