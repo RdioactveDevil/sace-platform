@@ -6,6 +6,7 @@ import extractPdfRouter from "./extract-pdf";
 import tutorRouter from "./tutor";
 import adminRouter from "./admin";
 import curriculumRouter from "./curriculum";
+import writingRouter from "./writing";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(extractPdfRouter);
 router.use(tutorRouter);
 router.use(adminRouter);
 router.use(curriculumRouter);
+router.use(writingRouter);
 
 export default router;
