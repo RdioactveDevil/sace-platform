@@ -197,6 +197,35 @@ export async function loadManagedCurriculaTopics() {
 }
 
 /**
+ * Fetch live/generating curricula with their top-level topic names for display in SubjectPicker.
+ * @returns {Promise<Array<{ id: string, name: string, status: string, topicNames: string[] }>>}
+ */
+export async function fetchLiveCurricula() {
+  const { data: curricula, error: cErr } = await supabase
+    .from('curricula')
+    .select('id, name, status')
+    .in('status', ['live', 'generating'])
+    .order('created_at', { ascending: true })
+  if (cErr) throw cErr
+  if (!curricula?.length) return []
+
+  const ids = curricula.map(c => c.id)
+  const { data: topics, error: tErr } = await supabase
+    .from('curriculum_topics')
+    .select('curriculum_id, name')
+    .in('curriculum_id', ids)
+    .order('order_index')
+  if (tErr) throw tErr
+
+  return curricula.map(c => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
+  }))
+}
+
+/**
  * Delete a curriculum and all its topics/subtopics (cascade).
  * @param {string} id
  */

@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
 import { ALL_SUBJECTS } from '../lib/subjects'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -22,8 +23,7 @@ const ATAR_TARGETS = [
 
 const STUDY_HOURS = [1, 2, 3, 5, 7, 10]
 
-const AVAILABLE_SUBJECTS = ALL_SUBJECTS.filter(s => s.available)
-const COMING_SUBJECTS    = ALL_SUBJECTS.filter(s => !s.available)
+const BUILT_IN_CURRICULUM_NAMES = new Set(ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()))
 
 const inp = {
   padding: '12px 14px', borderRadius: 10,
@@ -49,6 +49,32 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const [studyHours, setStudyHours]   = useState(null)
   const [selectedSubs, setSelectedSubs] = useState([])
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [dynamicSubjects, setDynamicSubjects] = useState([])
+
+  useEffect(() => {
+    fetchLiveCurricula()
+      .then(curricula => {
+        setDynamicSubjects(
+          curricula
+            .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
+            .map(c => ({
+              id: `curriculum_${c.id}`,
+              name: c.name,
+              stage: '',
+              icon: '📚',
+              color: '#6366f1',
+              topics: c.topicNames,
+              questionCount: 0,
+              available: c.status === 'live',
+            }))
+        )
+      })
+      .catch(() => {})
+  }, [])
+
+  const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
+  const AVAILABLE_SUBJECTS = allSubjects.filter(s => s.available)
+  const COMING_SUBJECTS    = allSubjects.filter(s => !s.available)
 
   const TOTAL_CONTENT_STEPS = 4
 

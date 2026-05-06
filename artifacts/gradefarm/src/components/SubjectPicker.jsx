@@ -2,37 +2,72 @@ import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
 import { countQuestionsForSubject } from '../lib/db'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = `'Plus Jakarta Sans', sans-serif`
 
+// Built-in subject names as they appear in the curricula table (name + ' ' + stage, trimmed).
+const BUILT_IN_CURRICULUM_NAMES = new Set(
+  ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim())
+)
+
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
   const [liveQuestionCounts, setLiveQuestionCounts] = useState({})
+  const [dynamicSubjects, setDynamicSubjects] = useState([])
   const t = THEMES[theme]
 
   useEffect(() => {
+    fetchLiveCurricula()
+      .then(curricula => {
+        const dynamic = curricula
+          .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
+          .map(c => ({
+            id: `curriculum_${c.id}`,
+            name: c.name,
+            stage: '',
+            icon: '📚',
+            color: '#6366f1',
+            topics: c.topicNames,
+            questionCount: 0,
+            available: c.status === 'live',
+          }))
+        setDynamicSubjects(dynamic)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
-    const ids = ALL_SUBJECTS.filter((s) => s.available && QUESTIONS_SUBJECT_BY_ID[s.id]).map((s) => s.id)
-    if (ids.length === 0) return undefined
+    const pairs = [
+      ...ALL_SUBJECTS
+        .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
+        .map(s => [s.id, QUESTIONS_SUBJECT_BY_ID[s.id]]),
+      ...dynamicSubjects
+        .filter(s => s.available)
+        .map(s => [s.id, s.name]),
+    ]
+    if (pairs.length === 0) return undefined
     Promise.all(
-      ids.map(async (id) => {
-        const n = await countQuestionsForSubject(QUESTIONS_SUBJECT_BY_ID[id])
+      pairs.map(async ([id, subjectName]) => {
+        const n = await countQuestionsForSubject(subjectName)
         return [id, n]
       })
     )
-      .then((pairs) => {
-        if (!cancelled) setLiveQuestionCounts(Object.fromEntries(pairs))
+      .then((results) => {
+        if (!cancelled) setLiveQuestionCounts(Object.fromEntries(results))
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [dynamicSubjects])
 
   const hasSubscriptions = subscriptions.length > 0
+  const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
 
-  const subscribed = ALL_SUBJECTS.filter(s =>
+  const subscribed = allSubjects.filter(s =>
     s.available && (
       !hasSubscriptions ||
       subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
@@ -40,13 +75,13 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   )
 
   const notSubscribed = hasSubscriptions
-    ? ALL_SUBJECTS.filter(s =>
+    ? allSubjects.filter(s =>
         s.available &&
         !subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
       )
     : []
 
-  const comingSoon = ALL_SUBJECTS.filter(s => !s.available)
+  const comingSoon = allSubjects.filter(s => !s.available)
 
   const SubjectCard = ({ subj, locked = false }) => {
     const isSelected = selected?.id === subj.id
