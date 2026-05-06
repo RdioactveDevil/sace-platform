@@ -656,6 +656,30 @@ router.get("/admin/students/:id/assignments", async (req, res) => {
   }
 });
 
+// GET /admin/students/:id/writing-attempts — writing practice history (admin only)
+router.get("/admin/students/:id/writing-attempts", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { id } = req.params;
+
+    const { data, error } = await admin
+      .from("writing_attempts")
+      .select(
+        "id, user_id, subject, essay_type, mode, prompt, image_url, timed, duration_seconds, actual_seconds, created_at, feedback, content",
+      )
+      .eq("user_id", id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ attempts: data || [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 // GET /admin/assignments — list every assignment, with filters & pagination
 router.get("/admin/assignments", async (req, res) => {
   try {

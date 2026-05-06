@@ -750,4 +750,38 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
   }
 });
 
+// GET /tutor/students/:studentId/writing-attempts — rostered students only
+router.get("/tutor/students/:studentId/writing-attempts", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const { studentId } = req.params;
+    if (!studentId) return res.status(400).json({ error: "studentId required" });
+
+    const { data: rosterRow, error: rosterErr } = await admin
+      .from("tutor_students")
+      .select("student_id")
+      .eq("tutor_id", callerUserId)
+      .eq("student_id", studentId)
+      .maybeSingle<{ student_id: string }>();
+    if (rosterErr || !rosterRow) return res.status(403).json({ error: "Student not on your roster." });
+
+    const { data, error } = await admin
+      .from("writing_attempts")
+      .select(
+        "id, subject, essay_type, mode, prompt, image_url, timed, duration_seconds, actual_seconds, created_at, feedback",
+      )
+      .eq("user_id", studentId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ attempts: data || [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 export default router;

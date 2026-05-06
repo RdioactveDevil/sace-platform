@@ -95,6 +95,11 @@ export async function adminGetStudentAssignments(studentId) {
   return json.assignments || []
 }
 
+export async function adminGetStudentWritingAttempts(studentId) {
+  const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/writing-attempts`)
+  return json.attempts || []
+}
+
 export async function adminListTutors() {
   const json = await adminFetch('/api/admin/tutors')
   return json.tutors || []
@@ -131,6 +136,33 @@ export async function signOut() {
 export async function getSession() {
   const { data } = await supabase.auth.getSession()
   return data.session
+}
+
+/** Streamed PDF of writing submission + report (no storage). */
+export async function downloadWritingReportPdf(attemptId, studentDisplayName) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const res = await fetch('/api/writing/report-pdf', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ attemptId, studentDisplayName: studentDisplayName || undefined }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `PDF failed (${res.status})`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `gradefarm-writing-${String(attemptId).slice(0, 8)}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // â”€â”€â”€ PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -847,6 +879,12 @@ export async function deleteAssignment(assignmentId) {
     .delete()
     .eq('id', assignmentId)
   if (error) throw error
+}
+
+/** Writing attempts for a roster student (tutor API; raw essay text not included). */
+export async function fetchTutorStudentWritingAttempts(studentId) {
+  const json = await tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/writing-attempts`)
+  return json.attempts || []
 }
 
 /**

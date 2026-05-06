@@ -3,10 +3,12 @@ import {
   adminListStudents,
   adminGetStudentStats,
   adminGetStudentAssignments,
+  adminGetStudentWritingAttempts,
   adminSetTutor,
   adminSetAdmin,
   adminApproveTutor,
   adminRejectTutor,
+  downloadWritingReportPdf,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
 
@@ -55,6 +57,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [roleError, setRoleError]           = useState('')
   const [detailAssignments, setDetailAssignments] = useState(null)
   const [assignmentsLoading, setAssignmentsLoading] = useState(false)
+  const [writingAttempts, setWritingAttempts] = useState(null)
+  const [writingLoading, setWritingLoading] = useState(false)
+  const [pdfBusyId, setPdfBusyId] = useState(null)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -101,18 +106,23 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setSelected(student)
     setDetailStats(null)
     setDetailAssignments(null)
+    setWritingAttempts(null)
     setRoleError('')
     setStatsLoading(true)
     setAssignmentsLoading(true)
+    setWritingLoading(true)
     adminGetStudentStats(student.id)
       .then(s => { setDetailStats(s); setStatsLoading(false) })
       .catch(() => setStatsLoading(false))
     adminGetStudentAssignments(student.id)
       .then(a => { setDetailAssignments(a); setAssignmentsLoading(false) })
       .catch(() => { setDetailAssignments([]); setAssignmentsLoading(false) })
+    adminGetStudentWritingAttempts(student.id)
+      .then(w => { setWritingAttempts(w); setWritingLoading(false) })
+      .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
   }
 
-  const closeDetail = () => { setSelected(null); setDetailStats(null); setDetailAssignments(null) }
+  const closeDetail = () => { setSelected(null); setDetailStats(null); setDetailAssignments(null); setWritingAttempts(null) }
 
   const runRole = async (id, fn) => {
     setBusyId(id)
@@ -444,6 +454,62 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                           <div style={{ fontSize: 10, color: '#475569', marginTop: 3 }}>
                             Due {fmtDate(a.due_date)}
                             {a.completed_at && ` · Completed ${fmtDate(a.completed_at)}`}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Section>
+
+              {/* English writing practice */}
+              <Section title="English writing">
+                {writingLoading ? (
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading…</div>
+                ) : !writingAttempts || writingAttempts.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#475569' }}>No writing attempts yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
+                    {writingAttempts.map(w => {
+                      const sc = w.feedback?.overallScore
+                      return (
+                        <div key={w.id} style={{ padding: '9px 11px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', textTransform: 'capitalize' }}>
+                                {w.essay_type} · {(w.mode || '').replace(/_/g, ' ')}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{w.subject} · {fmtDate(w.created_at)}</div>
+                              {typeof sc === 'number' && (
+                                <div style={{ fontSize: 11, fontWeight: 800, color: GOLD, marginTop: 6 }}>Overall {sc}/10</div>
+                              )}
+                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, maxHeight: 48, overflow: 'hidden' }}>{w.prompt}</div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!w.feedback || pdfBusyId === w.id}
+                              onClick={async () => {
+                                setPdfBusyId(w.id)
+                                try {
+                                  await downloadWritingReportPdf(w.id, selected.display_name)
+                                } catch (e) { console.warn(e) }
+                                setPdfBusyId(null)
+                              }}
+                              style={{
+                                flexShrink: 0,
+                                padding: '5px 10px',
+                                borderRadius: 6,
+                                border: `1px solid ${GOLD}55`,
+                                background: 'rgba(241,190,67,0.12)',
+                                color: GOLD,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                cursor: !w.feedback || pdfBusyId === w.id ? 'not-allowed' : 'pointer',
+                                fontFamily: FONT_B,
+                              }}
+                            >
+                              {pdfBusyId === w.id ? '…' : 'PDF'}
+                            </button>
                           </div>
                         </div>
                       )

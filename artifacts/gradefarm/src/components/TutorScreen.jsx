@@ -20,6 +20,8 @@ import {
   addStudentsToClass,
   removeStudentFromClass,
   createBatchAssignment,
+  fetchTutorStudentWritingAttempts,
+  downloadWritingReportPdf,
 } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
 import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
@@ -722,18 +724,30 @@ function ProgressTab({ profile, theme }) {
   const [progress, setProgress]       = useState(null)
   const [loading, setLoading]         = useState(false)
   const [rosterLoading, setRosterLoading] = useState(true)
+  const [writingAttempts, setWritingAttempts] = useState([])
+  const [writingLoading, setWritingLoading] = useState(false)
+  const [pdfBusyId, setPdfBusyId] = useState(null)
 
   useEffect(() => {
     fetchRoster(profile.id).then(r => { setRoster(r); setRosterLoading(false) }).catch(() => setRosterLoading(false))
   }, [profile.id])
 
   useEffect(() => {
-    if (!selectedStudentId) { setProgress(null); return }
+    if (!selectedStudentId) {
+      setProgress(null)
+      setWritingAttempts([])
+      return
+    }
     setLoading(true)
     fetchStudentProgressForTutor(profile.id, selectedStudentId)
       .then(p => { setProgress(p); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [selectedStudentId])
+
+    setWritingLoading(true)
+    fetchTutorStudentWritingAttempts(selectedStudentId)
+      .then(rows => { setWritingAttempts(rows); setWritingLoading(false) })
+      .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
+  }, [selectedStudentId, profile.id])
 
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
 
@@ -869,6 +883,66 @@ function ProgressTab({ profile, theme }) {
               </div>
             </div>
           )}
+
+          <div style={card}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>English writing</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>Practice submissions (scores from AI rubric)</div>
+            </div>
+            {writingLoading ? (
+              <div style={{ padding: 24, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading writing…</div>
+            ) : writingAttempts.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No writing attempts yet.</div>
+            ) : (
+              <div>
+                {writingAttempts.map(w => {
+                  const sc = w.feedback?.overallScore
+                  const label = `${w.essay_type || ''} · ${(w.mode || '').replace(/_/g, ' ')}`
+                  const stName = roster.find(r => r.student_id === selectedStudentId)?.profiles?.display_name
+                  return (
+                    <div key={w.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, textTransform: 'capitalize' }}>{label}</div>
+                          <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{w.subject} · {fmtDate(w.created_at)}</div>
+                          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.prompt}</div>
+                          {typeof sc === 'number' && (
+                            <div style={{ fontSize: 12, fontWeight: 800, color: GOLD, marginTop: 8 }}>Overall: {sc}/10</div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!w.feedback || pdfBusyId === w.id}
+                          onClick={async () => {
+                            setPdfBusyId(w.id)
+                            try {
+                              await downloadWritingReportPdf(w.id, stName)
+                            } catch (e) { console.warn(e) }
+                            setPdfBusyId(null)
+                          }}
+                          style={{
+                            flexShrink: 0,
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            border: `1px solid ${GOLD}55`,
+                            background: 'rgba(241,190,67,0.1)',
+                            color: GOLD,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: !w.feedback || pdfBusyId === w.id ? 'not-allowed' : 'pointer',
+                            fontFamily: FONT_B,
+                            opacity: w.feedback ? 1 : 0.4,
+                          }}
+                        >
+                          {pdfBusyId === w.id ? 'PDF…' : 'PDF'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </>
       )}
 

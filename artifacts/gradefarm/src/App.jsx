@@ -853,7 +853,9 @@ function AppInner() {
         (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         selectedSubject?.type === 'writing' ?
           <AppShell {...shellProps}>
-            <WritingScreen subject={selectedSubject} profile={profile} theme={theme} onBack={handleChangeSubject} />
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <WritingScreen subject={selectedSubject} profile={profile} theme={theme} onBack={handleChangeSubject} />
+            </div>
           </AppShell> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}

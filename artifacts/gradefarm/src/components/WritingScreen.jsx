@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { saveWritingAttempt, updateWritingAttemptFeedback, getWritingAttempts } from '../lib/writingDb'
+import { downloadWritingReportPdf } from '../lib/db'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const TEAL   = '#14b8a6'
@@ -24,6 +25,11 @@ function formatTime(secs) {
   const m = Math.floor(secs / 60)
   const s = secs % 60
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function hasSubstantiveContent(mode, essayText, plannerFields) {
+  if (mode === 'full_essay') return essayText.trim().length > 0
+  return Object.values(plannerFields || {}).some(v => typeof v === 'string' && v.trim().length > 0)
 }
 
 export default function WritingScreen({ subject, profile, onBack }) {
@@ -58,6 +64,8 @@ export default function WritingScreen({ subject, profile, onBack }) {
   const [pastAttempts, setPastAttempts] = useState([])
   const [loadingPast,  setLoadingPast]  = useState(false)
   const [selectedPast, setSelectedPast] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [submitBlocked, setSubmitBlocked] = useState(false)
 
   const timed   = mode === 'full_essay' ? essayTimed   : plannerTimed
   const minutes = mode === 'full_essay' ? essayMinutes : plannerMinutes
@@ -104,6 +112,12 @@ export default function WritingScreen({ subject, profile, onBack }) {
   }
 
   const handleSubmit = async () => {
+    if (!hasSubstantiveContent(mode, essayText, plannerFields)) {
+      setSubmitBlocked(true)
+      return
+    }
+    setSubmitBlocked(false)
+
     clearInterval(timerRef.current)
     const actualSeconds = startTime ? Math.floor((Date.now() - startTime) / 1000) : null
     const content = mode === 'full_essay' ? essayText : plannerFields
@@ -177,6 +191,9 @@ export default function WritingScreen({ subject, profile, onBack }) {
 
   // ── Shared styles ─────────────────────────────────────────────────────────────
   const s = {
+    scrollWrap: {
+      flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+    },
     container: {
       maxWidth: 780, margin: '0 auto', padding: '32px 24px',
       fontFamily: FONT_B, color: '#f1f5f9',
@@ -225,6 +242,8 @@ export default function WritingScreen({ subject, profile, onBack }) {
     },
   }
 
+  const wrap = (inner) => <div style={s.scrollWrap}>{inner}</div>
+
   const PromptPanel = ({ compact = false }) => (
     <div style={{ ...s.promptPanel, marginBottom: compact ? 16 : 24 }}>
       {imageUrl && (
@@ -244,7 +263,7 @@ export default function WritingScreen({ subject, profile, onBack }) {
   )
 
   // ── Stage: Setup ──────────────────────────────────────────────────────────────
-  if (stage === 'setup') return (
+  if (stage === 'setup') return wrap((
     <div style={s.container}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <button onClick={onBack} style={{ ...s.ghostBtn, padding: '6px 12px', fontSize: 12 }}>← Back</button>
@@ -359,10 +378,10 @@ export default function WritingScreen({ subject, profile, onBack }) {
         )}
       </div>
     </div>
-  )
+  ))
 
   // ── Stage: Prompt ─────────────────────────────────────────────────────────────
-  if (stage === 'prompt') return (
+  if (stage === 'prompt') return wrap((
     <div style={s.container}>
       <button onClick={() => setStage('setup')} style={{ ...s.ghostBtn, padding: '6px 12px', fontSize: 12, marginBottom: 24 }}>← Back to Setup</button>
       <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 800 }}>Your Writing Prompt</h2>
@@ -376,14 +395,14 @@ export default function WritingScreen({ subject, profile, onBack }) {
         </div>
       </div>
     </div>
-  )
+  ))
 
   // ── Stage: Writing ────────────────────────────────────────────────────────────
   if (stage === 'writing') {
     const fields = essayType === 'narrative' ? NARRATIVE_FIELDS : PERSUASIVE_FIELDS
     const timerColor = secondsLeft !== null && secondsLeft < 60 ? '#ef4444' : TEAL
 
-    return (
+    return wrap(
       <div style={s.container}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: TEAL, textTransform: 'capitalize' }}>
@@ -398,12 +417,18 @@ export default function WritingScreen({ subject, profile, onBack }) {
 
         <PromptPanel compact />
 
+        {submitBlocked && (
+          <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.28)', color: '#fbbf24', fontSize: 13 }}>
+            Add your writing before submitting — the text area and planner fields were empty.
+          </div>
+        )}
+
         {mode === 'full_essay' ? (
           <div style={{ marginBottom: 20 }}>
             <span style={s.label}>Your Essay</span>
             <textarea
               value={essayText}
-              onChange={e => setEssayText(e.target.value)}
+              onChange={e => { setEssayText(e.target.value); setSubmitBlocked(false) }}
               rows={18}
               placeholder="Start writing here…"
               style={s.textarea}
@@ -417,7 +442,7 @@ export default function WritingScreen({ subject, profile, onBack }) {
                 <span style={s.label}>{f.label}</span>
                 <textarea
                   value={plannerFields[f.key] || ''}
-                  onChange={e => setPlannerFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  onChange={e => { setPlannerFields(prev => ({ ...prev, [f.key]: e.target.value })); setSubmitBlocked(false) }}
                   rows={3}
                   placeholder={`${f.label}…`}
                   style={s.textarea}
@@ -433,7 +458,7 @@ export default function WritingScreen({ subject, profile, onBack }) {
   }
 
   // ── Stage: Feedback ───────────────────────────────────────────────────────────
-  if (stage === 'feedback') return (
+  if (stage === 'feedback') return wrap((
     <div style={s.container}>
       <h2 style={{ margin: '0 0 24px', fontSize: 20, fontWeight: 800 }}>Feedback</h2>
 
@@ -452,6 +477,39 @@ export default function WritingScreen({ subject, profile, onBack }) {
 
       {feedback && (
         <div>
+          {(feedback.overallScore != null || feedback.emptySubmission) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+              {feedback.overallScore != null && (
+                <div style={{ padding: '12px 18px', borderRadius: 12, border: `2px solid ${TEAL}`, background: 'rgba(20,184,166,0.1)' }}>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Overall band</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: TEAL, fontVariantNumeric: 'tabular-nums' }}>{feedback.overallScore}<span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>/10</span></div>
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', maxWidth: 420, lineHeight: 1.5 }}>
+                Scores align with Australian writing-assessment expectations (NAPLAN-style) and selective-task style criteria (ACER / Edutest). They are indicative only.
+              </div>
+            </div>
+          )}
+
+          {Array.isArray(feedback.criteriaScores) && feedback.criteriaScores.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Criteria</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {feedback.criteriaScores.map((c, i) => (
+                  <div key={i} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{c.name}</span>
+                      {c.score != null && (
+                        <span style={{ fontSize: 14, fontWeight: 800, color: TEAL, fontVariantNumeric: 'tabular-nums' }}>{c.score}/10</span>
+                      )}
+                    </div>
+                    {c.comment && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 1.55 }}>{c.comment}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ padding: '18px 20px', borderRadius: 12, background: 'rgba(20,184,166,0.07)', border: '1px solid rgba(20,184,166,0.25)', marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: TEAL, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Overall Impression</div>
             <div style={{ fontSize: 14, lineHeight: 1.7, color: '#f1f5f9' }}>{feedback.overallImpression}</div>
@@ -487,12 +545,31 @@ export default function WritingScreen({ subject, profile, onBack }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
         <button onClick={handleTryAgain} style={s.primaryBtn()}>Try Again</button>
         <button onClick={onBack} style={s.ghostBtn}>Change Subject</button>
+        {attemptId && feedback && !loadingFeedback && (
+          <button
+            type="button"
+            disabled={pdfLoading}
+            onClick={async () => {
+              setPdfLoading(true)
+              try {
+                await downloadWritingReportPdf(attemptId, profile?.display_name)
+              } catch (e) {
+                console.warn(e)
+              } finally {
+                setPdfLoading(false)
+              }
+            }}
+            style={{ ...s.ghostBtn, borderColor: TEAL, color: TEAL }}
+          >
+            {pdfLoading ? 'Preparing PDF…' : 'Download PDF report'}
+          </button>
+        )}
       </div>
     </div>
-  )
+  ))
 
   return null
 }
