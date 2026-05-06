@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useNavigate, useLocation, useBlocker } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions } from './lib/db'
 import { THEMES } from './lib/theme'
@@ -42,6 +42,14 @@ const NAV_ITEMS = [
   { icon: 'history',     label: 'History',       id: 'history',     path: '/history'       },
 ]
 
+/** Sidebar when the active subject is English Writing (replaces quiz-style nav). */
+const WRITING_NAV_ITEMS = [
+  { icon: 'pen',         label: 'Write an Essay',   id: 'w-essay',   path: '/writing/essay'     },
+  { icon: 'list-check',  label: 'Prompt Planner',   id: 'w-planner', path: '/writing/planner'   },
+  { icon: 'history',     label: 'History',          id: 'w-history', path: '/writing/history'   },
+  { icon: 'study',       label: 'Study Plan',       id: 'w-study',   path: '/writing/study-plan' },
+]
+
 // Cohesive lucide-style icon family — uniform 18px viewBox, 1.5 stroke, rounded caps/joins.
 function NavIcon({ name, size = 18, color = 'currentColor' }) {
   const S = { fill: 'none', stroke: color, strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }
@@ -55,12 +63,14 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'history'     && <><circle cx="9" cy="9" r="6.5" {...S} /><path d="M9 5.25V9l2.75 1.5" {...S} /></>}
       {name === 'tutor'       && <><circle cx="9" cy="6.25" r="3" {...S} /><path d="M3.25 15.5a5.75 5.75 0 0 1 11.5 0" {...S} /></>}
       {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
+      {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
+      {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
     </svg>
   )
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
+function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose, writingNav = false }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { level, pct, next } = getLevelProgress(profile.xp)
@@ -70,8 +80,9 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const go = (path) => { navigate(path); onClose?.() }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
+  const primaryNav = writingNav ? WRITING_NAV_ITEMS : NAV_ITEMS
   const navItems = [
-    ...NAV_ITEMS,
+    ...primaryNav,
     ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
     ...(profile?.is_admin ? [{ icon: 'admin', label: 'Admin',           id: 'admin', path: '/admin' }] : []),
   ]
@@ -79,6 +90,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
     location.pathname === p ||
     (p === '/home' && location.pathname === '/') ||
     (p === '/question-bank' && location.pathname === '/quiz') ||
+    // Writing module uses /writing/* routes
+    (p.startsWith('/writing/') && location.pathname === p) ||
     // Admin uses nested routes (/admin/*); treat any /admin descendant as active.
     (p === '/admin' && location.pathname.startsWith('/admin'))
 
@@ -253,7 +266,7 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
 }
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
-function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }) {
+function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav = false }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
@@ -265,7 +278,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
+  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: t.bg }}>
@@ -552,7 +565,11 @@ function AppInner() {
     localStorage.setItem('gf-subject', JSON.stringify(subject))
     const qs = await getQuestions(QUESTIONS_SUBJECT_BY_ID[subject.id] || subject.name)
     setQuestions(qs)
-    navigate('/home')
+    if (subject.type === 'writing') {
+      navigate('/writing/essay', { replace: true })
+    } else {
+      navigate('/home')
+    }
   }
 
   const handleSignOut = async () => {
@@ -619,7 +636,7 @@ function AppInner() {
     setQuizRemediationUsedIds([])
     setQuizRemediationWrongCount(0)
     setSubscriptionsLoaded(false)
-    navigate('/home')
+    navigate('/subject-picker')
   }
 
   const commonProps  = { theme, onToggleTheme: toggleTheme }
@@ -838,8 +855,8 @@ function AppInner() {
       <Route path="/tutor" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
-          : <TutorRoute profile={profile}>
-              <AppShell {...shellProps}>
+          :               <TutorRoute profile={profile}>
+              <AppShell {...shellProps} writingNav={selectedSubject?.type === 'writing'}>
                 <TutorScreen profile={profile} theme={theme} />
               </AppShell>
             </TutorRoute>
@@ -851,12 +868,19 @@ function AppInner() {
         !profile.onboarding_completed ? <Navigate to="/onboarding" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
-        selectedSubject?.type === 'writing' ?
-          <AppShell {...shellProps}>
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <WritingScreen subject={selectedSubject} profile={profile} theme={theme} onBack={handleChangeSubject} />
-            </div>
-          </AppShell> :
+        selectedSubject?.type === 'writing' ? (
+          <Routes>
+            <Route path="/writing" element={<Navigate to="/writing/essay" replace />} />
+            <Route path="/writing/*" element={
+              <AppShell {...shellProps} writingNav>
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <WritingScreen subject={selectedSubject} profile={profile} theme={theme} onBack={handleChangeSubject} />
+                </div>
+              </AppShell>
+            } />
+            <Route path="*" element={<Navigate to="/writing/essay" replace />} />
+          </Routes>
+        ) :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}

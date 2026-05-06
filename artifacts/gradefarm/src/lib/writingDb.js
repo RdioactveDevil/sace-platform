@@ -36,7 +36,7 @@ export async function updateWritingAttemptFeedback(attemptId, feedback) {
 export async function getWritingAttempts(userId, subject) {
   const { data, error } = await supabase
     .from('writing_attempts')
-    .select('id, essay_type, mode, prompt, image_url, created_at, feedback')
+    .select('id, essay_type, mode, prompt, image_url, created_at, feedback, content')
     .eq('user_id', userId)
     .eq('subject', subject)
     .order('created_at', { ascending: false })
