@@ -5,8 +5,8 @@ const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 
 function getAdmin() {
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  if (!serviceKey) throw new Error("No SUPABASE_SERVICE_KEY configured");
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) throw new Error("No SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY configured");
   return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } });
 }
 

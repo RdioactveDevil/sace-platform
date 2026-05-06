@@ -221,8 +221,11 @@ export default function WritingScreen({ subject, profile, onBack }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subject: subject.id, essayType }),
       })
-      if (!res.ok) throw new Error('Failed to generate prompt')
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = [data.error, data.detail].filter(Boolean).join(': ') || 'Failed to generate prompt'
+        throw new Error(msg)
+      }
       setPrompt(data.prompt)
       setImageUrl(data.imageUrl || null)
       setStage('prompt')

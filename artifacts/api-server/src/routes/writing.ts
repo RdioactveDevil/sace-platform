@@ -175,13 +175,17 @@ router.post("/writing/prompt", async (req, res) => {
     }
   } catch (err) {
     logger.error({ err }, "Failed to generate writing prompt");
-    res.status(500).json({ error: "Failed to reach Claude API" });
+    const detail = err instanceof Error ? err.message : "unknown error";
+    res.status(502).json({ error: "Failed to reach Claude API", detail: detail.slice(0, 400) });
     return;
   }
 
   const parsed = extractJson(rawText) as { prompt?: string; imageQuery?: string } | null;
   if (!parsed?.prompt) {
-    res.status(500).json({ error: "Could not parse prompt from AI response" });
+    res.status(500).json({
+      error: "Could not parse prompt from AI response",
+      detail: rawText ? rawText.slice(0, 200) : "(empty)",
+    });
     return;
   }
 
