@@ -30,6 +30,8 @@ async function buildAll() {
     // Examples of unbundleable packages:
     // - uses native modules and loads them dynamically (e.g. sharp)
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
+    // Do NOT add "@swc/*" here: some transitive deps use @swc/helpers; keeping them external makes
+    // the serverless bundle runtime-require packages Vercel does not install, causing 500s.
     external: [
       "*.node",
       "sharp",
@@ -62,7 +64,6 @@ async function buildAll() {
       "@prisma/client",
       "@mikro-orm/*",
       "@grpc/*",
-      "@swc/*",
       "@aws-sdk/*",
       "@azure/*",
       "@opentelemetry/*",
