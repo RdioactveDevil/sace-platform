@@ -26,6 +26,7 @@ import AdminRoute        from './components/AdminRoute'
 import AdminScreen       from './components/AdminScreen'
 import TutorRoute        from './components/TutorRoute'
 import TutorScreen       from './components/TutorScreen'
+import WritingScreen     from './components/WritingScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -849,7 +850,11 @@ function AppInner() {
         !(user && profile) ? <Navigate to="/home" replace /> :
         !profile.onboarding_completed ? <Navigate to="/onboarding" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        (subscriptionsLoaded && subscriptions.length > 0 && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
+        (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
+        selectedSubject?.type === 'writing' ?
+          <AppShell {...shellProps}>
+            <WritingScreen subject={selectedSubject} profile={profile} theme={theme} onBack={handleChangeSubject} />
+          </AppShell> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
