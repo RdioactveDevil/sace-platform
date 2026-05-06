@@ -3,12 +3,26 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+
+/** Fail the build if an entry still runtime-imports @swc/helpers (Vercel omits optional deps → production 500). */
+async function assertNoSwcHelpersRuntimeRef(distDir, ...entryNames) {
+  const swcRef = /["']@swc\/helpers/u;
+  for (const name of entryNames) {
+    const p = path.join(distDir, name);
+    const text = await readFile(p, "utf8");
+    if (swcRef.test(text)) {
+      throw new Error(
+        `${name} still references @swc/helpers. Do not add "@swc/*" to esbuild external[], or add @swc/helpers to dependencies and verify deploy. Bundle: ${p}`,
+      );
+    }
+  }
+}
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
@@ -122,6 +136,8 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  await assertNoSwcHelpersRuntimeRef(distDir, "serverless.mjs", "index.mjs");
 }
 
 buildAll().catch((err) => {
