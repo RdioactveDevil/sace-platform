@@ -19,6 +19,7 @@ import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
 import OnboardingScreen  from './components/OnboardingScreen'
+import TutorOnboardingScreen from './components/TutorOnboardingScreen'
 import AppTutorialScreen from './components/AppTutorialScreen'
 import TutorSignupScreen from './components/TutorSignupScreen'
 import GetAccessScreen   from './components/GetAccessScreen'
@@ -751,6 +752,9 @@ function AppInner() {
     onSignOut: handleSignOut,
   }
 
+  const onboardingDest =
+    user?.user_metadata?.signup_path === 'tutor' ? '/onboarding/tutor' : '/onboarding'
+
   return (
     <>
     <NavBlockerModal blocker={blocker} theme={theme} />
@@ -764,7 +768,7 @@ function AppInner() {
       <Route path="/home" element={
         (user && profile)
           ? !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
             : !profile.app_tutorial_completed_at
               ? <Navigate to="/tutorial" replace />
               : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
@@ -775,7 +779,7 @@ function AppInner() {
       <Route path="/auth" element={
         (user && profile)
           ? !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
             : !profile.app_tutorial_completed_at
               ? <Navigate to="/tutorial" replace />
               : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
@@ -785,19 +789,21 @@ function AppInner() {
       <Route path="/auth/tutor" element={
         (user && profile)
           ? !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
             : !profile.app_tutorial_completed_at
               ? <Navigate to="/tutorial" replace />
               : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <TutorSignupScreen />
       } />
 
-      {/* Onboarding — new users only */}
+      {/* Onboarding — students only (tutors use /onboarding/tutor) */}
       <Route path="/onboarding" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : profile.onboarding_completed
             ? <Navigate to={profile.app_tutorial_completed_at ? '/subject-picker' : '/tutorial'} replace />
+          : user?.user_metadata?.signup_path === 'tutor'
+            ? <Navigate to="/onboarding/tutor" replace />
             : <OnboardingScreen profile={profile} userEmail={user?.email} onDone={async () => {
                 try {
                   const subs = await getSubscriptions(profile.id)
@@ -809,11 +815,24 @@ function AppInner() {
               }} />
       } />
 
+      <Route path="/onboarding/tutor" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : profile.onboarding_completed
+            ? <Navigate to={profile.app_tutorial_completed_at ? '/subject-picker' : '/tutorial'} replace />
+          : user?.user_metadata?.signup_path !== 'tutor'
+            ? <Navigate to="/onboarding" replace />
+          : <TutorOnboardingScreen profile={profile} userEmail={user?.email} onDone={() => {
+              setProfile(prev => ({ ...prev, onboarding_completed: true }))
+              navigate('/tutorial', { replace: true })
+            }} />
+      } />
+
       <Route path="/tutorial" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
           : profile.app_tutorial_completed_at
             ? <Navigate to="/subject-picker" replace />
           : <AppTutorialScreen user={user} profile={profile} onProfileRefresh={(patch) => setProfile(prev => ({ ...prev, ...patch }))} />
@@ -824,7 +843,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
           : !profile.app_tutorial_completed_at
             ? <Navigate to="/tutorial" replace />
           : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
@@ -835,7 +854,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
           : !profile.app_tutorial_completed_at
             ? <Navigate to="/tutorial" replace />
           : <GetAccessScreen profile={profile} onAccessGranted={refreshSubscriptions} />
@@ -846,7 +865,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
           : !profile.app_tutorial_completed_at
             ? <Navigate to="/tutorial" replace />
           : <AppShell {...shellProps}>
@@ -889,7 +908,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
           : !profile.app_tutorial_completed_at
             ? <Navigate to="/tutorial" replace />
           : <AdminRoute profile={profile}>
@@ -902,7 +921,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
-            ? <Navigate to="/onboarding" replace />
+            ? <Navigate to={onboardingDest} replace />
           : !profile.app_tutorial_completed_at
             ? <Navigate to="/tutorial" replace />
           :               <TutorRoute profile={profile}>
@@ -915,7 +934,7 @@ function AppInner() {
       {/* Single shell route — AppShellScreens stays mounted across ALL tab switches */}
       <Route path="/*" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
-        !profile.onboarding_completed ? <Navigate to="/onboarding" replace /> :
+        !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
         !profile.app_tutorial_completed_at ? <Navigate to="/tutorial" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :

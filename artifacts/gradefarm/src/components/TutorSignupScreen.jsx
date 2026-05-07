@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  signUpAsTutorAccount,
-  applyForTutor,
-  saveSubscriptions,
-  completeOnboarding,
-} from '../lib/db'
+import { signUpAsTutorAccount, applyForTutor, saveSubscriptions, updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
 
 const GOLD = '#f1be43'
@@ -30,7 +25,6 @@ export default function TutorSignupScreen() {
   const [years, setYears] = useState(null)
   const [qualifications, setQualifications] = useState('')
   const [bio, setBio] = useState('')
-  const [terms, setTerms] = useState(false)
 
   const next = () => {
     setError('')
@@ -76,10 +70,6 @@ export default function TutorSignupScreen() {
   }
 
   const submit = async () => {
-    if (!terms) {
-      setError('Please accept the Terms and Privacy Policy to continue.')
-      return
-    }
     setError('')
     setLoading(true)
     try {
@@ -91,9 +81,7 @@ export default function TutorSignupScreen() {
         )
       }
       const uid = session.user.id
-      await applyForTutor()
-      await saveSubscriptions(uid, [])
-      await completeOnboarding(uid, {
+      await updateProfile(uid, {
         display_name: name.trim(),
         school: org.trim(),
         tutor_organization: org.trim(),
@@ -103,8 +91,9 @@ export default function TutorSignupScreen() {
         tutor_experience_years: years,
         tutor_bio: bio.trim() || null,
       })
-      // Full navigation so App refetches profile (onboarding + tutor fields) before /tutorial
-      window.location.assign('/tutorial')
+      await applyForTutor()
+      await saveSubscriptions(uid, [])
+      window.location.assign('/onboarding/tutor')
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     }
@@ -255,7 +244,7 @@ export default function TutorSignupScreen() {
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.38)', margin: '0 0 22px', lineHeight: 1.55 }}>
             {step === 0 && 'Create login credentials. You will use these to sign in after approval.'}
             {step === 1 && 'Tell us about your teaching so we can review your application.'}
-            {step === 2 && 'Confirm details and accept terms to send your application.'}
+            {step === 2 && 'Confirm details, then continue to tutor onboarding (terms come next).'}
           </p>
 
           <div style={{ display: 'flex', gap: 6, marginBottom: 22 }}>
@@ -370,45 +359,6 @@ export default function TutorSignupScreen() {
             </div>
           )}
 
-          {step === 2 && (
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 10,
-                padding: '12px 14px',
-                borderRadius: 10,
-                background: 'rgba(241,190,67,0.05)',
-                border: '1px solid rgba(241,190,67,0.16)',
-                cursor: 'pointer',
-                fontSize: 13,
-                color: '#cbd5e1',
-                marginBottom: 8,
-              }}
-            >
-              <input type="checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} style={{ marginTop: 2, accentColor: GOLD }} />
-              <span>
-                I agree to the{' '}
-                <button
-                  type="button"
-                  onClick={() => window.open('/terms', '_blank')}
-                  style={{ background: 'none', border: 'none', padding: 0, color: GOLD, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B }}
-                >
-                  Terms
-                </button>{' '}
-                and{' '}
-                <button
-                  type="button"
-                  onClick={() => window.open('/privacy', '_blank')}
-                  style={{ background: 'none', border: 'none', padding: 0, color: GOLD, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B }}
-                >
-                  Privacy Policy
-                </button>
-                .
-              </span>
-            </label>
-          )}
-
           {error && (
             <div
               style={{
@@ -471,17 +421,17 @@ export default function TutorSignupScreen() {
               <button
                 type="button"
                 onClick={submit}
-                disabled={loading || !terms}
+                disabled={loading}
                 style={{
                   flex: 2,
                   padding: '13px',
                   borderRadius: 12,
                   border: 'none',
-                  background: loading || !terms ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg,${GOLD},${GOLDL})`,
-                  color: loading || !terms ? '#475569' : NAVYD,
+                  background: loading ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg,${GOLD},${GOLDL})`,
+                  color: loading ? '#475569' : NAVYD,
                   fontSize: 15,
                   fontWeight: 800,
-                  cursor: loading || !terms ? 'default' : 'pointer',
+                  cursor: loading ? 'default' : 'pointer',
                   fontFamily: FONT_B,
                 }}
               >
