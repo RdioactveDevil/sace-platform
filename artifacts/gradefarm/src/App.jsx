@@ -453,6 +453,7 @@ function AppInner() {
   const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
   const [subscriptions, setSubscriptions]     = useState([])
+  const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
   const [welcomeCelebration, setWelcomeCelebration] = useState(false)
 
   const refreshSubscriptions = async () => {
