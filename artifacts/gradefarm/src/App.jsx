@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions, markTutorialComplete } from './lib/db'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
@@ -20,7 +20,7 @@ import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
 import OnboardingScreen  from './components/OnboardingScreen'
 import TutorOnboardingScreen from './components/TutorOnboardingScreen'
-import AppTutorialScreen from './components/AppTutorialScreen'
+import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import TutorSignupScreen from './components/TutorSignupScreen'
 import GetAccessScreen   from './components/GetAccessScreen'
 import TermsScreen       from './components/TermsScreen'
@@ -147,7 +147,9 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
       {/* Subject context chip */}
       <div style={{ padding: '14px 18px 10px', flexShrink: 0 }}>
         <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.30)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Studying</div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+        <div
+          data-tutorial-target="subject-chip"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
         </div>
@@ -200,6 +202,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
               type="button"
               className="gf-nav-btn"
               data-active={active}
+              data-tutorial-target={`nav-${item.id}`}
               onClick={() => go(item.path)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 11,
@@ -229,6 +232,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
       {/* Footer actions */}
       <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         <button
+          data-tutorial-target="change-subject"
           className="gf-footer-btn"
           onClick={onChangeSubject}
           style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.28)', background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', color: GOLD, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, letterSpacing: '0.01em' }}
@@ -269,11 +273,17 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
 }
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
-function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav = false }) {
+function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav = false, tutorialOverlay = null }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const open = () => setMenuOpen(true)
+    window.addEventListener('gf-tutorial-open-sidebar', open)
+    return () => window.removeEventListener('gf-tutorial-open-sidebar', open)
+  }, [])
 
   useEffect(() => {
     const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
@@ -323,6 +333,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
         )}
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
+      {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
     </div>
   )
 }
@@ -334,6 +345,7 @@ function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
   onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
+  tutorialOverlay,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
@@ -344,7 +356,7 @@ function AppShellScreens({
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate }
-  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut }
+  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut, tutorialOverlay }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -744,12 +756,26 @@ function AppInner() {
     </div>
   )
 
+  const tutorialOverlay =
+    user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject
+      ? {
+          writingNav: selectedSubject?.type === 'writing',
+          isTutor: !!profile.is_tutor,
+          theme,
+          onFinish: async () => {
+            await markTutorialComplete(profile.id)
+            setProfile(prev => ({ ...prev, app_tutorial_completed_at: new Date().toISOString() }))
+          },
+        }
+      : null
+
   const shellProps = {
     ...commonProps,
     profile,
     subject: selectedSubject,
     onChangeSubject: handleChangeSubject,
     onSignOut: handleSignOut,
+    tutorialOverlay,
   }
 
   const onboardingDest =
@@ -769,9 +795,11 @@ function AppInner() {
         (user && profile)
           ? !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-            : !profile.app_tutorial_completed_at
-              ? <Navigate to="/tutorial" replace />
-              : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : !profile.app_tutorial_completed_at && !selectedSubject
+            ? <Navigate to="/subject-picker" replace />
+          : !profile.app_tutorial_completed_at && selectedSubject
+            ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
       } />
 
@@ -780,9 +808,11 @@ function AppInner() {
         (user && profile)
           ? !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-            : !profile.app_tutorial_completed_at
-              ? <Navigate to="/tutorial" replace />
-              : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : !profile.app_tutorial_completed_at && !selectedSubject
+            ? <Navigate to="/subject-picker" replace />
+          : !profile.app_tutorial_completed_at && selectedSubject
+            ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
@@ -790,9 +820,11 @@ function AppInner() {
         (user && profile)
           ? !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-            : !profile.app_tutorial_completed_at
-              ? <Navigate to="/tutorial" replace />
-              : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : !profile.app_tutorial_completed_at && !selectedSubject
+            ? <Navigate to="/subject-picker" replace />
+          : !profile.app_tutorial_completed_at && selectedSubject
+            ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <TutorSignupScreen />
       } />
 
@@ -801,7 +833,7 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : profile.onboarding_completed
-            ? <Navigate to={profile.app_tutorial_completed_at ? '/subject-picker' : '/tutorial'} replace />
+            ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path === 'tutor'
             ? <Navigate to="/onboarding/tutor" replace />
             : <OnboardingScreen profile={profile} userEmail={user?.email} onDone={async () => {
@@ -811,7 +843,7 @@ function AppInner() {
                   setSubscriptionsLoaded(true)
                 } catch {}
                 setProfile(prev => ({ ...prev, onboarding_completed: true }))
-                navigate('/tutorial', { replace: true })
+                navigate('/subject-picker', { replace: true })
               }} />
       } />
 
@@ -819,23 +851,22 @@ function AppInner() {
         !(user && profile)
           ? <Navigate to="/home" replace />
           : profile.onboarding_completed
-            ? <Navigate to={profile.app_tutorial_completed_at ? '/subject-picker' : '/tutorial'} replace />
+            ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path !== 'tutor'
             ? <Navigate to="/onboarding" replace />
           : <TutorOnboardingScreen profile={profile} userEmail={user?.email} onDone={() => {
               setProfile(prev => ({ ...prev, onboarding_completed: true }))
-              navigate('/tutorial', { replace: true })
+              navigate('/subject-picker', { replace: true })
             }} />
       } />
 
+      {/* Legacy URL — in-app tour runs on real screens after subject selection */}
       <Route path="/tutorial" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : profile.app_tutorial_completed_at
-            ? <Navigate to="/subject-picker" replace />
-          : <AppTutorialScreen user={user} profile={profile} onProfileRefresh={(patch) => setProfile(prev => ({ ...prev, ...patch }))} />
+          : <Navigate to={selectedSubject ? (selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank') : '/subject-picker'} replace />
       } />
 
       {/* Subject picker — logged in only */}
@@ -844,8 +875,6 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : !profile.app_tutorial_completed_at
-            ? <Navigate to="/tutorial" replace />
           : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
       } />
 
@@ -855,8 +884,6 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : !profile.app_tutorial_completed_at
-            ? <Navigate to="/tutorial" replace />
           : <GetAccessScreen profile={profile} onAccessGranted={refreshSubscriptions} />
       } />
 
@@ -866,8 +893,6 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : !profile.app_tutorial_completed_at
-            ? <Navigate to="/tutorial" replace />
           : <AppShell {...shellProps}>
               <QuizScreen {...commonProps} {...quizState}
               profile={profile} setProfile={setProfile}
@@ -909,8 +934,6 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : !profile.app_tutorial_completed_at
-            ? <Navigate to="/tutorial" replace />
           : <AdminRoute profile={profile}>
               <AdminScreen profile={profile} />
             </AdminRoute>
@@ -922,8 +945,6 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : !profile.app_tutorial_completed_at
-            ? <Navigate to="/tutorial" replace />
           :               <TutorRoute profile={profile}>
               <AppShell {...shellProps} writingNav={false}>
                 <TutorScreen profile={profile} theme={theme} />
@@ -935,7 +956,6 @@ function AppInner() {
       <Route path="/*" element={
         !(user && profile) ? <Navigate to="/home" replace /> :
         !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
-        !profile.app_tutorial_completed_at ? <Navigate to="/tutorial" replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         selectedSubject?.type === 'writing' ? (
