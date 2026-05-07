@@ -6,7 +6,7 @@ export async function signUp(email, password, displayName, school, applyForTutor
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName } }
+    options: { data: { display_name: displayName, signup_path: 'student' } }
   })
   if (error) throw error
 
@@ -22,6 +22,17 @@ export async function signUp(email, password, displayName, school, applyForTutor
       try { await supabase.rpc('apply_for_tutor') } catch {}
     }
   }
+  return data
+}
+
+/** Tutor signup entry: tags auth metadata so the post-auth tutorial can tailor copy. */
+export async function signUpAsTutorAccount(email, password, displayName) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName, signup_path: 'tutor' } }
+  })
+  if (error) throw error
   return data
 }
 
@@ -415,6 +426,14 @@ export async function addSubscription(userId, subjectName, stage) {
 export async function completeOnboarding(userId, profileUpdates) {
   const updates = { ...profileUpdates, onboarding_completed: true, terms_accepted_at: new Date().toISOString() }
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId)
+  if (error) throw error
+}
+
+export async function markTutorialComplete(userId) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ app_tutorial_completed_at: new Date().toISOString() })
+    .eq('id', userId)
   if (error) throw error
 }
 

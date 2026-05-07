@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { signIn, signUp } from '../lib/db'
 
 const GOLD  = '#f1be43'
@@ -16,12 +17,12 @@ const TRUST_ITEMS = [
 ]
 
 export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
+  const navigate = useNavigate()
   const [mode, setMode]       = useState('signin')
   const [email, setEmail]     = useState('')
   const [pass, setPass]       = useState('')
   const [name, setName]       = useState('')
   const [school, setSchool]   = useState('')
-  const [applyTutor, setApplyTutor] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
@@ -34,7 +35,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
         onAuth(false)
       } else {
         if (!name.trim()) throw new Error('Please enter your name.')
-        await signUp(email, pass, name, school, applyTutor)
+        await signUp(email, pass, name, school)
         onAuth(true)
       }
     } catch (e) {
@@ -145,15 +146,25 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
             <input className="auth-inp" placeholder="Email address" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} />
             <input className="auth-inp" placeholder="Password" type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} />
             {mode === 'signup' && (
-              <label style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:10, background:'rgba(241,190,67,0.05)', border:'1px solid rgba(241,190,67,0.16)', cursor:'pointer', fontSize:13, color:'#cbd5e1' }}>
-                <input type="checkbox" checked={applyTutor} onChange={e => setApplyTutor(e.target.checked)} style={{ marginTop:2, accentColor:GOLD, cursor:'pointer' }} />
-                <span>
-                  <strong style={{ color:'#f1f5f9' }}>Sign up as a tutor</strong>
-                  <span style={{ display:'block', marginTop:2, fontSize:11, color:'#94a3b8' }}>
-                    Your tutor access will be activated after admin approval. You can use the app as a student in the meantime.
-                  </span>
-                </span>
-              </label>
+              <button
+                type="button"
+                onClick={() => navigate('/auth/tutor')}
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(241,190,67,0.35)',
+                  background: 'rgba(241,190,67,0.06)',
+                  color: GOLD,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontFamily: FONT_B,
+                  marginTop: 2,
+                }}
+              >
+                Sign up as Tutor →
+              </button>
             )}
           </div>
 
