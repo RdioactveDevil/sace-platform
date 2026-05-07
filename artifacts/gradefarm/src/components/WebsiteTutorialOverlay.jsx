@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useCallback, useMemo } from 'react'
+import { useState, useLayoutEffect, useCallback, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 
@@ -229,14 +229,20 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
   const [finishing, setFinishing] = useState(false)
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 860 : false))
 
-  const step = steps[ix]
+  useEffect(() => {
+    if (!steps.length) return
+    setIx(i => Math.min(i, Math.max(0, steps.length - 1)))
+  }, [steps.length])
+
+  const safeIx = Math.min(ix, Math.max(0, steps.length - 1))
+  const step = steps[safeIx]
 
   useLayoutEffect(() => {
     const upd = () => setTooltipStyle(computeTooltipStyle(rect))
     upd()
     window.addEventListener('resize', upd)
     return () => window.removeEventListener('resize', upd)
-  }, [rect, ix])
+  }, [rect, safeIx])
 
   useLayoutEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 860)
@@ -279,7 +285,7 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
       window.removeEventListener('resize', measure)
       window.removeEventListener('scroll', measure, true)
     }
-  }, [ix, step, location.pathname, navigate, measure])
+  }, [safeIx, step, location.pathname, navigate, measure])
 
   const finish = async () => {
     if (finishing) return
@@ -293,8 +299,8 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
   }
 
   const next = () => {
-    if (ix >= steps.length - 1) void finish()
-    else setIx(ix + 1)
+    if (safeIx >= steps.length - 1) void finish()
+    else setIx(safeIx + 1)
   }
 
   const back = () => setIx(i => Math.max(0, i - 1))
@@ -327,7 +333,7 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
         }}
       >
         <div style={{ fontSize: 11, color: t.textMuted || '#64748b', fontWeight: 700, letterSpacing: '0.12em', marginBottom: 8 }}>
-          FEATURE TOUR · {ix + 1} / {steps.length}
+          FEATURE TOUR · {safeIx + 1} / {steps.length}
         </div>
         <div style={{ fontSize: 17, fontWeight: 800, color: t.text || '#f1f5f9', marginBottom: 10 }}>{step.title}</div>
         <p style={{ fontSize: 14, color: t.textMuted || '#94a3b8', lineHeight: 1.65, margin: '0 0 18px' }}>{step.body}</p>
@@ -353,15 +359,15 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
           <button
             type="button"
             onClick={back}
-            disabled={ix === 0 || finishing}
+            disabled={safeIx === 0 || finishing}
             style={{
               padding: '10px 14px',
               borderRadius: 10,
               border: '1px solid rgba(255,255,255,0.1)',
               background: 'transparent',
-              color: ix === 0 || finishing ? '#475569' : '#94a3b8',
+              color: safeIx === 0 || finishing ? '#475569' : '#94a3b8',
               fontSize: 13,
-              cursor: ix === 0 || finishing ? 'default' : 'pointer',
+              cursor: safeIx === 0 || finishing ? 'default' : 'pointer',
               fontFamily: FONT_B,
             }}
           >
@@ -386,7 +392,7 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
               opacity: finishing ? 0.85 : 1,
             }}
           >
-            {finishing ? '…' : ix >= steps.length - 1 ? 'Done' : 'Next'}
+            {finishing ? '…' : safeIx >= steps.length - 1 ? 'Done' : 'Next'}
           </button>
         </div>
       </div>

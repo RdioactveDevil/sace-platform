@@ -9,7 +9,7 @@ const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
-export default function AccountScreen({ profile, theme, onSignOut, onChangeSubject }) {
+export default function AccountScreen({ profile, theme, onSignOut, onChangeSubject, onReplayFeatureTour }) {
   const t = THEMES[theme]
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank     = RANKS[Math.min(level, RANKS.length - 1)]
@@ -22,6 +22,7 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
   const [newPw, setNewPw]               = useState('')
   const [savingPw, setSavingPw]         = useState(false)
   const [pwMsg, setPwMsg]               = useState('')
+  const [replayTourBusy, setReplayTourBusy] = useState(false)
 
   const card = {
     background: t.bgCard,
@@ -80,6 +81,16 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
     else { setPwMsg('Password updated!'); setNewPw('') }
     setSavingPw(false)
     setTimeout(() => setPwMsg(''), 4000)
+  }
+
+  const handleReplayFeatureTour = async () => {
+    if (!onReplayFeatureTour || replayTourBusy) return
+    setReplayTourBusy(true)
+    try {
+      await onReplayFeatureTour()
+    } finally {
+      setReplayTourBusy(false)
+    }
   }
 
   const levelBadges = RANKS.map((r, i) => ({
@@ -193,6 +204,24 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
           ))}
         </div>
       </div>
+
+      {/* ── Feature tour (replay from Settings) ── */}
+      {typeof onReplayFeatureTour === 'function' && (
+        <div style={card}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8 }}>Feature tour</div>
+          <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
+            Replay the guided walkthrough of the sidebar — Question Bank, Learn, History, Study Plan, and more.
+          </p>
+          <button
+            type="button"
+            onClick={handleReplayFeatureTour}
+            disabled={replayTourBusy}
+            style={btn('secondary', replayTourBusy)}
+          >
+            {replayTourBusy ? 'Preparing…' : 'Replay feature tour'}
+          </button>
+        </div>
+      )}
 
       {/* ── Actions ── */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

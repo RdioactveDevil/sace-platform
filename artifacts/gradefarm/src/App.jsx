@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions, markTutorialComplete } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
@@ -347,6 +347,7 @@ function AppShellScreens({
   onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
   tutorialOverlay,
+  onReplayFeatureTour,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
@@ -402,10 +403,26 @@ function AppShellScreens({
         <HistoryScreen {...commonProps} profile={profile} embedded />
       </div>
       <div style={show('my-account')}>
-        <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} />
+        <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} />
       </div>
     </AppShell>
   )
+}
+
+function gfTutorialStorageKey(userId) {
+  return `gf-tutorial-done-${userId}`
+}
+
+/** Persist tutorial completion client-side so auth/session refreshes cannot resurrect the tour. */
+function mergeTutorialFromStorage(userId, prof) {
+  if (!prof || !userId) return prof
+  try {
+    const stored = localStorage.getItem(gfTutorialStorageKey(userId))
+    if (stored && !prof.app_tutorial_completed_at) {
+      return { ...prof, app_tutorial_completed_at: stored }
+    }
+  } catch (_) {}
+  return prof
 }
 
 function NavBlockerModal({ blocker, theme }) {
@@ -538,11 +555,12 @@ function AppInner() {
   }, [])
 
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
     setLoading(true)
     Promise.all([getProfile(user.id), getStruggleMap(user.id)])
       .then(([prof, map]) => {
-        setProfile(prof)
+        const merged = mergeTutorialFromStorage(user.id, prof)
+        setProfile(merged)
         setStruggleMap(map)
         setLoading(false)
         setBootstrapped(true)
@@ -567,7 +585,7 @@ function AppInner() {
         }).catch(() => { setSubscriptionsLoaded(true) })
       })
       .catch(() => { setLoading(false); setBootstrapped(true) })
-  }, [user])
+  }, [user?.id])
 
   // Reload questions if subject was persisted but questions are empty
   useEffect(() => {
@@ -589,7 +607,21 @@ function AppInner() {
     }
   }
 
+  const handleReplayFeatureTour = useCallback(async () => {
+    if (!profile?.id) return
+    const uid = profile.id
+    try {
+      localStorage.removeItem(gfTutorialStorageKey(uid))
+      await updateProfile(uid, { app_tutorial_completed_at: null })
+    } catch (e) {
+      console.error('[replay tutorial]', e)
+    }
+    setProfile(prev => (prev ? { ...prev, app_tutorial_completed_at: null } : prev))
+    navigate(selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank')
+  }, [profile?.id, navigate, selectedSubject?.type])
+
   const handleSignOut = async () => {
+    setWelcomeCelebration(false)
     await signOut()
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
@@ -765,11 +797,15 @@ function AppInner() {
           isTutor: !!profile.is_tutor,
           theme,
           onFinish: async () => {
+            const uid = profile.id
             const ts = new Date().toISOString()
+            try {
+              localStorage.setItem(gfTutorialStorageKey(uid), ts)
+            } catch (_) {}
             setProfile(prev => ({ ...prev, app_tutorial_completed_at: ts }))
             setWelcomeCelebration(true)
             try {
-              await markTutorialComplete(profile.id)
+              await markTutorialComplete(uid)
             } catch (e) {
               console.error('[tutorial complete]', e)
             }
@@ -984,6 +1020,7 @@ function AppInner() {
           setStruggleMap={setStruggleMap} subject={selectedSubject}
           assignmentsVersion={assignmentsVersion}
           lastSessionAt={lastSessionAt}
+          onReplayFeatureTour={handleReplayFeatureTour}
           onOpenLearn={(nextTopic) => {
             if (nextTopic) setLearnTopic(nextTopic)
             setLearnPhase('setup')
