@@ -15,6 +15,66 @@ export function isWebsiteTutorialSurface(pathname) {
   return WEBSITE_TUTORIAL_PATH_PREFIXES.some(p => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n))
+}
+
+/** Position the tour card beside the spotlight rect (fallback: bottom-centered). */
+function computeTooltipStyle(rect, estimateH = 248) {
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 400
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 700
+  const margin = 12
+  const gap = 14
+  const tw = Math.min(400, vw - margin * 2)
+  const th = estimateH
+
+  if (!rect) {
+    return {
+      position: 'fixed',
+      left: '50%',
+      bottom: margin,
+      transform: 'translateX(-50%)',
+      width: tw,
+    }
+  }
+
+  const roomRight = vw - rect.right - gap - margin
+  const roomLeft = rect.left - gap - margin
+  const roomBelow = vh - rect.bottom - gap - margin
+  const roomAbove = rect.top - gap - margin
+  const cx = rect.left + rect.width / 2
+
+  let left
+  let top
+  const transform = 'none'
+
+  if (roomRight >= tw) {
+    left = rect.right + gap
+    top = clamp(rect.top + rect.height / 2 - th / 2, margin, vh - th - margin)
+  } else if (roomLeft >= tw) {
+    left = rect.left - gap - tw
+    top = clamp(rect.top + rect.height / 2 - th / 2, margin, vh - th - margin)
+  } else if (roomBelow >= th) {
+    left = clamp(cx - tw / 2, margin, vw - tw - margin)
+    top = rect.bottom + gap
+  } else if (roomAbove >= th) {
+    left = clamp(cx - tw / 2, margin, vw - tw - margin)
+    top = rect.top - gap - th
+  } else {
+    left = clamp(cx - tw / 2, margin, vw - tw - margin)
+    top = clamp(vh - th - margin, margin, vh - margin)
+  }
+
+  return {
+    position: 'fixed',
+    left,
+    top,
+    transform,
+    width: tw,
+    maxWidth: `calc(100vw - ${margin * 2}px)`,
+  }
+}
+
 function studentSteps(isTutor) {
   const base = [
     {
@@ -165,9 +225,18 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
 
   const [ix, setIx] = useState(0)
   const [rect, setRect] = useState(null)
+  const [tooltipStyle, setTooltipStyle] = useState(() => computeTooltipStyle(null))
+  const [finishing, setFinishing] = useState(false)
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 860 : false))
 
   const step = steps[ix]
+
+  useLayoutEffect(() => {
+    const upd = () => setTooltipStyle(computeTooltipStyle(rect))
+    upd()
+    window.addEventListener('resize', upd)
+    return () => window.removeEventListener('resize', upd)
+  }, [rect, ix])
 
   useLayoutEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 860)
@@ -213,15 +282,18 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
   }, [ix, step, location.pathname, navigate, measure])
 
   const finish = async () => {
+    if (finishing) return
+    setFinishing(true)
     try {
       await onFinish()
     } catch (e) {
       console.error(e)
+      setFinishing(false)
     }
   }
 
   const next = () => {
-    if (ix >= steps.length - 1) finish()
+    if (ix >= steps.length - 1) void finish()
     else setIx(ix + 1)
   }
 
@@ -243,12 +315,9 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
 
       <div
         style={{
-          position: 'fixed',
-          left: '50%',
-          bottom: 28,
-          transform: 'translateX(-50%)',
-          width: 'min(420px, calc(100vw - 32px))',
+          ...tooltipStyle,
           zIndex: 100002,
+          transition: 'top 0.22s ease, left 0.22s ease, transform 0.22s ease',
           background: t.bgCard || 'rgba(12,16,42,0.97)',
           border: `1px solid rgba(241,190,67,0.35)`,
           borderRadius: 18,
@@ -265,7 +334,8 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button
             type="button"
-            onClick={finish}
+            onClick={() => void finish()}
+            disabled={finishing}
             style={{
               padding: '10px 14px',
               borderRadius: 10,
@@ -273,8 +343,9 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
               background: 'transparent',
               color: t.textMuted || '#64748b',
               fontSize: 13,
-              cursor: 'pointer',
+              cursor: finishing ? 'wait' : 'pointer',
               fontFamily: FONT_B,
+              opacity: finishing ? 0.65 : 1,
             }}
           >
             Skip tour
@@ -282,15 +353,15 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
           <button
             type="button"
             onClick={back}
-            disabled={ix === 0}
+            disabled={ix === 0 || finishing}
             style={{
               padding: '10px 14px',
               borderRadius: 10,
               border: '1px solid rgba(255,255,255,0.1)',
               background: 'transparent',
-              color: ix === 0 ? '#475569' : '#94a3b8',
+              color: ix === 0 || finishing ? '#475569' : '#94a3b8',
               fontSize: 13,
-              cursor: ix === 0 ? 'default' : 'pointer',
+              cursor: ix === 0 || finishing ? 'default' : 'pointer',
               fontFamily: FONT_B,
             }}
           >
@@ -299,6 +370,7 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
           <button
             type="button"
             onClick={next}
+            disabled={finishing}
             style={{
               flex: 1,
               padding: '11px 16px',
@@ -308,12 +380,13 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
               color: NAVYD,
               fontSize: 14,
               fontWeight: 800,
-              cursor: 'pointer',
+              cursor: finishing ? 'wait' : 'pointer',
               fontFamily: FONT_B,
               boxShadow: `0 6px 22px rgba(241,190,67,0.3)`,
+              opacity: finishing ? 0.85 : 1,
             }}
           >
-            {ix >= steps.length - 1 ? 'Done' : 'Next'}
+            {finishing ? '…' : ix >= steps.length - 1 ? 'Done' : 'Next'}
           </button>
         </div>
       </div>

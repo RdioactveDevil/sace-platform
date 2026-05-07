@@ -21,6 +21,7 @@ import StudyPlanScreen   from './components/StudyPlanScreen'
 import OnboardingScreen  from './components/OnboardingScreen'
 import TutorOnboardingScreen from './components/TutorOnboardingScreen'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
+import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import TutorSignupScreen from './components/TutorSignupScreen'
 import GetAccessScreen   from './components/GetAccessScreen'
 import TermsScreen       from './components/TermsScreen'
@@ -452,7 +453,7 @@ function AppInner() {
   const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
   const [subscriptions, setSubscriptions]     = useState([])
-  const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
+  const [welcomeCelebration, setWelcomeCelebration] = useState(false)
 
   const refreshSubscriptions = async () => {
     try {
@@ -763,8 +764,14 @@ function AppInner() {
           isTutor: !!profile.is_tutor,
           theme,
           onFinish: async () => {
-            await markTutorialComplete(profile.id)
-            setProfile(prev => ({ ...prev, app_tutorial_completed_at: new Date().toISOString() }))
+            const ts = new Date().toISOString()
+            setProfile(prev => ({ ...prev, app_tutorial_completed_at: ts }))
+            setWelcomeCelebration(true)
+            try {
+              await markTutorialComplete(profile.id)
+            } catch (e) {
+              console.error('[tutorial complete]', e)
+            }
           },
         }
       : null
@@ -1063,6 +1070,9 @@ function AppInner() {
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
     </Routes>
+    {welcomeCelebration && (
+      <GradeFarmWelcomeCelebration theme={theme} onDismiss={() => setWelcomeCelebration(false)} />
+    )}
     </>
   )
 }
