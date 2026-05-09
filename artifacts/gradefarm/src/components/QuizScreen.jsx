@@ -376,12 +376,13 @@ export default function QuizScreen({
   useEffect(() => { setTimeLeft(timerSeconds) }, [timerSeconds])
 
   // Countdown tick — auto-ends session when time expires
+  // Uses _finished (prop) not finished (const declared later) to avoid TDZ
   useEffect(() => {
-    if (!examMode || timerSeconds <= 0 || finished) return
+    if (!examMode || timerSeconds <= 0 || _finished) return
     if (timeLeft <= 0) { setFinished(true); return }
     const id = setInterval(() => setTimeLeft(s => Math.max(0, s - 1)), 1000)
     return () => clearInterval(id)
-  }, [examMode, timerSeconds, finished, timeLeft])
+  }, [examMode, timerSeconds, _finished, timeLeft])
 
   const currentQ = _currentQ ?? null
   const selected = _selected ?? null
