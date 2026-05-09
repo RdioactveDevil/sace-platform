@@ -305,6 +305,7 @@ function StatusToast({ status, onReturnToQuiz, theme = 'dark' }) {
 
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
+  examMode = false, timerSeconds = 0,
   onOpenLearn, consolidateSubtopic, onClearConsolidate,
   currentQ: _currentQ, setCurrentQ,
   selected: _selected, setSelected,
@@ -352,6 +353,7 @@ export default function QuizScreen({
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
   const [assignmentsCompleted, setAssignmentsCompleted] = useState([])
+  const [timeLeft, setTimeLeft] = useState(timerSeconds)
   const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
   // Maps variant_record_id -> real questions.id once background bank
@@ -369,6 +371,17 @@ export default function QuizScreen({
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
+
+  // Reset timer when a new exam session starts
+  useEffect(() => { setTimeLeft(timerSeconds) }, [timerSeconds])
+
+  // Countdown tick — auto-ends session when time expires
+  useEffect(() => {
+    if (!examMode || timerSeconds <= 0 || finished) return
+    if (timeLeft <= 0) { setFinished(true); return }
+    const id = setInterval(() => setTimeLeft(s => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(id)
+  }, [examMode, timerSeconds, finished, timeLeft])
 
   const currentQ = _currentQ ?? null
   const selected = _selected ?? null
@@ -1122,11 +1135,13 @@ export default function QuizScreen({
       sessionResults.filter(r => !r.correct && !r.remediation && r.subtopic).map(r => r.subtopic)
     )].slice(0, 4)
 
-    const headlineText = quizMode === 'new'
-      ? 'Session Complete!'
-      : quizMode === 'wrong'
-        ? 'Wrongs Reviewed!'
-        : 'Session Complete!'
+    const headlineText = examMode
+      ? (timeLeft <= 0 ? "Time's Up!" : 'Exam Complete!')
+      : quizMode === 'new'
+        ? 'Session Complete!'
+        : quizMode === 'wrong'
+          ? 'Wrongs Reviewed!'
+          : 'Session Complete!'
 
     return (
       <div style={{ minHeight: '100%', background: t.bg, fontFamily: FONT_B, overflowY: 'auto', position: 'relative' }}>
@@ -1350,6 +1365,16 @@ export default function QuizScreen({
           {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
           {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
           <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
+          {examMode && timerSeconds > 0 && (() => {
+            const m = Math.floor(timeLeft / 60)
+            const s = timeLeft % 60
+            const urgent = timeLeft < 300
+            return (
+              <span style={{ fontSize: 12, fontWeight: 800, color: urgent ? '#ef4444' : NAVY, background: urgent ? 'rgba(239,68,68,0.15)' : 'rgba(0,0,0,0.12)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
+                ⏱ {m}:{String(s).padStart(2, '0')}
+              </span>
+            )
+          })()}
           <button onClick={() => setShowExit(true)} style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End Session</button>
         </div>
       </div>
@@ -1502,7 +1527,7 @@ export default function QuizScreen({
                     >
                       {nextButtonLabel}
                     </button>
-                    {onOpenLearn && (
+                    {onOpenLearn && !examMode && (
                       <button
                         onClick={() => onOpenLearn(currentQ.topic, {
                           question: currentQ.question,
