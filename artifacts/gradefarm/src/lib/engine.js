@@ -114,18 +114,28 @@ export function getQuestionCounts(questions, struggleMap, subtopics = []) {
 }
 
 /**
- * Compute next review time using a simple spaced repetition schedule.
- * Wrong: review again in 1h
- * 1st correct: review in 24h
- * 2nd correct: review in 72h
- * 3rd+ correct: review in 7 days
+ * Compute next review time using an accuracy-weighted spaced repetition schedule.
+ *
+ * Intervals grow based on cumulative correct count, with a bonus tier when
+ * overall accuracy is ≥ 75% (the student is consistently getting it right):
+ *
+ *   correct=0 or error rate ≥ 50%  → 1h   (needs immediate re-exposure)
+ *   correct=1                        → 1d  (low acc) / 2d  (high acc)
+ *   correct=2                        → 4d  (low acc) / 7d  (high acc)
+ *   correct=3–4                      → 14d (low acc) / 21d (high acc)
+ *   correct≥5                        → 30d (low acc) / 60d (high acc)
  */
 export function nextReviewTime(attempts, wrong) {
   const correct = attempts - wrong
-  if (wrong >= attempts * 0.5) return new Date(Date.now() + 1000 * 60 * 60)
-  if (correct <= 1) return new Date(Date.now() + 1000 * 60 * 60 * 24)
-  if (correct <= 2) return new Date(Date.now() + 1000 * 60 * 60 * 72)
-  return new Date(Date.now() + 1000 * 60 * 60 * 168)
+  const accuracy = attempts > 0 ? correct / attempts : 0
+  const hi = accuracy >= 0.75
+  const h = 1000 * 60 * 60
+
+  if (correct === 0 || wrong >= attempts * 0.5) return new Date(Date.now() + h)
+  if (correct === 1)  return new Date(Date.now() + h * (hi ? 48  : 24))
+  if (correct === 2)  return new Date(Date.now() + h * (hi ? 168 : 96))
+  if (correct <= 4)   return new Date(Date.now() + h * (hi ? 504 : 336))
+  return                     new Date(Date.now() + h * (hi ? 1440 : 720))
 }
 
 // ─── XP SYSTEM ───────────────────────────────────────────────────────────────

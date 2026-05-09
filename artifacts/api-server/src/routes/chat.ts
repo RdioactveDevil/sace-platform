@@ -207,12 +207,36 @@ router.post("/chat", async (req, res) => {
       return;
     }
 
+    const { baseUrl, apiKey } = getAnthropicConfig();
+    const mainController = new AbortController();
+
+    // Fire the main request immediately so it runs concurrently with classification.
+    // If the classifier later returns off_topic we abort it; otherwise the response
+    // is already in-flight and on-topic latency drops by the classifier's RTT.
+    const mainFetchPromise = fetch(`${baseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: max_tokens || 1000,
+        system,
+        messages: typedMessages,
+      }),
+      signal: mainController.signal,
+    });
+    mainFetchPromise.catch(() => {}); // suppress unhandled rejection if aborted early
+
     if (typeof subject === "string" && subject.trim().length > 0 && typeof topic === "string" && topic.trim().length > 0 && typedMessages.length > 0) {
       const lastUserMsg = [...typedMessages].reverse().find((m) => m.role === "user");
       const lastUserText = lastUserMsg ? extractTextFromContent(lastUserMsg.content) : "";
       if (lastUserMsg && lastUserText.length > 0) {
         const classification = await classifyMessage(subject, topic, lastUserText);
         if (classification === "off_topic") {
+          mainController.abort();
           // Derive student identity server-side from the Bearer JWT — never trust a client-provided user_id.
           const authHeader = req.headers.authorization;
           if (authHeader?.startsWith("Bearer ")) {
@@ -232,21 +256,7 @@ router.post("/chat", async (req, res) => {
       }
     }
 
-    const { baseUrl, apiKey } = getAnthropicConfig();
-    const response = await fetch(`${baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: max_tokens || 1000,
-        system,
-        messages: typedMessages,
-      }),
-    });
+    const response = await mainFetchPromise;
 
     if (!response.ok) {
       const err = await response.text();
