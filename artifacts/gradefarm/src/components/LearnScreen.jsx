@@ -197,6 +197,18 @@ export default function LearnScreen({
     setPrimer(null)
     const timer = setTimeout(async () => {
       const t = topic.trim()
+      const cacheKey = `gf_primer_${subject?.name || 'unknown'}_${t}`
+      const cached = sessionStorage.getItem(cacheKey)
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPrimer(parsed)
+            setPrimerTopic(t)
+            return
+          }
+        } catch {}
+      }
       setPrimerLoading(true)
       try {
         const res = await fetch('/api/chat', {
@@ -213,7 +225,9 @@ export default function LearnScreen({
         const start = raw.indexOf('['), end = raw.lastIndexOf(']')
         const parsed = JSON.parse(start !== -1 && end > start ? raw.slice(start, end + 1) : '[]')
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setPrimer(parsed.filter(p => p.concept && p.definition))
+          const filtered = parsed.filter(p => p.concept && p.definition)
+          sessionStorage.setItem(cacheKey, JSON.stringify(filtered))
+          setPrimer(filtered)
           setPrimerTopic(t)
         }
       } catch {}

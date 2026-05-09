@@ -708,18 +708,18 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 label: `Start selected session · ${filteredCounts.unseen} new`,
                 variant: 'primary',
                 disabled: hasNoTopicsSelected || filteredCounts.unseen === 0,
-                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics }),
+                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
               {renderActionButton({
                 label: `Re-attempt wrong · ${filteredCounts.wrong}`,
                 variant: 'danger',
                 disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics }),
+                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
               {renderActionButton({
                 label: 'Repeat selected',
                 disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
-                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics }),
+                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
             </div>
 

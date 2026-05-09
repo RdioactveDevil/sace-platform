@@ -16,38 +16,27 @@ export default function AdminCohortTab() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    Promise.all([
-      supabase.from('answer_log').select('question_id, correct').limit(50000),
-      supabase.from('questions').select('id, topic, subtopic, subject'),
-    ])
-      .then(([logRes, qRes]) => {
-        if (cancelled) return
-        if (logRes.error) throw logRes.error
-        if (qRes.error)  throw qRes.error
-
-        const qMap = {}
-        for (const q of (qRes.data || [])) qMap[q.id] = q
-
-        const topicMap = {}
-        for (const entry of (logRes.data || [])) {
-          const q = qMap[entry.question_id]
-          if (!q) continue
-          const key = `${q.subject}|||${q.topic}`
-          if (!topicMap[key]) topicMap[key] = { subject: q.subject, topic: q.topic, attempts: 0, wrong: 0, students: new Set() }
-          topicMap[key].attempts++
-          if (!entry.correct) topicMap[key].wrong++
+    ;(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) throw new Error('Not authenticated')
+        const res = await fetch('/api/admin/cohort-stats', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error || `HTTP ${res.status}`)
         }
-
-        setRows(Object.values(topicMap).map(r => ({
-          ...r,
-          errorRate: r.attempts > 0 ? r.wrong / r.attempts : 0,
-          students: r.students.size,
-        })))
-        setLoading(false)
-      })
-      .catch(err => {
+        const { rows: fetched } = await res.json()
+        if (!cancelled) {
+          setRows(fetched || [])
+          setLoading(false)
+        }
+      } catch (err) {
         if (!cancelled) { setError(err.message || 'Failed to load'); setLoading(false) }
-      })
+      }
+    })()
     return () => { cancelled = true }
   }, [])
 
