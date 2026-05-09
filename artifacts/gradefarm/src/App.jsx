@@ -520,6 +520,8 @@ function AppInner() {
   const [quizRemediationUsedIds,   setQuizRemediationUsedIds]   = useState([])
   const [quizRemediationWrongCount, setQuizRemediationWrongCount] = useState(0)
   const [activeAssignmentId, setActiveAssignmentId] = useState(null)
+  const [quizExamMode, setQuizExamMode] = useState(false)
+  const [quizTimerSeconds, setQuizTimerSeconds] = useState(0)
   const [quizFinished, setQuizFinished] = useState(false)
   const [quizSessionTip, setQuizSessionTip] = useState('')
   const [quizSessionTipLoading, setQuizSessionTipLoading] = useState(false)
@@ -641,6 +643,8 @@ function AppInner() {
     setQuizSessionTip('')
     setQuizSessionTipLoading(false)
     setQuizSubtopics([])
+    setQuizExamMode(false)
+    setQuizTimerSeconds(0)
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
     setQuizRemediationTarget(3)
@@ -718,6 +722,8 @@ function AppInner() {
     finished: quizFinished, setFinished: setQuizFinished,
     sessionTip: quizSessionTip, setSessionTip: setQuizSessionTip,
     sessionTipLoading: quizSessionTipLoading, setSessionTipLoading: setQuizSessionTipLoading,
+    examMode: quizExamMode,
+    timerSeconds: quizTimerSeconds,
   }
 
   const quizIsActive = location.pathname === '/quiz' && quizAnswered.length > 0 && !quizFinished
@@ -1077,6 +1083,8 @@ function AppInner() {
 
             setQuizMode(nextMode)
             setQuizSubtopics(expandedSubtopics)
+            setQuizExamMode(!!opts?.examMode)
+            setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)
             setQuizQ(null)
             setQuizSelected(null)
             setQuizShowAns(false)

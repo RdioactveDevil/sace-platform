@@ -227,7 +227,14 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                           </div>
                         </div>
                         <button
-                          onClick={() => task.action === 'practice' ? onStartSession?.({ mode: 'new', subtopics: [] }) : onOpenLearn?.(task.topic)}
+                          onClick={() => {
+                            if (task.action === 'practice') {
+                              const match = topicStats.find(ts => ts.topic.toLowerCase() === task.topic.toLowerCase())
+                              onStartSession?.({ mode: match?.attempts > 0 ? 'wrong' : 'new', subtopics: match?.subtopics ?? [] })
+                            } else {
+                              onOpenLearn?.(task.topic)
+                            }
+                          }}
                           style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.3)`, background: 'rgba(241,190,67,0.08)', color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0, whiteSpace: 'nowrap' }}
                         >
                           Start →

@@ -10,6 +10,7 @@ import AdminAssignmentsTab       from './AdminAssignmentsTab'
 import AdminTutorApplicationsTab from './AdminTutorApplicationsTab'
 import AdminCurriculaTab         from './AdminCurriculaTab'
 import AdminCurriculumDetail     from './AdminCurriculumDetail'
+import AdminCohortTab            from './AdminCohortTab'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -35,6 +36,7 @@ export default function AdminScreen({ profile }) {
 
   const tabs = [
     { label: 'Students',           badge: studentCount, path: '/admin/students' },
+    { label: 'Cohort Analytics',   path: '/admin/cohort' },
     { label: 'Tutors',             path: '/admin/tutors' },
     { label: 'Assignments',        path: '/admin/assignments' },
     { label: 'Curricula',          path: '/admin/curricula' },
@@ -113,6 +115,7 @@ export default function AdminScreen({ profile }) {
         <Routes>
           <Route index element={<Navigate to="students" replace />} />
           <Route path="students"     element={<AdminStudentsTab profile={profile} onCountLoad={setStudentCount} />} />
+          <Route path="cohort"       element={<AdminCohortTab />} />
           <Route path="tutors"       element={<AdminTutorsTab />} />
           <Route path="assignments"  element={<AdminAssignmentsTab />} />
           <Route path="curricula"    element={<CurriculaRouter />} />

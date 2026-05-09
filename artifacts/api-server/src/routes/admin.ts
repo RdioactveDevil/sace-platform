@@ -817,4 +817,66 @@ router.get("/admin/assignment-subjects", async (req, res) => {
   }
 });
 
+// GET /admin/cohort-stats — server-side aggregation of answer_log joined with questions
+// Returns per-topic attempt/wrong counts without sending raw rows to the client.
+router.get("/admin/cohort-stats", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const PAGE = 5000;
+    // Build a question map from the questions table (small, fits in memory)
+    const qMap: Record<string, { topic: string; subject: string }> = {};
+    let qFrom = 0;
+    while (true) {
+      const { data, error } = await admin
+        .from("questions")
+        .select("id, topic, subject")
+        .range(qFrom, qFrom + PAGE - 1);
+      if (error) return res.status(500).json({ error: error.message });
+      for (const q of (data || []) as { id: string; topic: string; subject: string }[]) {
+        qMap[q.id] = { topic: q.topic, subject: q.subject };
+      }
+      if ((data || []).length < PAGE) break;
+      qFrom += PAGE;
+    }
+
+    // Stream through answer_log in pages and aggregate server-side
+    type TopicStat = { subject: string; topic: string; attempts: number; wrong: number };
+    const topicMap: Record<string, TopicStat> = {};
+    let aFrom = 0;
+    while (true) {
+      const { data, error } = await admin
+        .from("answer_log")
+        .select("question_id, correct")
+        .range(aFrom, aFrom + PAGE - 1);
+      if (error) return res.status(500).json({ error: error.message });
+      for (const entry of (data || []) as { question_id: string; correct: boolean }[]) {
+        const q = qMap[entry.question_id];
+        if (!q) continue;
+        const key = `${q.subject}|||${q.topic}`;
+        if (!topicMap[key]) topicMap[key] = { subject: q.subject, topic: q.topic, attempts: 0, wrong: 0 };
+        topicMap[key].attempts++;
+        if (!entry.correct) topicMap[key].wrong++;
+      }
+      if ((data || []).length < PAGE) break;
+      aFrom += PAGE;
+    }
+
+    const rows = Object.values(topicMap).map(r => ({
+      subject: r.subject,
+      topic: r.topic,
+      attempts: r.attempts,
+      wrong: r.wrong,
+      errorRate: r.attempts > 0 ? r.wrong / r.attempts : 0,
+    }));
+
+    return res.json({ rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 export default router;

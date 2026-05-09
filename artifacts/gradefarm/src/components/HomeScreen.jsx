@@ -18,6 +18,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([])
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
+  const [examMode, setExamMode] = useState(false)
+  const [examDuration, setExamDuration] = useState(45)
   const [assessments, setAssessments] = useState([])
   const [assignments, setAssignments] = useState([])
 
@@ -552,13 +554,37 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: t.text }}>Quick Start (All Topics)</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Quick Start (All Topics)</div>
+              <button
+                onClick={() => setExamMode(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+              >
+                ⏱ {examMode ? 'Exam On' : 'Exam Mode'}
+              </button>
+            </div>
+
+            {examMode && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 11, color: t.textMuted, fontWeight: 600 }}>Duration:</span>
+                {[30, 45, 60, 90].map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setExamDuration(m)}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${examDuration === m ? GOLD : t.border}`, background: examDuration === m ? 'rgba(241,190,67,0.12)' : 'transparent', color: examDuration === m ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {fullCounts.unseen > 0 ? (
                 renderActionButton({
-                  label: `Start Session · ${fullCounts.unseen} new question${fullCounts.unseen !== 1 ? 's' : ''} →`,
+                  label: examMode ? `Start ${examDuration}-min Exam · All topics →` : `Start Session · ${fullCounts.unseen} new question${fullCounts.unseen !== 1 ? 's' : ''} →`,
                   variant: 'primary',
-                  onClick: () => onStartSession({ mode: 'new', subtopics: [] }),
+                  onClick: () => onStartSession({ mode: 'new', subtopics: [], examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
                 })
               ) : (
                 <div style={{ borderRadius: 12, padding: '20px 16px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f6f7fc', border: `1px solid ${t.border}`, textAlign: 'center' }}>
@@ -571,12 +597,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               {fullCounts.wrong > 0 && renderActionButton({
                 label: `Re-attempt ${fullCounts.wrong} wrong answer${fullCounts.wrong !== 1 ? 's' : ''}`,
                 variant: 'danger',
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: [] }),
+                onClick: () => onStartSession({ mode: 'wrong', subtopics: [], examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
 
               {fullCounts.attempted > 0 && renderActionButton({
                 label: 'Repeat all questions',
-                onClick: () => onStartSession({ mode: 'all', subtopics: [] }),
+                onClick: () => onStartSession({ mode: 'all', subtopics: [], examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
             </div>
           </div>
@@ -682,18 +708,18 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 label: `Start selected session · ${filteredCounts.unseen} new`,
                 variant: 'primary',
                 disabled: hasNoTopicsSelected || filteredCounts.unseen === 0,
-                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics }),
+                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
               {renderActionButton({
                 label: `Re-attempt wrong · ${filteredCounts.wrong}`,
                 variant: 'danger',
                 disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics }),
+                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
               {renderActionButton({
                 label: 'Repeat selected',
                 disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
-                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics }),
+                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
             </div>
 
