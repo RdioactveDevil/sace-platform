@@ -141,6 +141,10 @@ export default function LearnScreen({
   const [imageError, setImageError] = useState('')
   const [lightboxSrc, setLightboxSrc] = useState(null)
 
+  const [primer, setPrimer]               = useState(null)   // [{ concept, definition }]
+  const [primerLoading, setPrimerLoading] = useState(false)
+  const [primerTopic, setPrimerTopic]     = useState('')     // topic primer was fetched for
+
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
   const fileRef   = useRef(null)
@@ -186,6 +190,38 @@ export default function LearnScreen({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Fetch a concept primer when the topic input settles (500 ms debounce)
+  useEffect(() => {
+    if (!topic.trim() || topic.trim() === primerTopic) return
+    setPrimer(null)
+    const timer = setTimeout(async () => {
+      const t = topic.trim()
+      setPrimerLoading(true)
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_tokens: 300,
+            system: 'You are an educational primer generator. Given a subject and topic, return a JSON array of exactly 4 objects: [{ "concept": string, "definition": string }]. Each definition must be 10 words or fewer. No markdown, no commentary — only the raw JSON array.',
+            messages: [{ role: 'user', content: `Subject: ${subject?.name || 'Chemistry'}. Topic: ${t}` }],
+          }),
+        })
+        const data = await res.json()
+        const raw = data?.content?.[0]?.text || '[]'
+        const start = raw.indexOf('['), end = raw.lastIndexOf(']')
+        const parsed = JSON.parse(start !== -1 && end > start ? raw.slice(start, end + 1) : '[]')
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPrimer(parsed.filter(p => p.concept && p.definition))
+          setPrimerTopic(t)
+        }
+      } catch {}
+      setPrimerLoading(false)
+    }, 500)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, subject?.name])
 
   // Auto-start Titan AI from a question context sent from QuizScreen
   useEffect(() => {
@@ -596,6 +632,31 @@ export default function LearnScreen({
                 })}
               </div>
             </div>
+
+            {(primerLoading || (primer && primer.length > 0)) && (
+              <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 14, background: t.bgCard, border: `1px solid ${t.border}` }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
+                  Concept Primer · {topic}
+                </div>
+                {primerLoading ? (
+                  <div style={{ fontSize: 13, color: t.textFaint, fontStyle: 'italic' }}>Loading key concepts…</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {primer.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: GOLD, flexShrink: 0, marginTop: 1 }}>
+                          {i + 1}
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{p.concept}</span>
+                          <span style={{ fontSize: 13, color: t.textMuted }}> — {p.definition}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={startLesson}
