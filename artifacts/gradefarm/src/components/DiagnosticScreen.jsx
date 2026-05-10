@@ -379,9 +379,37 @@ function TextQuestion({ q, answer, onAnswer, disabled }) {
     const newOff = off + ins.length + (sym.cursor ?? 0)
     lastAnswerRef.current = newRaw
     onAnswer(q.id, newRaw)
-    el.innerHTML = rawToHtml(newRaw)
+    // Insert as raw editable text so user can fill in template slots (e.g. \frac{}{}),
+    // then schedule the normal debounced render — don't render immediately.
+    el.innerHTML = escHtml(newRaw).replace(/\n/g, '<br>')
     requestAnimationFrame(() => { el.focus(); setCursorRawOffset(el, newOff) })
-  }, [disabled, q.id, onAnswer])
+    clearTimeout(renderTimer.current)
+    renderTimer.current = setTimeout(doRender, 600)
+  }, [disabled, q.id, onAnswer, doRender])
+
+  // Clicking a rendered math span unmasks it back to editable raw LaTeX
+  const handleClick = useCallback((e) => {
+    if (disabled) return
+    const span = e.target.closest('.math-atom')
+    if (!span || !editorRef.current) return
+    const rawSrc = span.dataset.raw || ''
+    const textNode = document.createTextNode(rawSrc)
+    span.replaceWith(textNode)
+    // Place cursor at end of the unmasked text
+    requestAnimationFrame(() => {
+      const range = document.createRange()
+      range.setStart(textNode, rawSrc.length)
+      range.collapse(true)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    })
+    const newRaw = getRawText(editorRef.current)
+    lastAnswerRef.current = newRaw
+    onAnswer(q.id, newRaw)
+    clearTimeout(renderTimer.current)
+    renderTimer.current = setTimeout(doRender, 600)
+  }, [disabled, q.id, onAnswer, doRender])
 
   const [borderColor, setBorderColor] = useState('rgba(255,255,255,0.12)')
 
@@ -415,6 +443,7 @@ function TextQuestion({ q, answer, onAnswer, disabled }) {
           suppressContentEditableWarning
           onInput={handleInput}
           onPaste={handlePaste}
+          onClick={handleClick}
           onFocus={() => setBorderColor(GOLD)}
           onBlur={() => { setBorderColor('rgba(255,255,255,0.12)'); doRender() }}
           style={{
@@ -600,10 +629,10 @@ export default function DiagnosticScreen() {
         @font-face { font-family: 'Plus Jakarta Sans'; src: url('/PlusJakartaSans.woff2') format('woff2'); font-display: swap; }
         * { box-sizing: border-box; }
         textarea:focus { outline: none; }
-        .math-atom { display: inline; user-select: none; cursor: default; }
-        .math-atom.math-atom[contenteditable=false] { outline: none; }
+        .math-atom { display: inline; user-select: none; cursor: pointer; background: rgba(241,190,67,0.1); border-radius: 3px; padding: 0 2px; }
+        .math-atom:hover { background: rgba(241,190,67,0.22); }
         .math-atom .katex { color: #fff; font-size: 1em; }
-        div > .math-atom[data-raw^="$$"] { display: block; text-align: center; margin: 6px 0; }
+        div > .math-atom[data-raw^="$$"] { display: block; text-align: center; margin: 6px 0; background: rgba(241,190,67,0.06); border-radius: 6px; padding: 6px; }
       `}</style>
 
       {/* Header */}
