@@ -56,15 +56,18 @@ function MathText({ children }) {
 
 // ── Math keyboard ──────────────────────────────────────────────────────────────
 
+// insert: the text dropped into the textarea (plain Unicode or $LaTeX$)
+// cursor: negative offset from end of insert to place caret (e.g. -2 = inside last pair)
+// preview: LaTeX string rendered in the button face via KaTeX (optional)
 const MATH_SYMBOLS = [
   { group: 'Operators', symbols: [
-    { label: '×', insert: '×' },
-    { label: '÷', insert: '÷' },
-    { label: '±', insert: '±' },
-    { label: '√', insert: '√()', cursor: -1 },
-    { label: 'xⁿ', insert: '^' },
-    { label: '∞', insert: '∞' },
-    { label: 'a/b', insert: '()/()', cursor: -4 },
+    { label: '×',   insert: '×' },
+    { label: '÷',   insert: '÷' },
+    { label: '±',   insert: '±' },
+    { label: '√',   insert: '$\\sqrt{}$',   cursor: -2, preview: '\\sqrt{x}' },
+    { label: 'xⁿ',  insert: '$x^{}$',       cursor: -2, preview: 'x^n' },
+    { label: '∞',   insert: '$\\infty$' },
+    { label: 'a/b', insert: '$\\frac{}{}$', cursor: -4, preview: '\\frac{a}{b}' },
   ]},
   { group: 'Relations', symbols: [
     { label: '≤', insert: ' ≤ ' },
@@ -75,28 +78,28 @@ const MATH_SYMBOLS = [
     { label: '→', insert: ' → ' },
   ]},
   { group: 'Trig', symbols: [
-    { label: 'sin', insert: 'sin()', cursor: -1 },
-    { label: 'cos', insert: 'cos()', cursor: -1 },
-    { label: 'tan', insert: 'tan()', cursor: -1 },
-    { label: 'sin⁻¹', insert: 'sin⁻¹()', cursor: -1 },
-    { label: 'cos⁻¹', insert: 'cos⁻¹()', cursor: -1 },
-    { label: 'tan⁻¹', insert: 'tan⁻¹()', cursor: -1 },
+    { label: 'sin',    insert: '$\\sin()$',      cursor: -2 },
+    { label: 'cos',    insert: '$\\cos()$',      cursor: -2 },
+    { label: 'tan',    insert: '$\\tan()$',      cursor: -2 },
+    { label: 'sin⁻¹', insert: '$\\sin^{-1}()$', cursor: -2, preview: '\\sin^{-1}(x)' },
+    { label: 'cos⁻¹', insert: '$\\cos^{-1}()$', cursor: -2, preview: '\\cos^{-1}(x)' },
+    { label: 'tan⁻¹', insert: '$\\tan^{-1}()$', cursor: -2, preview: '\\tan^{-1}(x)' },
   ]},
   { group: 'Calculus', symbols: [
-    { label: 'd/dx', insert: 'd/dx ' },
-    { label: 'd²/dx²', insert: 'd²/dx² ' },
-    { label: '∫', insert: '∫' },
-    { label: '∫ dx', insert: '∫  dx', cursor: -3 },
-    { label: 'lim', insert: 'lim(x→)', cursor: -1 },
-    { label: 'Σ', insert: 'Σ' },
-    { label: '∂', insert: '∂' },
-    { label: 'Δ', insert: 'Δ' },
+    { label: 'd/dx',   insert: '$\\frac{d}{dx}$',         preview: '\\frac{d}{dx}' },
+    { label: 'd²/dx²', insert: '$\\frac{d^2}{dx^2}$',     preview: '\\frac{d^2}{dx^2}' },
+    { label: '∫',      insert: '$\\int$' },
+    { label: '∫ dx',   insert: '$\\int_{}^{} \\, dx$', cursor: -11, preview: '\\int_a^b \\, dx' },
+    { label: 'lim',    insert: '$\\lim_{x \\to }$',     cursor: -2,  preview: '\\lim_{x \\to a}' },
+    { label: 'Σ',      insert: '$\\sum$' },
+    { label: '∂',      insert: '∂' },
+    { label: 'Δ',      insert: 'Δ' },
   ]},
   { group: 'Log / Exp', symbols: [
-    { label: 'ln', insert: 'ln()', cursor: -1 },
-    { label: 'log', insert: 'log()', cursor: -1 },
-    { label: 'log_n', insert: 'log_()', cursor: -1 },
-    { label: 'eˣ', insert: 'e^' },
+    { label: 'ln',    insert: '$\\ln()$',      cursor: -2 },
+    { label: 'log',   insert: '$\\log()$',     cursor: -2 },
+    { label: 'log_n', insert: '$\\log_{}()$',  cursor: -4, preview: '\\log_n(x)' },
+    { label: 'eˣ',    insert: '$e^{}$',        cursor: -2, preview: 'e^x' },
   ]},
   { group: 'Greek', symbols: [
     { label: 'π', insert: 'π' },
@@ -153,17 +156,20 @@ function MathKeyboard({ textareaRef, onInsert }) {
           <button
             key={sym.label}
             onClick={() => insert(sym)}
-            title={sym.insert}
             style={{
               padding: '6px 11px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)',
               background: 'rgba(255,255,255,0.06)', color: '#fff', fontFamily: FONT,
               fontSize: 13, fontWeight: 600, cursor: 'pointer',
               transition: 'background 0.12s, border-color 0.12s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 36, minHeight: 32,
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.15)'; e.currentTarget.style.borderColor = `${GOLD}60` }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
           >
-            {sym.label}
+            {sym.preview
+              ? <span dangerouslySetInnerHTML={{ __html: renderMath(sym.preview) }} style={{ pointerEvents: 'none' }} />
+              : sym.label
+            }
           </button>
         ))}
       </div>
@@ -230,9 +236,11 @@ function TextQuestion({ q, answer, onAnswer, disabled }) {
   const [showKeyboard, setShowKeyboard] = useState(false)
   const taRef = useRef(null)
 
-  const handleInsert = useCallback((newVal, cursorPos) => {
+  const handleInsert = useCallback((newVal) => {
     if (!disabled) onAnswer(q.id, newVal)
   }, [disabled, onAnswer, q.id])
+
+  const hasMath = answer && answer.includes('$')
 
   return (
     <div>
@@ -256,12 +264,12 @@ function TextQuestion({ q, answer, onAnswer, disabled }) {
         onChange={e => !disabled && onAnswer(q.id, e.target.value)}
         disabled={disabled}
         placeholder={isExtended
-          ? 'Write your full response here. Take your time and structure your answer clearly…'
-          : 'Write your answer here…'
+          ? 'Write your full response here. Use the ∑ Math panel to insert equations…'
+          : 'Write your answer here. Use the ∑ Math panel to insert equations…'
         }
         style={{
           width: '100%', boxSizing: 'border-box',
-          minHeight: isExtended ? 220 : 110,
+          minHeight: isExtended ? 180 : 100,
           padding: '14px 16px', borderRadius: 10,
           border: `2px solid rgba(255,255,255,0.12)`,
           background: 'rgba(255,255,255,0.05)',
@@ -271,6 +279,20 @@ function TextQuestion({ q, answer, onAnswer, disabled }) {
         onFocus={e => { e.target.style.borderColor = GOLD }}
         onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
       />
+      {/* Live rendered preview — auto-shows when $ math is detected */}
+      {hasMath && (
+        <div style={{
+          marginTop: 6, padding: '12px 16px', borderRadius: 10,
+          background: 'rgba(241,190,67,0.06)', border: '1px solid rgba(241,190,67,0.2)',
+        }}>
+          <div style={{ fontSize: 10, color: 'rgba(241,190,67,0.6)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+            Rendered preview
+          </div>
+          <div style={{ fontSize: 14, color: '#fff', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+            <MathText>{answer}</MathText>
+          </div>
+        </div>
+      )}
       {showKeyboard && !disabled && (
         <MathKeyboard textareaRef={taRef} onInsert={handleInsert} />
       )}
