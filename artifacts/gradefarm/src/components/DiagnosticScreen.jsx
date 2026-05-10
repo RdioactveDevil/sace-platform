@@ -4,6 +4,7 @@ import { loadDiagnosticByToken, submitDiagnosticAnswers } from '../lib/db'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'mathlive'
+import 'mathlive/fonts.css'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -167,66 +168,72 @@ function MathKeyboard({ onInsert }) {
 // ── MathLive input (math subjects) ─────────────────────────────────────────────
 
 function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, minHeight }) {
-  const mfRef = useRef(null)
+  const containerRef = useRef(null)
   const stableAnswer = useRef(onAnswer)
   stableAnswer.current = onAnswer
 
   useEffect(() => {
-    const mf = mfRef.current
-    if (!mf) return
+    const container = containerRef.current
+    if (!container) return
 
-    mf.mathVirtualKeyboardPolicy = 'manual'
-    mf.readOnly = !!disabled
+    let cancelled = false
 
-    if (value) {
-      mf.setValue(value, { suppressChangeNotifications: true })
+    // Create imperatively so we control when MathLive methods are called
+    const mf = document.createElement('math-field')
+    Object.assign(mf.style, {
+      display: 'block',
+      width: '100%',
+      minHeight: `${minHeight || 60}px`,
+      borderRadius: '10px',
+      border: '2px solid rgba(255,255,255,0.12)',
+      background: 'rgba(255,255,255,0.05)',
+      color: '#fff',
+      fontSize: '14px',
+      padding: '14px 16px',
+      boxSizing: 'border-box',
+      transition: 'border-color 0.15s',
+      cursor: disabled ? 'default' : 'text',
+    })
+    container.appendChild(mf)
+
+    const configure = () => {
+      if (cancelled) return
+      mf.mathVirtualKeyboardPolicy = 'manual'
+      mf.readOnly = !!disabled
+      if (value) mf.setValue(value, { suppressChangeNotifications: true })
+
+      const onInput = () => stableAnswer.current(questionId, mf.value)
+      const onFocus = () => { mf.style.borderColor = GOLD }
+      const onBlur  = () => { mf.style.borderColor = 'rgba(255,255,255,0.12)' }
+      mf.addEventListener('input', onInput)
+      mf.addEventListener('focus', onFocus)
+      mf.addEventListener('blur', onBlur)
+
+      if (insertFnRef) {
+        insertFnRef.current = (sym) => {
+          if (disabled) return
+          mf.focus()
+          mf.insert(sym.ml, { selectionMode: 'placeholder' })
+          stableAnswer.current(questionId, mf.value)
+        }
+      }
     }
 
-    const onInput = () => stableAnswer.current(questionId, mf.value)
-    const onFocus = () => { mf.style.borderColor = GOLD }
-    const onBlur  = () => { mf.style.borderColor = 'rgba(255,255,255,0.12)' }
+    // Ensure the custom element is upgraded before calling MathLive APIs
+    if (customElements.get('math-field')) {
+      configure()
+    } else {
+      customElements.whenDefined('math-field').then(configure)
+    }
 
-    mf.addEventListener('input', onInput)
-    mf.addEventListener('focus', onFocus)
-    mf.addEventListener('blur', onBlur)
     return () => {
-      mf.removeEventListener('input', onInput)
-      mf.removeEventListener('focus', onFocus)
-      mf.removeEventListener('blur', onBlur)
+      cancelled = true
+      if (container.contains(mf)) container.removeChild(mf)
+      if (insertFnRef) insertFnRef.current = null
     }
   }, [questionId, disabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Expose insert function to parent
-  useEffect(() => {
-    if (!insertFnRef) return
-    insertFnRef.current = (sym) => {
-      const mf = mfRef.current
-      if (!mf || disabled) return
-      mf.focus()
-      mf.insert(sym.ml, { selectionMode: 'placeholder' })
-      stableAnswer.current(questionId, mf.value)
-    }
-  }, [questionId, disabled, insertFnRef])
-
-  return (
-    <math-field
-      ref={mfRef}
-      style={{
-        display: 'block',
-        width: '100%',
-        minHeight: minHeight || 60,
-        borderRadius: 10,
-        border: '2px solid rgba(255,255,255,0.12)',
-        background: 'rgba(255,255,255,0.05)',
-        color: '#fff',
-        fontSize: 14,
-        padding: '14px 16px',
-        boxSizing: 'border-box',
-        transition: 'border-color 0.15s',
-        cursor: disabled ? 'default' : 'text',
-      }}
-    />
-  )
+  return <div ref={containerRef} style={{ width: '100%' }} />
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -533,11 +540,17 @@ export default function DiagnosticScreen() {
           --selection-background-color: rgba(241,190,67,0.25);
           --selection-background-color-focused: rgba(241,190,67,0.3);
           --primary-color: ${GOLD};
-          --text-color: #fff;
+          --text-color: #ffffff;
+          --smart-fence-color: rgba(255,255,255,0.5);
+          --placeholder-color: rgba(255,255,255,0.3);
+          --contains-highlight-background-color: rgba(241,190,67,0.15);
+          color: #fff;
           font-family: ${FONT};
         }
         math-field::part(virtual-keyboard-toggle) { display: none; }
         math-field::part(menu-toggle) { display: none; }
+        math-field .ML__latex { color: #fff; }
+        math-field .ML__fieldcontainer { background: transparent; }
         @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
       `}</style>
 
