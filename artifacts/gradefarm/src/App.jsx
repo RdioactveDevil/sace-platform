@@ -31,6 +31,7 @@ import AdminScreen       from './components/AdminScreen'
 import TutorRoute        from './components/TutorRoute'
 import TutorScreen       from './components/TutorScreen'
 import WritingScreen     from './components/WritingScreen'
+import DiagnosticScreen  from './components/DiagnosticScreen'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -839,6 +840,9 @@ function AppInner() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
+
+      {/* Diagnostic assessment — public, no auth required */}
+      <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
 
       {/* Landing page — public */}
       <Route path="/home" element={

@@ -1013,3 +1013,72 @@ export async function fetchStudentProgressForTutor(tutorId, studentId) {
     offTopicAttempts,
   }
 }
+
+// ── DIAGNOSTIC ASSESSMENTS ────────────────────────────────────────────────────
+
+/** Generate questions from Claude AI (preview, no save). */
+export async function generateDiagnosticQuestions({ yearLevel, subjects }) {
+  return tutorFetch('/api/tutor/diagnostic/generate', {
+    method: 'POST',
+    body: JSON.stringify({ yearLevel, subjects }),
+  })
+}
+
+/** Save a diagnostic assessment and get the unique student link. */
+export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, preCallFormUrl }) {
+  return tutorFetch('/api/tutor/diagnostic/create', {
+    method: 'POST',
+    body: JSON.stringify({ yearLevel, subjects, questions, studentName, preCallFormUrl }),
+  })
+}
+
+/** List all diagnostics created by this tutor. */
+export async function fetchDiagnosticAssessments() {
+  return tutorFetch('/api/tutor/diagnostic/list')
+}
+
+/** Get the full report for a completed diagnostic (tutor auth). */
+export async function fetchDiagnosticReport(assessmentId) {
+  return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/report`)
+}
+
+/** Load an assessment for a student (public — no auth). */
+export async function loadDiagnosticByToken(token) {
+  const res = await fetch(`/api/diagnostic/${encodeURIComponent(token)}`)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Assessment not found.')
+  return json
+}
+
+/** Submit student answers (public — no auth). */
+export async function submitDiagnosticAnswers(token, { studentName, answers }) {
+  const res = await fetch(`/api/diagnostic/${encodeURIComponent(token)}/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ studentName, answers }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Submission failed.')
+  return json
+}
+
+/** Download a diagnostic assessment PDF report (tutor). */
+export async function downloadDiagnosticReportPdf(assessmentId, studentName) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/report/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Failed to download PDF.')
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `diagnostic-report-${(studentName || 'student').replace(/\s+/g, '-').toLowerCase()}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
+}
