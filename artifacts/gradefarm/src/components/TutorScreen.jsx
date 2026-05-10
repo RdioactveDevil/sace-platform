@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import {
@@ -22,6 +22,10 @@ import {
   createBatchAssignment,
   fetchTutorStudentWritingAttempts,
   downloadWritingReportPdf,
+  generateDiagnosticQuestions,
+  createDiagnosticAssessment,
+  fetchDiagnosticAssessments,
+  fetchDiagnosticReport,
 } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
 import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
@@ -1218,12 +1222,659 @@ function ClassesTab({ profile, theme }) {
   )
 }
 
+// ── DiagnosticTab ─────────────────────────────────────────────────────────────
+
+const YEAR_LEVELS = [
+  'Year 3', 'Year 4', 'Year 5', 'Year 6',
+  'Year 7', 'Year 8', 'Year 9', 'Year 10',
+  'Year 11 / Stage 1', 'Year 12 / Stage 2',
+]
+
+const DIAGNOSTIC_SUBJECTS = [
+  { id: 'mathematics', name: 'Mathematics', topics: ['Number & Algebra', 'Measurement & Geometry', 'Statistics & Probability', 'Functions & Graphs', 'Calculus', 'Trigonometry', 'Quadratics', 'Linear Equations', 'Rates & Ratios', 'Financial Maths'] },
+  { id: 'english',     name: 'English',     topics: ['Reading Comprehension', 'Language Features', 'Essay Writing', 'Analytical Writing', 'Creative Writing', 'Grammar & Punctuation', 'Vocabulary', 'Text Analysis', 'Narrative', 'Persuasive Writing'], isWriting: true },
+  { id: 'science',     name: 'Science',     topics: ['Living World', 'Physical World', 'Earth & Space', 'Chemical World', 'Forces & Motion', 'Energy', 'Matter & Materials', 'Ecosystems'] },
+  { id: 'chemistry',   name: 'Chemistry',   topics: ['Atomic Structure', 'Bonding', 'Periodic Table', 'Quantities', 'Solutions', 'Acid–Base', 'Redox', 'Organic Chemistry', 'Electrochemistry', 'Thermochemistry'] },
+  { id: 'biology',     name: 'Biology',     topics: ['Cells & Organisms', 'Genetics & Evolution', 'Ecosystems', 'Human Biology', 'DNA & Proteins', 'Biodiversity', 'Physiology'] },
+  { id: 'physics',     name: 'Physics',     topics: ['Motion & Forces', 'Energy', 'Waves & Light', 'Electricity & Magnetism', 'Nuclear Physics', 'Thermodynamics', 'Modern Physics'] },
+  { id: 'history',     name: 'History',     topics: ['Ancient History', 'Modern History', 'Australian History', 'World War I', 'World War II', 'Cold War', 'Source Analysis'] },
+  { id: 'geography',   name: 'Geography',   topics: ['Landforms & Landscapes', 'Water in the World', 'Place & Liveability', 'Interconnections', 'Environmental Change', 'Geographies of Interconnections'] },
+]
+
+function DiagnosticTab({ profile, theme }) {
+  const t = THEMES[theme]
+
+  // ── Form state ──
+  const [step, setStep] = useState('form')  // form | preview | created | list | report
+  const [yearLevel, setYearLevel] = useState('')
+  const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [selectedTopics, setSelectedTopics] = useState([])
+  const [writingType, setWritingType] = useState('paragraph')
+  const [studentName, setStudentName] = useState('')
+  const [preCallFormUrl, setPreCallFormUrl] = useState('')
+
+  // ── Generated data ──
+  const [generating, setGenerating]   = useState(false)
+  const [genError, setGenError]       = useState('')
+  const [questions, setQuestions]     = useState([])
+  const [saving, setSaving]           = useState(false)
+  const [saveError, setSaveError]     = useState('')
+  const [createdLink, setCreatedLink] = useState('')
+  const [copied, setCopied]           = useState(false)
+
+  // ── Past diagnostics list ──
+  const [diagnostics, setDiagnostics] = useState([])
+  const [listLoading, setListLoading] = useState(false)
+
+  // ── Report panel ──
+  const [reportData, setReportData]   = useState(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState('')
+
+  const selectedSubject = DIAGNOSTIC_SUBJECTS.find(s => s.id === selectedSubjectId)
+
+  const loadList = useCallback(async () => {
+    setListLoading(true)
+    try {
+      const json = await fetchDiagnosticAssessments()
+      setDiagnostics(json.assessments || [])
+    } catch {}
+    setListLoading(false)
+  }, [])
+
+  useEffect(() => { loadList() }, [loadList])
+
+  const toggleTopic = (topic) => {
+    setSelectedTopics(prev =>
+      prev.includes(topic) ? prev.filter(t => t !== topic) : [...prev, topic]
+    )
+  }
+
+  const handleGenerate = async () => {
+    setGenError('')
+    if (!yearLevel) { setGenError('Please select a year level.'); return }
+    if (!selectedSubjectId) { setGenError('Please select a subject.'); return }
+    if (selectedTopics.length === 0) { setGenError('Please select at least one topic.'); return }
+
+    const subjectConfig = {
+      name: selectedSubject.name,
+      topics: selectedTopics,
+      ...(selectedSubject.isWriting ? { writingType } : {}),
+    }
+
+    setGenerating(true)
+    try {
+      const json = await generateDiagnosticQuestions({ yearLevel, subjects: [subjectConfig] })
+      setQuestions(json.questions || [])
+      setStep('preview')
+    } catch (err) {
+      setGenError(err.message || 'Generation failed. Please try again.')
+    }
+    setGenerating(false)
+  }
+
+  const handleCreate = async () => {
+    setSaveError('')
+    setSaving(true)
+    const subjectConfig = {
+      name: selectedSubject.name,
+      topics: selectedTopics,
+      ...(selectedSubject.isWriting ? { writingType } : {}),
+    }
+    try {
+      const json = await createDiagnosticAssessment({
+        yearLevel,
+        subjects: [subjectConfig],
+        questions,
+        studentName: studentName.trim() || null,
+        preCallFormUrl: preCallFormUrl.trim() || null,
+      })
+      setCreatedLink(json.link)
+      setStep('created')
+      await loadList()
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save assessment.')
+    }
+    setSaving(false)
+  }
+
+  const handleCopy = async (link) => {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {}
+  }
+
+  const handleViewReport = async (assessment) => {
+    setReportError('')
+    setReportData(null)
+    setReportLoading(true)
+    setStep('report')
+    try {
+      const json = await fetchDiagnosticReport(assessment.id)
+      setReportData(json)
+    } catch (err) {
+      setReportError(err.message || 'Failed to load report.')
+    }
+    setReportLoading(false)
+  }
+
+  const resetForm = () => {
+    setStep('form')
+    setYearLevel('')
+    setSelectedSubjectId('')
+    setSelectedTopics([])
+    setWritingType('paragraph')
+    setStudentName('')
+    setPreCallFormUrl('')
+    setQuestions([])
+    setCreatedLink('')
+    setGenError('')
+    setSaveError('')
+  }
+
+  const card = { background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }
+  const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
+  const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
+
+  // Difficulty totals for preview
+  const easyMarks = questions.filter(q => q.difficulty === 'easy').reduce((s, q) => s + q.marks, 0)
+  const modMarks  = questions.filter(q => q.difficulty === 'moderate').reduce((s, q) => s + q.marks, 0)
+  const examMarks = questions.filter(q => q.difficulty === 'exam').reduce((s, q) => s + q.marks, 0)
+  const totalMarks = questions.reduce((s, q) => s + q.marks, 0)
+
+  return (
+    <div>
+      {/* ── Tab sub-nav ── */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+        {[
+          { key: 'form',    label: '+ New Assessment' },
+          { key: 'list',    label: `Past Diagnostics (${diagnostics.length})` },
+        ].map(btn => (
+          <button
+            key={btn.key}
+            onClick={() => { if (btn.key === 'form') resetForm(); else setStep('list') }}
+            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${(step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? GOLD : t.border}`, background: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'rgba(241,190,67,0.1)' : 'transparent', color: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? GOLD : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Step: Form ── */}
+      {step === 'form' && (
+        <div>
+          <div style={card}>
+            <div style={sectionHdr}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Generate Diagnostic Assessment</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
+              </div>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {/* Year level */}
+              <div>
+                <label style={labelStyle}>Year Level</label>
+                <select value={yearLevel} onChange={e => setYearLevel(e.target.value)} style={inputStyle}>
+                  <option value="">Select year level…</option>
+                  {YEAR_LEVELS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label style={labelStyle}>Subject</label>
+                <select value={selectedSubjectId} onChange={e => { setSelectedSubjectId(e.target.value); setSelectedTopics([]) }} style={inputStyle}>
+                  <option value="">Select subject…</option>
+                  {DIAGNOSTIC_SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              {/* Topics */}
+              {selectedSubject && (
+                <div>
+                  <label style={labelStyle}>Topics / Subtopics <span style={{ color: t.textFaint, fontWeight: 400, textTransform: 'none' }}>— select all that apply</span></label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {selectedSubject.topics.map(topic => {
+                      const sel = selectedTopics.includes(topic)
+                      return (
+                        <button
+                          key={topic}
+                          onClick={() => toggleTopic(topic)}
+                          style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.12)' : 'transparent', color: sel ? GOLD : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
+                        >
+                          {topic}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Writing type — only for English */}
+              {selectedSubject?.isWriting && (
+                <div>
+                  <label style={labelStyle}>Writing Task Type</label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {[
+                      { value: 'paragraph', label: 'Paragraph', desc: 'Shorter response, 1–2 paragraphs' },
+                      { value: 'essay',     label: 'Essay',     desc: 'Full essay with intro, body, conclusion' },
+                    ].map(opt => {
+                      const sel = writingType === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => setWritingType(opt.value)}
+                          style={{ flex: 1, padding: '12px 16px', borderRadius: 10, border: `2px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.1)' : 'transparent', color: t.text, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 700, color: sel ? GOLD : t.text, marginBottom: 2 }}>{opt.label}</div>
+                          <div style={{ fontSize: 11, color: t.textMuted }}>{opt.desc}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Optional student name */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Student Name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Pre-Call Questionnaire URL <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <input value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Student is redirected here after completing the test</div>
+                </div>
+              </div>
+
+              {genError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)' }}>{genError}</div>}
+
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: generating ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                {generating ? <>🤖 Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : '🤖 Generate Assessment'}
+              </button>
+            </div>
+          </div>
+
+          {/* How it works */}
+          <div style={card}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>How it works</div>
+            </div>
+            <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 16 }}>
+              {[
+                { icon: '🤖', title: '30-Mark AI Test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
+                { icon: '🔗', title: 'Unique Link', desc: "Copy and share the link with the student's parent — the test runs entirely in the browser" },
+                { icon: '📊', title: 'Auto-Marked by AI', desc: 'As soon as the student submits, AI marks every question and generates a diagnostic report' },
+                { icon: '📋', title: 'Report to Tutor', desc: 'Pain points, patterns and recommendations appear here in the tutor portal for your review' },
+              ].map(item => (
+                <div key={item.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ fontSize: 22, flexShrink: 0 }}>{item.icon}</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 3 }}>{item.title}</div>
+                    <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step: Preview ── */}
+      {step === 'preview' && questions.length > 0 && (
+        <div>
+          <div style={card}>
+            <div style={sectionHdr}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Preview Generated Questions</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>{questions.length} questions · {totalMarks} marks</div>
+              </div>
+              <button onClick={resetForm} style={{ padding: '6px 14px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
+                ← Regenerate
+              </button>
+            </div>
+
+            {/* Mark summary */}
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              {[
+                { label: 'Section A — Foundation', marks: easyMarks, color: '#4ade80' },
+                { label: 'Section B — Core Skills', marks: modMarks,  color: GOLD },
+                { label: 'Section C — Exam Style', marks: examMarks, color: '#f87171' },
+                { label: 'TOTAL', marks: totalMarks, color: t.text },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: t.textMuted }}>{s.label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: s.color }}>{s.marks}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Questions list */}
+            <div style={{ maxHeight: 440, overflowY: 'auto' }}>
+              {questions.map((q, i) => {
+                const dc = q.difficulty === 'easy' ? '#4ade80' : q.difficulty === 'moderate' ? GOLD : '#f87171'
+                return (
+                  <div key={q.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: `${dc}15`, border: `1px solid ${dc}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: dc, flexShrink: 0 }}>
+                      Q{i + 1}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 20, border: `1px solid ${dc}30`, background: `${dc}10`, color: dc, fontWeight: 700 }}>{DIFF_LABEL[q.difficulty] || q.difficulty}</span>
+                        <span style={{ fontSize: 11, color: t.textMuted }}>{q.marks} mark{q.marks !== 1 ? 's' : ''}</span>
+                        <span style={{ fontSize: 11, color: t.textFaint }}>{q.topic}{q.subtopic ? ` · ${q.subtopic}` : ''}</span>
+                        <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 'auto' }}>{q.type?.replace(/_/g, ' ')}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{q.question}</div>
+                      {q.options && (
+                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {q.options.map(opt => (
+                            <div key={opt} style={{ fontSize: 12, color: opt.startsWith(q.correct_answer) ? '#4ade80' : t.textMuted, paddingLeft: 4 }}>
+                              {opt.startsWith(q.correct_answer) ? '✓ ' : '   '}{opt}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Save form */}
+          <div style={card}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Create Assessment & Get Link</div>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Student Name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Pre-Call Questionnaire URL <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <input value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
+                </div>
+              </div>
+              {saveError && <div style={{ fontSize: 13, color: '#f87171' }}>{saveError}</div>}
+              <button onClick={handleCreate} disabled={saving}
+                style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start' }}>
+                {saving ? 'Creating…' : '✅ Create & Get Student Link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step: Created ── */}
+      {step === 'created' && createdLink && (
+        <div style={card}>
+          <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✅</div>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>Assessment Created!</div>
+                <div style={{ fontSize: 13, color: t.textMuted }}>Share this link with the student or parent</div>
+              </div>
+            </div>
+
+            <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: GOLD, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{createdLink}</div>
+              <button
+                onClick={() => handleCopy(createdLink)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${copied ? '#4ade80' : t.border}`, background: copied ? 'rgba(74,222,128,0.1)' : 'transparent', color: copied ? '#4ade80' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+              >
+                {copied ? '✓ Copied!' : 'Copy Link'}
+              </button>
+            </div>
+
+            <div style={{ background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.2)', borderRadius: 10, padding: '14px 16px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>What happens next?</div>
+              <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <li style={{ fontSize: 13, color: t.textMuted }}>Send the link to the student or parent</li>
+                <li style={{ fontSize: 13, color: t.textMuted }}>The student opens the link and completes the test at their own pace</li>
+                <li style={{ fontSize: 13, color: t.textMuted }}>AI marks the assessment automatically on submission</li>
+                <li style={{ fontSize: 13, color: t.textMuted }}>The full report appears here in your tutor portal</li>
+                {preCallFormUrl && <li style={{ fontSize: 13, color: t.textMuted }}>After submission, the student is redirected to your pre-call questionnaire</li>}
+              </ol>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={resetForm} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                + New Assessment
+              </button>
+              <button onClick={() => setStep('list')} style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>
+                View All Diagnostics
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step: List ── */}
+      {step === 'list' && (
+        <div style={card}>
+          <div style={{ ...sectionHdr }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Past Diagnostics</div>
+            <button onClick={loadList} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Refresh</button>
+          </div>
+          {listLoading ? (
+            <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
+          ) : diagnostics.length === 0 ? (
+            <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No diagnostic assessments yet. Create one to get started.</div>
+          ) : (
+            <div>
+              {diagnostics.map(d => {
+                const completed = d.status === 'completed'
+                const subjectNames = (d.subjects || []).map(s => s.name).join(', ')
+                return (
+                  <div key={d.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.year_level} · {subjectNames}</span>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${completed ? 'rgba(74,222,128,0.35)' : 'rgba(241,190,67,0.35)'}`, background: completed ? 'rgba(74,222,128,0.1)' : 'rgba(241,190,67,0.1)', color: completed ? '#4ade80' : GOLD, fontWeight: 700 }}>
+                          {completed ? 'Completed' : 'Pending'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: t.textMuted }}>
+                        {d.submitted_by_name || d.student_name || 'No name yet'}
+                        {completed && d.score_total != null ? ` · Score: ${d.score_total}/${d.score_max}` : ''}
+                        {` · Created ${fmtDate(d.created_at)}`}
+                        {completed && d.completed_at ? ` · Submitted ${fmtDate(d.completed_at)}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button onClick={() => handleCopy(d.link)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
+                        Copy Link
+                      </button>
+                      {completed && (
+                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                          View Report
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Step: Report ── */}
+      {step === 'report' && (
+        <div>
+          <button onClick={() => setStep('list')} style={{ marginBottom: 16, padding: '8px 16px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>
+            ← Back to list
+          </button>
+          {reportLoading && <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading report…</div>}
+          {reportError && <div style={{ fontSize: 13, color: '#f87171', padding: '12px 16px', borderRadius: 8, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)' }}>{reportError}</div>}
+          {reportData?.report && (() => {
+            const r = reportData.report
+            const a = reportData.assessment
+            const pct = r.percentage
+            const bandColors = { Outstanding: '#4ade80', High: GOLD, Satisfactory: '#60a5fa', Developing: '#fbbf24', Beginning: '#f87171' }
+            const bc = bandColors[r.performance_band] || GOLD
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Header */}
+                <div style={card}>
+                  <div style={{ padding: '20px 24px', display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 4 }}>
+                        {a.submitted_by_name || a.student_name || 'Student'} — Diagnostic Report
+                      </div>
+                      <div style={{ fontSize: 13, color: t.textMuted }}>{a.year_level} · {(a.subjects || []).map(s => s.name).join(', ')} · {fmtDate(a.completed_at)}</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: t.text }}>{r.total_score}<span style={{ fontSize: 18, color: t.textMuted }}>/{r.max_score}</span></div>
+                      <div style={{ fontSize: 13, color: t.textMuted }}>{pct}%</div>
+                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, border: `1px solid ${bc}40`, background: `${bc}15`, color: bc, fontWeight: 700 }}>{r.performance_band}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section breakdown */}
+                <div style={card}>
+                  <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Section Scores</div>
+                  </div>
+                  <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {[
+                      { label: 'Section A — Foundation', score: r.easy_score, max: r.easy_max, color: '#4ade80' },
+                      { label: 'Section B — Core Skills', score: r.moderate_score, max: r.moderate_max, color: GOLD },
+                      { label: 'Section C — Exam Style', score: r.exam_score, max: r.exam_max, color: '#f87171' },
+                    ].filter(s => s.max > 0).map(s => (
+                      <div key={s.label}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                          <span style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{s.label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.score}/{s.max}</span>
+                        </div>
+                        <div style={{ height: 7, borderRadius: 4, background: t.border, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${s.max > 0 ? (s.score / s.max) * 100 : 0}%`, background: s.color, borderRadius: 4 }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Topic breakdown */}
+                {r.topic_breakdown?.length > 0 && (
+                  <div style={card}>
+                    <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Topic Breakdown</div>
+                    </div>
+                    <div>
+                      {r.topic_breakdown.map(tb => {
+                        const pct = tb.percentage
+                        const c = pct >= 75 ? '#4ade80' : pct >= 50 ? GOLD : '#f87171'
+                        return (
+                          <div key={tb.topic} style={{ padding: '11px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <div style={{ flex: 1, fontSize: 13, color: t.text }}>{tb.topic}</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{tb.marks_awarded}/{tb.marks_possible}</div>
+                            <div style={{ width: 60, height: 6, borderRadius: 3, background: t.border, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: c, borderRadius: 3 }} />
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: c, width: 36, textAlign: 'right' }}>{pct}%</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Report sections */}
+                {[
+                  { key: 'pain_points',     label: '⚡ Pain Points',      color: '#f87171', items: r.pain_points },
+                  { key: 'patterns',        label: '🔍 Patterns Observed', color: GOLD,      items: r.patterns },
+                  { key: 'recommendations', label: '✅ Recommendations',  color: '#4ade80', items: r.recommendations },
+                ].filter(s => s.items?.length > 0).map(section => (
+                  <div key={section.key} style={card}>
+                    <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{section.label}</div>
+                    </div>
+                    <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {section.items.map((item, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: section.color, flexShrink: 0, marginTop: 6 }} />
+                          <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55 }}>{item}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Summary */}
+                {r.summary && (
+                  <div style={card}>
+                    <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>📝 Tutor Summary</div>
+                    </div>
+                    <div style={{ padding: '14px 20px', fontSize: 13, color: t.text, lineHeight: 1.65 }}>{r.summary}</div>
+                  </div>
+                )}
+
+                {/* Per-question results */}
+                {r.question_results?.length > 0 && (
+                  <div style={card}>
+                    <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Question-by-Question Feedback</div>
+                    </div>
+                    <div>
+                      {r.question_results.map(qr => {
+                        const full = qr.marks_awarded === qr.marks_possible
+                        const partial = !full && qr.marks_awarded > 0
+                        const col = full ? '#4ade80' : partial ? GOLD : '#f87171'
+                        return (
+                          <div key={qr.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, background: `${col}15`, border: `1px solid ${col}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: col, flexShrink: 0 }}>
+                              Q{qr.id}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: col }}>{qr.marks_awarded}/{qr.marks_possible} marks</span>
+                              </div>
+                              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{qr.feedback}</div>
+                              {qr.student_answer && (
+                                <div style={{ marginTop: 6, fontSize: 11, color: t.textFaint }}>
+                                  Student answered: <span style={{ color: t.textMuted }}>{qr.student_answer.length > 80 ? qr.student_answer.slice(0, 80) + '…' : qr.student_answer}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam Style' }
+
 // ── Main TutorScreen ──────────────────────────────────────────────────────────
 const TABS = [
   { id: 'students',    label: 'Students',    icon: '👥' },
   { id: 'classes',     label: 'Classes',     icon: '🏫' },
   { id: 'assignments', label: 'Assignments', icon: '📋' },
   { id: 'progress',    label: 'Progress',    icon: '📊' },
+  { id: 'diagnostic',  label: 'Diagnostic',  icon: '🧪' },
 ]
 
 export default function TutorScreen({ profile, theme }) {
@@ -1269,6 +1920,7 @@ export default function TutorScreen({ profile, theme }) {
           {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
           {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
           {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
+          {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
         </div>
       </div>
     </div>
