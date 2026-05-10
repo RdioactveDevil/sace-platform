@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { loadDiagnosticByToken, submitDiagnosticAnswers } from '../lib/db'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+import 'mathlive'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -24,13 +25,9 @@ function renderMath(text, displayMode = false) {
 function MathText({ children }) {
   if (!children) return null
   const str = String(children)
-
-  // Split on $$...$$ (display) and $...$ (inline), preserving delimiters
   const parts = []
-  let rest = str
   const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
-  let lastIndex = 0
-  let m
+  let lastIndex = 0, m
   while ((m = re.exec(str)) !== null) {
     if (m.index > lastIndex) parts.push({ type: 'text', value: str.slice(lastIndex, m.index) })
     const raw = m[0]
@@ -54,179 +51,81 @@ function MathText({ children }) {
   )
 }
 
-// ── contentEditable math editor utilities ─────────────────────────────────────
+// ── Subject detection ──────────────────────────────────────────────────────────
 
-function escHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const WRITING_KEYWORDS = ['english', 'history', 'geography', 'literature', 'essay', 'writing', 'humanities', 'economics', 'legal', 'business']
+
+function detectIsMath(subjects = []) {
+  return !subjects.some(s =>
+    WRITING_KEYWORDS.some(kw => s.name?.toLowerCase().includes(kw))
+  )
 }
 
-// Convert raw text (with $...$) to innerHTML with rendered KaTeX spans
-function rawToHtml(raw) {
-  const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
-  let html = '', last = 0, m
-  while ((m = re.exec(raw)) !== null) {
-    if (m.index > last) html += escHtml(raw.slice(last, m.index)).replace(/\n/g, '<br>')
-    const src = m[0]
-    const isDisplay = src.startsWith('$$')
-    const inner = isDisplay ? src.slice(2, -2) : src.slice(1, -1)
-    const rendered = renderMath(inner, isDisplay)
-    const tag = isDisplay ? 'div' : 'span'
-    html += `<${tag} class="math-atom" data-raw="${src.replace(/"/g, '&quot;')}" contenteditable="false">${rendered}</${tag}>`
-    last = m.index + src.length
-  }
-  if (last < raw.length) html += escHtml(raw.slice(last)).replace(/\n/g, '<br>')
-  return html || ''
-}
+// ── Math symbols ───────────────────────────────────────────────────────────────
 
-// Walk the editor DOM, reconstructing raw text (using data-raw for math spans)
-function getRawText(el) {
-  let t = ''
-  function walk(node) {
-    if (node.nodeType === 3) { t += node.textContent }
-    else if (node.dataset?.raw) { t += node.dataset.raw }
-    else if (node.tagName === 'BR') { t += '\n' }
-    else if (node.tagName === 'DIV' && node !== el) { t += '\n'; for (const c of node.childNodes) walk(c) }
-    else { for (const c of node.childNodes) walk(c) }
-  }
-  walk(el)
-  return t
-}
-
-// Get cursor position as raw-text offset
-function getCursorRawOffset(el) {
-  const sel = window.getSelection()
-  if (!sel?.rangeCount || !el.contains(sel.anchorNode)) return 0
-  const r = sel.getRangeAt(0)
-  let off = 0, done = false
-  function count(node) {
-    if (node.nodeType === 3) off += node.length
-    else if (node.dataset?.raw) off += node.dataset.raw.length
-    else if (node.tagName === 'BR') off += 1
-    else if (node.tagName === 'DIV' && node !== el) { off += 1; for (const c of node.childNodes) count(c) }
-    else { for (const c of node.childNodes) count(c) }
-  }
-  function walk(node) {
-    if (done) return
-    if (node === r.startContainer) {
-      if (node.nodeType === 3) { off += r.startOffset }
-      else { for (let i = 0; i < r.startOffset; i++) count(node.childNodes[i]) }
-      done = true; return
-    }
-    if (node.nodeType === 3) { off += node.length }
-    else if (node.dataset?.raw) {
-      if (node.contains(r.startContainer)) { off += node.dataset.raw.length; done = true }
-      else { off += node.dataset.raw.length }
-    }
-    else if (node.tagName === 'BR') { off += 1 }
-    else if (node.tagName === 'DIV' && node !== el) {
-      if (node === r.startContainer) { done = true; return }
-      off += 1; for (const c of node.childNodes) { if (!done) walk(c) }
-    }
-    else { for (const c of node.childNodes) { if (!done) walk(c) } }
-  }
-  walk(el)
-  return off
-}
-
-// Restore cursor to raw-text offset after re-render
-function setCursorRawOffset(el, target) {
-  const range = document.createRange()
-  let rem = target, done = false
-  function walk(node) {
-    if (done) return
-    if (node.nodeType === 3) {
-      if (rem <= node.length) { range.setStart(node, rem); range.collapse(true); done = true }
-      else { rem -= node.length }
-    } else if (node.dataset?.raw) {
-      const len = node.dataset.raw.length
-      if (rem <= len) {
-        const p = node.parentNode, i = Array.from(p.childNodes).indexOf(node)
-        range.setStart(p, i + 1); range.collapse(true); done = true
-      } else { rem -= len }
-    } else if (node.tagName === 'BR') {
-      if (rem === 0) {
-        const p = node.parentNode, i = Array.from(p.childNodes).indexOf(node)
-        range.setStart(p, i); range.collapse(true); done = true
-      } else { rem -= 1 }
-    } else if (node.tagName === 'DIV' && node !== el) {
-      if (rem === 0) { range.setStart(node, 0); range.collapse(true); done = true }
-      else { rem -= 1; for (const c of node.childNodes) { if (!done) walk(c) } }
-    } else { for (const c of node.childNodes) { if (!done) walk(c) } }
-  }
-  walk(el)
-  if (!done) { range.selectNodeContents(el); range.collapse(false) }
-  const sel = window.getSelection()
-  sel?.removeAllRanges(); sel?.addRange(range)
-}
-
-// ── Math keyboard ──────────────────────────────────────────────────────────────
-
-// insert: the text dropped into the textarea (plain Unicode or $LaTeX$)
-// cursor: negative offset from end of insert to place caret (e.g. -2 = inside last pair)
-// preview: LaTeX string rendered in the button face via KaTeX (optional)
+// insert: for contentEditable/textarea fallback
+// ml: MathLive LaTeX, with #? placeholders (cursor jumps inside)
+// preview: KaTeX rendered in button face
 const MATH_SYMBOLS = [
   { group: 'Operators', symbols: [
-    { label: '×',   insert: '×' },
-    { label: '÷',   insert: '÷' },
-    { label: '±',   insert: '±' },
-    { label: '√',   insert: '$\\sqrt{}$',   cursor: -2, preview: '\\sqrt{x}' },
-    { label: 'xⁿ',  insert: '$x^{}$',       cursor: -2, preview: 'x^n' },
-    { label: '∞',   insert: '$\\infty$' },
-    { label: 'a/b', insert: '$\\frac{}{}$', cursor: -4, preview: '\\frac{a}{b}' },
+    { label: '×',   ml: '\\times',           preview: null },
+    { label: '÷',   ml: '\\div',             preview: null },
+    { label: '±',   ml: '\\pm',              preview: null },
+    { label: '√',   ml: '\\sqrt{#?}',        preview: '\\sqrt{x}' },
+    { label: 'xⁿ',  ml: '#@^{#?}',           preview: 'x^n' },
+    { label: '∞',   ml: '\\infty',           preview: '\\infty' },
+    { label: 'a/b', ml: '\\frac{#?}{#?}',    preview: '\\frac{a}{b}' },
   ]},
   { group: 'Relations', symbols: [
-    { label: '≤', insert: ' ≤ ' },
-    { label: '≥', insert: ' ≥ ' },
-    { label: '≠', insert: ' ≠ ' },
-    { label: '≈', insert: ' ≈ ' },
-    { label: '∈', insert: ' ∈ ' },
-    { label: '→', insert: ' → ' },
+    { label: '≤',   ml: '\\le' },
+    { label: '≥',   ml: '\\ge' },
+    { label: '≠',   ml: '\\ne' },
+    { label: '≈',   ml: '\\approx' },
+    { label: '∈',   ml: '\\in' },
+    { label: '→',   ml: '\\to' },
   ]},
   { group: 'Trig', symbols: [
-    { label: 'sin',    insert: '$\\sin()$',      cursor: -2 },
-    { label: 'cos',    insert: '$\\cos()$',      cursor: -2 },
-    { label: 'tan',    insert: '$\\tan()$',      cursor: -2 },
-    { label: 'sin⁻¹', insert: '$\\sin^{-1}()$', cursor: -2, preview: '\\sin^{-1}(x)' },
-    { label: 'cos⁻¹', insert: '$\\cos^{-1}()$', cursor: -2, preview: '\\cos^{-1}(x)' },
-    { label: 'tan⁻¹', insert: '$\\tan^{-1}()$', cursor: -2, preview: '\\tan^{-1}(x)' },
+    { label: 'sin',    ml: '\\sin\\left(#?\\right)',         preview: null },
+    { label: 'cos',    ml: '\\cos\\left(#?\\right)',         preview: null },
+    { label: 'tan',    ml: '\\tan\\left(#?\\right)',         preview: null },
+    { label: 'sin⁻¹', ml: '\\sin^{-1}\\left(#?\\right)',    preview: '\\sin^{-1}(x)' },
+    { label: 'cos⁻¹', ml: '\\cos^{-1}\\left(#?\\right)',    preview: '\\cos^{-1}(x)' },
+    { label: 'tan⁻¹', ml: '\\tan^{-1}\\left(#?\\right)',    preview: '\\tan^{-1}(x)' },
   ]},
   { group: 'Calculus', symbols: [
-    { label: 'd/dx',   insert: '$\\frac{d}{dx}$',         preview: '\\frac{d}{dx}' },
-    { label: 'd²/dx²', insert: '$\\frac{d^2}{dx^2}$',     preview: '\\frac{d^2}{dx^2}' },
-    { label: '∫',      insert: '$\\int$' },
-    { label: '∫ dx',   insert: '$\\int_{}^{} \\, dx$', cursor: -11, preview: '\\int_a^b \\, dx' },
-    { label: 'lim',    insert: '$\\lim_{x \\to }$',     cursor: -2,  preview: '\\lim_{x \\to a}' },
-    { label: 'Σ',      insert: '$\\sum$' },
-    { label: '∂',      insert: '∂' },
-    { label: 'Δ',      insert: 'Δ' },
+    { label: 'd/dx',   ml: '\\frac{d}{dx}',            preview: '\\frac{d}{dx}' },
+    { label: 'd²/dx²', ml: '\\frac{d^2}{dx^2}',        preview: '\\frac{d^2}{dx^2}' },
+    { label: '∫',      ml: '\\int' },
+    { label: '∫ dx',   ml: '\\int_{#?}^{#?}#?\\,dx',   preview: '\\int_a^b \\, dx' },
+    { label: 'lim',    ml: '\\lim_{x\\to#?}',          preview: '\\lim_{x \\to a}' },
+    { label: 'Σ',      ml: '\\sum_{#?}^{#?}' },
+    { label: '∂',      ml: '\\partial' },
+    { label: 'Δ',      ml: '\\Delta' },
   ]},
   { group: 'Log / Exp', symbols: [
-    { label: 'ln',    insert: '$\\ln()$',      cursor: -2 },
-    { label: 'log',   insert: '$\\log()$',     cursor: -2 },
-    { label: 'log_n', insert: '$\\log_{}()$',  cursor: -4, preview: '\\log_n(x)' },
-    { label: 'eˣ',    insert: '$e^{}$',        cursor: -2, preview: 'e^x' },
+    { label: 'ln',    ml: '\\ln\\left(#?\\right)' },
+    { label: 'log',   ml: '\\log\\left(#?\\right)' },
+    { label: 'log_n', ml: '\\log_{#?}\\left(#?\\right)',  preview: '\\log_n(x)' },
+    { label: 'eˣ',    ml: 'e^{#?}',                      preview: 'e^x' },
   ]},
   { group: 'Greek', symbols: [
-    { label: 'π', insert: 'π' },
-    { label: 'θ', insert: 'θ' },
-    { label: 'α', insert: 'α' },
-    { label: 'β', insert: 'β' },
-    { label: 'λ', insert: 'λ' },
-    { label: 'μ', insert: 'μ' },
-    { label: 'σ', insert: 'σ' },
-    { label: 'φ', insert: 'φ' },
+    { label: 'π', ml: '\\pi' },
+    { label: 'θ', ml: '\\theta' },
+    { label: 'α', ml: '\\alpha' },
+    { label: 'β', ml: '\\beta' },
+    { label: 'λ', ml: '\\lambda' },
+    { label: 'μ', ml: '\\mu' },
+    { label: 'σ', ml: '\\sigma' },
+    { label: 'φ', ml: '\\phi' },
   ]},
 ]
 
 function MathKeyboard({ onInsert }) {
   const [activeGroup, setActiveGroup] = useState(0)
-  const insert = useCallback((sym) => onInsert(sym), [onInsert])
-
   const group = MATH_SYMBOLS[activeGroup]
 
   return (
     <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
-      {/* Group tabs */}
       <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid rgba(255,255,255,0.08)', scrollbarWidth: 'none' }}>
         {MATH_SYMBOLS.map((g, i) => (
           <button key={g.group} onClick={() => setActiveGroup(i)} style={{
@@ -239,12 +138,11 @@ function MathKeyboard({ onInsert }) {
           </button>
         ))}
       </div>
-      {/* Symbols */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 12px' }}>
         {group.symbols.map((sym) => (
           <button
             key={sym.label}
-            onClick={() => insert(sym)}
+            onClick={() => onInsert(sym)}
             style={{
               padding: '6px 11px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)',
               background: 'rgba(255,255,255,0.06)', color: '#fff', fontFamily: FONT,
@@ -266,6 +164,71 @@ function MathKeyboard({ onInsert }) {
   )
 }
 
+// ── MathLive input (math subjects) ─────────────────────────────────────────────
+
+function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, minHeight }) {
+  const mfRef = useRef(null)
+  const stableAnswer = useRef(onAnswer)
+  stableAnswer.current = onAnswer
+
+  useEffect(() => {
+    const mf = mfRef.current
+    if (!mf) return
+
+    mf.mathVirtualKeyboardPolicy = 'manual'
+    mf.readOnly = !!disabled
+
+    if (value) {
+      mf.setValue(value, { suppressChangeNotifications: true })
+    }
+
+    const onInput = () => stableAnswer.current(questionId, mf.value)
+    const onFocus = () => { mf.style.borderColor = GOLD }
+    const onBlur  = () => { mf.style.borderColor = 'rgba(255,255,255,0.12)' }
+
+    mf.addEventListener('input', onInput)
+    mf.addEventListener('focus', onFocus)
+    mf.addEventListener('blur', onBlur)
+    return () => {
+      mf.removeEventListener('input', onInput)
+      mf.removeEventListener('focus', onFocus)
+      mf.removeEventListener('blur', onBlur)
+    }
+  }, [questionId, disabled]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Expose insert function to parent
+  useEffect(() => {
+    if (!insertFnRef) return
+    insertFnRef.current = (sym) => {
+      const mf = mfRef.current
+      if (!mf || disabled) return
+      mf.focus()
+      mf.insert(sym.ml, { selectionMode: 'placeholder' })
+      stableAnswer.current(questionId, mf.value)
+    }
+  }, [questionId, disabled, insertFnRef])
+
+  return (
+    <math-field
+      ref={mfRef}
+      style={{
+        display: 'block',
+        width: '100%',
+        minHeight: minHeight || 60,
+        borderRadius: 10,
+        border: '2px solid rgba(255,255,255,0.12)',
+        background: 'rgba(255,255,255,0.05)',
+        color: '#fff',
+        fontSize: 14,
+        padding: '14px 16px',
+        boxSizing: 'border-box',
+        transition: 'border-color 0.15s',
+        cursor: disabled ? 'default' : 'text',
+      }}
+    />
+  )
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function difficultyGroups(questions) {
@@ -279,8 +242,7 @@ function difficultyGroups(questions) {
   ].filter(g => g.questions.length > 0)
 }
 
-
-// ── Assessment question display ────────────────────────────────────────────────
+// ── Question components ────────────────────────────────────────────────────────
 
 function McqQuestion({ q, answer, onAnswer, disabled }) {
   return (
@@ -312,7 +274,9 @@ function McqQuestion({ q, answer, onAnswer, disabled }) {
             }}>
               {letter}
             </span>
-            <span style={{ flex: 1, lineHeight: 1.5, marginTop: 2 }}><MathText>{opt.replace(/^[A-D]\.\s*/, '')}</MathText></span>
+            <span style={{ flex: 1, lineHeight: 1.5, marginTop: 2 }}>
+              <MathText>{opt.replace(/^[A-D]\.\s*/, '')}</MathText>
+            </span>
           </button>
         )
       })}
@@ -320,151 +284,86 @@ function McqQuestion({ q, answer, onAnswer, disabled }) {
   )
 }
 
-function TextQuestion({ q, answer, onAnswer, disabled }) {
+function TextQuestion({ q, answer, onAnswer, disabled, isMath }) {
   const isExtended = q.type === 'extended_response'
   const [showKeyboard, setShowKeyboard] = useState(false)
-  const editorRef  = useRef(null)
-  const renderTimer = useRef(null)
-  const lastAnswerRef = useRef(answer || '')
-  const placeholder = isExtended
-    ? 'Write your full response here. Use the ∑ Math panel to insert equations…'
-    : 'Write your answer here. Use the ∑ Math panel to insert equations…'
-
-  // Mount: paint initial HTML
-  useEffect(() => {
-    if (editorRef.current) editorRef.current.innerHTML = rawToHtml(answer || '')
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // If answer is reset externally (e.g. cleared from parent), re-sync
-  useEffect(() => {
-    if (answer !== lastAnswerRef.current && editorRef.current) {
-      lastAnswerRef.current = answer || ''
-      editorRef.current.innerHTML = rawToHtml(answer || '')
-    }
-  }, [answer])
-
-  const doRender = useCallback(() => {
-    const el = editorRef.current
-    if (!el) return
-    const raw = getRawText(el)
-    const off = getCursorRawOffset(el)
-    el.innerHTML = rawToHtml(raw)
-    setCursorRawOffset(el, off)
-  }, [])
-
-  const handleInput = useCallback(() => {
-    if (!editorRef.current) return
-    const raw = getRawText(editorRef.current)
-    lastAnswerRef.current = raw
-    onAnswer(q.id, raw)
-    clearTimeout(renderTimer.current)
-    renderTimer.current = setTimeout(doRender, 500)
-  }, [q.id, onAnswer, doRender])
-
-  const handlePaste = useCallback((e) => {
-    e.preventDefault()
-    const text = e.clipboardData?.getData('text/plain') || ''
-    document.execCommand('insertText', false, text)
-  }, [])
+  const insertFnRef = useRef(null)
 
   const handleInsert = useCallback((sym) => {
-    if (disabled) return
-    const el = editorRef.current
-    if (!el) return
-    el.focus()
-    const raw = getRawText(el)
-    const off = getCursorRawOffset(el)
-    const ins = sym.insert
-    const newRaw = raw.slice(0, off) + ins + raw.slice(off)
-    const newOff = off + ins.length + (sym.cursor ?? 0)
-    lastAnswerRef.current = newRaw
-    onAnswer(q.id, newRaw)
-    // Insert as raw editable text so user can fill in template slots (e.g. \frac{}{}),
-    // then schedule the normal debounced render — don't render immediately.
-    el.innerHTML = escHtml(newRaw).replace(/\n/g, '<br>')
-    requestAnimationFrame(() => { el.focus(); setCursorRawOffset(el, newOff) })
-    clearTimeout(renderTimer.current)
-    renderTimer.current = setTimeout(doRender, 600)
-  }, [disabled, q.id, onAnswer, doRender])
+    if (disabled || !insertFnRef.current) return
+    insertFnRef.current(sym)
+  }, [disabled])
 
-  // Clicking a rendered math span unmasks it back to editable raw LaTeX
-  const handleClick = useCallback((e) => {
-    if (disabled) return
-    const span = e.target.closest('.math-atom')
-    if (!span || !editorRef.current) return
-    const rawSrc = span.dataset.raw || ''
-    const textNode = document.createTextNode(rawSrc)
-    span.replaceWith(textNode)
-    // Place cursor at end of the unmasked text
-    requestAnimationFrame(() => {
-      const range = document.createRange()
-      range.setStart(textNode, rawSrc.length)
-      range.collapse(true)
-      const sel = window.getSelection()
-      sel?.removeAllRanges()
-      sel?.addRange(range)
-    })
-    const newRaw = getRawText(editorRef.current)
-    lastAnswerRef.current = newRaw
-    onAnswer(q.id, newRaw)
-    clearTimeout(renderTimer.current)
-    renderTimer.current = setTimeout(doRender, 600)
-  }, [disabled, q.id, onAnswer, doRender])
-
-  const [borderColor, setBorderColor] = useState('rgba(255,255,255,0.12)')
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-        <button
-          onClick={() => setShowKeyboard(v => !v)}
-          style={{
-            padding: '4px 12px', borderRadius: 7,
-            border: `1px solid ${showKeyboard ? GOLD : 'rgba(255,255,255,0.15)'}`,
-            background: showKeyboard ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.05)',
-            color: showKeyboard ? GOLD : 'rgba(255,255,255,0.6)',
-            fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          }}
-        >
-          ∑ Math
-        </button>
-      </div>
-      <div style={{ position: 'relative' }}>
-        {/* Placeholder */}
-        {!answer && (
-          <div style={{
-            position: 'absolute', top: 14, left: 16, right: 16, pointerEvents: 'none',
-            color: 'rgba(255,255,255,0.28)', fontFamily: FONT, fontSize: 14, lineHeight: 1.6,
-          }}>{placeholder}</div>
-        )}
-        <div
-          ref={editorRef}
-          contentEditable={!disabled}
-          suppressContentEditableWarning
-          onInput={handleInput}
-          onPaste={handlePaste}
-          onClick={handleClick}
-          onFocus={() => setBorderColor(GOLD)}
-          onBlur={() => { setBorderColor('rgba(255,255,255,0.12)'); doRender() }}
-          style={{
-            width: '100%', boxSizing: 'border-box',
-            minHeight: isExtended ? 180 : 100,
-            padding: '14px 16px', borderRadius: 10,
-            border: `2px solid ${borderColor}`,
-            background: 'rgba(255,255,255,0.05)',
-            color: '#fff', fontFamily: FONT, fontSize: 14, lineHeight: 1.8,
-            outline: 'none', cursor: disabled ? 'default' : 'text',
-            overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            transition: 'border-color 0.15s',
-          }}
+  if (isMath) {
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+          <button
+            onClick={() => setShowKeyboard(v => !v)}
+            style={{
+              padding: '4px 12px', borderRadius: 7,
+              border: `1px solid ${showKeyboard ? GOLD : 'rgba(255,255,255,0.15)'}`,
+              background: showKeyboard ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.05)',
+              color: showKeyboard ? GOLD : 'rgba(255,255,255,0.6)',
+              fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            ∑ Math
+          </button>
+        </div>
+        <MathLiveInput
+          questionId={q.id}
+          value={answer}
+          onAnswer={onAnswer}
+          insertFnRef={insertFnRef}
+          disabled={disabled}
+          minHeight={isExtended ? 180 : 80}
         />
+        {showKeyboard && !disabled && <MathKeyboard onInsert={handleInsert} />}
       </div>
-      {showKeyboard && !disabled && <MathKeyboard onInsert={handleInsert} />}
-    </div>
+    )
+  }
+
+  // Plain textarea for English / humanities subjects
+  return (
+    <PlainTextInput
+      value={answer || ''}
+      onChange={v => onAnswer(q.id, v)}
+      disabled={disabled}
+      isExtended={isExtended}
+    />
   )
 }
 
-function QuestionCard({ q, idx, answer, onAnswer, disabled }) {
+function PlainTextInput({ value, onChange, disabled, isExtended }) {
+  const placeholder = isExtended
+    ? 'Write your full response here…'
+    : 'Write your answer here…'
+  const [borderColor, setBorderColor] = useState('rgba(255,255,255,0.12)')
+  return (
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      disabled={disabled}
+      placeholder={placeholder}
+      onFocus={() => setBorderColor(GOLD)}
+      onBlur={() => setBorderColor('rgba(255,255,255,0.12)')}
+      style={{
+        width: '100%', boxSizing: 'border-box',
+        minHeight: isExtended ? 180 : 100,
+        padding: '14px 16px', borderRadius: 10,
+        border: `2px solid ${borderColor}`,
+        background: 'rgba(255,255,255,0.05)',
+        color: '#fff', fontFamily: FONT, fontSize: 14, lineHeight: 1.8,
+        outline: 'none', resize: 'vertical',
+        cursor: disabled ? 'default' : 'text',
+        transition: 'border-color 0.15s',
+      }}
+    />
+  )
+}
+
+function QuestionCard({ q, idx, answer, onAnswer, disabled, isMath }) {
   const dc = DIFF_COLOR[q.difficulty] || GOLD
   return (
     <div style={{
@@ -492,12 +391,14 @@ function QuestionCard({ q, idx, answer, onAnswer, disabled }) {
               <span style={{ fontSize: 11, color: '#4ade80', marginLeft: 'auto' }}>✓ Answered</span>
             )}
           </div>
-          <div style={{ fontSize: 15, color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}><MathText>{q.question}</MathText></div>
+          <div style={{ fontSize: 15, color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+            <MathText>{q.question}</MathText>
+          </div>
         </div>
       </div>
       {q.type === 'multiple_choice'
         ? <McqQuestion q={q} answer={answer} onAnswer={onAnswer} disabled={disabled} />
-        : <TextQuestion q={q} answer={answer} onAnswer={onAnswer} disabled={disabled} />
+        : <TextQuestion q={q} answer={answer} onAnswer={onAnswer} disabled={disabled} isMath={isMath} />
       }
     </div>
   )
@@ -518,14 +419,12 @@ function SubmittedScreen({ preCallFormUrl, onRedirect }) {
       <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
         ✅
       </div>
-
       <div>
         <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 10 }}>Assessment Submitted!</div>
         <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', maxWidth: 420, lineHeight: 1.6 }}>
           Thank you for completing the diagnostic. Your tutor will review your responses and get in touch with you soon.
         </div>
       </div>
-
       {preCallFormUrl && (
         <div style={{ background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 12, padding: '20px 28px', maxWidth: 420, width: '100%' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>One more step</div>
@@ -540,7 +439,6 @@ function SubmittedScreen({ preCallFormUrl, onRedirect }) {
           </button>
         </div>
       )}
-
       <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
         You can close this page.
       </div>
@@ -554,15 +452,16 @@ export default function DiagnosticScreen() {
   const { token } = useParams()
   const navigate  = useNavigate()
 
-  const [phase, setPhase]       = useState('loading')  // loading | intro | test | submitting | result | error
+  const [phase, setPhase]           = useState('loading')
   const [assessment, setAssessment] = useState(null)
   const [studentName, setStudentName] = useState('')
-  const [answers, setAnswers]   = useState({})
-  const [result, setResult]     = useState(null)
-  const [error, setError]       = useState('')
+  const [answers, setAnswers]       = useState({})
+  const [result, setResult]         = useState(null)
+  const [error, setError]           = useState('')
   const [submitError, setSubmitError] = useState('')
-  const [groups, setGroups]     = useState([])
+  const [groups, setGroups]         = useState([])
   const [activeGroup, setActiveGroup] = useState(0)
+  const [isMath, setIsMath]         = useState(true)
   const topRef = useRef(null)
 
   useEffect(() => {
@@ -575,6 +474,7 @@ export default function DiagnosticScreen() {
         }
         setAssessment(a)
         setGroups(difficultyGroups(a.questions))
+        setIsMath(detectIsMath(a.subjects || []))
         setPhase('intro')
       })
       .catch(err => {
@@ -620,8 +520,7 @@ export default function DiagnosticScreen() {
 
   const answeredCount = assessment ? assessment.questions.filter(q => answers[String(q.id)]?.trim()).length : 0
   const totalCount    = assessment ? assessment.questions.length : 0
-
-  const subjectNames = (assessment?.subjects || []).map(s => s.name).join(', ')
+  const subjectNames  = (assessment?.subjects || []).map(s => s.name).join(', ')
 
   return (
     <div ref={topRef} style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT, color: '#fff' }}>
@@ -629,10 +528,17 @@ export default function DiagnosticScreen() {
         @font-face { font-family: 'Plus Jakarta Sans'; src: url('/PlusJakartaSans.woff2') format('woff2'); font-display: swap; }
         * { box-sizing: border-box; }
         textarea:focus { outline: none; }
-        .math-atom { display: inline; user-select: none; cursor: pointer; background: rgba(241,190,67,0.1); border-radius: 3px; padding: 0 2px; }
-        .math-atom:hover { background: rgba(241,190,67,0.22); }
-        .math-atom .katex { color: #fff; font-size: 1em; }
-        div > .math-atom[data-raw^="$$"] { display: block; text-align: center; margin: 6px 0; background: rgba(241,190,67,0.06); border-radius: 6px; padding: 6px; }
+        math-field {
+          --caret-color: ${GOLD};
+          --selection-background-color: rgba(241,190,67,0.25);
+          --selection-background-color-focused: rgba(241,190,67,0.3);
+          --primary-color: ${GOLD};
+          --text-color: #fff;
+          font-family: ${FONT};
+        }
+        math-field::part(virtual-keyboard-toggle) { display: none; }
+        math-field::part(menu-toggle) { display: none; }
+        @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
       `}</style>
 
       {/* Header */}
@@ -684,7 +590,6 @@ export default function DiagnosticScreen() {
               <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }}>{subjectNames}</div>
             </div>
 
-            {/* Info cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
               {[
                 { icon: '📝', label: 'Questions', value: `${assessment.questions.length}` },
@@ -710,7 +615,6 @@ export default function DiagnosticScreen() {
               </ul>
             </div>
 
-            {/* Name input */}
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: 8 }}>
                 Your Name
@@ -740,7 +644,6 @@ export default function DiagnosticScreen() {
         {/* ─ Test ─ */}
         {phase === 'test' && assessment && (
           <div style={{ paddingTop: 32, paddingBottom: 80, display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {/* Section tabs */}
             <div style={{ display: 'flex', gap: 2, marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' }}>
               {groups.map((g, i) => (
                 <button
@@ -761,14 +664,13 @@ export default function DiagnosticScreen() {
               ))}
             </div>
 
-            {/* Active section */}
             {groups[activeGroup] && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 4 }}>{groups[activeGroup].label}</div>
                   <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{groups[activeGroup].marks} marks — {groups[activeGroup].questions.length} question{groups[activeGroup].questions.length !== 1 ? 's' : ''}</div>
                 </div>
-                {groups[activeGroup].questions.map((q, qi) => (
+                {groups[activeGroup].questions.map((q) => (
                   <QuestionCard
                     key={q.id}
                     q={q}
@@ -776,10 +678,10 @@ export default function DiagnosticScreen() {
                     answer={answers[String(q.id)]}
                     onAnswer={handleAnswer}
                     disabled={false}
+                    isMath={isMath}
                   />
                 ))}
 
-                {/* Section navigation */}
                 <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                   {activeGroup > 0 && (
                     <button onClick={() => { setActiveGroup(activeGroup - 1); topRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
@@ -797,7 +699,6 @@ export default function DiagnosticScreen() {
               </div>
             )}
 
-            {/* Submit */}
             <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(12,16,55,0.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, zIndex: 100 }}>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
                 {answeredCount}/{totalCount} questions answered
@@ -827,7 +728,6 @@ export default function DiagnosticScreen() {
                 <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4, animation: `pulse 1.2s ${i * 0.4}s infinite` }} />
               ))}
             </div>
-            <style>{`@keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }`}</style>
           </div>
         )}
 
