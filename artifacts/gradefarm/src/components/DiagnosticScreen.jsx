@@ -7,7 +7,6 @@ const GOLDL = '#f9d87a'
 const NAVY  = '#0c1037'
 const FONT  = "'Plus Jakarta Sans', sans-serif"
 
-const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam Style' }
 const DIFF_COLOR = { easy: '#4ade80', moderate: GOLD, exam: '#f87171' }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -23,21 +22,6 @@ function difficultyGroups(questions) {
   ].filter(g => g.questions.length > 0)
 }
 
-function BandBadge({ band }) {
-  const colors = {
-    Outstanding: { bg: 'rgba(167,243,208,0.15)', border: '#4ade80', text: '#4ade80' },
-    High:        { bg: 'rgba(241,190,67,0.15)',  border: GOLD,      text: GOLD },
-    Satisfactory:{ bg: 'rgba(96,165,250,0.15)',  border: '#60a5fa', text: '#60a5fa' },
-    Developing:  { bg: 'rgba(251,191,36,0.15)',  border: '#fbbf24', text: '#fbbf24' },
-    Beginning:   { bg: 'rgba(248,113,113,0.15)', border: '#f87171', text: '#f87171' },
-  }
-  const c = colors[band] || colors.Satisfactory
-  return (
-    <span style={{ fontSize: 13, padding: '4px 12px', borderRadius: 20, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontWeight: 700 }}>
-      {band}
-    </span>
-  )
-}
 
 // ── Assessment question display ────────────────────────────────────────────────
 
@@ -144,70 +128,34 @@ function QuestionCard({ q, idx, answer, onAnswer, disabled }) {
   )
 }
 
-// ── Result screen ──────────────────────────────────────────────────────────────
+// ── Submitted screen ───────────────────────────────────────────────────────────
 
-function ResultScreen({ result, preCallFormUrl, onRedirect }) {
-  const { score, maxScore, percentage, band, report } = result
-  const radius = 54
-  const circumference = 2 * Math.PI * radius
-  const dashOffset = circumference * (1 - percentage / 100)
-
+function SubmittedScreen({ preCallFormUrl, onRedirect }) {
   useEffect(() => {
     if (preCallFormUrl) {
-      const timer = setTimeout(onRedirect, 8000)
+      const timer = setTimeout(onRedirect, 6000)
       return () => clearTimeout(timer)
     }
   }, [preCallFormUrl, onRedirect])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, padding: '48px 24px' }}>
-      {/* Score ring */}
-      <div style={{ position: 'relative', width: 140, height: 140 }}>
-        <svg width="140" height="140" style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx="70" cy="70" r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
-          <circle cx="70" cy="70" r={radius} fill="none" stroke={GOLD} strokeWidth="10"
-            strokeDasharray={circumference} strokeDashoffset={dashOffset}
-            strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }}
-          />
-        </svg>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>{score}/{maxScore}</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{percentage}%</div>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28, padding: '64px 24px', textAlign: 'center' }}>
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
+        ✅
       </div>
 
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Assessment Complete!</div>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><BandBadge band={band} /></div>
-        {report?.summary && <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', maxWidth: 480, lineHeight: 1.6 }}>{report.summary}</div>}
-      </div>
-
-      {/* Section scores */}
-      {report && (
-        <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            { label: 'Section A — Foundation', score: report.easy_score, max: report.easy_max, color: '#4ade80' },
-            { label: 'Section B — Core Skills', score: report.moderate_score, max: report.moderate_max, color: GOLD },
-            { label: 'Section C — Exam Style', score: report.exam_score, max: report.exam_max, color: '#f87171' },
-          ].filter(s => s.max > 0).map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '12px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{s.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.score}/{s.max}</span>
-              </div>
-              <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${s.max > 0 ? (s.score / s.max) * 100 : 0}%`, background: s.color, borderRadius: 3, transition: 'width 0.8s ease' }} />
-              </div>
-            </div>
-          ))}
+      <div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 10 }}>Assessment Submitted!</div>
+        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', maxWidth: 420, lineHeight: 1.6 }}>
+          Thank you for completing the diagnostic. Your tutor will review your responses and get in touch with you soon.
         </div>
-      )}
+      </div>
 
       {preCallFormUrl && (
-        <div style={{ background: 'rgba(241,190,67,0.1)', border: `1px solid rgba(241,190,67,0.3)`, borderRadius: 12, padding: '18px 24px', maxWidth: 480, width: '100%', textAlign: 'center' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Next Step</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 14, lineHeight: 1.5 }}>
-            You will be redirected to a short Pre-Call Questionnaire to help your tutor prepare for your first session.
+        <div style={{ background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 12, padding: '20px 28px', maxWidth: 420, width: '100%' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>One more step</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 16, lineHeight: 1.5 }}>
+            Please complete a short Pre-Call Questionnaire to help your tutor prepare for your first session.
           </div>
           <button
             onClick={onRedirect}
@@ -218,8 +166,8 @@ function ResultScreen({ result, preCallFormUrl, onRedirect }) {
         </div>
       )}
 
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
-        Your results have been sent to your tutor. They will review and get in touch with you soon.
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
+        You can close this page.
       </div>
     </div>
   )
@@ -505,10 +453,9 @@ export default function DiagnosticScreen() {
         )}
 
         {/* ─ Result ─ */}
-        {phase === 'result' && result && (
-          <ResultScreen
-            result={result}
-            preCallFormUrl={result.preCallFormUrl || assessment?.pre_call_form_url}
+        {phase === 'result' && (
+          <SubmittedScreen
+            preCallFormUrl={result?.preCallFormUrl || assessment?.pre_call_form_url}
             onRedirect={handleRedirect}
           />
         )}
