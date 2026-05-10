@@ -223,7 +223,13 @@ For this ${subjects.map((s) => s.name).join("/")} assessment:
 - EXAM (10 marks): Short-answer and/or extended short-response questions (4–5 marks each) — synthesis and exam-style reasoning. Must total exactly 10 marks.
 `;
 
-  const system = `You are an expert Australian curriculum test designer. You create high-quality diagnostic assessments aligned to the Australian Curriculum. Always return strict, parseable JSON — no markdown fences, no extra commentary.`;
+  const system = `You are an expert Australian curriculum test designer. You create high-quality diagnostic assessments aligned to the Australian Curriculum. Always return strict, parseable JSON — no markdown fences, no extra commentary.
+
+IMPORTANT: Format ALL mathematical expressions using LaTeX delimiters:
+- Inline math: $expression$ e.g. $f(x) = x^2 - 3x + 2$
+- Display math (standalone): $$expression$$ e.g. $$\\int_0^1 x^2\\,dx$$
+- Use proper LaTeX: ^{} for powers, \\frac{}{} for fractions, \\sqrt{} for roots, \\sin \\cos \\tan for trig, \\ln \\log for logs, \\int \\sum \\lim for calculus, \\infty \\pi \\theta for Greek/symbols.
+- Example question: "Given $f(x) = x^3 - 3x$, find $f'(x)$ and determine the nature of the stationary points."`;
 
   const user = `Create a 30-mark diagnostic assessment for ${yearLevel}.
 Subject(s): ${subjectDesc}
@@ -233,9 +239,9 @@ ${writingInstructions}
 Each question object must have these exact fields:
 {
   "id": <integer starting at 1>,
-  "question": "<full question text>",
+  "question": "<full question text with LaTeX math wrapped in $ or $$ delimiters>",
   "type": "multiple_choice" | "short_answer" | "extended_response",
-  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],  (only for multiple_choice)
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],  (only for multiple_choice, use LaTeX in options too)
   "correct_answer": "<letter for MC e.g. 'B', or full model answer for others>",
   "marks": <integer>,
   "difficulty": "easy" | "moderate" | "exam",
@@ -253,6 +259,7 @@ STRICT RULES:
 6. Use real curriculum-aligned content for the given subject(s) and topics.
 7. Multiple choice questions must have exactly 4 options labelled A, B, C, D.
 8. correct_answer for multiple_choice must be a single uppercase letter (A/B/C/D).
+9. ALL mathematical expressions MUST use LaTeX formatting with $ delimiters.
 
 Return a JSON object: { "questions": [ ...array of question objects... ] }`;
 

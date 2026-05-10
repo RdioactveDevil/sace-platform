@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { loadDiagnosticByToken, submitDiagnosticAnswers } from '../lib/db'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -8,6 +10,166 @@ const NAVY  = '#0c1037'
 const FONT  = "'Plus Jakarta Sans', sans-serif"
 
 const DIFF_COLOR = { easy: '#4ade80', moderate: GOLD, exam: '#f87171' }
+
+// ── Math rendering ─────────────────────────────────────────────────────────────
+
+function renderMath(text, displayMode = false) {
+  try {
+    return katex.renderToString(text, { throwOnError: false, displayMode })
+  } catch {
+    return text
+  }
+}
+
+function MathText({ children }) {
+  if (!children) return null
+  const str = String(children)
+
+  // Split on $$...$$ (display) and $...$ (inline), preserving delimiters
+  const parts = []
+  let rest = str
+  const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
+  let lastIndex = 0
+  let m
+  while ((m = re.exec(str)) !== null) {
+    if (m.index > lastIndex) parts.push({ type: 'text', value: str.slice(lastIndex, m.index) })
+    const raw = m[0]
+    if (raw.startsWith('$$')) {
+      parts.push({ type: 'display', value: raw.slice(2, -2) })
+    } else {
+      parts.push({ type: 'inline', value: raw.slice(1, -1) })
+    }
+    lastIndex = m.index + raw.length
+  }
+  if (lastIndex < str.length) parts.push({ type: 'text', value: str.slice(lastIndex) })
+
+  return (
+    <span>
+      {parts.map((p, i) => {
+        if (p.type === 'text') return <span key={i}>{p.value}</span>
+        const html = renderMath(p.value, p.type === 'display')
+        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} style={p.type === 'display' ? { display: 'block', textAlign: 'center', margin: '8px 0' } : undefined} />
+      })}
+    </span>
+  )
+}
+
+// ── Math keyboard ──────────────────────────────────────────────────────────────
+
+const MATH_SYMBOLS = [
+  { group: 'Operators', symbols: [
+    { label: '×', insert: '\\times ' },
+    { label: '÷', insert: '\\div ' },
+    { label: '±', insert: '\\pm ' },
+    { label: '√', insert: '\\sqrt{}', cursor: -1 },
+    { label: 'xⁿ', insert: '^{}', cursor: -1 },
+    { label: '∞', insert: '\\infty ' },
+    { label: 'a/b', insert: '\\frac{}{}', cursor: -4 },
+  ]},
+  { group: 'Relations', symbols: [
+    { label: '≤', insert: '\\leq ' },
+    { label: '≥', insert: '\\geq ' },
+    { label: '≠', insert: '\\neq ' },
+    { label: '≈', insert: '\\approx ' },
+    { label: '∈', insert: '\\in ' },
+    { label: '→', insert: '\\to ' },
+  ]},
+  { group: 'Trig', symbols: [
+    { label: 'sin', insert: '\\sin ' },
+    { label: 'cos', insert: '\\cos ' },
+    { label: 'tan', insert: '\\tan ' },
+    { label: 'sin⁻¹', insert: '\\sin^{-1} ' },
+    { label: 'cos⁻¹', insert: '\\cos^{-1} ' },
+    { label: 'tan⁻¹', insert: '\\tan^{-1} ' },
+  ]},
+  { group: 'Calculus', symbols: [
+    { label: 'd/dx', insert: '\\frac{d}{dx}' },
+    { label: 'd²/dx²', insert: '\\frac{d^2}{dx^2}' },
+    { label: '∫', insert: '\\int ' },
+    { label: '∫ dx', insert: '\\int_{{}}}^{{}}} \\, dx', cursor: -13 },
+    { label: 'lim', insert: '\\lim_{x \\to } ', cursor: -2 },
+    { label: 'Σ', insert: '\\sum_{{}}}^{{}}} ', cursor: -6 },
+    { label: '∂', insert: '\\partial ' },
+    { label: 'Δ', insert: '\\Delta ' },
+  ]},
+  { group: 'Log / Exp', symbols: [
+    { label: 'ln', insert: '\\ln ' },
+    { label: 'log', insert: '\\log ' },
+    { label: 'logₙ', insert: '\\log_{} ', cursor: -2 },
+    { label: 'eˣ', insert: 'e^{}', cursor: -1 },
+  ]},
+  { group: 'Greek', symbols: [
+    { label: 'π', insert: '\\pi ' },
+    { label: 'θ', insert: '\\theta ' },
+    { label: 'α', insert: '\\alpha ' },
+    { label: 'β', insert: '\\beta ' },
+    { label: 'λ', insert: '\\lambda ' },
+    { label: 'μ', insert: '\\mu ' },
+    { label: 'σ', insert: '\\sigma ' },
+    { label: 'φ', insert: '\\phi ' },
+  ]},
+]
+
+function MathKeyboard({ textareaRef, onInsert }) {
+  const [activeGroup, setActiveGroup] = useState(0)
+
+  const insert = useCallback((sym) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const start = ta.selectionStart ?? ta.value.length
+    const end   = ta.selectionEnd   ?? ta.value.length
+    const before = ta.value.slice(0, start)
+    const after  = ta.value.slice(end)
+    const ins = sym.insert
+    const newVal = before + ins + after
+    const cursorPos = start + ins.length + (sym.cursor ?? 0)
+    onInsert(newVal, cursorPos)
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(cursorPos, cursorPos)
+    })
+  }, [textareaRef, onInsert])
+
+  const group = MATH_SYMBOLS[activeGroup]
+
+  return (
+    <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
+      {/* Group tabs */}
+      <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid rgba(255,255,255,0.08)', scrollbarWidth: 'none' }}>
+        {MATH_SYMBOLS.map((g, i) => (
+          <button key={g.group} onClick={() => setActiveGroup(i)} style={{
+            padding: '7px 13px', border: 'none', background: 'transparent', fontFamily: FONT,
+            fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            color: activeGroup === i ? GOLD : 'rgba(255,255,255,0.45)',
+            borderBottom: activeGroup === i ? `2px solid ${GOLD}` : '2px solid transparent',
+          }}>
+            {g.group}
+          </button>
+        ))}
+      </div>
+      {/* Symbols */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 12px' }}>
+        {group.symbols.map((sym) => (
+          <button
+            key={sym.label}
+            onClick={() => insert(sym)}
+            title={sym.insert}
+            style={{
+              padding: '6px 11px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.06)', color: '#fff', fontFamily: FONT,
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              transition: 'background 0.12s, border-color 0.12s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.15)'; e.currentTarget.style.borderColor = `${GOLD}60` }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
+          >
+            {sym.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -55,7 +217,7 @@ function McqQuestion({ q, answer, onAnswer, disabled }) {
             }}>
               {letter}
             </span>
-            <span style={{ flex: 1, lineHeight: 1.5, marginTop: 2 }}>{opt.replace(/^[A-D]\.\s*/, '')}</span>
+            <span style={{ flex: 1, lineHeight: 1.5, marginTop: 2 }}><MathText>{opt.replace(/^[A-D]\.\s*/, '')}</MathText></span>
           </button>
         )
       })}
@@ -65,27 +227,54 @@ function McqQuestion({ q, answer, onAnswer, disabled }) {
 
 function TextQuestion({ q, answer, onAnswer, disabled }) {
   const isExtended = q.type === 'extended_response'
+  const [showKeyboard, setShowKeyboard] = useState(false)
+  const taRef = useRef(null)
+
+  const handleInsert = useCallback((newVal, cursorPos) => {
+    if (!disabled) onAnswer(q.id, newVal)
+  }, [disabled, onAnswer, q.id])
+
   return (
-    <textarea
-      value={answer || ''}
-      onChange={e => !disabled && onAnswer(q.id, e.target.value)}
-      disabled={disabled}
-      placeholder={isExtended
-        ? 'Write your full response here. Take your time and structure your answer clearly…'
-        : 'Write your answer here…'
-      }
-      style={{
-        width: '100%', boxSizing: 'border-box',
-        minHeight: isExtended ? 220 : 110,
-        padding: '14px 16px', borderRadius: 10,
-        border: `2px solid rgba(255,255,255,0.12)`,
-        background: 'rgba(255,255,255,0.05)',
-        color: '#fff', fontFamily: FONT, fontSize: 14, lineHeight: 1.6,
-        resize: 'vertical', outline: 'none',
-      }}
-      onFocus={e => { e.target.style.borderColor = GOLD }}
-      onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
-    />
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+        <button
+          onClick={() => setShowKeyboard(v => !v)}
+          style={{
+            padding: '4px 12px', borderRadius: 7,
+            border: `1px solid ${showKeyboard ? GOLD : 'rgba(255,255,255,0.15)'}`,
+            background: showKeyboard ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.05)',
+            color: showKeyboard ? GOLD : 'rgba(255,255,255,0.6)',
+            fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          ∑ Math
+        </button>
+      </div>
+      <textarea
+        ref={taRef}
+        value={answer || ''}
+        onChange={e => !disabled && onAnswer(q.id, e.target.value)}
+        disabled={disabled}
+        placeholder={isExtended
+          ? 'Write your full response here. Take your time and structure your answer clearly…'
+          : 'Write your answer here…'
+        }
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          minHeight: isExtended ? 220 : 110,
+          padding: '14px 16px', borderRadius: 10,
+          border: `2px solid rgba(255,255,255,0.12)`,
+          background: 'rgba(255,255,255,0.05)',
+          color: '#fff', fontFamily: FONT, fontSize: 14, lineHeight: 1.6,
+          resize: 'vertical', outline: 'none',
+        }}
+        onFocus={e => { e.target.style.borderColor = GOLD }}
+        onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
+      />
+      {showKeyboard && !disabled && (
+        <MathKeyboard textareaRef={taRef} onInsert={handleInsert} />
+      )}
+    </div>
   )
 }
 
@@ -117,7 +306,7 @@ function QuestionCard({ q, idx, answer, onAnswer, disabled }) {
               <span style={{ fontSize: 11, color: '#4ade80', marginLeft: 'auto' }}>✓ Answered</span>
             )}
           </div>
-          <div style={{ fontSize: 15, color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{q.question}</div>
+          <div style={{ fontSize: 15, color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}><MathText>{q.question}</MathText></div>
         </div>
       </div>
       {q.type === 'multiple_choice'
