@@ -108,7 +108,10 @@ function getApiKey(): string {
   return process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 }
 
-async function callClaude(system: string, user: string, maxTokens = 4000): Promise<string> {
+async function callClaude(system: string, user: string, maxTokens = 4000, prefill?: string): Promise<string> {
+  const messages: { role: string; content: string }[] = [{ role: "user", content: user }];
+  if (prefill) messages.push({ role: "assistant", content: prefill });
+
   const res = await fetch(`${getBaseUrl()}/v1/messages`, {
     method: "POST",
     headers: {
@@ -120,7 +123,7 @@ async function callClaude(system: string, user: string, maxTokens = 4000): Promi
       model: CLAUDE_MODEL,
       max_tokens: maxTokens,
       system,
-      messages: [{ role: "user", content: user }],
+      messages,
     }),
   });
   if (!res.ok) {
@@ -128,7 +131,9 @@ async function callClaude(system: string, user: string, maxTokens = 4000): Promi
     throw new Error(`Claude API error: ${text.slice(0, 300)}`);
   }
   const data = (await res.json()) as { content?: { text: string }[] };
-  return data?.content?.[0]?.text || "";
+  const text = data?.content?.[0]?.text || "";
+  // Prepend the prefill so the full response is parseable
+  return prefill ? prefill + text : text;
 }
 
 function extractJson(text: string): unknown {
@@ -263,7 +268,7 @@ STRICT RULES:
 
 Return a JSON object: { "questions": [ ...array of question objects... ] }`;
 
-  const raw = await callClaude(system, user, 5000);
+  const raw = await callClaude(system, user, 8000, "{");
   const parsed = extractJson(raw) as { questions?: DiagnosticQuestion[] } | DiagnosticQuestion[] | null;
 
   let questions: DiagnosticQuestion[];
@@ -339,7 +344,7 @@ ${JSON.stringify(markingPayload, null, 2)}
 
 Return JSON: { "results": [ { "id": <int>, "marks_awarded": <int>, "feedback": "<string>" }, ... ] }`;
 
-    const raw = await callClaude(system, user, 3000);
+    const raw = await callClaude(system, user, 3000, "{");
     const parsed = extractJson(raw) as { results?: { id: number; marks_awarded: number; feedback: string }[] } | null;
     const rawResults = parsed && typeof parsed === "object" && Array.isArray((parsed as { results?: unknown[] }).results)
       ? (parsed as { results: { id: number; marks_awarded: number; feedback: string }[] }).results
@@ -420,7 +425,7 @@ Return JSON with exactly these fields:
 
 Be specific. Reference actual topics and marks. Limit to 4–5 items per array.`;
 
-  const reportRaw = await callClaude(reportSystem, reportUser, 2000);
+  const reportRaw = await callClaude(reportSystem, reportUser, 2000, "{");
   const reportParsed = extractJson(reportRaw) as {
     pain_points?: string[];
     patterns?: string[];
