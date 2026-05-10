@@ -199,6 +199,7 @@ function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, min
     const configure = () => {
       if (cancelled) return
       mf.mathVirtualKeyboardPolicy = 'manual'
+      mf.smartMode = true
       mf.readOnly = !!disabled
       if (value) mf.setValue(value, { suppressChangeNotifications: true })
 
@@ -301,7 +302,8 @@ function TextQuestion({ q, answer, onAnswer, disabled, isMath }) {
     insertFnRef.current(sym)
   }, [disabled])
 
-  if (isMath) {
+  // Extended responses need multi-line prose — always use plain textarea
+  if (isMath && !isExtended) {
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
