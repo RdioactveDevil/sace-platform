@@ -54,6 +54,111 @@ function MathText({ children }) {
   )
 }
 
+// ── contentEditable math editor utilities ─────────────────────────────────────
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Convert raw text (with $...$) to innerHTML with rendered KaTeX spans
+function rawToHtml(raw) {
+  const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
+  let html = '', last = 0, m
+  while ((m = re.exec(raw)) !== null) {
+    if (m.index > last) html += escHtml(raw.slice(last, m.index)).replace(/\n/g, '<br>')
+    const src = m[0]
+    const isDisplay = src.startsWith('$$')
+    const inner = isDisplay ? src.slice(2, -2) : src.slice(1, -1)
+    const rendered = renderMath(inner, isDisplay)
+    const tag = isDisplay ? 'div' : 'span'
+    html += `<${tag} class="math-atom" data-raw="${src.replace(/"/g, '&quot;')}" contenteditable="false">${rendered}</${tag}>`
+    last = m.index + src.length
+  }
+  if (last < raw.length) html += escHtml(raw.slice(last)).replace(/\n/g, '<br>')
+  return html || ''
+}
+
+// Walk the editor DOM, reconstructing raw text (using data-raw for math spans)
+function getRawText(el) {
+  let t = ''
+  function walk(node) {
+    if (node.nodeType === 3) { t += node.textContent }
+    else if (node.dataset?.raw) { t += node.dataset.raw }
+    else if (node.tagName === 'BR') { t += '\n' }
+    else if (node.tagName === 'DIV' && node !== el) { t += '\n'; for (const c of node.childNodes) walk(c) }
+    else { for (const c of node.childNodes) walk(c) }
+  }
+  walk(el)
+  return t
+}
+
+// Get cursor position as raw-text offset
+function getCursorRawOffset(el) {
+  const sel = window.getSelection()
+  if (!sel?.rangeCount || !el.contains(sel.anchorNode)) return 0
+  const r = sel.getRangeAt(0)
+  let off = 0, done = false
+  function count(node) {
+    if (node.nodeType === 3) off += node.length
+    else if (node.dataset?.raw) off += node.dataset.raw.length
+    else if (node.tagName === 'BR') off += 1
+    else if (node.tagName === 'DIV' && node !== el) { off += 1; for (const c of node.childNodes) count(c) }
+    else { for (const c of node.childNodes) count(c) }
+  }
+  function walk(node) {
+    if (done) return
+    if (node === r.startContainer) {
+      if (node.nodeType === 3) { off += r.startOffset }
+      else { for (let i = 0; i < r.startOffset; i++) count(node.childNodes[i]) }
+      done = true; return
+    }
+    if (node.nodeType === 3) { off += node.length }
+    else if (node.dataset?.raw) {
+      if (node.contains(r.startContainer)) { off += node.dataset.raw.length; done = true }
+      else { off += node.dataset.raw.length }
+    }
+    else if (node.tagName === 'BR') { off += 1 }
+    else if (node.tagName === 'DIV' && node !== el) {
+      if (node === r.startContainer) { done = true; return }
+      off += 1; for (const c of node.childNodes) { if (!done) walk(c) }
+    }
+    else { for (const c of node.childNodes) { if (!done) walk(c) } }
+  }
+  walk(el)
+  return off
+}
+
+// Restore cursor to raw-text offset after re-render
+function setCursorRawOffset(el, target) {
+  const range = document.createRange()
+  let rem = target, done = false
+  function walk(node) {
+    if (done) return
+    if (node.nodeType === 3) {
+      if (rem <= node.length) { range.setStart(node, rem); range.collapse(true); done = true }
+      else { rem -= node.length }
+    } else if (node.dataset?.raw) {
+      const len = node.dataset.raw.length
+      if (rem <= len) {
+        const p = node.parentNode, i = Array.from(p.childNodes).indexOf(node)
+        range.setStart(p, i + 1); range.collapse(true); done = true
+      } else { rem -= len }
+    } else if (node.tagName === 'BR') {
+      if (rem === 0) {
+        const p = node.parentNode, i = Array.from(p.childNodes).indexOf(node)
+        range.setStart(p, i); range.collapse(true); done = true
+      } else { rem -= 1 }
+    } else if (node.tagName === 'DIV' && node !== el) {
+      if (rem === 0) { range.setStart(node, 0); range.collapse(true); done = true }
+      else { rem -= 1; for (const c of node.childNodes) { if (!done) walk(c) } }
+    } else { for (const c of node.childNodes) { if (!done) walk(c) } }
+  }
+  walk(el)
+  if (!done) { range.selectNodeContents(el); range.collapse(false) }
+  const sel = window.getSelection()
+  sel?.removeAllRanges(); sel?.addRange(range)
+}
+
 // ── Math keyboard ──────────────────────────────────────────────────────────────
 
 // insert: the text dropped into the textarea (plain Unicode or $LaTeX$)
@@ -113,25 +218,9 @@ const MATH_SYMBOLS = [
   ]},
 ]
 
-function MathKeyboard({ textareaRef, onInsert }) {
+function MathKeyboard({ onInsert }) {
   const [activeGroup, setActiveGroup] = useState(0)
-
-  const insert = useCallback((sym) => {
-    const ta = textareaRef.current
-    if (!ta) return
-    const start = ta.selectionStart ?? ta.value.length
-    const end   = ta.selectionEnd   ?? ta.value.length
-    const before = ta.value.slice(0, start)
-    const after  = ta.value.slice(end)
-    const ins = sym.insert
-    const newVal = before + ins + after
-    const cursorPos = start + ins.length + (sym.cursor ?? 0)
-    onInsert(newVal, cursorPos)
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(cursorPos, cursorPos)
-    })
-  }, [textareaRef, onInsert])
+  const insert = useCallback((sym) => onInsert(sym), [onInsert])
 
   const group = MATH_SYMBOLS[activeGroup]
 
@@ -234,13 +323,67 @@ function McqQuestion({ q, answer, onAnswer, disabled }) {
 function TextQuestion({ q, answer, onAnswer, disabled }) {
   const isExtended = q.type === 'extended_response'
   const [showKeyboard, setShowKeyboard] = useState(false)
-  const taRef = useRef(null)
+  const editorRef  = useRef(null)
+  const renderTimer = useRef(null)
+  const lastAnswerRef = useRef(answer || '')
+  const placeholder = isExtended
+    ? 'Write your full response here. Use the ∑ Math panel to insert equations…'
+    : 'Write your answer here. Use the ∑ Math panel to insert equations…'
 
-  const handleInsert = useCallback((newVal) => {
-    if (!disabled) onAnswer(q.id, newVal)
-  }, [disabled, onAnswer, q.id])
+  // Mount: paint initial HTML
+  useEffect(() => {
+    if (editorRef.current) editorRef.current.innerHTML = rawToHtml(answer || '')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hasMath = answer && answer.includes('$')
+  // If answer is reset externally (e.g. cleared from parent), re-sync
+  useEffect(() => {
+    if (answer !== lastAnswerRef.current && editorRef.current) {
+      lastAnswerRef.current = answer || ''
+      editorRef.current.innerHTML = rawToHtml(answer || '')
+    }
+  }, [answer])
+
+  const doRender = useCallback(() => {
+    const el = editorRef.current
+    if (!el) return
+    const raw = getRawText(el)
+    const off = getCursorRawOffset(el)
+    el.innerHTML = rawToHtml(raw)
+    setCursorRawOffset(el, off)
+  }, [])
+
+  const handleInput = useCallback(() => {
+    if (!editorRef.current) return
+    const raw = getRawText(editorRef.current)
+    lastAnswerRef.current = raw
+    onAnswer(q.id, raw)
+    clearTimeout(renderTimer.current)
+    renderTimer.current = setTimeout(doRender, 500)
+  }, [q.id, onAnswer, doRender])
+
+  const handlePaste = useCallback((e) => {
+    e.preventDefault()
+    const text = e.clipboardData?.getData('text/plain') || ''
+    document.execCommand('insertText', false, text)
+  }, [])
+
+  const handleInsert = useCallback((sym) => {
+    if (disabled) return
+    const el = editorRef.current
+    if (!el) return
+    el.focus()
+    const raw = getRawText(el)
+    const off = getCursorRawOffset(el)
+    const ins = sym.insert
+    const newRaw = raw.slice(0, off) + ins + raw.slice(off)
+    const newOff = off + ins.length + (sym.cursor ?? 0)
+    lastAnswerRef.current = newRaw
+    onAnswer(q.id, newRaw)
+    el.innerHTML = rawToHtml(newRaw)
+    requestAnimationFrame(() => { el.focus(); setCursorRawOffset(el, newOff) })
+  }, [disabled, q.id, onAnswer])
+
+  const [borderColor, setBorderColor] = useState('rgba(255,255,255,0.12)')
 
   return (
     <div>
@@ -258,44 +401,36 @@ function TextQuestion({ q, answer, onAnswer, disabled }) {
           ∑ Math
         </button>
       </div>
-      <textarea
-        ref={taRef}
-        value={answer || ''}
-        onChange={e => !disabled && onAnswer(q.id, e.target.value)}
-        disabled={disabled}
-        placeholder={isExtended
-          ? 'Write your full response here. Use the ∑ Math panel to insert equations…'
-          : 'Write your answer here. Use the ∑ Math panel to insert equations…'
-        }
-        style={{
-          width: '100%', boxSizing: 'border-box',
-          minHeight: isExtended ? 180 : 100,
-          padding: '14px 16px', borderRadius: 10,
-          border: `2px solid rgba(255,255,255,0.12)`,
-          background: 'rgba(255,255,255,0.05)',
-          color: '#fff', fontFamily: FONT, fontSize: 14, lineHeight: 1.6,
-          resize: 'vertical', outline: 'none',
-        }}
-        onFocus={e => { e.target.style.borderColor = GOLD }}
-        onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
-      />
-      {/* Live rendered preview — auto-shows when $ math is detected */}
-      {hasMath && (
-        <div style={{
-          marginTop: 6, padding: '12px 16px', borderRadius: 10,
-          background: 'rgba(241,190,67,0.06)', border: '1px solid rgba(241,190,67,0.2)',
-        }}>
-          <div style={{ fontSize: 10, color: 'rgba(241,190,67,0.6)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-            Rendered preview
-          </div>
-          <div style={{ fontSize: 14, color: '#fff', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-            <MathText>{answer}</MathText>
-          </div>
-        </div>
-      )}
-      {showKeyboard && !disabled && (
-        <MathKeyboard textareaRef={taRef} onInsert={handleInsert} />
-      )}
+      <div style={{ position: 'relative' }}>
+        {/* Placeholder */}
+        {!answer && (
+          <div style={{
+            position: 'absolute', top: 14, left: 16, right: 16, pointerEvents: 'none',
+            color: 'rgba(255,255,255,0.28)', fontFamily: FONT, fontSize: 14, lineHeight: 1.6,
+          }}>{placeholder}</div>
+        )}
+        <div
+          ref={editorRef}
+          contentEditable={!disabled}
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onPaste={handlePaste}
+          onFocus={() => setBorderColor(GOLD)}
+          onBlur={() => { setBorderColor('rgba(255,255,255,0.12)'); doRender() }}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            minHeight: isExtended ? 180 : 100,
+            padding: '14px 16px', borderRadius: 10,
+            border: `2px solid ${borderColor}`,
+            background: 'rgba(255,255,255,0.05)',
+            color: '#fff', fontFamily: FONT, fontSize: 14, lineHeight: 1.8,
+            outline: 'none', cursor: disabled ? 'default' : 'text',
+            overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            transition: 'border-color 0.15s',
+          }}
+        />
+      </div>
+      {showKeyboard && !disabled && <MathKeyboard onInsert={handleInsert} />}
     </div>
   )
 }
@@ -465,6 +600,10 @@ export default function DiagnosticScreen() {
         @font-face { font-family: 'Plus Jakarta Sans'; src: url('/PlusJakartaSans.woff2') format('woff2'); font-display: swap; }
         * { box-sizing: border-box; }
         textarea:focus { outline: none; }
+        .math-atom { display: inline; user-select: none; cursor: default; }
+        .math-atom.math-atom[contenteditable=false] { outline: none; }
+        .math-atom .katex { color: #fff; font-size: 1em; }
+        div > .math-atom[data-raw^="$$"] { display: block; text-align: center; margin: 6px 0; }
       `}</style>
 
       {/* Header */}
