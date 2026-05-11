@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback } from 'react'
+import { memo, useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
@@ -63,13 +63,13 @@ function useCallViewportLock() {
   }, [])
 }
 
-function WhiteboardSurface() {
+const WhiteboardSurface = memo(function WhiteboardSurface() {
   return (
     <div className="gf-whiteboard-surface">
       <Tldraw options={WHITEBOARD_OPTIONS} autoFocus={false} />
     </div>
   )
-}
+})
 
 function RoomHeader({ room }) {
   const title = room?.title || 'Session'
@@ -99,7 +99,9 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
     <div className="gf-call-stage">
       <div className="gf-call-surface">
         {showWhiteboard ? (
-          <WhiteboardSurface />
+          <div className="gf-whiteboard-frame">
+            <WhiteboardSurface />
+          </div>
         ) : (
           <div className="gf-video-surface">
             <GridLayout tracks={tracks} className="gf-video-grid">
@@ -273,8 +275,10 @@ export default function RecurringRoomPage({ profile }) {
         .gf-chat-header { min-height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #f5f5fb; font-size: 13px; font-weight: 800; }
         .gf-chat-header button { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: #a8a8bd; cursor: pointer; font-size: 16px; }
         .gf-chat-header button:hover { background: #1b1b2f; color: #fff; }
-        .gf-whiteboard-surface { flex: 1 1 auto; width: 100%; height: 100% !important; min-height: 0 !important; overflow: hidden; position: relative; background: #f8fafc; border-radius: 14px; }
+        .gf-whiteboard-frame { position: absolute; inset: 12px 12px 86px; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
+        .gf-whiteboard-surface { position: absolute; inset: 0; width: 100%; height: 100% !important; min-height: 0 !important; overflow: visible; background: #f8fafc; border-radius: 14px; }
         .gf-whiteboard-surface .tl-container { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
+        .gf-whiteboard-surface .tlui-layout { z-index: 30 !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
         .lk-chat-messages { flex: 1 !important; }
         .lk-chat-entry { border-bottom: 1px solid #1a1a2e !important; padding: 10px 14px !important; }
@@ -286,6 +290,7 @@ export default function RecurringRoomPage({ profile }) {
           .gf-room-schedule { display: none; }
           .gf-call-stage { flex-direction: column; }
           .gf-call-surface { padding: 8px 8px 84px; }
+          .gf-whiteboard-frame { inset: 8px 8px 84px; }
           .gf-chat-panel { width: 100%; min-width: 0; height: 38%; border-left: 0; border-top: 1px solid rgba(255,255,255,0.08); }
           .gf-dock-button { padding: 0 11px; }
         }

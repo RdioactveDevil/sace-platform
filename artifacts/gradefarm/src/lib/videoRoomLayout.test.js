@@ -45,9 +45,14 @@ for (const file of files) {
     const source = readComponent(file)
 
     assert.doesNotMatch(source, /Back to video/)
+    assert.match(source, /memo\(function WhiteboardSurface\(\)/)
+    assert.match(source, /className="gf-whiteboard-frame"/)
+    assert.match(source, /\.gf-whiteboard-frame\s*\{/)
     assert.match(source, /className="gf-whiteboard-surface"/)
     assert.match(source, /\.gf-whiteboard-surface\s*\{/)
+    assert.match(source, /overflow:\s*visible;/)
     assert.match(source, /height:\s*100%\s*!important;/)
+    assert.match(source, /\.gf-whiteboard-surface\s+\.tlui-layout\s*\{/)
   })
 
   test(`${file} keeps the Tldraw canvas mounted through room updates`, () => {
