@@ -69,4 +69,9 @@ for (const file of files) {
     assert.match(source, /position:\s*absolute\s*!important;/)
     assert.match(source, /inset:\s*0\s*!important;/)
   })
+
+  test(`${file} keeps the call stage visible during LiveKit signal reconnect`, () => {
+    const source = readComponent(file)
+    assert.match(source, /ConnectionState\.SignalReconnecting/)
+  })
 }
