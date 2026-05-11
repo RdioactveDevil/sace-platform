@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 
@@ -11,6 +11,142 @@ function getAdmin() {
   if (!key) throw new Error("No SUPABASE_SERVICE_KEY configured");
   return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
+
+const CHUNK = 80;
+
+/**
+ * When a live curriculum display name changes, every row that stores that string as
+ * `questions.subject` (or equivalent) must be updated or the app shows 0 questions.
+ */
+async function cascadeCurriculumSubjectRename(admin: SupabaseClient, oldName: string, newName: string) {
+  if (oldName === newName) return { questions: 0, questionVariants: 0 };
+
+  async function updateWithConceptTag(
+    table: "questions" | "question_variants",
+    rows: { id: string; topic: string; subtopic: string | null }[],
+  ) {
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const part = rows.slice(i, i + CHUNK);
+      const results = await Promise.all(
+        part.map((q) => {
+          const sub = (q.subtopic && String(q.subtopic).trim()) || q.topic;
+          const concept_tag = `${newName}|${q.topic}|${sub}`.toLowerCase();
+          return admin.from(table).update({ subject: newName, concept_tag }).eq("id", q.id);
+        }),
+      );
+      for (const r of results) {
+        if (r.error) throw r.error;
+      }
+    }
+    return rows.length;
+  }
+
+  const { data: qRows, error: qErr } = await admin
+    .from("questions")
+    .select("id, topic, subtopic")
+    .eq("subject", oldName);
+  if (qErr) throw qErr;
+  const nQ = qRows?.length ? await updateWithConceptTag("questions", qRows as { id: string; topic: string; subtopic: string | null }[]) : 0;
+
+  const { data: vRows, error: vErr } = await admin
+    .from("question_variants")
+    .select("id, topic, subtopic")
+    .eq("subject", oldName);
+  if (vErr) throw vErr;
+  const nV = vRows?.length ? await updateWithConceptTag("question_variants", vRows as { id: string; topic: string; subtopic: string | null }[]) : 0;
+
+  const simpleTables: [string, string][] = [
+    ["draft_questions", "subject"],
+    ["sessions", "subject"],
+    ["study_plan_items", "subject"],
+    ["user_subscriptions", "subject_name"],
+    ["assignments", "subject"],
+    ["tutor_classes", "subject"],
+  ];
+
+  for (const [table, col] of simpleTables) {
+    const { error } = await admin.from(table).update({ [col]: newName }).eq(col, oldName);
+    if (error) throw new Error(`${table}.${col} cascade failed: ${error.message}`);
+  }
+
+  return { questions: nQ, questionVariants: nV };
+}
+
+// POST /api/admin/curriculum-rename-cascade
+// Body: { curriculumId: uuid, newName: string } — renames all question/subscription rows
+// from the curriculum's current DB name to newName (curricula row is updated by the client).
+router.post("/admin/curriculum-rename-cascade", async (req, res) => {
+  const { curriculumId, newName } = req.body || {};
+  if (!curriculumId || typeof newName !== "string" || !newName.trim()) {
+    res.status(400).json({ error: "curriculumId and newName are required" });
+    return;
+  }
+
+  const next = newName.trim();
+  let admin: ReturnType<typeof getAdmin>;
+  try {
+    admin = getAdmin();
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Server misconfiguration" });
+    return;
+  }
+
+  const { data: row, error: cErr } = await admin.from("curricula").select("name").eq("id", curriculumId).maybeSingle();
+  if (cErr || !row?.name) {
+    res.status(404).json({ error: "Curriculum not found" });
+    return;
+  }
+
+  const oldName = row.name;
+  if (oldName === next) {
+    res.json({ ok: true, skipped: true });
+    return;
+  }
+
+  try {
+    const counts = await cascadeCurriculumSubjectRename(admin, oldName, next);
+    logger.info({ curriculumId, oldName, newName: next, counts }, "curriculum subject string cascaded");
+    res.json({ ok: true, oldName, newName: next, ...counts });
+  } catch (err) {
+    logger.error({ err, curriculumId, oldName, newName: next }, "curriculum-rename-cascade failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Cascade failed" });
+  }
+});
+
+// POST /api/admin/curriculum-repair-subject-string
+// Body: { fromSubject: string, toSubject: string } — same row updates as rename cascade,
+// for recovery when the curricula row was already renamed but questions were not migrated.
+router.post("/admin/curriculum-repair-subject-string", async (req, res) => {
+  const { fromSubject, toSubject } = req.body || {};
+  if (typeof fromSubject !== "string" || typeof toSubject !== "string" || !fromSubject.trim() || !toSubject.trim()) {
+    res.status(400).json({ error: "fromSubject and toSubject are required" });
+    return;
+  }
+  const fromS = fromSubject.trim();
+  const toS = toSubject.trim();
+  if (fromS === toS) {
+    res.json({ ok: true, skipped: true });
+    return;
+  }
+
+  let admin: ReturnType<typeof getAdmin>;
+  try {
+    admin = getAdmin();
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Server misconfiguration" });
+    return;
+  }
+
+  try {
+    const counts = await cascadeCurriculumSubjectRename(admin, fromS, toS);
+    await admin.from("curricula").update({ name: toS }).eq("name", fromS);
+    logger.info({ fromS, toS, counts }, "curriculum subject string repair");
+    res.json({ ok: true, fromSubject: fromS, toSubject: toS, ...counts });
+  } catch (err) {
+    logger.error({ err, fromS, toS }, "curriculum-repair-subject-string failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Repair failed" });
+  }
+});
 
 function extractJson(text: string): unknown {
   try { return JSON.parse(text); } catch {}

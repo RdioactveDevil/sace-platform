@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { adminApiPost } from './adminApi'
 
 /**
  * List all curricula with topic + subtopic counts and generation progress.
@@ -99,6 +100,14 @@ export async function createCurriculum({ name, subject_description, topics }) {
  * @param {{ name?: string, subject_description?: string, topics?: Array }} updates
  */
 export async function updateCurriculum(id, { name, subject_description, topics } = {}) {
+  if (name !== undefined) {
+    const { data: row, error: nameFetchErr } = await supabase.from('curricula').select('name').eq('id', id).maybeSingle()
+    if (nameFetchErr) throw nameFetchErr
+    if (row?.name && name !== row.name) {
+      await adminApiPost('/api/admin/curriculum-rename-cascade', { curriculumId: id, newName: name })
+    }
+  }
+
   const patch = {}
   if (name !== undefined) patch.name = name
   if (subject_description !== undefined) patch.subject_description = subject_description

@@ -4,8 +4,10 @@ import {
   updateCurriculum,
   updateCurriculumStatus,
   getSubtopicStatuses,
+  loadManagedCurriculaTopics,
 } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
+import { refreshManagedTopicsCache } from '../lib/adminTopics'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -195,6 +197,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     setSaving(true); setError(''); setSaveOk(false)
     try {
       await updateCurriculum(curriculumId, { name: curriculum.name, topics })
+      refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
       setSaveOk(true)
       setTimeout(() => setSaveOk(false), 2500)
     } catch (e) {
@@ -211,6 +214,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     setSaving(true); setError(''); setGenError('')
     try {
       await updateCurriculum(curriculumId, { name: curriculum.name, topics })
+      refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
       await updateCurriculumStatus(curriculumId, 'generating')
       setCurriculum(prev => ({ ...prev, status: 'generating' }))
       setGenerating(true)
