@@ -10,11 +10,12 @@ import {
   useTracks,
   useConnectionState,
 } from '@livekit/components-react'
-import { Track, ConnectionState } from 'livekit-client'
+import { Track } from 'livekit-client'
 import '@livekit/components-styles'
 import { Tldraw } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { fetchTutoringSession, getTutoringSessionToken, endTutoringSession } from '../lib/db'
+import { useLiveKitJoinOverlay } from '../hooks/useLiveKitJoinOverlay'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -87,12 +88,7 @@ function RoomHeader({ session }) {
 
 function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, onEnd, isTutor }) {
   const connectionState = useConnectionState()
-  // Keep UI usable during signal resume — SignalReconnecting is not "offline" but our overlay
-  // would cover the whole stage (including Tldraw) if we only allowed Connected | Reconnecting.
-  const isConnected =
-    connectionState === ConnectionState.Connected ||
-    connectionState === ConnectionState.Reconnecting ||
-    connectionState === ConnectionState.SignalReconnecting
+  const showJoinOverlay = useLiveKitJoinOverlay(connectionState)
 
   const tracks = useTracks(
     [
@@ -104,17 +100,15 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
 
   return (
     <div className="gf-call-stage">
-      {/* Connecting overlay — shown until LiveKit handshake completes */}
-      {!isConnected && (
+      {/* Fullscreen spinner only until first in-room handshake; mid-session SDK flicker must not cover Tldraw */}
+      {showJoinOverlay && (
         <div className="gf-connecting-overlay">
           <div className="gf-connecting-spinner" />
-          <p className="gf-connecting-text">
-            {connectionState === ConnectionState.Reconnecting ? 'Reconnecting…' : 'Connecting…'}
-          </p>
+          <p className="gf-connecting-text">Connecting…</p>
         </div>
       )}
 
-      <div className="gf-call-surface">
+      <div className={showWhiteboard ? 'gf-call-surface gf-call-surface--whiteboard' : 'gf-call-surface'}>
         {showWhiteboard ? (
           <div className="gf-whiteboard-frame">
             <WhiteboardSurface />
@@ -294,6 +288,7 @@ export default function SessionRoom({ profile }) {
         .gf-connecting-spinner { width: 40px; height: 40px; border: 3px solid ${GOLD}; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         .gf-connecting-text { color: #aaa; font-family: ${FONT_B}; font-size: 15px; margin: 0; }
         .gf-call-surface { flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; overflow: hidden; padding: 12px 12px 86px; }
+        .gf-call-surface--whiteboard { overflow: visible !important; }
         .gf-video-surface { flex: 1; min-width: 0; min-height: 0; overflow: hidden; border-radius: 14px; background: #10101b; border: 1px solid rgba(255,255,255,0.08); }
         .gf-video-grid { width: 100%; height: 100%; background: #070711 !important; }
         .gf-call-dock { position: absolute; left: 50%; bottom: 18px; z-index: 20; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); overflow-x: auto; transform: translateX(-50%); padding: 8px; border-radius: 14px; background: rgba(11,11,24,0.92); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 18px 40px rgba(0,0,0,0.36); backdrop-filter: blur(12px); }
