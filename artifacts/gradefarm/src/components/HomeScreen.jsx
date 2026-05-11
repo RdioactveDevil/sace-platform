@@ -4,7 +4,7 @@ import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent } from '../lib/db'
-import { getTopicConfig } from '../lib/saceTopics'
+import { getTopicConfigForSubject } from '../lib/saceTopics'
 import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 
 const GOLD   = '#f1be43'
@@ -14,7 +14,7 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
-  const { macroGroups: MACRO_GROUPS, normFn: topicNormFn } = getY7TopicConfig(subject?.id) ?? getTopicConfig(subject?.stage)
+  const { macroGroups: MACRO_GROUPS, normFn: topicNormFn } = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
   const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([])
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))

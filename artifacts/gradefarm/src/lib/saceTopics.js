@@ -277,3 +277,51 @@ export function getTopicConfig(stage) {
   }
   return { macroGroups: MACRO_GROUPS_STAGE1, normFn: normalizeTopic }
 }
+
+/**
+ * Macro groups + normaliser for subjects whose topic keys are exactly the strings
+ * in `topicList` (managed curricula, Mathematical Methods, Biology tiles, etc.).
+ */
+export function buildGenericTopicConfig(topicList, groupLabel = 'Topics') {
+  const topics = [...new Set((topicList || []).filter(Boolean))]
+  const lowerToCanon = new Map(topics.map((t) => [String(t).trim().toLowerCase(), t]))
+
+  function normFn(raw) {
+    if (!raw) return null
+    const key = String(raw).trim().toLowerCase()
+    return lowerToCanon.get(key) ?? null
+  }
+
+  return {
+    macroGroups: [{ id: 'g1', num: 1, label: groupLabel, topics }],
+    normFn,
+  }
+}
+
+function curriculumGroupLabel(displayName) {
+  if (!displayName) return 'Topics'
+  const stripped = String(displayName).replace(/\s+Stage\s*[12]\s*$/i, '').trim()
+  return stripped || 'Topics'
+}
+
+/**
+ * Resolves topic normalisation and macro groups for the **active subject**.
+ * Only `chemistry_s1` / `chemistry_s2` use the SACE Chemistry Stage 1/2 outlines;
+ * other Stage 2 subjects (e.g. Mathematical Methods) no longer inherit Chemistry topics.
+ */
+export function getTopicConfigForSubject(subject) {
+  if (!subject) return getTopicConfig('Stage 1')
+  if (subject.id === 'chemistry_s1') return getTopicConfig('Stage 1')
+  if (subject.id === 'chemistry_s2') return getTopicConfig('Stage 2')
+  if (subject.type === 'writing') return getTopicConfig(subject.stage)
+  if (subject.id?.startsWith('curriculum_')) {
+    if (Array.isArray(subject.topics) && subject.topics.length > 0) {
+      return buildGenericTopicConfig(subject.topics, curriculumGroupLabel(subject.name))
+    }
+    return getTopicConfig(subject.stage || 'Stage 1')
+  }
+  if (Array.isArray(subject.topics) && subject.topics.length > 0) {
+    return buildGenericTopicConfig(subject.topics, subject.name || 'Topics')
+  }
+  return getTopicConfig(subject.stage)
+}
