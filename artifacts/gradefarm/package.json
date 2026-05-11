@@ -76,8 +76,12 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.21",
+    "@livekit/components-styles": "^1.1.2",
     "@supabase/supabase-js": "^2.105.1",
+    "@tldraw/tldraw": "^5.0.0",
     "katex": "^0.16.45",
+    "livekit-client": "^2.18.9",
     "mathlive": "^0.109.2",
     "react-router-dom": "^7.14.2"
   }

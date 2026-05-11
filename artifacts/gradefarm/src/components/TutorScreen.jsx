@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import SessionsTab from './SessionsTab'
 import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
@@ -2045,6 +2046,7 @@ const TABS = [
   { id: 'students',    label: 'Students',    icon: '👥' },
   { id: 'classes',     label: 'Classes',     icon: '🏫' },
   { id: 'assignments', label: 'Assignments', icon: '📋' },
+  { id: 'sessions',    label: 'Sessions',    icon: '📹' },
   { id: 'progress',    label: 'Progress',    icon: '📊' },
   { id: 'diagnostic',  label: 'Diagnostic',  icon: '🧪' },
 ]
@@ -2091,6 +2093,7 @@ export default function TutorScreen({ profile, theme }) {
           {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
           {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
           {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
+          {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
           {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
           {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
         </div>
