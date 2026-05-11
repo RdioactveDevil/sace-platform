@@ -26,11 +26,15 @@ for (const file of files) {
   test(`${file} gives LiveKit toolbar buttons contrast from the toolbar`, () => {
     const source = readComponent(file)
 
-    assert.match(source, /\.lk-control-bar\s+\.lk-button\s*\{/)
-    assert.match(source, /background:\s*#23233a\s*!important;/)
-    assert.match(source, /border:\s*1px solid #3a3a58\s*!important;/)
-    assert.match(source, /\.lk-control-bar\s+\.lk-button:hover\s*\{/)
-    assert.match(source, /\.lk-control-bar\s+\.lk-button\[aria-pressed="true"\]/)
+    assert.doesNotMatch(source, /<VideoConference/)
+    assert.match(source, /function CallStage\(/)
+    assert.match(source, /<GridLayout tracks=\{tracks\}/)
+    assert.match(source, /<TrackToggle source=\{Track\.Source\.Microphone\}/)
+    assert.match(source, /<TrackToggle source=\{Track\.Source\.Camera\}/)
+    assert.match(source, /<TrackToggle source=\{Track\.Source\.ScreenShare\}/)
+    assert.match(source, /className="gf-call-dock"/)
+    assert.match(source, /\.gf-dock-button\s*\{/)
+    assert.match(source, /\.gf-dock-button\[aria-pressed="true"\]/)
   })
 
   test(`${file} keeps whiteboard controls unobstructed`, () => {

@@ -2,10 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
-  VideoConference,
+  GridLayout,
+  ParticipantTile,
   RoomAudioRenderer,
   Chat,
+  TrackToggle,
+  useTracks,
 } from '@livekit/components-react'
+import { Track } from 'livekit-client'
 import '@livekit/components-styles'
 import { Tldraw } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
@@ -23,126 +27,98 @@ function WhiteboardSurface() {
   )
 }
 
-// ── Room header ───────────────────────────────────────────────────────────────
-function RoomHeader({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+function RoomHeader({ room }) {
   const title = room?.title || 'Session'
-  const scheduleLabel = room?.schedule ? `🔁 ${room.schedule}` : 'One-off session'
-  const btnBase = {
-    border: '1px solid #2d2d46',
-    borderRadius: 999,
-    padding: '8px 14px',
-    fontSize: 13,
-    fontWeight: 600,
-    fontFamily: FONT_B,
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-  }
+  const scheduleLabel = room?.schedule || 'One-off session'
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '12px 16px', background: 'linear-gradient(180deg, #15152a, #0d0d1a)',
-      borderBottom: '1px solid #2a2a3e', flexShrink: 0, gap: 12, flexWrap: 'wrap',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-        <span style={{ fontFamily: "'Sifonn Pro', sans-serif", fontSize: 17, color: GOLD, letterSpacing: -0.5, flexShrink: 0 }}>
-          gradefarm.
-        </span>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ color: '#f5f5fb', fontSize: 14, fontWeight: 700, fontFamily: FONT_B, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {title}
-          </p>
-          <p style={{ color: '#9393ae', fontSize: 12, fontFamily: FONT_B, margin: 0 }}>
-            {scheduleLabel}
-          </p>
-        </div>
-        <span style={{ background: '#173225', color: '#6ee7b7', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 999, fontFamily: FONT_B, flexShrink: 0, letterSpacing: 0.2 }}>
-          LIVE NOW
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-        <button
-          onClick={onToggleWhiteboard}
-          style={{
-            ...btnBase,
-            background: showWhiteboard ? GOLD : '#1a1a2e',
-            color: showWhiteboard ? '#1a1a2e' : '#d4d4e5',
-          }}
-        >
-          🖊️ {showWhiteboard ? 'Hide board' : 'Whiteboard'}
-        </button>
-        <button
-          onClick={onToggleChat}
-          style={{
-            ...btnBase,
-            background: showChat ? GOLD : '#1a1a2e',
-            color: showChat ? '#1a1a2e' : '#d4d4e5',
-          }}
-        >
-          💬 {showChat ? 'Close chat' : 'Open chat'}
-        </button>
-        <button
-          onClick={onLeave}
-          style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', borderColor: '#8f2323' }}
-        >
-          ⏻ Leave
-        </button>
+    <div className="gf-room-header">
+      <div className="gf-room-title-row">
+        <span className="gf-brand">gradefarm.</span>
+        <span className="gf-room-title">{title}</span>
+        <span className="gf-room-schedule">{scheduleLabel}</span>
+        <span className="gf-live-pill">LIVE</span>
       </div>
     </div>
   )
 }
 
-// ── Main room content ─────────────────────────────────────────────────────────
+function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false }
+  )
+
+  return (
+    <div className="gf-call-stage">
+      <div className="gf-call-surface">
+        {showWhiteboard ? (
+          <WhiteboardSurface />
+        ) : (
+          <div className="gf-video-surface">
+            <GridLayout tracks={tracks} className="gf-video-grid">
+              <ParticipantTile />
+            </GridLayout>
+          </div>
+        )}
+
+        <div className="gf-call-dock">
+          <TrackToggle source={Track.Source.Microphone} className="gf-dock-button">
+            Mic
+          </TrackToggle>
+          <TrackToggle source={Track.Source.Camera} className="gf-dock-button">
+            Camera
+          </TrackToggle>
+          <TrackToggle source={Track.Source.ScreenShare} className="gf-dock-button">
+            Share
+          </TrackToggle>
+          <button className="gf-dock-button" type="button" aria-pressed={showWhiteboard} onClick={onToggleWhiteboard}>
+            Whiteboard
+          </button>
+          <button className="gf-dock-button" type="button" aria-pressed={showChat} onClick={onToggleChat}>
+            Chat
+          </button>
+          <button className="gf-dock-button gf-dock-button-danger" type="button" onClick={onLeave}>
+            Leave
+          </button>
+        </div>
+      </div>
+
+      {showChat && (
+        <aside className="gf-chat-panel">
+          <div className="gf-chat-header">
+            <span>Session chat</span>
+            <button type="button" onClick={onToggleChat} aria-label="Close chat">x</button>
+          </div>
+          <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
+        </aside>
+      )}
+      <RoomAudioRenderer />
+    </div>
+  )
+}
+
 function RoomContent({ room }) {
   const [showChat, setShowChat] = useState(false)
   const [showWhiteboard, setShowWhiteboard] = useState(false)
   const navigate = useNavigate()
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', background: '#0a0a14' }}>
-      <RoomHeader
-        room={room}
+    <div className="gf-room-shell">
+      <RoomHeader room={room} />
+      <CallStage
         showChat={showChat}
         showWhiteboard={showWhiteboard}
         onToggleChat={() => setShowChat(c => !c)}
         onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
         onLeave={() => navigate('/tutor')}
       />
-
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', position: 'relative' }}>
-        {showWhiteboard ? (
-          /* ── Whiteboard overlay ── */
-          <WhiteboardSurface />
-        ) : (
-          /* ── Video + optional chat panel ── */
-          <>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: 'hidden', padding: 10 }}>
-              <VideoConference />
-              <RoomAudioRenderer />
-            </div>
-            {showChat && (
-              <div style={{
-                width: 320, minWidth: 300, minHeight: 0, display: 'flex', flexDirection: 'column',
-                borderLeft: '1px solid #2a2a3e', background: '#0d0d1a',
-              }}>
-                <div style={{ padding: '12px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111122' }}>
-                  <span style={{ color: '#f5f5fb', fontFamily: FONT_B, fontSize: 13, fontWeight: 700 }}>Session chat</span>
-                  <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
-                </div>
-                <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
-              </div>
-            )}
-          </>
-        )}
-      </div>
     </div>
   )
 }
 
-// ── Loading / error screen ────────────────────────────────────────────────────
 function StatusScreen({ message, isError, onBack }) {
   return (
     <div style={{
@@ -152,7 +128,7 @@ function StatusScreen({ message, isError, onBack }) {
     }}>
       {isError ? (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>!</div>
           <p style={{ color: '#f87171', fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>{message}</p>
           <button
             onClick={onBack}
@@ -172,7 +148,6 @@ function StatusScreen({ message, isError, onBack }) {
   )
 }
 
-// ── RecurringRoomPage ─────────────────────────────────────────────────────────
 export default function RecurringRoomPage({ profile }) {
   const { roomName } = useParams()
   const navigate = useNavigate()
@@ -207,7 +182,7 @@ export default function RecurringRoomPage({ profile }) {
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', background: '#0a0a14' }}>
-        <StatusScreen message="Joining session…" />
+        <StatusScreen message="Joining session..." />
       </div>
     )
   }
@@ -227,23 +202,47 @@ export default function RecurringRoomPage({ profile }) {
         .lk-room-container { background: #0a0a14 !important; height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
         .lk-video-conference { height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
         .lk-grid-layout-wrapper, .lk-focus-layout-wrapper { min-height: 0 !important; overflow: hidden !important; }
-        .lk-grid-layout { background: #0a0a14 !important; min-height: 0 !important; }
-        .lk-focus-layout { background: #0a0a14 !important; min-height: 0 !important; }
-        .lk-participant-tile { border-radius: 14px !important; overflow: hidden; border: 1px solid #272742 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.28) !important; }
-        .gf-whiteboard-surface { flex: 1 1 auto; width: 100%; height: 100% !important; min-height: 0 !important; overflow: hidden; position: relative; background: #f8fafc; }
+        .lk-grid-layout { background: #070711 !important; min-height: 0 !important; gap: 10px !important; }
+        .lk-focus-layout { background: #070711 !important; min-height: 0 !important; }
+        .lk-participant-tile { border-radius: 12px !important; overflow: hidden; border: 1px solid rgba(255,255,255,0.08) !important; background: #11111f !important; }
+        .gf-room-shell { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #070711; color: #f7f7fb; font-family: ${FONT_B}; }
+        .gf-room-header { height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: rgba(8,8,18,0.96); border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .gf-room-title-row { min-width: 0; display: flex; align-items: center; gap: 12px; }
+        .gf-brand { flex-shrink: 0; color: ${GOLD}; font-family: 'Sifonn Pro', sans-serif; font-size: 17px; letter-spacing: 0; }
+        .gf-room-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f5f5fb; font-size: 13px; font-weight: 800; }
+        .gf-room-schedule { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9393ae; font-size: 12px; }
+        .gf-live-pill { flex-shrink: 0; border-radius: 6px; background: #173225; color: #6ee7b7; font-size: 10px; font-weight: 800; padding: 3px 7px; }
+        .gf-call-stage { flex: 1; min-height: 0; display: flex; position: relative; background: #05050d; overflow: hidden; }
+        .gf-call-surface { flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; overflow: hidden; padding: 12px 12px 86px; }
+        .gf-video-surface { flex: 1; min-width: 0; min-height: 0; overflow: hidden; border-radius: 14px; background: #10101b; border: 1px solid rgba(255,255,255,0.08); }
+        .gf-video-grid { width: 100%; height: 100%; background: #070711 !important; }
+        .gf-call-dock { position: absolute; left: 50%; bottom: 18px; z-index: 20; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); overflow-x: auto; transform: translateX(-50%); padding: 8px; border-radius: 14px; background: rgba(11,11,24,0.92); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 18px 40px rgba(0,0,0,0.36); backdrop-filter: blur(12px); }
+        .gf-dock-button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; background: #1b1b2f; color: #f5f5fb; padding: 0 14px; font-family: ${FONT_B}; font-size: 13px; font-weight: 700; line-height: 1; white-space: nowrap; cursor: pointer; }
+        .gf-dock-button:hover { background: #262641; border-color: rgba(255,255,255,0.22); }
+        .gf-dock-button[aria-pressed="true"],
+        .gf-dock-button[data-lk-enabled="true"] { background: ${GOLD}; color: #171724; border-color: ${GOLD}; }
+        .gf-dock-button-danger { background: #7f1d1d; color: #fecaca; border-color: #9f2727; }
+        .gf-dock-button-danger:hover { background: #992222; border-color: #b83434; }
+        .gf-chat-panel { width: 340px; min-width: 300px; min-height: 0; display: flex; flex-direction: column; background: #0d0d1a; border-left: 1px solid rgba(255,255,255,0.08); }
+        .gf-chat-header { min-height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #f5f5fb; font-size: 13px; font-weight: 800; }
+        .gf-chat-header button { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: #a8a8bd; cursor: pointer; font-size: 16px; }
+        .gf-chat-header button:hover { background: #1b1b2f; color: #fff; }
+        .gf-whiteboard-surface { flex: 1 1 auto; width: 100%; height: 100% !important; min-height: 0 !important; overflow: hidden; position: relative; background: #f8fafc; border-radius: 14px; }
         .gf-whiteboard-surface .tl-container { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
-        .lk-control-bar { background: rgba(13, 13, 26, 0.9) !important; border-top: 1px solid #2a2a3e !important; padding: 12px 16px !important; backdrop-filter: blur(6px); flex-shrink: 0 !important; }
-        .lk-control-bar .lk-button { background: #23233a !important; color: #f4f4fb !important; border: 1px solid #3a3a58 !important; border-radius: 10px !important; }
-        .lk-control-bar .lk-button:hover { background: #2d2d49 !important; border-color: #56567a !important; transform: translateY(-1px); }
-        .lk-control-bar .lk-button[aria-pressed="true"],
-        .lk-control-bar .lk-button[data-lk-enabled="true"] { background: ${GOLD} !important; color: #171724 !important; border-color: ${GOLD} !important; }
-        .lk-disconnect-button { background: #7f1d1d !important; color: #fca5a5 !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
         .lk-chat-messages { flex: 1 !important; }
         .lk-chat-entry { border-bottom: 1px solid #1a1a2e !important; padding: 10px 14px !important; }
         .lk-chat-form { border-top: 1px solid #2a2a3e !important; background: #0d0d1a !important; padding: 10px !important; }
         .lk-chat-form-input { background: #1a1a2e !important; color: #e5e5e5 !important; border: 1px solid #2a2a3e !important; border-radius: 8px !important; padding: 8px 12px !important; }
         .lk-chat-form-button { background: ${GOLD} !important; color: #1a1a2e !important; border-radius: 8px !important; }
+        @media (max-width: 860px) {
+          .gf-room-header { padding: 0 12px; }
+          .gf-room-schedule { display: none; }
+          .gf-call-stage { flex-direction: column; }
+          .gf-call-surface { padding: 8px 8px 84px; }
+          .gf-chat-panel { width: 100%; min-width: 0; height: 38%; border-left: 0; border-top: 1px solid rgba(255,255,255,0.08); }
+          .gf-dock-button { padding: 0 11px; }
+        }
       `}</style>
       <LiveKitRoom
         serverUrl={wsUrl}
