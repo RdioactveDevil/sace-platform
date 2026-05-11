@@ -2,10 +2,14 @@
  * Canonical spellings of `questions.subject` / `draft_questions.subject` for the same bank
  * (SACE ordering, "Year N Title" vs "Title Year N", optional SACE prefix).
  */
+export function normalizeSubjectLabel(raw: string): string {
+  return raw.trim().replace(/[\s:;，、。]+$/u, "").trim();
+}
+
 export function subjectCountCandidates(primary: string): string[] {
-  const s = primary.trim();
+  const s = normalizeSubjectLabel(primary);
   if (!s) return [];
-  const out = new Set<string>([s])
+  const out = new Set<string>([normalizeSubjectLabel(primary)]);
 
   const sace = s.match(/^SACE\s+Stage\s*([12])\s+(.+)$/i);
   if (sace) {
@@ -59,7 +63,7 @@ export function subjectCountCandidates(primary: string): string[] {
  */
 export function expandCurriculumRenameSources(oldName: string, oldLevelLabel = ""): string[] {
   const out = new Set<string>();
-  const name = oldName.trim();
+  const name = normalizeSubjectLabel(oldName);
   if (!name) return [];
 
   for (const x of subjectCountCandidates(name)) out.add(x);

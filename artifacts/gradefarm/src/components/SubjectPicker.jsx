@@ -47,14 +47,17 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
     const pairs = [
       ...ALL_SUBJECTS
         .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
-        .map(s => [s.id, QUESTIONS_SUBJECT_BY_ID[s.id]]),
+        .map(s => [s.id, QUESTIONS_SUBJECT_BY_ID[s.id], s.stage || '']),
       ...dynamicSubjects
         .filter(s => s.available)
-        .map(s => [s.id, s.name]),
+        .map(s => [s.id, s.name, s.stage || '']),
     ]
     if (pairs.length === 0) return undefined
-    const names = [...new Set(pairs.map(([, subjectName]) => subjectName))]
-    fetchSubjectBankCounts(names)
+    const countPayload = pairs.map(([, subjectName, stage]) => ({
+      subject: subjectName,
+      levelLabel: stage,
+    }))
+    fetchSubjectBankCounts(countPayload)
       .then((counts) => {
         if (cancelled) return
         const results = pairs.map(([id, subjectName]) => [id, counts[subjectName] ?? 0])

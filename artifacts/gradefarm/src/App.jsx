@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import { getProfile, getStruggleMap, signOut, getQuestions, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
@@ -596,7 +596,7 @@ function AppInner() {
   // Reload questions if subject was persisted but questions are empty
   useEffect(() => {
     if (!selectedSubject || questions.length > 0) return
-    getQuestions(QUESTIONS_SUBJECT_BY_ID[selectedSubject.id] || selectedSubject.name)
+    getQuestionsForSubjectTile(selectedSubject)
       .then(qs => setQuestions(qs))
       .catch(() => {})
   }, [selectedSubject])
@@ -604,7 +604,7 @@ function AppInner() {
   const handleSelectSubject = async (subject) => {
     setSelectedSubject(subject)
     localStorage.setItem('gf-subject', JSON.stringify(subject))
-    const qs = await getQuestions(QUESTIONS_SUBJECT_BY_ID[subject.id] || subject.name)
+    const qs = await getQuestionsForSubjectTile(subject)
     setQuestions(qs)
     if (subject.type === 'writing') {
       navigate('/writing/essay', { replace: true })
@@ -1069,7 +1069,7 @@ function AppInner() {
               if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))
-                const qs = await getQuestions(QUESTIONS_SUBJECT_BY_ID[matchingSubject.id] || matchingSubject.name)
+                const qs = await getQuestionsForSubjectTile(matchingSubject)
                 setQuestions(qs)
                 activeQuestions = qs
                 activeSubject = matchingSubject

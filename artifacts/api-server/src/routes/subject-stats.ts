@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger";
-import { subjectCountCandidates } from "../lib/subject-aliases";
+import { expandCurriculumRenameSources } from "../lib/subject-aliases";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -32,9 +32,18 @@ async function countForAliases(
   return { live: live ?? 0, pendingDrafts: pendingDrafts ?? 0 };
 }
 
+type InItem = string | { name?: string; subject?: string; levelLabel?: string };
+
+function normItem(raw: InItem): { key: string; level: string } {
+  if (typeof raw === "string") return { key: raw.trim(), level: "" };
+  const key = String(raw.name ?? raw.subject ?? "").trim();
+  const level = String(raw.levelLabel ?? "").trim();
+  return { key, level };
+}
+
 // POST /api/subject-question-counts
-// Body: { subjects: string[] }
-// Returns: { counts: Record<string, number> } — live `questions` + pending `draft_questions` per subject label (keyed by requested string).
+// Body: { subjects: Array<string | { name?: string, subject?: string, levelLabel?: string }> }
+// Returns: { counts: Record<string, number> } keyed by each requested `name`/`subject` string.
 router.post("/subject-question-counts", async (req, res) => {
   const { subjects } = req.body || {};
   if (!Array.isArray(subjects)) {
@@ -42,8 +51,8 @@ router.post("/subject-question-counts", async (req, res) => {
     return;
   }
 
-  const list = subjects.map((s) => (typeof s === "string" ? s.trim() : "")).filter(Boolean);
-  if (list.length === 0) {
+  const normalized = (subjects as InItem[]).map(normItem).filter((x) => x.key);
+  if (normalized.length === 0) {
     res.json({ counts: {} });
     return;
   }
@@ -51,8 +60,8 @@ router.post("/subject-question-counts", async (req, res) => {
   try {
     const admin = getAdmin();
     const counts: Record<string, number> = {};
-    for (const key of list) {
-      const aliases = subjectCountCandidates(key);
+    for (const { key, level } of normalized) {
+      const aliases = expandCurriculumRenameSources(key, level);
       const { live, pendingDrafts } = await countForAliases(admin, aliases);
       counts[key] = live + pendingDrafts;
     }

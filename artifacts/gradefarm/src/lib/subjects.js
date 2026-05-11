@@ -222,3 +222,91 @@ export function buildCanonicalCurriculumName(title, levelLabel) {
   }
   return `${t} ${lv}`
 }
+
+/** Trim stray punctuation some legacy rows use on `questions.subject`. */
+export function normalizeSubjectStorageKey(s) {
+  return String(s || '').trim().replace(/[\s:;，、。]+$/u, '').trim()
+}
+
+/**
+ * All plausible `questions.subject` spellings for a live curriculum tile (mirrors API
+ * `expandCurriculumRenameSources` / `subjectCountCandidates` — keep aligned).
+ * Includes **SACE Stage N Title** when cohort is Stage N.
+ */
+export function bankSubjectAliases(displayName, levelLabel = '') {
+  const out = new Set()
+  const addFromString = (raw) => {
+    const s = normalizeSubjectStorageKey(raw)
+    if (!s) return
+    out.add(s)
+    const sace = s.match(/^SACE\s+Stage\s*([12])\s+(.+)$/i)
+    if (sace) {
+      const n = sace[1]
+      const title = sace[2].trim()
+      const st = `Stage ${n}`
+      out.add(`${title} ${st}`)
+      out.add(`${st} ${title}`)
+    }
+    const stageAtEnd = s.match(/^(.+?)\s+Stage\s*([12])\s*$/i)
+    if (stageAtEnd) {
+      const title = stageAtEnd[1].trim()
+      const n = stageAtEnd[2]
+      const st = `Stage ${n}`
+      out.add(`${st} ${title}`)
+      out.add(`SACE ${st} ${title}`)
+      out.add(`SACE Stage ${n} ${title}`)
+    }
+    const stageAtStart = s.match(/^Stage\s*([12])\s+(.+)$/i)
+    if (stageAtStart) {
+      const n = stageAtStart[1]
+      const title = stageAtStart[2].trim()
+      const st = `Stage ${n}`
+      out.add(`${title} ${st}`)
+      out.add(`SACE ${st} ${title}`)
+    }
+    const yearFirst = s.match(/^Year\s*(\d{1,2})\s+(.+)$/i)
+    if (yearFirst) {
+      out.add(`${yearFirst[2].trim()} Year ${yearFirst[1]}`)
+    }
+    const yearLast = s.match(/^(.+?)\s+Year\s*(\d{1,2})\s*$/i)
+    if (yearLast) {
+      out.add(`Year ${yearLast[2]} ${yearLast[1].trim()}`)
+    }
+  }
+
+  const name = normalizeSubjectStorageKey(displayName)
+  if (!name) return []
+
+  addFromString(name)
+
+  const lv = String(levelLabel || '').trim()
+  let base = name.replace(/\s+Stage\s*[12]\s*$/i, '').replace(/^Stage\s*[12]\s+/i, '').trim()
+  if (!base) base = name
+
+  const st = lv.match(/^stage\s*([12])$/i)
+  if (st) {
+    const n = st[1]
+    const forms = [base, `${base} Stage ${n}`, `Stage ${n} ${base}`, `SACE Stage ${n} ${base}`]
+    forms.forEach((f) => addFromString(f))
+  }
+
+  const yr = lv.match(/^year\s*(\d{1,2})$/i)
+  if (yr) {
+    ;[`Year ${yr[1]} ${base}`, `${base} Year ${yr[1]}`].forEach((f) => addFromString(f))
+  }
+
+  return [...out].filter(Boolean)
+}
+
+/**
+ * `questions.subject` keys to load for a picker tile (built-in id → single canonical string).
+ */
+export function questionsBankSubjectKeys(subjectTile) {
+  if (!subjectTile) return ['Chemistry']
+  const id = subjectTile.id
+  if (QUESTIONS_SUBJECT_BY_ID[id]) return [QUESTIONS_SUBJECT_BY_ID[id]]
+  if (typeof id === 'string' && id.startsWith('curriculum_')) {
+    return bankSubjectAliases(subjectTile.name || '', subjectTile.stage || '')
+  }
+  return [subjectTile.name || 'Chemistry']
+}

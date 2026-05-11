@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { nextReviewTime } from './engine'
+import { questionsBankSubjectKeys } from './subjects'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function signUp(email, password, displayName, school, applyForTutor = false) {
@@ -192,6 +193,23 @@ export async function updateProfile(userId, updates) {
   if (error) throw error
 }
 
+function mapAndDedupeQuestions(data, subjectFallback) {
+  const mapped = (data || []).map(q => ({
+    ...q,
+    options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+    concept_tag:
+      q.concept_tag ||
+      `${q.subject || subjectFallback}|${q.topic}|${q.subtopic}`.toLowerCase(),
+  }))
+  const seen = new Set()
+  return mapped.filter(q => {
+    const key = (q.question || '').trim().toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 // â”€â”€â”€ QUESTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getQuestions(subject = 'Chemistry') {
   const { data, error } = await supabase
@@ -200,25 +218,22 @@ export async function getQuestions(subject = 'Chemistry') {
     .eq('subject', subject)
 
   if (error) throw error
+  return mapAndDedupeQuestions(data, subject)
+}
 
-  const mapped = data.map(q => ({
-    ...q,
-    options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
-    concept_tag:
-      q.concept_tag ||
-      `${q.subject || subject}|${q.topic}|${q.subtopic}`.toLowerCase(),
-  }))
-
-  // Deduplicate by question text to prevent the same question showing twice
-  // when the bank has duplicate content with different IDs (e.g. from multiple
-  // generation runs or seed scripts run more than once).
-  const seen = new Set()
-  return mapped.filter(q => {
-    const key = (q.question || '').trim().toLowerCase()
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+/**
+ * Load the bank for a subject tile (curriculum_* tiles query all spelling variants, e.g. SACE Stage 2 …).
+ */
+export async function getQuestionsForSubjectTile(subjectTile) {
+  const keys = questionsBankSubjectKeys(subjectTile)
+  if (keys.length === 0) return []
+  if (keys.length === 1) return getQuestions(keys[0])
+  const { data, error } = await supabase
+    .from('questions')
+    .select('*')
+    .in('subject', keys)
+  if (error) throw error
+  return mapAndDedupeQuestions(data, keys[0])
 }
 
 // â”€â”€â”€ STRUGGLE PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -234,20 +249,32 @@ export async function countQuestionsForSubject(subject) {
 }
 
 /**
- * Live `questions` + pending `draft_questions` per subject, using service API so draft rows
- * (curriculum generator) are visible despite RLS. Falls back to {@link countQuestionsForSubject} if the API fails.
- * @param {string[]} subjectNames canonical labels (e.g. curricula.name, QUESTIONS_SUBJECT_BY_ID values)
- * @returns {Promise<Record<string, number>>}
+ * Live `questions` + pending `draft_questions` for subjects. Pass `{ subject, levelLabel }` for
+ * managed curricula so counts include spellings like `SACE Stage 2 Mathematical Methods`.
+ * @param {Array<string|{subject: string, levelLabel?: string}>} entries
+ * @returns {Promise<Record<string, number>>} keyed by `subject` string
  */
-export async function fetchSubjectBankCounts(subjectNames) {
-  const unique = [...new Set((subjectNames || []).filter(Boolean).map((s) => String(s).trim()))]
-  if (unique.length === 0) return {}
+export async function fetchSubjectBankCounts(entries) {
+  const items = []
+  for (const e of entries || []) {
+    if (e && typeof e === 'object' && 'subject' in e) {
+      const subject = String(e.subject || '').trim()
+      if (!subject) continue
+      items.push({ name: subject, levelLabel: String(e.levelLabel || '').trim() })
+    } else {
+      const s = String(e || '').trim()
+      if (s) items.push({ name: s, levelLabel: '' })
+    }
+  }
+
+  const keysForFallback = [...new Set(items.map((i) => i.name))]
+  if (keysForFallback.length === 0) return {}
 
   try {
     const res = await fetch('/api/subject-question-counts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subjects: unique }),
+      body: JSON.stringify({ subjects: items }),
     })
     const text = await res.text()
     let data
@@ -260,7 +287,7 @@ export async function fetchSubjectBankCounts(subjectNames) {
     return data.counts && typeof data.counts === 'object' ? data.counts : {}
   } catch {
     const out = {}
-    for (const s of unique) {
+    for (const s of keysForFallback) {
       try {
         out[s] = await countQuestionsForSubject(s)
       } catch {
