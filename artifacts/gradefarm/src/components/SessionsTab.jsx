@@ -1,0 +1,327 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { THEMES } from '../lib/theme'
+import {
+  fetchRoster,
+  fetchStudentEmails,
+  createTutoringSession,
+  fetchTutoringSessions,
+  cancelTutoringSession,
+} from '../lib/db'
+
+const GOLD = '#f1be43'
+const FONT_B = "'Plus Jakarta Sans', sans-serif"
+
+function fmtDateTime(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-AU', {
+    weekday: 'short', day: 'numeric', month: 'short',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function statusColor(status) {
+  if (status === 'active')    return { bg: '#1e3a2f', text: '#4ade80' }
+  if (status === 'completed') return { bg: '#1e2a3a', text: '#60a5fa' }
+  if (status === 'cancelled') return { bg: '#2a1a1a', text: '#f87171' }
+  return { bg: '#2a2a1a', text: GOLD }
+}
+
+function StatusBadge({ status }) {
+  const { bg, text } = statusColor(status)
+  return (
+    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', fontFamily: FONT_B }}>
+      {status}
+    </span>
+  )
+}
+
+// ── Schedule Session Modal ────────────────────────────────────────────────────
+function ScheduleModal({ profile, theme, roster, emails, onClose, onCreated }) {
+  const t = THEMES[theme]
+  const [studentId, setStudentId] = useState('')
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('16:00')
+  const [duration, setDuration] = useState(60)
+  const [title, setTitle] = useState('')
+  const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!studentId || !date || !time) { setError('Please fill in all required fields.'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const scheduledAt = new Date(`${date}T${time}:00`).toISOString()
+      const session = await createTutoringSession({
+        student_id: studentId,
+        scheduled_at: scheduledAt,
+        duration_minutes: duration,
+        title: title || undefined,
+        notes: notes || undefined,
+      })
+      onCreated(session)
+      onClose()
+    } catch (e) {
+      setError(e.message || 'Failed to create session.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '10px 12px', borderRadius: 8,
+    border: `1px solid ${t.border}`, background: t.bgNav,
+    color: t.text, fontFamily: FONT_B, fontSize: 14, boxSizing: 'border-box',
+  }
+  const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+      <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B }}>
+        <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700, color: t.text }}>📅 Schedule a Session</h2>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Student *</label>
+            <select value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle} required>
+              <option value="">Select a student…</option>
+              {roster.map(s => (
+                <option key={s.student_id} value={s.student_id}>
+                  {s.display_name || emails[s.student_id] || s.student_id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Date *</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} required min={new Date().toISOString().split('T')[0]} />
+            </div>
+            <div>
+              <label style={labelStyle}>Time *</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Duration</label>
+            <select value={duration} onChange={e => setDuration(Number(e.target.value))} style={inputStyle}>
+              <option value={30}>30 minutes</option>
+              <option value={45}>45 minutes</option>
+              <option value={60}>1 hour</option>
+              <option value={90}>1.5 hours</option>
+              <option value={120}>2 hours</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Topic / Title</label>
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Chemistry Unit 3 — Acids & Bases" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Notes for student</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+          </div>
+          {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 14, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={loading} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: GOLD, color: '#1a1a2e', fontFamily: FONT_B, fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Scheduling…' : 'Schedule & Notify Student'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Session Card ──────────────────────────────────────────────────────────────
+function SessionCard({ session, theme, onJoin, onCancel }) {
+  const t = THEMES[theme]
+  const [cancelling, setCancelling] = useState(false)
+  const isPast = new Date(session.scheduled_at) < new Date()
+  const canJoin = session.status === 'scheduled' || session.status === 'active'
+  const canCancel = session.status === 'scheduled'
+
+  const handleCancel = async () => {
+    if (!window.confirm('Cancel this session?')) return
+    setCancelling(true)
+    try { await onCancel(session.id) } finally { setCancelling(false) }
+  }
+
+  return (
+    <div style={{
+      background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 12,
+      padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20,
+      flexWrap: 'wrap',
+    }}>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>
+            {session.title || 'Tutoring Session'}
+          </span>
+          <StatusBadge status={session.status} />
+        </div>
+        <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <span>👤 {session.other_party_name || 'Student'}</span>
+          <span>📅 {fmtDateTime(session.scheduled_at)}</span>
+          <span>⏱ {session.duration_minutes} min</span>
+        </div>
+        {session.notes && (
+          <p style={{ margin: '8px 0 0', fontSize: 13, color: t.textMuted, fontStyle: 'italic' }}>
+            {session.notes}
+          </p>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        {canJoin && (
+          <button
+            onClick={() => onJoin(session.id)}
+            style={{ background: GOLD, color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer' }}
+          >
+            {session.status === 'active' ? '🔴 Rejoin' : '▶ Join'}
+          </button>
+        )}
+        {canCancel && (
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}
+          >
+            {cancelling ? '…' : 'Cancel'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── SessionsTab ───────────────────────────────────────────────────────────────
+export default function SessionsTab({ profile, theme }) {
+  const t = THEMES[theme]
+  const navigate = useNavigate()
+
+  const [sessions, setSessions] = useState([])
+  const [roster, setRoster] = useState([])
+  const [emails, setEmails] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [filter, setFilter] = useState('upcoming')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [allSessions, rosterData] = await Promise.all([
+        fetchTutoringSessions({ limit: 50 }),
+        fetchRoster(profile.id),
+      ])
+      setSessions(allSessions || [])
+      setRoster(rosterData || [])
+      if (rosterData?.length) {
+        const ids = rosterData.map(s => s.student_id)
+        const emailMap = await fetchStudentEmails(ids)
+        setEmails(emailMap || {})
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }, [profile.id])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCancel = async (id) => {
+    await cancelTutoringSession(id)
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, status: 'cancelled' } : s))
+  }
+
+  const handleCreated = (session) => {
+    setSessions(prev => [session, ...prev])
+  }
+
+  const now = new Date()
+  const filtered = sessions.filter(s => {
+    if (filter === 'upcoming') return (s.status === 'scheduled' || s.status === 'active')
+    if (filter === 'past') return (s.status === 'completed' || (s.status === 'scheduled' && new Date(s.scheduled_at) < now))
+    if (filter === 'cancelled') return s.status === 'cancelled'
+    return true
+  })
+
+  const filterStyle = (id) => ({
+    padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 600,
+    background: filter === id ? GOLD : t.bgNav,
+    color: filter === id ? '#1a1a2e' : t.textMuted,
+  })
+
+  return (
+    <div style={{ fontFamily: FONT_B, color: t.text }}>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>📹 Video Sessions</h2>
+          <p style={{ margin: 0, color: t.textMuted, fontSize: 14 }}>
+            Schedule live video calls with your students. They'll receive an email with the join link.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          style={{ background: GOLD, color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '11px 20px', fontSize: 14, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer' }}
+        >
+          + Schedule Session
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <button style={filterStyle('upcoming')} onClick={() => setFilter('upcoming')}>Upcoming</button>
+        <button style={filterStyle('past')} onClick={() => setFilter('past')}>Past</button>
+        <button style={filterStyle('cancelled')} onClick={() => setFilter('cancelled')}>Cancelled</button>
+        <button style={filterStyle('all')} onClick={() => setFilter('all')}>All</button>
+      </div>
+
+      {/* Session list */}
+      {loading ? (
+        <div style={{ color: t.textMuted, textAlign: 'center', padding: '40px 0', fontSize: 15 }}>
+          <div style={{ width: 32, height: 32, border: `3px solid ${GOLD}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          Loading sessions…
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: t.textMuted }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+          <p style={{ fontSize: 15, margin: 0 }}>
+            {filter === 'upcoming' ? 'No upcoming sessions. Schedule one to get started.' : `No ${filter} sessions.`}
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {filtered.map(session => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              theme={theme}
+              onJoin={(id) => navigate(`/session/${id}`)}
+              onCancel={handleCancel}
+            />
+          ))}
+        </div>
+      )}
+
+      {showModal && (
+        <ScheduleModal
+          profile={profile}
+          theme={theme}
+          roster={roster}
+          emails={emails}
+          onClose={() => setShowModal(false)}
+          onCreated={handleCreated}
+        />
+      )}
+    </div>
+  )
+}

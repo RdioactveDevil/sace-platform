@@ -32,6 +32,7 @@ import TutorRoute        from './components/TutorRoute'
 import TutorScreen       from './components/TutorScreen'
 import WritingScreen     from './components/WritingScreen'
 import DiagnosticScreen  from './components/DiagnosticScreen'
+import SessionRoom       from './components/SessionRoom'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -1004,6 +1005,13 @@ function AppInner() {
                 <TutorScreen profile={profile} theme={theme} />
               </AppShell>
             </TutorRoute>
+      } />
+
+      {/* Session room — full-page video call, accessible to tutors and students */}
+      <Route path="/session/:sessionId" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : <SessionRoom profile={profile} />
       } />
 
       {/* Single shell route — AppShellScreens stays mounted across ALL tab switches */}

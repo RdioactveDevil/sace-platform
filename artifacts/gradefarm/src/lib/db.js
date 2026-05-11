@@ -1082,3 +1082,90 @@ export async function downloadDiagnosticReportPdf(assessmentId, studentName) {
   a.click()
   URL.revokeObjectURL(url)
 }
+// ── Tutoring Sessions ─────────────────────────────────────────────────────────
+
+/** Create a new tutoring session (tutor only). */
+export async function createTutoringSession({ student_id, scheduled_at, duration_minutes = 60, title, notes, class_id }) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch('/api/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ student_id, scheduled_at, duration_minutes, title, notes, class_id }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to create session.')
+  return json.session
+}
+
+/** List tutoring sessions for the current user (tutor or student). */
+export async function fetchTutoringSessions({ status, limit = 20, offset = 0 } = {}) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (status) params.set('status', status)
+  const res = await fetch(`/api/sessions?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to fetch sessions.')
+  return json.sessions
+}
+
+/** Get a single tutoring session by ID. */
+export async function fetchTutoringSession(id) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Session not found.')
+  return json.session
+}
+
+/** Generate a LiveKit access token for joining a session room. */
+export async function getTutoringSessionToken(sessionId) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/token`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to get session token.')
+  return json // { token, wsUrl, roomName }
+}
+
+/** Update a tutoring session (tutor only). */
+export async function updateTutoringSession(id, updates) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(updates),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to update session.')
+  return json.session
+}
+
+/** Cancel a tutoring session (tutor only). */
+export async function cancelTutoringSession(id) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to cancel session.')
+  return json
+}
