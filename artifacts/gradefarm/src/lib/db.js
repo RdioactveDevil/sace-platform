@@ -1082,3 +1082,182 @@ export async function downloadDiagnosticReportPdf(assessmentId, studentName) {
   a.click()
   URL.revokeObjectURL(url)
 }
+// ── Tutoring Sessions ─────────────────────────────────────────────────────────
+
+/** Create a new tutoring session (tutor only). */
+export async function createTutoringSession({ session_type = 'individual', student_id, student_ids, scheduled_at, duration_minutes = 60, title, notes, class_id }) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch('/api/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ session_type, student_id, student_ids, scheduled_at, duration_minutes, title, notes, class_id }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to create session.')
+  return json.session
+}
+
+/** List tutoring sessions for the current user (tutor or student). */
+export async function fetchTutoringSessions({ status, limit = 20, offset = 0 } = {}) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (status) params.set('status', status)
+  const res = await fetch(`/api/sessions?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to fetch sessions.')
+  return json.sessions
+}
+
+/** Get a single tutoring session by ID. */
+export async function fetchTutoringSession(id) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Session not found.')
+  return json.session
+}
+
+/** Generate a LiveKit access token for joining a session room. */
+export async function getTutoringSessionToken(sessionId) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/token`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to get session token.')
+  return json // { token, wsUrl, roomName }
+}
+
+/** Update a tutoring session (tutor only). */
+export async function updateTutoringSession(id, updates) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(updates),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to update session.')
+  return json.session
+}
+
+/** Cancel a tutoring session (tutor only). */
+export async function cancelTutoringSession(id) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to cancel session.')
+  return json
+}
+
+// ── Recurring Series ──────────────────────────────────────────────────────────
+
+/** Create a recurring session series. */
+export async function createSessionSeries({
+  session_type = 'individual', student_id, student_ids, class_id,
+  recurrence_type, day_of_week, time_of_day, timezone = 'Australia/Adelaide',
+  duration_minutes = 60, title, notes, starts_at, ends_at,
+}) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch('/api/series', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      session_type, student_id, student_ids, class_id,
+      recurrence_type, day_of_week, time_of_day, timezone,
+      duration_minutes, title, notes, starts_at, ends_at,
+    }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to create series.')
+  return json
+}
+
+/** List all recurring series for the current tutor. */
+export async function fetchSessionSeries() {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch('/api/series', { headers: { Authorization: `Bearer ${token}` } })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to fetch series.')
+  return json.series
+}
+
+/** Cancel a series (and all future sessions in it). */
+export async function cancelSessionSeries(id) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/series/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status: 'cancelled' }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to cancel series.')
+  return json
+}
+
+/** Generate more occurrences for an existing series. */
+export async function extendSessionSeries(id) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/series/${encodeURIComponent(id)}/extend`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to extend series.')
+  return json
+}
+
+/** Get info about a room by its room name (for the permanent join page). */
+export async function getRoomInfo(roomName) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/rooms/${encodeURIComponent(roomName)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Room not found.')
+  return json.room
+}
+
+/** Generate a LiveKit token by room name (for permanent links). */
+export async function getRoomToken(roomName) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/rooms/${encodeURIComponent(roomName)}/token`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to get room token.')
+  return json // { token, wsUrl, roomName, title, is_series }
+}

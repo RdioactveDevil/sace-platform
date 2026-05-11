@@ -8,6 +8,8 @@ import adminRouter from "./admin";
 import curriculumRouter from "./curriculum";
 import writingRouter from "./writing";
 import diagnosticRouter from "./diagnostic";
+import sessionsRouter from "./sessions";
+import seriesRouter from "./series";
 
 const router: IRouter = Router();
 
@@ -20,5 +22,7 @@ router.use(adminRouter);
 router.use(curriculumRouter);
 router.use(writingRouter);
 router.use(diagnosticRouter);
+router.use(sessionsRouter);
+router.use(seriesRouter);
 
 export default router;
