@@ -228,6 +228,25 @@ export function normalizeSubjectStorageKey(s) {
   return String(s || '').trim().replace(/[\s:;，、。]+$/u, '').trim()
 }
 
+/** Legacy rows: subject ends with ` :` / `: ` etc. (keep in sync with api-server expandSubjectRowStringsForDb). */
+export function expandSubjectRowStringsForDb(canonical) {
+  const trimmed = String(canonical || '').trim()
+  if (!trimmed) return []
+  const normalized = normalizeSubjectStorageKey(trimmed)
+  const bases = [...new Set([trimmed, normalized].filter(Boolean))]
+  const suffixes = [' :', ' : ', ': ', ':']
+  const out = new Set()
+  for (const b of bases) {
+    out.add(b)
+    for (const suf of suffixes) {
+      out.add(b + suf)
+      out.add(b + suf + ' ')
+      out.add(b + suf + '  ')
+    }
+  }
+  return [...out].filter(Boolean)
+}
+
 /**
  * All plausible `questions.subject` spellings for a live curriculum tile (mirrors API
  * `expandCurriculumRenameSources` / `subjectCountCandidates` — keep aligned).
@@ -295,7 +314,11 @@ export function bankSubjectAliases(displayName, levelLabel = '') {
     ;[`Year ${yr[1]} ${base}`, `${base} Year ${yr[1]}`].forEach((f) => addFromString(f))
   }
 
-  return [...out].filter(Boolean)
+  const withJunk = new Set()
+  for (const x of out) {
+    for (const v of expandSubjectRowStringsForDb(x)) withJunk.add(v)
+  }
+  return [...withJunk].filter(Boolean)
 }
 
 /**

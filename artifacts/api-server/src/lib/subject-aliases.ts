@@ -6,10 +6,41 @@ export function normalizeSubjectLabel(raw: string): string {
   return raw.trim().replace(/[\s:;，、。]+$/u, "").trim();
 }
 
-export function subjectCountCandidates(primary: string): string[] {
+/**
+ * Some legacy `questions.subject` values end with stray colons/spaces (e.g. `"SACE Stage 2 Mathematical Methods : "`).
+ * Expand one canonical label into every variant we should use in `.in("subject", …)` and rename cascades.
+ */
+export function expandSubjectRowStringsForDb(canonical: string): string[] {
+  const trimmed = canonical.trim();
+  if (!trimmed) return [];
+  const normalized = normalizeSubjectLabel(trimmed);
+  const bases = [...new Set([trimmed, normalized].filter((x) => x.length > 0))];
+  const suffixes = [" :", " : ", ": ", ":"];
+  const out = new Set<string>();
+  for (const b of bases) {
+    out.add(b);
+    for (const suf of suffixes) {
+      out.add(b + suf);
+      out.add(b + suf + " ");
+      out.add(b + suf + "  ");
+    }
+  }
+  return [...out].filter((x) => x.length > 0);
+}
+
+function withSubjectRowJunkVariants(keyword: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const k of keyword) {
+    for (const v of expandSubjectRowStringsForDb(k)) out.add(v);
+  }
+  return [...out];
+}
+
+/** Core alias spellings only (no trailing ` :` junk). */
+export function collectSubjectAliasCore(primary: string): string[] {
   const s = normalizeSubjectLabel(primary);
   if (!s) return [];
-  const out = new Set<string>([normalizeSubjectLabel(primary)]);
+  const out = new Set<string>([s]);
 
   const sace = s.match(/^SACE\s+Stage\s*([12])\s+(.+)$/i);
   if (sace) {
@@ -56,6 +87,10 @@ export function subjectCountCandidates(primary: string): string[] {
   return [...out].filter((x) => x.length > 0);
 }
 
+export function subjectCountCandidates(primary: string): string[] {
+  return withSubjectRowJunkVariants(collectSubjectAliasCore(primary));
+}
+
 /**
  * All `subject` strings that should be renamed when a curriculum display name changes.
  * Unions alias expansion of the stored name with titles rebuilt from {@param oldLevelLabel}
@@ -66,10 +101,10 @@ export function expandCurriculumRenameSources(oldName: string, oldLevelLabel = "
   const name = normalizeSubjectLabel(oldName);
   if (!name) return [];
 
-  for (const x of subjectCountCandidates(name)) out.add(x);
+  for (const x of collectSubjectAliasCore(name)) out.add(x);
 
   const lv = oldLevelLabel.trim();
-  if (!lv) return [...out].filter((x) => x.length > 0);
+  if (!lv) return withSubjectRowJunkVariants(out);
 
   let base = name
     .replace(/\s+Stage\s*[12]\s*$/i, "")
@@ -85,7 +120,7 @@ export function expandCurriculumRenameSources(oldName: string, oldLevelLabel = "
       const t = f.trim();
       if (!t) continue;
       out.add(t);
-      for (const x of subjectCountCandidates(t)) out.add(x);
+      for (const x of collectSubjectAliasCore(t)) out.add(x);
     }
   }
 
@@ -95,9 +130,9 @@ export function expandCurriculumRenameSources(oldName: string, oldLevelLabel = "
     const forms = [`Year ${y} ${base}`, `${base} Year ${y}`];
     for (const f of forms) {
       out.add(f);
-      for (const x of subjectCountCandidates(f)) out.add(x);
+      for (const x of collectSubjectAliasCore(f)) out.add(x);
     }
   }
 
-  return [...out].filter((x) => x.length > 0);
+  return withSubjectRowJunkVariants(out);
 }
