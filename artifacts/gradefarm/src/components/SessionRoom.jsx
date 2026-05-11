@@ -14,137 +14,133 @@ import { fetchTutoringSession, getTutoringSessionToken } from '../lib/db'
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-// ── Tab switcher inside the room ──────────────────────────────────────────────
-function RoomTabs({ active, onChange }) {
-  const tabs = [
-    { id: 'video', label: '📹 Video' },
-    { id: 'whiteboard', label: '🖊 Whiteboard' },
-    { id: 'chat', label: '💬 Chat' },
-  ]
-  return (
-    <div style={{
-      display: 'flex',
-      gap: 0,
-      background: '#0d0d1a',
-      borderBottom: '1px solid #2a2a3e',
-      flexShrink: 0,
-      padding: '0 16px',
-    }}>
-      {tabs.map(tab => (
-        <button
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          style={{
-            padding: '12px 20px',
-            border: 'none',
-            borderBottom: active === tab.id ? `2px solid ${GOLD}` : '2px solid transparent',
-            background: 'transparent',
-            color: active === tab.id ? GOLD : '#888',
-            fontSize: 13,
-            fontWeight: 600,
-            fontFamily: FONT_B,
-            cursor: 'pointer',
-            transition: 'color 0.15s',
-          }}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // ── Room header ───────────────────────────────────────────────────────────────
-function RoomHeader({ session, onLeave }) {
+function RoomHeader({ session, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
   const title = session?.title || 'Tutoring Session'
+  const btnBase = {
+    border: 'none', borderRadius: 8, padding: '7px 14px',
+    fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer',
+    transition: 'all 0.15s',
+  }
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 24px',
-      height: 56,
-      background: '#0d0d1a',
-      borderBottom: '1px solid #2a2a3e',
-      flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 16px', height: 52, background: '#0d0d1a',
+      borderBottom: '1px solid #2a2a3e', flexShrink: 0, gap: 12,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <span style={{ fontFamily: "'Sifonn Pro', sans-serif", fontSize: 18, color: GOLD, letterSpacing: -0.5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <span style={{ fontFamily: "'Sifonn Pro', sans-serif", fontSize: 17, color: GOLD, letterSpacing: -0.5, flexShrink: 0 }}>
           gradefarm.
         </span>
-        <span style={{ color: '#ccc', fontSize: 14, fontFamily: FONT_B }}>{title}</span>
-        <span style={{
-          background: '#1e3a2f',
-          color: '#4ade80',
-          fontSize: 11,
-          fontWeight: 700,
-          padding: '3px 8px',
-          borderRadius: 4,
-          fontFamily: FONT_B,
-        }}>
+        <span style={{ color: '#ccc', fontSize: 13, fontFamily: FONT_B, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {title}
+        </span>
+        <span style={{ background: '#1e3a2f', color: '#4ade80', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, fontFamily: FONT_B, flexShrink: 0 }}>
           LIVE
         </span>
       </div>
-      <button
-        onClick={onLeave}
-        style={{
-          background: '#7f1d1d',
-          color: '#fca5a5',
-          border: 'none',
-          borderRadius: 6,
-          padding: '8px 16px',
-          fontSize: 13,
-          fontWeight: 600,
-          fontFamily: FONT_B,
-          cursor: 'pointer',
-        }}
-      >
-        Leave Session
-      </button>
-    </div>
-  )
-}
 
-// ── Main room content (after connecting) ─────────────────────────────────────
-function RoomContent({ session }) {
-  const [activeTab, setActiveTab] = useState('video')
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#0a0a14' }}>
-      <RoomTabs active={activeTab} onChange={setActiveTab} />
-      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-        {/* Video tab */}
-        <div style={{ position: 'absolute', inset: 0, display: activeTab === 'video' ? 'flex' : 'none', flexDirection: 'column' }}>
-          <VideoConference />
-          <RoomAudioRenderer />
-        </div>
-        {/* Whiteboard tab */}
-        <div style={{ position: 'absolute', inset: 0, display: activeTab === 'whiteboard' ? 'block' : 'none' }}>
-          <Tldraw />
-        </div>
-        {/* Chat tab */}
-        <div style={{ position: 'absolute', inset: 0, display: activeTab === 'chat' ? 'flex' : 'none', flexDirection: 'column', background: '#0d0d1a' }}>
-          <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <button
+          onClick={onToggleWhiteboard}
+          style={{
+            ...btnBase,
+            background: showWhiteboard ? GOLD : '#1a1a2e',
+            color: showWhiteboard ? '#1a1a2e' : '#ccc',
+            border: '1px solid #2a2a3e',
+          }}
+        >
+          🖊 Whiteboard
+        </button>
+        <button
+          onClick={onToggleChat}
+          style={{
+            ...btnBase,
+            background: showChat ? GOLD : '#1a1a2e',
+            color: showChat ? '#1a1a2e' : '#ccc',
+            border: '1px solid #2a2a3e',
+          }}
+        >
+          💬 Chat
+        </button>
+        <button
+          onClick={onLeave}
+          style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', border: 'none' }}
+        >
+          Leave
+        </button>
       </div>
     </div>
   )
 }
 
-// ── Connecting / error states ─────────────────────────────────────────────────
+// ── Main room content ─────────────────────────────────────────────────────────
+function RoomContent({ session }) {
+  const [showChat, setShowChat] = useState(false)
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
+  const navigate = useNavigate()
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#0a0a14' }}>
+      <RoomHeader
+        session={session}
+        showChat={showChat}
+        showWhiteboard={showWhiteboard}
+        onToggleChat={() => setShowChat(c => !c)}
+        onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
+        onLeave={() => navigate('/tutor')}
+      />
+
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+        {showWhiteboard ? (
+          /* ── Whiteboard overlay ── */
+          <div style={{ flex: 1, position: 'relative' }}>
+            <button
+              onClick={() => setShowWhiteboard(false)}
+              style={{
+                position: 'absolute', top: 12, left: 12, zIndex: 500,
+                background: '#0d0d1a', color: '#ccc', border: '1px solid #2a2a3e',
+                borderRadius: 8, padding: '7px 14px', fontFamily: FONT_B,
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              ← Back to video
+            </button>
+            <Tldraw />
+          </div>
+        ) : (
+          /* ── Video + optional chat panel ── */
+          <>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <VideoConference />
+              <RoomAudioRenderer />
+            </div>
+            {showChat && (
+              <div style={{
+                width: 300, minWidth: 300, display: 'flex', flexDirection: 'column',
+                borderLeft: '1px solid #2a2a3e', background: '#0d0d1a',
+              }}>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#ccc', fontFamily: FONT_B, fontSize: 13, fontWeight: 600 }}>Chat</span>
+                  <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+                </div>
+                <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Loading / error screen ────────────────────────────────────────────────────
 function StatusScreen({ message, isError, onBack }) {
   return (
     <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#0a0a14',
-      color: '#ccc',
-      fontFamily: FONT_B,
-      gap: 16,
-      padding: 32,
+      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', background: '#0a0a14', color: '#ccc',
+      fontFamily: FONT_B, gap: 16, padding: 32,
     }}>
       {isError ? (
         <div style={{ textAlign: 'center' }}>
@@ -197,7 +193,7 @@ export default function SessionRoom({ profile }) {
 
   useEffect(() => { load() }, [load])
 
-  const handleLeave = () => navigate('/tutor')
+  const handleLeave = () => navigate(profile?.is_tutor ? '/tutor' : '/home')
 
   if (loading) {
     return (
@@ -219,14 +215,20 @@ export default function SessionRoom({ profile }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a14' }}>
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
-        .lk-room-container { background: #0a0a14 !important; }
-        .lk-control-bar { background: #0d0d1a !important; border-top: 1px solid #2a2a3e !important; }
-        .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; }
-        .lk-chat-entry { border-bottom: 1px solid #2a2a3e !important; }
-        .lk-chat-form { border-top: 1px solid #2a2a3e !important; background: #0d0d1a !important; }
-        .lk-chat-form-input { background: #1a1a2e !important; color: #e5e5e5 !important; border: 1px solid #2a2a3e !important; }
+        .lk-room-container { background: #0a0a14 !important; height: 100% !important; }
+        .lk-grid-layout { background: #0a0a14 !important; }
+        .lk-focus-layout { background: #0a0a14 !important; }
+        .lk-participant-tile { border-radius: 10px !important; overflow: hidden; }
+        .lk-control-bar { background: #0d0d1a !important; border-top: 1px solid #2a2a3e !important; padding: 10px 16px !important; }
+        .lk-button { border-radius: 8px !important; }
+        .lk-disconnect-button { background: #7f1d1d !important; color: #fca5a5 !important; }
+        .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
+        .lk-chat-messages { flex: 1 !important; }
+        .lk-chat-entry { border-bottom: 1px solid #1a1a2e !important; padding: 10px 14px !important; }
+        .lk-chat-form { border-top: 1px solid #2a2a3e !important; background: #0d0d1a !important; padding: 10px !important; }
+        .lk-chat-form-input { background: #1a1a2e !important; color: #e5e5e5 !important; border: 1px solid #2a2a3e !important; border-radius: 8px !important; padding: 8px 12px !important; }
+        .lk-chat-form-button { background: ${GOLD} !important; color: #1a1a2e !important; border-radius: 8px !important; }
       `}</style>
-      <RoomHeader session={session} onLeave={handleLeave} />
       <LiveKitRoom
         serverUrl={wsUrl}
         token={livekitToken}

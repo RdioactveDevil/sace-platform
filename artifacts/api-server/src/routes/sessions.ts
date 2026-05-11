@@ -91,7 +91,7 @@ async function requireAuth(req: Request, res: Response): Promise<CallerContext |
   };
 }
 
-/** Check if a user has access to a session (tutor, direct student, or participant). */
+/** Check if a user has access to a session (tutor, direct student, participant, or open session). */
 async function userCanAccessSession(
   admin: SupabaseClient & { auth: SupabaseAdminAuth },
   sessionRow: { tutor_id: string; student_id: string | null },
@@ -99,14 +99,20 @@ async function userCanAccessSession(
 ): Promise<boolean> {
   if (sessionRow.tutor_id === userId) return true;
   if (sessionRow.student_id === userId) return true;
-  // Check participants table (covers group sessions)
-  const { data } = await admin
+  // Check participants table (covers group and invite-only sessions)
+  const { data: participant, count } = await admin
     .from("session_participants")
-    .select("student_id")
+    .select("student_id", { count: "exact" })
     .eq("session_id", (sessionRow as Record<string, unknown>)["id"] as string)
     .eq("student_id", userId)
     .maybeSingle();
-  return !!data;
+  if (participant) return true;
+  // Open session: no pre-assigned participants means anyone with the link can join
+  const { count: totalCount } = await admin
+    .from("session_participants")
+    .select("*", { count: "exact", head: true })
+    .eq("session_id", (sessionRow as Record<string, unknown>)["id"] as string);
+  return (totalCount ?? 0) === 0;
 }
 
 /** Send a session invite email to a single student. */
@@ -481,19 +487,10 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
     return;
   }
 
-  // Open sessions (no pre-assigned participants) are joinable by any authenticated user
-  const { count: participantCount } = await ctx.admin
-    .from("session_participants")
-    .select("*", { count: "exact", head: true })
-    .eq("session_id", id);
-
-  const isOpen = (participantCount ?? 0) === 0 && session.tutor_id !== ctx.userId;
-  if (!isOpen) {
-    const canAccess = await userCanAccessSession(ctx.admin, { ...session, id }, ctx.userId);
-    if (!canAccess) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
+  const canAccess = await userCanAccessSession(ctx.admin, { ...session, id }, ctx.userId);
+  if (!canAccess) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
   }
 
   if (session.status === "cancelled") {
