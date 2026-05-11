@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useLayoutEffect, useCallback } from 'react'
+import { memo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
@@ -17,6 +17,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { fetchTutoringSession, getTutoringSessionToken, endTutoringSession } from '../lib/db'
 import { useLiveKitJoinOverlay } from '../hooks/useLiveKitJoinOverlay'
+import { useWhiteboardScreenShare } from '../hooks/useWhiteboardScreenShare'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -87,6 +88,13 @@ function RoomHeader({ session }) {
 }
 
 function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, onEnd, isTutor }) {
+  const whiteboardCaptureRef = useRef(null)
+  useWhiteboardScreenShare({
+    enabled: showWhiteboard,
+    shouldPublish: isTutor,
+    captureRootRef: whiteboardCaptureRef,
+  })
+
   const connectionState = useConnectionState()
   const showJoinOverlay = useLiveKitJoinOverlay(connectionState)
 
@@ -111,7 +119,7 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
       <div className={showWhiteboard ? 'gf-call-surface gf-call-surface--whiteboard' : 'gf-call-surface'}>
         {showWhiteboard ? (
           <div className="gf-whiteboard-split">
-            <div className="gf-whiteboard-main">
+            <div ref={whiteboardCaptureRef} className="gf-whiteboard-main">
               <div className="gf-whiteboard-frame">
                 <WhiteboardSurface />
               </div>

@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useLayoutEffect, useCallback } from 'react'
+import { memo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
@@ -17,6 +17,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { getRoomInfo, getRoomToken } from '../lib/db'
 import { useLiveKitJoinOverlay } from '../hooks/useLiveKitJoinOverlay'
+import { useWhiteboardScreenShare } from '../hooks/useWhiteboardScreenShare'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -88,7 +89,14 @@ function RoomHeader({ room }) {
   )
 }
 
-function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, isTutor }) {
+  const whiteboardCaptureRef = useRef(null)
+  useWhiteboardScreenShare({
+    enabled: showWhiteboard,
+    shouldPublish: isTutor,
+    captureRootRef: whiteboardCaptureRef,
+  })
+
   const connectionState = useConnectionState()
   const showJoinOverlay = useLiveKitJoinOverlay(connectionState)
 
@@ -113,7 +121,7 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
       <div className={showWhiteboard ? 'gf-call-surface gf-call-surface--whiteboard' : 'gf-call-surface'}>
         {showWhiteboard ? (
           <div className="gf-whiteboard-split">
-            <div className="gf-whiteboard-main">
+            <div ref={whiteboardCaptureRef} className="gf-whiteboard-main">
               <div className="gf-whiteboard-frame">
                 <WhiteboardSurface />
               </div>
@@ -168,7 +176,7 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
   )
 }
 
-function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, isTutor }) {
   return (
     <div className="gf-room-shell">
       <RoomHeader room={room} />
@@ -178,6 +186,7 @@ function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhi
         onToggleChat={onToggleChat}
         onToggleWhiteboard={onToggleWhiteboard}
         onLeave={onLeave}
+        isTutor={isTutor}
       />
     </div>
   )
@@ -343,6 +352,7 @@ export default function RecurringRoomPage({ profile }) {
           onToggleChat={() => setShowChat(c => !c)}
           onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
           onLeave={handleLeave}
+          isTutor={profile?.is_tutor ?? false}
         />
       </LiveKitRoom>
     </div>

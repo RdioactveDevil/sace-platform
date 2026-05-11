@@ -66,6 +66,14 @@ for (const file of files) {
     assert.match(source, /\.gf-video-rail\s*\{/)
   })
 
+  test(`${file} publishes tutor whiteboard to the room via LiveKit screen share`, () => {
+    const source = readComponent(file)
+
+    assert.match(source, /useWhiteboardScreenShare\(/)
+    assert.match(source, /whiteboardCaptureRef/)
+    assert.match(source, /captureRootRef:\s*whiteboardCaptureRef/)
+  })
+
   test(`${file} embeds Excalidraw for the whiteboard`, () => {
     const source = readComponent(file)
 
@@ -84,6 +92,15 @@ for (const file of files) {
     assert.match(source, /showJoinOverlay/)
   })
 }
+
+test('../hooks/useWhiteboardScreenShare.js captures Excalidraw canvas as LiveKit screen share', () => {
+  const hookPath = resolve(import.meta.dirname, '../hooks/useWhiteboardScreenShare.js')
+  const source = readFileSync(hookPath, 'utf8')
+  assert.match(source, /captureStream/)
+  assert.match(source, /Track\.Source\.ScreenShare/)
+  assert.match(source, /WHITEBOARD_SCREEN_SHARE_NAME/)
+  assert.match(source, /shouldPublish/)
+})
 
 test('../hooks/useLiveKitJoinOverlay.js latches after in-room LiveKit states', () => {
   const hookPath = resolve(import.meta.dirname, '../hooks/useLiveKitJoinOverlay.js')
