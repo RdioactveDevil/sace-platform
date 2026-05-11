@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { Resend } from "resend";
 
 const router = Router();
@@ -530,6 +530,46 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
 
   const token = await at.toJwt();
   res.json({ token, wsUrl, roomName: session.livekit_room_name });
+});
+
+// POST /sessions/:id/end — tutor ends the LiveKit room and marks session completed
+router.post("/sessions/:id/end", async (req: Request, res: Response) => {
+  const ctx = await requireAuth(req, res);
+  if (!ctx) return;
+
+  const { id } = req.params;
+  const { data: session, error } = await ctx.admin
+    .from("tutoring_sessions")
+    .select("tutor_id, livekit_room_name, status")
+    .eq("id", id)
+    .single();
+
+  if (error || !session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (session.tutor_id !== ctx.userId) {
+    res.status(403).json({ error: "Only the tutor can end a session" });
+    return;
+  }
+
+  const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
+  if (apiKey && apiSecret && session.livekit_room_name) {
+    try {
+      const roomService = new RoomServiceClient(wsUrl, apiKey, apiSecret);
+      await roomService.deleteRoom(session.livekit_room_name);
+    } catch {
+      // Room may not exist in LiveKit anymore — ignore
+    }
+  }
+
+  await ctx.admin
+    .from("tutoring_sessions")
+    .update({ status: "completed" })
+    .eq("id", id);
+
+  res.json({ ok: true });
 });
 
 // PATCH /sessions/:id — update a session (reschedule, notes, status)

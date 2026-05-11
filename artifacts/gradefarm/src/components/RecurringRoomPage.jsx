@@ -8,8 +8,9 @@ import {
   Chat,
   TrackToggle,
   useTracks,
+  useConnectionState,
 } from '@livekit/components-react'
-import { Track } from 'livekit-client'
+import { Track, ConnectionState } from 'livekit-client'
 import '@livekit/components-styles'
 import { Tldraw } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
@@ -87,6 +88,9 @@ function RoomHeader({ room }) {
 }
 
 function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+  const connectionState = useConnectionState()
+  const isConnected = connectionState === ConnectionState.Connected || connectionState === ConnectionState.Reconnecting
+
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -97,6 +101,16 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
 
   return (
     <div className="gf-call-stage">
+      {/* Connecting overlay — shown until LiveKit handshake completes */}
+      {!isConnected && (
+        <div className="gf-connecting-overlay">
+          <div className="gf-connecting-spinner" />
+          <p className="gf-connecting-text">
+            {connectionState === ConnectionState.Reconnecting ? 'Reconnecting…' : 'Connecting…'}
+          </p>
+        </div>
+      )}
+
       <div className="gf-call-surface">
         {showWhiteboard ? (
           <div className="gf-whiteboard-frame">
@@ -136,7 +150,7 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
         <aside className="gf-chat-panel">
           <div className="gf-chat-header">
             <span>Session chat</span>
-            <button type="button" onClick={onToggleChat} aria-label="Close chat">x</button>
+            <button type="button" onClick={onToggleChat} aria-label="Close chat">×</button>
           </div>
           <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
         </aside>
@@ -146,20 +160,16 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
   )
 }
 
-function RoomContent({ room }) {
-  const [showChat, setShowChat] = useState(false)
-  const [showWhiteboard, setShowWhiteboard] = useState(false)
-  const navigate = useNavigate()
-
+function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
   return (
     <div className="gf-room-shell">
       <RoomHeader room={room} />
       <CallStage
         showChat={showChat}
         showWhiteboard={showWhiteboard}
-        onToggleChat={() => setShowChat(c => !c)}
-        onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
-        onLeave={() => navigate('/tutor')}
+        onToggleChat={onToggleChat}
+        onToggleWhiteboard={onToggleWhiteboard}
+        onLeave={onLeave}
       />
     </div>
   )
@@ -174,7 +184,7 @@ function StatusScreen({ message, isError, onBack }) {
     }}>
       {isError ? (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>!</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
           <p style={{ color: '#f87171', fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>{message}</p>
           <button
             onClick={onBack}
@@ -205,6 +215,10 @@ export default function RecurringRoomPage({ profile }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Lifted above LiveKitRoom so panel state survives any internal LiveKit re-renders
+  const [showChat, setShowChat] = useState(false)
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -230,7 +244,7 @@ export default function RecurringRoomPage({ profile }) {
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', background: '#0a0a14' }}>
-        <StatusScreen message="Joining session..." />
+        <StatusScreen message="Joining session…" />
       </div>
     )
   }
@@ -246,6 +260,7 @@ export default function RecurringRoomPage({ profile }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', background: '#0a0a14' }}>
       <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         .lk-room-container { background: #0a0a14 !important; height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
         .lk-video-conference { height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
@@ -261,6 +276,9 @@ export default function RecurringRoomPage({ profile }) {
         .gf-room-schedule { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9393ae; font-size: 12px; }
         .gf-live-pill { flex-shrink: 0; border-radius: 6px; background: #173225; color: #6ee7b7; font-size: 10px; font-weight: 800; padding: 3px 7px; }
         .gf-call-stage { flex: 1; min-height: 0; display: flex; position: relative; background: #05050d; overflow: hidden; }
+        .gf-connecting-overlay { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #05050d; }
+        .gf-connecting-spinner { width: 40px; height: 40px; border: 3px solid ${GOLD}; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .gf-connecting-text { color: #aaa; font-family: ${FONT_B}; font-size: 15px; margin: 0; }
         .gf-call-surface { flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; overflow: hidden; padding: 12px 12px 86px; }
         .gf-video-surface { flex: 1; min-width: 0; min-height: 0; overflow: hidden; border-radius: 14px; background: #10101b; border: 1px solid rgba(255,255,255,0.08); }
         .gf-video-grid { width: 100%; height: 100%; background: #070711 !important; }
@@ -304,7 +322,14 @@ export default function RecurringRoomPage({ profile }) {
         style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
         onDisconnected={handleLeave}
       >
-        <RoomContent room={room} />
+        <RoomContent
+          room={room}
+          showChat={showChat}
+          showWhiteboard={showWhiteboard}
+          onToggleChat={() => setShowChat(c => !c)}
+          onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
+          onLeave={handleLeave}
+        />
       </LiveKitRoom>
     </div>
   )

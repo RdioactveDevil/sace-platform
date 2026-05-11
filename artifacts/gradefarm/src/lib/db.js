@@ -1248,6 +1248,20 @@ export async function getRoomInfo(roomName) {
   return json.room
 }
 
+/** End a tutoring session for all participants (tutor only). Closes the LiveKit room. */
+export async function endTutoringSession(sessionId) {
+  const session = await getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/end`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Failed to end session.')
+  return json
+}
+
 /** Generate a LiveKit token by room name (for permanent links). */
 export async function getRoomToken(roomName) {
   const session = await getSession()
