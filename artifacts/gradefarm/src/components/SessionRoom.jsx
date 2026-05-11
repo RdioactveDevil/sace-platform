@@ -13,6 +13,15 @@ import { fetchTutoringSession, getTutoringSessionToken } from '../lib/db'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const WHITEBOARD_OPTIONS = Object.freeze({ maxFontsToLoadBeforeRender: 0 })
+
+function WhiteboardSurface() {
+  return (
+    <div className="gf-whiteboard-surface">
+      <Tldraw options={WHITEBOARD_OPTIONS} autoFocus={false} />
+    </div>
+  )
+}
 
 // ── Room header ───────────────────────────────────────────────────────────────
 function RoomHeader({ session, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
@@ -94,9 +103,7 @@ function RoomContent({ session }) {
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', position: 'relative' }}>
         {showWhiteboard ? (
           /* ── Whiteboard overlay ── */
-          <div className="gf-whiteboard-surface">
-            <Tldraw />
-          </div>
+          <WhiteboardSurface />
         ) : (
           /* ── Video + optional chat panel ── */
           <>
@@ -210,8 +217,8 @@ export default function SessionRoom({ profile }) {
         .lk-grid-layout { background: #0a0a14 !important; min-height: 0 !important; }
         .lk-focus-layout { background: #0a0a14 !important; min-height: 0 !important; }
         .lk-participant-tile { border-radius: 10px !important; overflow: hidden; }
-        .gf-whiteboard-surface { flex: 1; width: 100%; height: 100% !important; min-height: 0 !important; overflow: hidden; position: relative; }
-        .gf-whiteboard-surface > .tl-container { width: 100% !important; height: 100% !important; }
+        .gf-whiteboard-surface { flex: 1 1 auto; width: 100%; height: 100% !important; min-height: 0 !important; overflow: hidden; position: relative; background: #f8fafc; }
+        .gf-whiteboard-surface .tl-container { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
         .lk-control-bar { background: #0d0d1a !important; border-top: 1px solid #2a2a3e !important; padding: 10px 16px !important; flex-shrink: 0 !important; }
         .lk-control-bar .lk-button { background: #23233a !important; color: #f4f4fb !important; border: 1px solid #3a3a58 !important; border-radius: 8px !important; }
         .lk-control-bar .lk-button:hover { background: #2d2d49 !important; border-color: #56567a !important; transform: translateY(-1px); }
