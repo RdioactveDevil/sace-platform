@@ -116,6 +116,7 @@ export async function updateCurriculum(id, { name, subject_description, level_la
     await adminApiPost('/api/admin/curriculum-rename-cascade', {
       oldSubject: oldName,
       newSubject: name,
+      oldLevelLabel: oldLevel,
     })
   }
 

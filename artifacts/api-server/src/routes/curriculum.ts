@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
+import { expandCurriculumRenameSources } from "../lib/subject-aliases";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -25,12 +26,12 @@ function conceptTag(subject: string, topic: string, subtopic: string): string {
   return `${subject}|${topic}|${subtopic || topic}`.toLowerCase();
 }
 
-async function cascadeCurriculumSubjectRename(
+async function cascadeSingleSubjectRename(
   admin: SupabaseClient,
-  oldName: string,
-  newName: string,
+  oldSubject: string,
+  newSubject: string,
 ): Promise<void> {
-  if (!oldName || !newName || oldName === newName) return;
+  if (!oldSubject || !newSubject || oldSubject === newSubject) return;
 
   const batch = 400;
 
@@ -38,13 +39,13 @@ async function cascadeCurriculumSubjectRename(
     const { data: rows, error } = await admin
       .from("questions")
       .select("id, topic, subtopic")
-      .eq("subject", oldName)
+      .eq("subject", oldSubject)
       .limit(batch);
     if (error) throw new Error(error.message);
     if (!rows?.length) break;
     for (const r of rows as { id: string; topic: string; subtopic: string }[]) {
-      const ct = conceptTag(newName, r.topic, r.subtopic);
-      const { error: uErr } = await admin.from("questions").update({ subject: newName, concept_tag: ct }).eq("id", r.id);
+      const ct = conceptTag(newSubject, r.topic, r.subtopic);
+      const { error: uErr } = await admin.from("questions").update({ subject: newSubject, concept_tag: ct }).eq("id", r.id);
       if (uErr) throw new Error(uErr.message);
     }
   }
@@ -53,37 +54,51 @@ async function cascadeCurriculumSubjectRename(
     const { data: rows, error } = await admin
       .from("question_variants")
       .select("id, topic, subtopic")
-      .eq("subject", oldName)
+      .eq("subject", oldSubject)
       .limit(batch);
     if (error) throw new Error(error.message);
     if (!rows?.length) break;
     for (const r of rows as { id: string; topic: string; subtopic: string }[]) {
-      const ct = conceptTag(newName, r.topic, r.subtopic);
-      const { error: uErr } = await admin.from("question_variants").update({ subject: newName, concept_tag: ct }).eq("id", r.id);
+      const ct = conceptTag(newSubject, r.topic, r.subtopic);
+      const { error: uErr } = await admin.from("question_variants").update({ subject: newSubject, concept_tag: ct }).eq("id", r.id);
       if (uErr) throw new Error(uErr.message);
     }
   }
 
-  const { error: dErr } = await admin.from("draft_questions").update({ subject: newName }).eq("subject", oldName);
+  const { error: dErr } = await admin.from("draft_questions").update({ subject: newSubject }).eq("subject", oldSubject);
   if (dErr) throw new Error(dErr.message);
 
-  const { error: sErr } = await admin.from("sessions").update({ subject: newName }).eq("subject", oldName);
+  const { error: sErr } = await admin.from("sessions").update({ subject: newSubject }).eq("subject", oldSubject);
   if (sErr) throw new Error(sErr.message);
 
-  const { error: spErr } = await admin.from("study_plan_items").update({ subject: newName }).eq("subject", oldName);
+  const { error: spErr } = await admin.from("study_plan_items").update({ subject: newSubject }).eq("subject", oldSubject);
   if (spErr) throw new Error(spErr.message);
 
   const { error: usErr } = await admin
     .from("user_subscriptions")
-    .update({ subject_name: newName })
-    .eq("subject_name", oldName);
+    .update({ subject_name: newSubject })
+    .eq("subject_name", oldSubject);
   if (usErr) throw new Error(usErr.message);
 
-  const { error: asErr } = await admin.from("assignments").update({ subject: newName }).eq("subject", oldName);
+  const { error: asErr } = await admin.from("assignments").update({ subject: newSubject }).eq("subject", oldSubject);
   if (asErr) throw new Error(asErr.message);
 
-  const { error: tcErr } = await admin.from("tutor_classes").update({ subject: newName }).eq("subject", oldName);
+  const { error: tcErr } = await admin.from("tutor_classes").update({ subject: newSubject }).eq("subject", oldSubject);
   if (tcErr) throw new Error(tcErr.message);
+}
+
+async function cascadeCurriculumSubjectRename(
+  admin: SupabaseClient,
+  oldName: string,
+  newName: string,
+  oldLevelLabel = "",
+): Promise<void> {
+  if (!oldName || !newName) return;
+
+  const sources = expandCurriculumRenameSources(oldName, oldLevelLabel);
+  for (const src of sources) {
+    await cascadeSingleSubjectRename(admin, src, newName);
+  }
 }
 
 // POST /api/admin/curriculum-plan
@@ -178,22 +193,50 @@ router.post("/admin/curriculum-plan", async (req, res) => {
 });
 
 // POST /api/admin/curriculum-rename-cascade
-// Body: { oldSubject: string, newSubject: string }
+// Body: { oldSubject: string, newSubject: string, oldLevelLabel?: string }
 router.post("/admin/curriculum-rename-cascade", async (req, res) => {
-  const { oldSubject, newSubject } = req.body || {};
+  const { oldSubject, newSubject, oldLevelLabel } = req.body || {};
   const a = typeof oldSubject === "string" ? oldSubject.trim() : "";
   const b = typeof newSubject === "string" ? newSubject.trim() : "";
+  const lvl = typeof oldLevelLabel === "string" ? oldLevelLabel.trim() : "";
   if (!a || !b) {
     res.status(400).json({ error: "oldSubject and newSubject are required" });
     return;
   }
   try {
     const admin = getAdmin();
-    await cascadeCurriculumSubjectRename(admin, a, b);
+    await cascadeCurriculumSubjectRename(admin, a, b, lvl);
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "curriculum-rename-cascade failed");
     const message = err instanceof Error ? err.message : "Rename cascade failed";
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/admin/curriculum-repair-subject-strings
+// Body: { newSubject: string, sourceSubjects: string[] } — merges every source string (plus alias expansion) into newSubject.
+router.post("/admin/curriculum-repair-subject-strings", async (req, res) => {
+  const { newSubject, sourceSubjects } = req.body || {};
+  const b = typeof newSubject === "string" ? newSubject.trim() : "";
+  const rawList = Array.isArray(sourceSubjects) ? sourceSubjects : [];
+  if (!b || rawList.length === 0) {
+    res.status(400).json({ error: "newSubject and non-empty sourceSubjects[] are required" });
+    return;
+  }
+  try {
+    const admin = getAdmin();
+    for (const raw of rawList) {
+      const s = typeof raw === "string" ? raw.trim() : "";
+      if (!s || s === b) continue;
+      for (const src of expandCurriculumRenameSources(s, "")) {
+        await cascadeSingleSubjectRename(admin, src, b);
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "curriculum-repair-subject-strings failed");
+    const message = err instanceof Error ? err.message : "Repair failed";
     res.status(500).json({ error: message });
   }
 });
