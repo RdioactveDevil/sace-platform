@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { THEMES, FONTS } from '../lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
+import { subjectNameForUi, subjectStageForUi } from '../lib/subjects'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -60,7 +61,7 @@ export default function Layout({
 
       {/* Subject badge */}
       <div style={{ padding: '10px 20px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
-        <div style={{ fontSize: 11, color: t.textMuted }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+        <div style={{ fontSize: 11, color: t.textMuted }}>{subjectNameForUi(subject)} · {subjectStageForUi(subject)}</div>
       </div>
 
       {/* Profile */}

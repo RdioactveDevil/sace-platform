@@ -7,7 +7,7 @@ import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
-import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS } from './lib/subjects'
+import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS, subscriptionMatchesSubject, subjectNameForUi, subjectStageForUi } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/saceTopics'
 import { getY7TopicConfig } from './lib/australianCurriculumTopics'
 import HomeScreen        from './components/HomeScreen'
@@ -156,7 +156,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           data-tutorial-target="subject-chip"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{subjectNameForUi(subject)} · {subjectStageForUi(subject)}</div>
         </div>
       </div>
 
@@ -265,7 +265,7 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
       <div style={{ fontSize: 52 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Subject Not in Your Plan</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 360, lineHeight: 1.6, margin: 0 }}>
-        <strong style={{ color: t.text }}>{subject?.name} {subject?.stage}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
+        <strong style={{ color: t.text }}>{subjectNameForUi(subject)} {subjectStageForUi(subject)}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
       </p>
       <a href="mailto:hello@titaniumtutoring.com.au" style={{ padding: '12px 24px', borderRadius: 12, background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         Contact us to upgrade →
@@ -584,7 +584,7 @@ function AppInner() {
               setSelectedSubject(unified)
             }
           }
-          if (stored && subs.length > 0 && !subs.some(s => s.subject_name === stored.name && s.stage === stored.stage)) {
+          if (stored && subs.length > 0 && !subs.some(s => subscriptionMatchesSubject(s, stored))) {
             localStorage.removeItem('gf-subject')
             setSelectedSubject(null)
           }
@@ -1029,7 +1029,7 @@ function AppInner() {
         !(user && profile) ? <Navigate to="/home" replace /> :
         !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
+        (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => subscriptionMatchesSubject(s, selectedSubject))) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         selectedSubject?.type === 'writing' ? (
           <Routes>
             <Route path="/writing" element={<Navigate to="/writing/essay" replace />} />

@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { ALL_SUBJECTS } from '../lib/subjects'
+import { ALL_SUBJECTS, subscriptionMatchesSubject, subjectNameForUi, subjectStageForUi, parseTrailingSaceStage, subjectRowSummary } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -60,7 +60,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
             .map(c => ({
               id: `curriculum_${c.id}`,
               name: c.name,
-              stage: '',
+              stage: parseTrailingSaceStage(c.name) || '',
               icon: '📚',
               color: '#6366f1',
               topics: c.topicNames,
@@ -83,15 +83,16 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
   const toggleSubject = (subj) => {
     setSelectedSubs(prev => {
-      const key = `${subj.name}::${subj.stage}`
-      const exists = prev.find(s => `${s.subject_name}::${s.stage}` === key)
-      if (exists) return prev.filter(s => `${s.subject_name}::${s.stage}` !== key)
-      return [...prev, { subject_name: subj.name, stage: subj.stage }]
+      const eff = subj.stage || parseTrailingSaceStage(subj.name) || ''
+      const key = `${subj.name}::${eff}`
+      const exists = prev.find(s => `${s.subject_name}::${s.stage || parseTrailingSaceStage(s.subject_name) || ''}` === key)
+      if (exists) return prev.filter(s => `${s.subject_name}::${s.stage || parseTrailingSaceStage(s.subject_name) || ''}` !== key)
+      return [...prev, { subject_name: subj.name, stage: subj.stage || eff || '' }]
     })
   }
 
   const isSubSelected = (subj) =>
-    selectedSubs.some(s => s.subject_name === subj.name && s.stage === subj.stage)
+    selectedSubs.some(s => subscriptionMatchesSubject(s, subj))
 
   const finish = async () => {
     setSaving(true)
@@ -377,8 +378,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
             }}>
               <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}22`, border: `1px solid ${subj.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{subj.icon}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: sel ? '#f1f5f9' : '#e2e8f0' }}>{subj.name}</div>
-                <div style={{ fontSize: 11, color: subj.color, fontWeight: 600, marginTop: 1 }}>{subj.stage}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: sel ? '#f1f5f9' : '#e2e8f0' }}>{subjectNameForUi(subj)}</div>
+                <div style={{ fontSize: 11, color: subj.color, fontWeight: 600, marginTop: 1 }}>{subjectStageForUi(subj)}</div>
               </div>
               <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? GOLD : 'rgba(255,255,255,0.15)'}`, background: sel ? GOLD : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
                 {sel && <span style={{ fontSize: 11, color: NAVYD, fontWeight: 800 }}>✓</span>}
@@ -395,8 +396,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
               <div key={subj.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
                 <div style={{ fontSize: 16 }}>{subj.icon}</div>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>{subj.name}</span>
-                  <span style={{ fontSize: 11, color: '#475569', marginLeft: 8 }}>{subj.stage}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>{subjectNameForUi(subj)}</span>
+                  <span style={{ fontSize: 11, color: '#475569', marginLeft: 8 }}>{subjectStageForUi(subj)}</span>
                 </div>
                 <span style={{ fontSize: 10, color: '#475569', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 6 }}>SOON</span>
               </div>
@@ -422,7 +423,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           { label: 'Year',           value: yearLevel ? `Year ${yearLevel}` : '\u2014' },
           { label: 'ATAR Target',    value: atarTarget ? `${atarTarget}+` : '\u2014' },
           { label: 'Study hrs/week', value: studyHours ? `${studyHours}h` : '\u2014' },
-          { label: 'Subjects',       value: selectedSubs.map(s => `${s.subject_name} ${s.stage}`).join(', ') || '\u2014' },
+          { label: 'Subjects',       value: selectedSubs.map(subjectRowSummary).join(', ') || '\u2014' },
         ].map(row => (
           <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ fontSize: 12, color: '#475569' }}>{row.label}</span>

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent } from '../lib/db'
 import { getTopicConfigForSubject } from '../lib/saceTopics'
 import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { subjectNameForUi, subjectStageForUi } from '../lib/subjects'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -522,7 +523,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Questions</div>
           <h1 style={{ fontSize: 24, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, marginBottom: 4, color: t.text }}>Question Bank</h1>
           <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>
-            {subject?.stage || 'Stage 1'} · {subject?.name || 'Chemistry'} · {questions.length} questions
+            {subjectStageForUi(subject)} · {subjectNameForUi(subject)} · {questions.length} questions
           </p>
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>

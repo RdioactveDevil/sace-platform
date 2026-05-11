@@ -4,6 +4,7 @@ import { THEMES } from '../lib/theme'
 import { getAnswerLogLast30Days, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
 import { getTopicConfigForSubject } from '../lib/saceTopics'
 import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
+import { subjectNameForUi, subjectStageForUi } from '../lib/subjects'
 import ReadinessCard from './ReadinessCard'
 import StreakCalendar from './StreakCalendar'
 import SubtopicHeatmap from './SubtopicHeatmap'
@@ -371,7 +372,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           <div style={{ ...card, padding: '18px 20px', marginTop: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Topic Breakdown</div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>SACE {subject?.stage || 'Stage 1'} {subject?.name || 'Chemistry'}</div>
+              <div style={{ fontSize: 11, color: t.textMuted }}>SACE {subjectStageForUi(subject)} {subjectNameForUi(subject)}</div>
             </div>
             <div className="ps-topic-grid">
               {curriculumTopics.map((topic) => {

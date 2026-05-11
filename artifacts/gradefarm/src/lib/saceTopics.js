@@ -2,6 +2,7 @@ import {
   MACRO_GROUPS_Y10,
   normalizeY10Topic,
 } from './vicMathsTopics'
+import { parseTrailingSaceStage } from './subjects.js'
 
 // ─── Stage 1 ──────────────────────────────────────────────────────────────────
 
@@ -318,7 +319,8 @@ export function getTopicConfigForSubject(subject) {
     if (Array.isArray(subject.topics) && subject.topics.length > 0) {
       return buildGenericTopicConfig(subject.topics, curriculumGroupLabel(subject.name))
     }
-    return getTopicConfig(subject.stage || 'Stage 1')
+    const st = subject.stage || parseTrailingSaceStage(subject.name)
+    return getTopicConfig(st || 'Stage 1')
   }
   if (Array.isArray(subject.topics) && subject.topics.length > 0) {
     return buildGenericTopicConfig(subject.topics, subject.name || 'Topics')

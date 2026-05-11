@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, subscriptionMatchesSubject, subjectNameForUi, subjectStageForUi, parseTrailingSaceStage } from '../lib/subjects'
 import { countQuestionsForSubject } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
@@ -28,7 +28,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           .map(c => ({
             id: `curriculum_${c.id}`,
             name: c.name,
-            stage: '',
+            stage: parseTrailingSaceStage(c.name) || '',
             icon: '📚',
             color: '#6366f1',
             topics: c.topicNames,
@@ -70,14 +70,14 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const subscribed = allSubjects.filter(s =>
     s.available && (
       !hasSubscriptions ||
-      subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
+      subscriptions.some(sub => subscriptionMatchesSubject(sub, s))
     )
   )
 
   const notSubscribed = hasSubscriptions
     ? allSubjects.filter(s =>
         s.available &&
-        !subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
+        !subscriptions.some(sub => subscriptionMatchesSubject(sub, s))
       )
     : []
 
@@ -111,8 +111,8 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
               {locked ? '🔒' : subj.icon}
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: locked ? '#8896b3' : '#0c1037' }}>{subj.name}</div>
-              <div style={{ fontSize: 11, color: locked ? '#a0aec0' : subj.color, fontWeight: 700, marginTop: 1 }}>{subj.stage}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: locked ? '#8896b3' : '#0c1037' }}>{subjectNameForUi(subj)}</div>
+              <div style={{ fontSize: 11, color: locked ? '#a0aec0' : subj.color, fontWeight: 700, marginTop: 1 }}>{subjectStageForUi(subj)}</div>
             </div>
           </div>
         </div>
@@ -192,8 +192,8 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
                 <div key={subj.id} style={{ background: '#f0f2ff', border: '1px solid #e2e5f0', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}15`, border: `1px solid ${subj.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{subj.icon}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2a5e' }}>{subj.name}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{subj.stage}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2a5e' }}>{subjectNameForUi(subj)}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{subjectStageForUi(subj)}</div>
                   </div>
                   <span style={{ fontSize: 10, background: '#e2e5f0', color: '#64748b', padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>SOON</span>
                 </div>
@@ -222,7 +222,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
             transition: 'all 0.2s ease',
           }}
         >
-          {selected ? `Start ${selected.name} ${selected.stage} →` : 'Select a subject above'}
+          {selected ? `Start ${subjectNameForUi(selected)} ${subjectStageForUi(selected)} →` : 'Select a subject above'}
         </button>
       </div>
     </div>

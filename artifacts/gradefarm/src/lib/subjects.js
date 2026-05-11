@@ -162,3 +162,62 @@ export const ALL_SUBJECTS = [
     available: true,
   },
 ]
+
+// ── Managed curricula use the full DB name (e.g. "Mathematical Methods Stage 2") but
+//    `stage` was left blank, so UI fallbacks like `|| 'Stage 1'` showed the wrong year.
+
+const TRAILING_SACE_STAGE_RE = /\s+Stage\s*(1|2)\s*$/i
+
+/** @param {string} [fullName] */
+export function parseTrailingSaceStage(fullName) {
+  if (!fullName || typeof fullName !== 'string') return ''
+  const m = fullName.match(TRAILING_SACE_STAGE_RE)
+  if (!m) return ''
+  return m[1] === '2' ? 'Stage 2' : 'Stage 1'
+}
+
+/** @param {string} [fullName] */
+export function stripTrailingSaceStage(fullName) {
+  if (!fullName || typeof fullName !== 'string') return ''
+  const s = fullName.replace(TRAILING_SACE_STAGE_RE, '').trim()
+  return s || fullName.trim()
+}
+
+/** Stage label for headers and chips when `subject.stage` is missing. */
+export function subjectStageForUi(subject) {
+  if (!subject) return 'Stage 1'
+  if (subject.stage) return subject.stage
+  return parseTrailingSaceStage(subject.name) || 'Stage 1'
+}
+
+/** Name line without duplicating a trailing "Stage N" when we also show stage separately. */
+export function subjectNameForUi(subject) {
+  if (!subject) return 'Chemistry'
+  const parsed = parseTrailingSaceStage(subject.name)
+  const st = subject.stage
+  if (parsed && (!st || st === parsed)) {
+    const stripped = stripTrailingSaceStage(subject.name)
+    if (stripped) return stripped
+  }
+  return subject.name || 'Chemistry'
+}
+
+/**
+ * True if a saved subscription row covers this subject tile.
+ * Aligns `stage: ''` in the DB with `stage` parsed from the curriculum name.
+ */
+export function subscriptionMatchesSubject(subscriptionRow, subjectTile) {
+  if (!subscriptionRow || !subjectTile) return false
+  if (subscriptionRow.subject_name !== subjectTile.name) return false
+  const parsed = parseTrailingSaceStage(subjectTile.name)
+  const a = subscriptionRow.stage || parsed || ''
+  const b = subjectTile.stage || parsed || ''
+  return a === b
+}
+
+/** Compact label for a saved subscription / onboarding row. */
+export function subjectRowSummary(saved) {
+  if (!saved) return ''
+  const tile = { name: saved.subject_name, stage: saved.stage }
+  return `${subjectNameForUi(tile)} ${subjectStageForUi(tile)}`.trim()
+}
