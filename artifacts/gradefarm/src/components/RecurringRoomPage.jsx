@@ -93,7 +93,7 @@ function RoomContent({ room }) {
   const navigate = useNavigate()
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#0a0a14' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', background: '#0a0a14' }}>
       <RoomHeader
         room={room}
         showChat={showChat}
@@ -103,10 +103,10 @@ function RoomContent({ room }) {
         onLeave={() => navigate('/tutor')}
       />
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', position: 'relative' }}>
         {showWhiteboard ? (
           /* ── Whiteboard overlay ── */
-          <div style={{ flex: 1, position: 'relative' }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             <button
               onClick={() => setShowWhiteboard(false)}
               style={{
@@ -123,13 +123,13 @@ function RoomContent({ room }) {
         ) : (
           /* ── Video + optional chat panel ── */
           <>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: 10 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: 'hidden', padding: 10 }}>
               <VideoConference />
               <RoomAudioRenderer />
             </div>
             {showChat && (
               <div style={{
-                width: 320, minWidth: 300, display: 'flex', flexDirection: 'column',
+                width: 320, minWidth: 300, minHeight: 0, display: 'flex', flexDirection: 'column',
                 borderLeft: '1px solid #2a2a3e', background: '#0d0d1a',
               }}>
                 <div style={{ padding: '12px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111122' }}>
@@ -210,7 +210,7 @@ export default function RecurringRoomPage({ profile }) {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a14' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', background: '#0a0a14' }}>
         <StatusScreen message="Joining session…" />
       </div>
     )
@@ -218,23 +218,27 @@ export default function RecurringRoomPage({ profile }) {
 
   if (error) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a14' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', background: '#0a0a14' }}>
         <StatusScreen message={error} isError onBack={handleLeave} />
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a14' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', background: '#0a0a14' }}>
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
-        .lk-room-container { background: #0a0a14 !important; height: 100% !important; }
-        .lk-grid-layout { background: #0a0a14 !important; }
-        .lk-focus-layout { background: #0a0a14 !important; }
+        .lk-room-container { background: #0a0a14 !important; height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
+        .lk-video-conference { height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
+        .lk-grid-layout-wrapper, .lk-focus-layout-wrapper { min-height: 0 !important; overflow: hidden !important; }
+        .lk-grid-layout { background: #0a0a14 !important; min-height: 0 !important; }
+        .lk-focus-layout { background: #0a0a14 !important; min-height: 0 !important; }
         .lk-participant-tile { border-radius: 14px !important; overflow: hidden; border: 1px solid #272742 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.28) !important; }
-        .lk-control-bar { background: rgba(13, 13, 26, 0.9) !important; border-top: 1px solid #2a2a3e !important; padding: 12px 16px !important; backdrop-filter: blur(6px); }
-        .lk-button { border-radius: 10px !important; border-color: #2e2e48 !important; }
-        .lk-button:hover { transform: translateY(-1px); }
+        .lk-control-bar { background: rgba(13, 13, 26, 0.9) !important; border-top: 1px solid #2a2a3e !important; padding: 12px 16px !important; backdrop-filter: blur(6px); flex-shrink: 0 !important; }
+        .lk-control-bar .lk-button { background: #23233a !important; color: #f4f4fb !important; border: 1px solid #3a3a58 !important; border-radius: 10px !important; }
+        .lk-control-bar .lk-button:hover { background: #2d2d49 !important; border-color: #56567a !important; transform: translateY(-1px); }
+        .lk-control-bar .lk-button[aria-pressed="true"],
+        .lk-control-bar .lk-button[data-lk-enabled="true"] { background: ${GOLD} !important; color: #171724 !important; border-color: ${GOLD} !important; }
         .lk-disconnect-button { background: #7f1d1d !important; color: #fca5a5 !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
         .lk-chat-messages { flex: 1 !important; }
