@@ -5,17 +5,19 @@ import {
   VideoConference,
   RoomAudioRenderer,
   Chat,
+  useConnectionState,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
+import { ConnectionState } from 'livekit-client'
 import { Tldraw } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
-import { fetchTutoringSession, getTutoringSessionToken } from '../lib/db'
+import { fetchTutoringSession, getTutoringSessionToken, endTutoringSession } from '../lib/db'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 // ── Room header ───────────────────────────────────────────────────────────────
-function RoomHeader({ session, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+function RoomHeader({ session, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, onEnd, isTutor }) {
   const title = session?.title || 'Tutoring Session'
   const btnBase = {
     border: 'none', borderRadius: 8, padding: '7px 14px',
@@ -63,22 +65,37 @@ function RoomHeader({ session, showChat, showWhiteboard, onToggleChat, onToggleW
         >
           💬 Chat
         </button>
-        <button
-          onClick={onLeave}
-          style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', border: 'none' }}
-        >
-          Leave
-        </button>
+        {isTutor ? (
+          <button
+            onClick={onEnd}
+            style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', border: 'none' }}
+          >
+            End Session
+          </button>
+        ) : (
+          <button
+            onClick={onLeave}
+            style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', border: 'none' }}
+          >
+            Leave
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-// ── Main room content ─────────────────────────────────────────────────────────
-function RoomContent({ session }) {
-  const [showChat, setShowChat] = useState(false)
-  const [showWhiteboard, setShowWhiteboard] = useState(false)
-  const navigate = useNavigate()
+// ── Main room content (must be inside LiveKitRoom to use LiveKit hooks) ───────
+function RoomContent({ session, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, onEnd, isTutor }) {
+  const connectionState = useConnectionState()
+  const isConnected = connectionState === ConnectionState.Connected || connectionState === ConnectionState.Reconnecting
+
+  // Lazy-mount Tldraw: initialize only on first open, then keep alive via CSS
+  const [whiteboardMounted, setWhiteboardMounted] = useState(false)
+  const handleToggleWhiteboard = () => {
+    if (!showWhiteboard && !whiteboardMounted) setWhiteboardMounted(true)
+    onToggleWhiteboard()
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#0a0a14' }}>
@@ -86,17 +103,37 @@ function RoomContent({ session }) {
         session={session}
         showChat={showChat}
         showWhiteboard={showWhiteboard}
-        onToggleChat={() => setShowChat(c => !c)}
-        onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
-        onLeave={() => navigate('/tutor')}
+        onToggleChat={onToggleChat}
+        onToggleWhiteboard={handleToggleWhiteboard}
+        onLeave={onLeave}
+        onEnd={onEnd}
+        isTutor={isTutor}
       />
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-        {showWhiteboard ? (
-          /* ── Whiteboard overlay ── */
-          <div style={{ flex: 1, position: 'relative' }}>
+
+        {/* Connecting overlay — covers everything until LiveKit handshake completes */}
+        {!isConnected && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 20,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            background: '#0a0a14', gap: 16,
+          }}>
+            <div style={{ width: 40, height: 40, border: `3px solid ${GOLD}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ color: '#aaa', fontFamily: FONT_B, fontSize: 15, margin: 0 }}>
+              {connectionState === ConnectionState.Reconnecting ? 'Reconnecting…' : 'Connecting…'}
+            </p>
+          </div>
+        )}
+
+        {/* Whiteboard — lazy-mounted, CSS hidden when inactive so Tldraw state persists */}
+        {whiteboardMounted && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 10,
+            display: showWhiteboard ? 'flex' : 'none', flexDirection: 'column',
+          }}>
             <button
-              onClick={() => setShowWhiteboard(false)}
+              onClick={onToggleWhiteboard}
               style={{
                 position: 'absolute', top: 12, left: 12, zIndex: 500,
                 background: '#0d0d1a', color: '#ccc', border: '1px solid #2a2a3e',
@@ -108,27 +145,27 @@ function RoomContent({ session }) {
             </button>
             <Tldraw />
           </div>
-        ) : (
-          /* ── Video + optional chat panel ── */
-          <>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <VideoConference />
-              <RoomAudioRenderer />
-            </div>
-            {showChat && (
-              <div style={{
-                width: 300, minWidth: 300, display: 'flex', flexDirection: 'column',
-                borderLeft: '1px solid #2a2a3e', background: '#0d0d1a',
-              }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#ccc', fontFamily: FONT_B, fontSize: 13, fontWeight: 600 }}>Chat</span>
-                  <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
-                </div>
-                <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
-              </div>
-            )}
-          </>
         )}
+
+        {/* Video + chat — always mounted so LiveKit tracks stay active */}
+        <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <VideoConference />
+            <RoomAudioRenderer />
+          </div>
+          {showChat && (
+            <div style={{
+              width: 300, minWidth: 300, display: 'flex', flexDirection: 'column',
+              borderLeft: '1px solid #2a2a3e', background: '#0d0d1a',
+            }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ color: '#ccc', fontFamily: FONT_B, fontSize: 13, fontWeight: 600 }}>Chat</span>
+                <button onClick={onToggleChat} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+              </div>
+              <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -175,6 +212,15 @@ export default function SessionRoom({ profile }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Lifted above LiveKitRoom so panel state survives any internal LiveKit re-renders
+  const [showChat, setShowChat] = useState(false)
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
+
+  const handleEnd = async () => {
+    try { await endTutoringSession(sessionId) } catch {}
+    handleLeave()
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -214,6 +260,7 @@ export default function SessionRoom({ profile }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a14' }}>
       <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         .lk-room-container { background: #0a0a14 !important; height: 100% !important; }
         .lk-grid-layout { background: #0a0a14 !important; }
@@ -238,7 +285,16 @@ export default function SessionRoom({ profile }) {
         style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
         onDisconnected={handleLeave}
       >
-        <RoomContent session={session} />
+        <RoomContent
+          session={session}
+          showChat={showChat}
+          showWhiteboard={showWhiteboard}
+          onToggleChat={() => setShowChat(c => !c)}
+          onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
+          onLeave={handleLeave}
+          onEnd={handleEnd}
+          isTutor={profile?.is_tutor ?? false}
+        />
       </LiveKitRoom>
     </div>
   )
