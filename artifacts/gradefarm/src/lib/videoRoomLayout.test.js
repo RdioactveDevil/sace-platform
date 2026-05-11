@@ -52,10 +52,7 @@ for (const file of files) {
     assert.match(source, /\.gf-whiteboard-surface\s*\{/)
     assert.match(source, /overflow:\s*visible;/)
     assert.match(source, /height:\s*100%\s*!important;/)
-    assert.doesNotMatch(
-      source,
-      /\.gf-whiteboard-surface\s+\.tlui-layout[\s\S]*?z-index:\s*30\s*!important/
-    )
+    assert.match(source, /\.gf-call-surface--whiteboard/)
   })
 
   test(`${file} keeps the Tldraw canvas mounted through room updates`, () => {
@@ -70,8 +67,16 @@ for (const file of files) {
     assert.match(source, /inset:\s*0\s*!important;/)
   })
 
-  test(`${file} keeps the call stage visible during LiveKit signal reconnect`, () => {
+  test(`${file} uses latched LiveKit join overlay so mid-session flashes do not cover Tldraw`, () => {
     const source = readComponent(file)
-    assert.match(source, /ConnectionState\.SignalReconnecting/)
+    assert.match(source, /useLiveKitJoinOverlay\(/)
+    assert.match(source, /showJoinOverlay/)
   })
 }
+
+test('../hooks/useLiveKitJoinOverlay.js latches after in-room LiveKit states', () => {
+  const hookPath = resolve(import.meta.dirname, '../hooks/useLiveKitJoinOverlay.js')
+  const source = readFileSync(hookPath, 'utf8')
+  assert.match(source, /ConnectionState\.SignalReconnecting/)
+  assert.match(source, /setHandshakeObserved/)
+})
