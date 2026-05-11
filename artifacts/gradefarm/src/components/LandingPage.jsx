@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -293,6 +294,7 @@ function MobileMenu({ open, onClose, onNavigate }) {
 /* ─── main component ───────────────────────────────────────────────────── */
 
 export default function LandingPage({ onGetStarted, onSignIn }) {
+  const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => {
@@ -300,7 +302,10 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
     window.addEventListener('scroll', h)
     return () => window.removeEventListener('scroll', h)
   }, [])
-  const scroll = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  const scroll = id => {
+    if (id === 'pricing') { navigate('/pricing'); return }
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  }
   const handleMobileNav = id => { scroll(id); setMenuOpen(false) }
 
   return (
@@ -914,38 +919,24 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         <section id="pricing" className="lp-pad lp-pad-section" style={{ padding:'80px 32px' }}>
           <div style={{ maxWidth:820, margin:'0 auto', textAlign:'center' }}>
             <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Pricing</div>
-            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>FREE WHILE IN BETA.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:52, maxWidth:440, margin:'0 auto 52px', lineHeight:1.7 }}>Everything is free right now. Beta users lock in the lowest price forever.</p>
-            <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:16, maxWidth:720, margin:'0 auto' }}>
+            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>SIMPLE, TRANSPARENT PRICING.</h2>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students pay <strong style={{ color:'#f1f5f9' }}>$7/month per subject</strong>. Tutors choose a plan that fits their roster. Free tier available — no credit card required.</p>
+            <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:820, margin:'0 auto 36px' }}>
               {[
-                { name:'Beta', price:'Free', sub:'While in beta · lock in your rate forever', hi:true, features:['All subjects (Chemistry live now)','Unlimited quiz sessions','Learn with Titan AI','Struggle tracking & readiness score','Weekly leaderboard','Priority beta pricing forever'] },
-                { name:'Full Release', price:'$12', sub:'/month · after beta ends', hi:false, features:['Everything in Beta','All SACE subjects','Parent dashboard','School assignment mode','Exam countdown planner','Priority support'] },
+                { label:'Free', price:'$0', desc:'1 subject · 10 questions/day', color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
+                { label:'Student', price:'$7', desc:'/month per subject · full access', color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
+                { label:'Tutor', price:'From $29', desc:'/month · roster & session tools', color:PURPLE, bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.28)' },
               ].map(p => (
-                <div key={p.name} style={{ background: p.hi?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${p.hi?'rgba(241,190,67,0.32)':'rgba(255,255,255,0.06)'}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid rgba(255,255,255,0.06)`, borderRadius:20, padding: p.hi?'38px 30px 34px':'36px 30px', textAlign:'left', position:'relative' }}>
-                  {p.hi && <div style={{ position:'absolute', top:-12, left:'50%', transform:'translateX(-50%)', background:`linear-gradient(135deg,${GOLD},${GOLDL})`, color:NAVYD, fontSize:11, fontWeight:900, padding:'5px 16px', borderRadius:20, whiteSpace:'nowrap' }}>AVAILABLE NOW</div>}
-                  <div style={{ fontSize:11, fontWeight:800, color: p.hi?GOLD:'rgba(255,255,255,0.28)', marginBottom:8, letterSpacing:'0.12em', textTransform:'uppercase' }}>{p.name}</div>
-                  <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
-                    <div style={{ fontFamily:FONT_D, fontSize:52, color: p.hi?'#fff':'rgba(255,255,255,0.4)', letterSpacing:1, lineHeight:1 }}>{p.price}</div>
-                  </div>
-                  <div style={{ fontSize:12, color:MUTED, marginBottom:28, lineHeight:1.5 }}>{p.sub}</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:11, marginBottom:28 }}>
-                    {p.features.map(f => (
-                      <div key={f} style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color: p.hi?'#cbd5e1':MUTED }}>
-                        <div style={{ width:18, height:18, borderRadius:'50%', background: p.hi?'rgba(241,190,67,0.15)':'rgba(255,255,255,0.04)', border:`1px solid ${p.hi?'rgba(241,190,67,0.35)':'rgba(255,255,255,0.1)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-                          <span style={{ fontSize:8, fontWeight:900, color: p.hi?GOLD:'#475569' }}>✓</span>
-                        </div>
-                        {f}
-                      </div>
-                    ))}
-                  </div>
-                  {p.hi && (
-                    <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ width:'100%', padding:'15px 14px', borderRadius:11, border:'none', color:NAVYD, fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 6px 20px rgba(241,190,67,0.35)` }}>
-                      Get started free →
-                    </button>
-                  )}
+                <div key={p.label} style={{ background:p.bg, border:`1px solid ${p.border}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid ${p.border}`, borderRadius:18, padding:'28px 20px', textAlign:'left' }}>
+                  <div style={{ fontSize:10, fontWeight:800, color:p.color, marginBottom:8, letterSpacing:'0.12em', textTransform:'uppercase' }}>{p.label}</div>
+                  <div style={{ fontFamily:FONT_D, fontSize:36, color: p.hi?'#fff':'rgba(255,255,255,0.5)', letterSpacing:1, lineHeight:1, marginBottom:6 }}>{p.price}</div>
+                  <div style={{ fontSize:12, color:MUTED, lineHeight:1.5 }}>{p.desc}</div>
                 </div>
               ))}
             </div>
+            <button onClick={() => navigate('/pricing')} className="ctab" style={{ padding:'13px 32px', borderRadius:11, border:`1px solid rgba(241,190,67,0.3)`, background:'rgba(241,190,67,0.06)', color:GOLD, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:FONT_B }}>
+              See full pricing →
+            </button>
           </div>
         </section>
       </FadeUp>
