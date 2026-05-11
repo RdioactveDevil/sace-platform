@@ -52,7 +52,10 @@ for (const file of files) {
     assert.match(source, /\.gf-whiteboard-surface\s*\{/)
     assert.match(source, /overflow:\s*visible;/)
     assert.match(source, /height:\s*100%\s*!important;/)
-    assert.match(source, /\.gf-whiteboard-surface\s+\.tlui-layout\s*\{/)
+    assert.doesNotMatch(
+      source,
+      /\.gf-whiteboard-surface\s+\.tlui-layout[\s\S]*?z-index:\s*30\s*!important/
+    )
   })
 
   test(`${file} keeps the Tldraw canvas mounted through room updates`, () => {

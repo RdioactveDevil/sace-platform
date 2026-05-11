@@ -305,7 +305,6 @@ export default function SessionRoom({ profile }) {
         .gf-whiteboard-frame { position: absolute; inset: 12px 12px 86px; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
         .gf-whiteboard-surface { position: absolute; inset: 0; width: 100%; height: 100% !important; min-height: 0 !important; overflow: visible; background: #f8fafc; border-radius: 14px; }
         .gf-whiteboard-surface .tl-container { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
-        .gf-whiteboard-surface .tlui-layout { z-index: 30 !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
         .lk-chat-messages { flex: 1 !important; }
         .lk-chat-entry { border-bottom: 1px solid #1a1a2e !important; padding: 10px 14px !important; }
