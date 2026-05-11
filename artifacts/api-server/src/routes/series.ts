@@ -322,9 +322,9 @@ router.get("/series", async (req: Request, res: Response) => {
       .select("series_id, student_id, profiles(display_name)")
       .in("series_id", seriesIds);
 
-    for (const p of (participants ?? []) as Array<{ series_id: string; student_id: string; profiles: { display_name: string | null } | null }>) {
+    for (const p of (participants ?? []) as unknown as Array<{ series_id: string; student_id: string; profiles: Array<{ display_name: string | null }> | null }>) {
       if (!participantMap[p.series_id]) participantMap[p.series_id] = [];
-      participantMap[p.series_id].push(p.profiles?.display_name ?? "Student");
+      participantMap[p.series_id].push(p.profiles?.[0]?.display_name ?? "Student");
     }
   }
 
@@ -445,7 +445,7 @@ router.post("/rooms/:roomName/token", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
 
-  const { roomName } = req.params;
+  const roomName = req.params.roomName as string;
 
   // Look up series by room name
   const { data: series, error: seriesErr } = await ctx.admin

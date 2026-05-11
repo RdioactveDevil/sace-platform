@@ -380,11 +380,11 @@ router.get("/sessions", async (req: Request, res: Response) => {
       .select("session_id, student_id, profiles(display_name)")
       .in("session_id", sessionIdList);
 
-    for (const p of (participants ?? []) as Array<{ session_id: string; student_id: string; profiles: { display_name: string | null } | null }>) {
+    for (const p of (participants ?? []) as unknown as Array<{ session_id: string; student_id: string; profiles: Array<{ display_name: string | null }> | null }>) {
       if (!participantMap[p.session_id]) participantMap[p.session_id] = [];
       participantMap[p.session_id].push({
         student_id: p.student_id,
-        display_name: p.profiles?.display_name ?? "Student",
+        display_name: p.profiles?.[0]?.display_name ?? "Student",
       });
     }
   }
@@ -453,9 +453,9 @@ router.get("/sessions/:id", async (req: Request, res: Response) => {
   res.json({
     session: {
       ...session,
-      participants: (participants ?? []).map((p: { student_id: string; profiles: { display_name: string | null } | null }) => ({
+      participants: (participants as unknown as Array<{ student_id: string; profiles: Array<{ display_name: string | null }> | null }> ?? []).map((p) => ({
         student_id: p.student_id,
-        display_name: p.profiles?.display_name ?? "Student",
+        display_name: p.profiles?.[0]?.display_name ?? "Student",
       })),
       participant_count: (participants ?? []).length,
     },
