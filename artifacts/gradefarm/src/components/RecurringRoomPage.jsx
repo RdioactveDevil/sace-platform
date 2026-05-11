@@ -12,15 +12,13 @@ import {
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
 import '@livekit/components-styles'
-import { Tldraw } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+import { Excalidraw } from '@excalidraw/excalidraw'
+import '@excalidraw/excalidraw/index.css'
 import { getRoomInfo, getRoomToken } from '../lib/db'
 import { useLiveKitJoinOverlay } from '../hooks/useLiveKitJoinOverlay'
-import { TLDRAW_LICENSE_KEY } from '../lib/tldrawLicense'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const WHITEBOARD_OPTIONS = Object.freeze({ maxFontsToLoadBeforeRender: 0 })
 
 function useCallViewportLock() {
   useLayoutEffect(() => {
@@ -69,7 +67,7 @@ function useCallViewportLock() {
 const WhiteboardSurface = memo(function WhiteboardSurface() {
   return (
     <div className="gf-whiteboard-surface">
-      <Tldraw licenseKey={TLDRAW_LICENSE_KEY} options={WHITEBOARD_OPTIONS} autoFocus={false} />
+      <Excalidraw theme="light" autoFocus={false} />
     </div>
   )
 })
@@ -103,7 +101,7 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
 
   return (
     <div className="gf-call-stage">
-      {/* Fullscreen spinner only until first in-room handshake; mid-session SDK flicker must not cover Tldraw */}
+      {/* Fullscreen spinner only until first in-room handshake; mid-session SDK flicker must not cover the whiteboard */}
       {showJoinOverlay && (
         <div className="gf-connecting-overlay">
           <div className="gf-connecting-spinner" />
@@ -296,7 +294,7 @@ export default function RecurringRoomPage({ profile }) {
         .gf-chat-header button:hover { background: #1b1b2f; color: #fff; }
         .gf-whiteboard-frame { position: absolute; inset: 12px 12px 86px; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
         .gf-whiteboard-surface { position: absolute; inset: 0; width: 100%; height: 100% !important; min-height: 0 !important; overflow: visible; background: #f8fafc; border-radius: 14px; }
-        .gf-whiteboard-surface .tl-container { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
+        .gf-whiteboard-surface .excalidraw { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
         .lk-chat-messages { flex: 1 !important; }
         .lk-chat-entry { border-bottom: 1px solid #1a1a2e !important; padding: 10px 14px !important; }
