@@ -89,7 +89,10 @@ function RoomHeader({ room }) {
 
 function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
   const connectionState = useConnectionState()
-  const isConnected = connectionState === ConnectionState.Connected || connectionState === ConnectionState.Reconnecting
+  const isConnected =
+    connectionState === ConnectionState.Connected ||
+    connectionState === ConnectionState.Reconnecting ||
+    connectionState === ConnectionState.SignalReconnecting
 
   const tracks = useTracks(
     [

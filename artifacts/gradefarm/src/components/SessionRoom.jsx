@@ -87,7 +87,12 @@ function RoomHeader({ session }) {
 
 function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, onEnd, isTutor }) {
   const connectionState = useConnectionState()
-  const isConnected = connectionState === ConnectionState.Connected || connectionState === ConnectionState.Reconnecting
+  // Keep UI usable during signal resume — SignalReconnecting is not "offline" but our overlay
+  // would cover the whole stage (including Tldraw) if we only allowed Connected | Reconnecting.
+  const isConnected =
+    connectionState === ConnectionState.Connected ||
+    connectionState === ConnectionState.Reconnecting ||
+    connectionState === ConnectionState.SignalReconnecting
 
   const tracks = useTracks(
     [
