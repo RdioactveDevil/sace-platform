@@ -17,60 +17,69 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 // ── Room header ───────────────────────────────────────────────────────────────
 function RoomHeader({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
   const title = room?.title || 'Session'
+  const scheduleLabel = room?.schedule ? `🔁 ${room.schedule}` : 'One-off session'
   const btnBase = {
-    border: 'none', borderRadius: 8, padding: '7px 14px',
-    fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer',
+    border: '1px solid #2d2d46',
+    borderRadius: 999,
+    padding: '8px 14px',
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: FONT_B,
+    cursor: 'pointer',
     transition: 'all 0.15s',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
   }
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 16px', height: 52, background: '#0d0d1a',
-      borderBottom: '1px solid #2a2a3e', flexShrink: 0, gap: 12,
+      padding: '12px 16px', background: 'linear-gradient(180deg, #15152a, #0d0d1a)',
+      borderBottom: '1px solid #2a2a3e', flexShrink: 0, gap: 12, flexWrap: 'wrap',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
         <span style={{ fontFamily: "'Sifonn Pro', sans-serif", fontSize: 17, color: GOLD, letterSpacing: -0.5, flexShrink: 0 }}>
           gradefarm.
         </span>
-        <span style={{ color: '#ccc', fontSize: 13, fontFamily: FONT_B, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {title}
-        </span>
-        {room?.schedule && (
-          <span style={{ color: '#888', fontSize: 12, fontFamily: FONT_B, flexShrink: 0 }}>🔁 {room.schedule}</span>
-        )}
-        <span style={{ background: '#1e3a2f', color: '#4ade80', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, fontFamily: FONT_B, flexShrink: 0 }}>
-          LIVE
+        <div style={{ minWidth: 0 }}>
+          <p style={{ color: '#f5f5fb', fontSize: 14, fontWeight: 700, fontFamily: FONT_B, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {title}
+          </p>
+          <p style={{ color: '#9393ae', fontSize: 12, fontFamily: FONT_B, margin: 0 }}>
+            {scheduleLabel}
+          </p>
+        </div>
+        <span style={{ background: '#173225', color: '#6ee7b7', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 999, fontFamily: FONT_B, flexShrink: 0, letterSpacing: 0.2 }}>
+          LIVE NOW
         </span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
         <button
           onClick={onToggleWhiteboard}
           style={{
             ...btnBase,
             background: showWhiteboard ? GOLD : '#1a1a2e',
-            color: showWhiteboard ? '#1a1a2e' : '#ccc',
-            border: '1px solid #2a2a3e',
+            color: showWhiteboard ? '#1a1a2e' : '#d4d4e5',
           }}
         >
-          🖊 Whiteboard
+          🖊️ {showWhiteboard ? 'Hide board' : 'Whiteboard'}
         </button>
         <button
           onClick={onToggleChat}
           style={{
             ...btnBase,
             background: showChat ? GOLD : '#1a1a2e',
-            color: showChat ? '#1a1a2e' : '#ccc',
-            border: '1px solid #2a2a3e',
+            color: showChat ? '#1a1a2e' : '#d4d4e5',
           }}
         >
-          💬 Chat
+          💬 {showChat ? 'Close chat' : 'Open chat'}
         </button>
         <button
           onClick={onLeave}
-          style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', border: 'none' }}
+          style={{ ...btnBase, background: '#7f1d1d', color: '#fca5a5', borderColor: '#8f2323' }}
         >
-          Leave
+          ⏻ Leave
         </button>
       </div>
     </div>
@@ -114,17 +123,17 @@ function RoomContent({ room }) {
         ) : (
           /* ── Video + optional chat panel ── */
           <>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: 10 }}>
               <VideoConference />
               <RoomAudioRenderer />
             </div>
             {showChat && (
               <div style={{
-                width: 300, minWidth: 300, display: 'flex', flexDirection: 'column',
+                width: 320, minWidth: 300, display: 'flex', flexDirection: 'column',
                 borderLeft: '1px solid #2a2a3e', background: '#0d0d1a',
               }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#ccc', fontFamily: FONT_B, fontSize: 13, fontWeight: 600 }}>Chat</span>
+                <div style={{ padding: '12px 14px', borderBottom: '1px solid #2a2a3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111122' }}>
+                  <span style={{ color: '#f5f5fb', fontFamily: FONT_B, fontSize: 13, fontWeight: 700 }}>Session chat</span>
                   <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
                 </div>
                 <Chat style={{ flex: 1, '--lk-bg': '#0d0d1a', '--lk-border-color': '#2a2a3e', '--lk-fg': '#e5e5e5' }} />
@@ -222,9 +231,10 @@ export default function RecurringRoomPage({ profile }) {
         .lk-room-container { background: #0a0a14 !important; height: 100% !important; }
         .lk-grid-layout { background: #0a0a14 !important; }
         .lk-focus-layout { background: #0a0a14 !important; }
-        .lk-participant-tile { border-radius: 10px !important; overflow: hidden; }
-        .lk-control-bar { background: #0d0d1a !important; border-top: 1px solid #2a2a3e !important; padding: 10px 16px !important; }
-        .lk-button { border-radius: 8px !important; }
+        .lk-participant-tile { border-radius: 14px !important; overflow: hidden; border: 1px solid #272742 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.28) !important; }
+        .lk-control-bar { background: rgba(13, 13, 26, 0.9) !important; border-top: 1px solid #2a2a3e !important; padding: 12px 16px !important; backdrop-filter: blur(6px); }
+        .lk-button { border-radius: 10px !important; border-color: #2e2e48 !important; }
+        .lk-button:hover { transform: translateY(-1px); }
         .lk-disconnect-button { background: #7f1d1d !important; color: #fca5a5 !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
         .lk-chat-messages { flex: 1 !important; }
