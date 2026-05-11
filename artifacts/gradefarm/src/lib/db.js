@@ -233,6 +233,44 @@ export async function countQuestionsForSubject(subject) {
   return count ?? 0
 }
 
+/**
+ * Live `questions` + pending `draft_questions` per subject, using service API so draft rows
+ * (curriculum generator) are visible despite RLS. Falls back to {@link countQuestionsForSubject} if the API fails.
+ * @param {string[]} subjectNames canonical labels (e.g. curricula.name, QUESTIONS_SUBJECT_BY_ID values)
+ * @returns {Promise<Record<string, number>>}
+ */
+export async function fetchSubjectBankCounts(subjectNames) {
+  const unique = [...new Set((subjectNames || []).filter(Boolean).map((s) => String(s).trim()))]
+  if (unique.length === 0) return {}
+
+  try {
+    const res = await fetch('/api/subject-question-counts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subjects: unique }),
+    })
+    const text = await res.text()
+    let data
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new Error('Invalid JSON from subject-question-counts')
+    }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    return data.counts && typeof data.counts === 'object' ? data.counts : {}
+  } catch {
+    const out = {}
+    for (const s of unique) {
+      try {
+        out[s] = await countQuestionsForSubject(s)
+      } catch {
+        out[s] = 0
+      }
+    }
+    return out
+  }
+}
+
 export async function getStruggleMap(userId) {
   const { data, error } = await supabase
     .from('struggle_profiles')

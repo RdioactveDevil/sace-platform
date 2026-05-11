@@ -10,6 +10,7 @@ import writingRouter from "./writing";
 import diagnosticRouter from "./diagnostic";
 import sessionsRouter from "./sessions";
 import seriesRouter from "./series";
+import subjectStatsRouter from "./subject-stats";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(writingRouter);
 router.use(diagnosticRouter);
 router.use(sessionsRouter);
 router.use(seriesRouter);
+router.use(subjectStatsRouter);
 
 export default router;

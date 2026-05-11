@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
-import { countQuestionsForSubject } from '../lib/db'
+import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -53,14 +53,12 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
         .map(s => [s.id, s.name]),
     ]
     if (pairs.length === 0) return undefined
-    Promise.all(
-      pairs.map(async ([id, subjectName]) => {
-        const n = await countQuestionsForSubject(subjectName)
-        return [id, n]
-      })
-    )
-      .then((results) => {
-        if (!cancelled) setLiveQuestionCounts(Object.fromEntries(results))
+    const names = [...new Set(pairs.map(([, subjectName]) => subjectName))]
+    fetchSubjectBankCounts(names)
+      .then((counts) => {
+        if (cancelled) return
+        const results = pairs.map(([id, subjectName]) => [id, counts[subjectName] ?? 0])
+        setLiveQuestionCounts(Object.fromEntries(results))
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -130,7 +128,13 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           </span>
           {locked ? (
             <button
-              onClick={e => { e.stopPropagation(); onGetAccess && onGetAccess(subj) }}
+              onClick={e => {
+                e.stopPropagation()
+                onGetAccess && onGetAccess({
+                  ...subj,
+                  questionCount: liveQuestionCounts[subj.id] ?? subj.questionCount,
+                })
+              }}
               style={{
                 fontSize: 12, fontWeight: 700, color: '#ffffff',
                 background: 'linear-gradient(135deg, #0c1037, #1e2a6e)',
