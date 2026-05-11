@@ -162,3 +162,63 @@ export const ALL_SUBJECTS = [
     available: true,
   },
 ]
+
+/** Admin curriculum wizard + detail: SACE stages and Australian year levels. */
+export const COHORT_LEVEL_OPTIONS = [
+  'Stage 1',
+  'Stage 2',
+  'Year 7',
+  'Year 8',
+  'Year 9',
+  'Year 10',
+  'Year 11',
+  'Year 12',
+]
+
+/**
+ * Derive "Stage 1", "Stage 2", or "Year N" from a legacy `curricula.name` when `level_label` is empty.
+ * @param {string} fullName
+ * @returns {string}
+ */
+export function inferCohortLabelFromCurriculumName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return ''
+  const mStage = fullName.match(/\bStage\s*([12])\b/i)
+  if (mStage) return `Stage ${mStage[1]}`
+  const mYear = fullName.match(/\bYear\s*(\d{1,2})\b/i)
+  if (mYear) return `Year ${mYear[1]}`
+  return ''
+}
+
+/**
+ * Stage / year shown on live curriculum tiles (Subject Picker, onboarding).
+ * @param {string} fullName  `curricula.name` (canonical `questions.subject`)
+ * @param {string} [levelLabel] `curricula.level_label`
+ * @returns {string}
+ */
+export function effectiveCohortStageForLiveCurriculum(fullName, levelLabel) {
+  const fromCol = (levelLabel || '').trim()
+  if (fromCol) return fromCol
+  return inferCohortLabelFromCurriculumName(fullName)
+}
+
+/**
+ * Build canonical `curricula.name` / `questions.subject` from title + cohort (matches AC year ordering vs SACE).
+ * @param {string} title short subject title, e.g. "Mathematical Methods"
+ * @param {string} levelLabel one of COHORT_LEVEL_OPTIONS
+ * @returns {string}
+ */
+export function buildCanonicalCurriculumName(title, levelLabel) {
+  const t = String(title || '').trim().replace(/\s+/g, ' ')
+  const lv = String(levelLabel || '').trim()
+  if (!t) throw new Error('Subject title is required')
+  if (!lv) throw new Error('Cohort level is required')
+  if (/^year\s*\d+/i.test(lv)) {
+    const yn = lv.match(/\d+/)
+    return `Year ${yn ? yn[0] : ''} ${t}`.replace(/\s+/g, ' ').trim()
+  }
+  if (/^stage\s*[12]$/i.test(lv)) {
+    const sn = lv.match(/[12]/i)
+    return `${t} Stage ${sn ? sn[0] : ''}`.replace(/\s+/g, ' ').trim()
+  }
+  return `${t} ${lv}`
+}

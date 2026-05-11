@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
@@ -20,15 +21,82 @@ function extractJson(text: string): unknown {
   try { return JSON.parse(text.slice(start, end + 1)); } catch { return null; }
 }
 
+function conceptTag(subject: string, topic: string, subtopic: string): string {
+  return `${subject}|${topic}|${subtopic || topic}`.toLowerCase();
+}
+
+async function cascadeCurriculumSubjectRename(
+  admin: SupabaseClient,
+  oldName: string,
+  newName: string,
+): Promise<void> {
+  if (!oldName || !newName || oldName === newName) return;
+
+  const batch = 400;
+
+  for (;;) {
+    const { data: rows, error } = await admin
+      .from("questions")
+      .select("id, topic, subtopic")
+      .eq("subject", oldName)
+      .limit(batch);
+    if (error) throw new Error(error.message);
+    if (!rows?.length) break;
+    for (const r of rows as { id: string; topic: string; subtopic: string }[]) {
+      const ct = conceptTag(newName, r.topic, r.subtopic);
+      const { error: uErr } = await admin.from("questions").update({ subject: newName, concept_tag: ct }).eq("id", r.id);
+      if (uErr) throw new Error(uErr.message);
+    }
+  }
+
+  for (;;) {
+    const { data: rows, error } = await admin
+      .from("question_variants")
+      .select("id, topic, subtopic")
+      .eq("subject", oldName)
+      .limit(batch);
+    if (error) throw new Error(error.message);
+    if (!rows?.length) break;
+    for (const r of rows as { id: string; topic: string; subtopic: string }[]) {
+      const ct = conceptTag(newName, r.topic, r.subtopic);
+      const { error: uErr } = await admin.from("question_variants").update({ subject: newName, concept_tag: ct }).eq("id", r.id);
+      if (uErr) throw new Error(uErr.message);
+    }
+  }
+
+  const { error: dErr } = await admin.from("draft_questions").update({ subject: newName }).eq("subject", oldName);
+  if (dErr) throw new Error(dErr.message);
+
+  const { error: sErr } = await admin.from("sessions").update({ subject: newName }).eq("subject", oldName);
+  if (sErr) throw new Error(sErr.message);
+
+  const { error: spErr } = await admin.from("study_plan_items").update({ subject: newName }).eq("subject", oldName);
+  if (spErr) throw new Error(spErr.message);
+
+  const { error: usErr } = await admin
+    .from("user_subscriptions")
+    .update({ subject_name: newName })
+    .eq("subject_name", oldName);
+  if (usErr) throw new Error(usErr.message);
+
+  const { error: asErr } = await admin.from("assignments").update({ subject: newName }).eq("subject", oldName);
+  if (asErr) throw new Error(asErr.message);
+
+  const { error: tcErr } = await admin.from("tutor_classes").update({ subject: newName }).eq("subject", oldName);
+  if (tcErr) throw new Error(tcErr.message);
+}
+
 // POST /api/admin/curriculum-plan
 // Body: { subjectDescription: string, base64Doc?: string, mediaType?: string }
 // Returns: { topics: [{ name: string, subtopics: [{ name: string }] }] }
 router.post("/admin/curriculum-plan", async (req, res) => {
-  const { subjectDescription, base64Doc, mediaType } = req.body || {};
+  const { subjectDescription, base64Doc, mediaType, cohortLevel } = req.body || {};
   if (!subjectDescription?.trim() && !base64Doc) {
     res.status(400).json({ error: "subjectDescription or a document is required" });
     return;
   }
+
+  const cohort = typeof cohortLevel === "string" ? cohortLevel.trim() : "";
 
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
@@ -40,14 +108,22 @@ router.post("/admin/curriculum-plan", async (req, res) => {
     "Produce a realistic, well-structured curriculum tree: 5–10 topics, each with 3–6 subtopics.",
     "Subtopic names should be specific and teachable (e.g. 'Mitosis and cell division', not 'Cell processes').",
     "If a curriculum document is provided, extract the topic and subtopic structure from it directly.",
-  ].join("\n");
+    cohort
+      ? `Every topic and subtopic must be appropriate for this cohort only: ${cohort}. Do not mix levels (e.g. no Stage 2 content under Stage 1).`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
+  const cohortNote = cohort ? `Target cohort: ${cohort}\n\n` : "";
   const descText = subjectDescription?.trim()
-    ? `Subject description: ${subjectDescription.trim()}\n\n`
-    : "";
+    ? `${cohortNote}Subject description: ${subjectDescription.trim()}\n\n`
+    : cohort
+      ? `${cohortNote}`
+      : "";
   const userText = base64Doc
     ? `${descText}Generate a complete topic and subtopic breakdown based on the attached curriculum document.`
-    : `Generate a complete topic and subtopic breakdown for: ${subjectDescription.trim()}`;
+    : `Generate a complete topic and subtopic breakdown for:\n${descText.trimEnd()}`;
 
   const userContent = base64Doc
     ? [
@@ -99,6 +175,59 @@ router.post("/admin/curriculum-plan", async (req, res) => {
   }
 
   res.json({ topics: parsed.topics });
+});
+
+// POST /api/admin/curriculum-rename-cascade
+// Body: { oldSubject: string, newSubject: string }
+router.post("/admin/curriculum-rename-cascade", async (req, res) => {
+  const { oldSubject, newSubject } = req.body || {};
+  const a = typeof oldSubject === "string" ? oldSubject.trim() : "";
+  const b = typeof newSubject === "string" ? newSubject.trim() : "";
+  if (!a || !b) {
+    res.status(400).json({ error: "oldSubject and newSubject are required" });
+    return;
+  }
+  try {
+    const admin = getAdmin();
+    await cascadeCurriculumSubjectRename(admin, a, b);
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "curriculum-rename-cascade failed");
+    const message = err instanceof Error ? err.message : "Rename cascade failed";
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/admin/curriculum-subscription-stage
+// Body: { subjectName: string, oldStage: string, newStage: string }
+router.post("/admin/curriculum-subscription-stage", async (req, res) => {
+  const { subjectName, oldStage, newStage } = req.body || {};
+  const sub = typeof subjectName === "string" ? subjectName.trim() : "";
+  if (!sub) {
+    res.status(400).json({ error: "subjectName is required" });
+    return;
+  }
+  const o = oldStage === undefined || oldStage === null ? "" : String(oldStage).trim();
+  const n = newStage === undefined || newStage === null ? "" : String(newStage).trim();
+  if (o === n) {
+    res.json({ ok: true, updated: 0 });
+    return;
+  }
+  try {
+    const admin = getAdmin();
+    const { data, error } = await admin
+      .from("user_subscriptions")
+      .update({ stage: n })
+      .eq("subject_name", sub)
+      .eq("stage", o)
+      .select("id");
+    if (error) throw error;
+    res.json({ ok: true, updated: (data ?? []).length });
+  } catch (err) {
+    logger.error({ err }, "curriculum-subscription-stage failed");
+    const message = err instanceof Error ? err.message : "Stage update failed";
+    res.status(500).json({ error: message });
+  }
 });
 
 // POST /api/admin/curriculum-generate

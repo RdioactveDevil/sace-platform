@@ -1,4 +1,6 @@
 import { supabase } from './supabase'
+import { adminApiPost } from './adminApi'
+import { inferCohortLabelFromCurriculumName } from './subjects'
 
 /**
  * List all curricula with topic + subtopic counts and generation progress.
@@ -8,7 +10,7 @@ export async function listCurricula() {
   const { data, error } = await supabase
     .from('curricula')
     .select(`
-      id, name, subject_description, status, created_at,
+      id, name, level_label, subject_description, status, created_at,
       curriculum_topics (
         id,
         curriculum_subtopics ( id, gen_status, questions_generated )
@@ -23,6 +25,7 @@ export async function listCurricula() {
     return {
       id: c.id,
       name: c.name,
+      level_label: c.level_label ?? '',
       subject_description: c.subject_description,
       status: c.status,
       created_at: c.created_at,
@@ -41,7 +44,7 @@ export async function listCurricula() {
 export async function getCurriculumDetail(id) {
   const { data: curriculum, error: cErr } = await supabase
     .from('curricula')
-    .select('id, name, subject_description, status, created_at')
+    .select('id, name, level_label, subject_description, status, created_at')
     .eq('id', id)
     .single()
   if (cErr) throw cErr
@@ -76,13 +79,13 @@ export async function getCurriculumDetail(id) {
 
 /**
  * Create a new curriculum with its full topic/subtopic tree.
- * @param {{ name: string, subject_description: string, topics: Array }} data
+ * @param {{ name: string, subject_description: string, topics: Array, level_label?: string }} data
  * @returns {Promise<string>} curriculum id
  */
-export async function createCurriculum({ name, subject_description, topics }) {
+export async function createCurriculum({ name, subject_description, topics, level_label = '' }) {
   const { data: curriculum, error: cErr } = await supabase
     .from('curricula')
-    .insert({ name, subject_description, status: 'draft' })
+    .insert({ name, subject_description, level_label: level_label || '', status: 'draft' })
     .select('id')
     .single()
   if (cErr) throw cErr
@@ -96,12 +99,42 @@ export async function createCurriculum({ name, subject_description, topics }) {
  * Update an existing curriculum's name, description, and full topic/subtopic tree.
  * Replaces all existing topics/subtopics (full replace, not patch).
  * @param {string} id
- * @param {{ name?: string, subject_description?: string, topics?: Array }} updates
+ * @param {{ name?: string, subject_description?: string, level_label?: string, topics?: Array }} updates
  */
-export async function updateCurriculum(id, { name, subject_description, topics } = {}) {
+export async function updateCurriculum(id, { name, subject_description, level_label, topics } = {}) {
+  const { data: cur, error: curErr } = await supabase
+    .from('curricula')
+    .select('name, level_label')
+    .eq('id', id)
+    .single()
+  if (curErr) throw curErr
+
+  const oldName = cur.name
+  const oldLevel = (cur.level_label ?? '').trim()
+
+  if (name !== undefined && name !== oldName) {
+    await adminApiPost('/api/admin/curriculum-rename-cascade', {
+      oldSubject: oldName,
+      newSubject: name,
+    })
+  }
+
+  if (level_label !== undefined) {
+    const newLevel = String(level_label).trim()
+    if (newLevel !== oldLevel) {
+      const subjectForSubscriptions = name !== undefined ? name : oldName
+      await adminApiPost('/api/admin/curriculum-subscription-stage', {
+        subjectName: subjectForSubscriptions,
+        oldStage: oldLevel,
+        newStage: newLevel,
+      })
+    }
+  }
+
   const patch = {}
   if (name !== undefined) patch.name = name
   if (subject_description !== undefined) patch.subject_description = subject_description
+  if (level_label !== undefined) patch.level_label = level_label
 
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('curricula').update(patch).eq('id', id)
@@ -157,7 +190,7 @@ export async function getSubtopicStatuses(curriculumId) {
 export async function loadManagedCurriculaTopics() {
   const { data: curricula, error: cErr } = await supabase
     .from('curricula')
-    .select('id, name')
+    .select('id, name, level_label')
     .in('status', ['live', 'generating'])
   if (cErr) throw cErr
   if (!curricula?.length) return {}
@@ -198,12 +231,12 @@ export async function loadManagedCurriculaTopics() {
 
 /**
  * Fetch live/generating curricula with their top-level topic names for display in SubjectPicker.
- * @returns {Promise<Array<{ id: string, name: string, status: string, topicNames: string[] }>>}
+ * @returns {Promise<Array<{ id: string, name: string, level_label: string, status: string, topicNames: string[] }>>}
  */
 export async function fetchLiveCurricula() {
   const { data: curricula, error: cErr } = await supabase
     .from('curricula')
-    .select('id, name, status')
+    .select('id, name, level_label, status')
     .in('status', ['live', 'generating'])
     .order('created_at', { ascending: true })
   if (cErr) throw cErr
@@ -220,6 +253,7 @@ export async function fetchLiveCurricula() {
   return curricula.map(c => ({
     id: c.id,
     name: c.name,
+    level_label: (c.level_label ?? '').trim(),
     status: c.status,
     topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
   }))
@@ -245,9 +279,10 @@ export async function seedBuiltInSubjectsIfNeeded(builtIns) {
 
   for (const { name, description, topics } of builtIns) {
     if (existingNames.has(name)) continue
+    const level = inferCohortLabelFromCurriculumName(name)
     const { data: c, error } = await supabase
       .from('curricula')
-      .insert({ name, subject_description: description || name, status: 'live' })
+      .insert({ name, subject_description: description || name, level_label: level, status: 'live' })
       .select('id')
       .single()
     if (error || !c) continue

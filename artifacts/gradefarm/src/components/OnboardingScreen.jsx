@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { ALL_SUBJECTS } from '../lib/subjects'
+import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -23,7 +23,10 @@ const ATAR_TARGETS = [
 
 const STUDY_HOURS = [1, 2, 3, 5, 7, 10]
 
-const BUILT_IN_CURRICULUM_NAMES = new Set(ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()))
+const BUILT_IN_CURRICULUM_NAMES = new Set([
+  ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
+  ...Object.values(QUESTIONS_SUBJECT_BY_ID),
+])
 
 const inp = {
   padding: '12px 14px', borderRadius: 10,
@@ -60,7 +63,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
             .map(c => ({
               id: `curriculum_${c.id}`,
               name: c.name,
-              stage: '',
+              stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
               icon: '📚',
               color: '#6366f1',
               topics: c.topicNames,

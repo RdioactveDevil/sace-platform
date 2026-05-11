@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded, deleteCurriculum } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
 import { S1_TOPICS, S2_TOPICS, Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS, Y10_MATHS_TOPICS } from '../lib/adminTopics'
+import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
 // Group a flat topic array into sections by the prefix of each code.
 // Chemistry uses "1.1" → section "1"; Maths/English use "N1" → section "N".
@@ -98,6 +99,8 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [uploadedDoc, setUploadedDoc]  = useState(null) // { base64, mediaType, name }
   const [creating, setCreating]         = useState(false)
   const [createError, setCreateError]  = useState('')
+  const [subjectTitle, setSubjectTitle] = useState('')
+  const [cohortLevel, setCohortLevel]   = useState('')
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -112,7 +115,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   useEffect(() => { load() }, [load])
 
-  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null) }
+  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel('') }
   const closeModal = () => { if (!creating) setShowModal(false) }
 
   const handleFileUpload = (e) => {
@@ -128,15 +131,38 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   }
 
   const handleGeneratePlan = async () => {
+    if (!subjectTitle.trim()) {
+      setCreateError('Enter a short subject name (e.g. Mathematical Methods).')
+      return
+    }
+    if (!cohortLevel) {
+      setCreateError('Select Stage 1 / Stage 2 or a year level.')
+      return
+    }
     if (!description.trim() && !uploadedDoc) return
     setCreating(true)
     setCreateError('')
     try {
-      const payload = { subjectDescription: description.trim() }
+      let canonicalName
+      try {
+        canonicalName = buildCanonicalCurriculumName(subjectTitle.trim(), cohortLevel)
+      } catch (err) {
+        setCreateError(err.message || 'Invalid subject name or cohort.')
+        setCreating(false)
+        return
+      }
+      const payload = { subjectDescription: description.trim(), cohortLevel }
       if (uploadedDoc) { payload.base64Doc = uploadedDoc.base64; payload.mediaType = uploadedDoc.mediaType }
       const { topics } = await adminApiPost('/api/admin/curriculum-plan', payload)
-      const name = (description.trim() || uploadedDoc.name.replace(/\.[^.]+$/, '')).split('\n')[0].slice(0, 120)
-      const id = await createCurriculum({ name, subject_description: description.trim(), topics })
+      const subject_description = [description.trim(), uploadedDoc ? `Source: ${uploadedDoc.name}` : '']
+        .filter(Boolean)
+        .join('\n\n') || `Managed curriculum: ${canonicalName}`
+      const id = await createCurriculum({
+        name: canonicalName,
+        subject_description,
+        topics,
+        level_label: cohortLevel,
+      })
       setShowModal(false)
       onSelectCurriculum(id)
     } catch (e) {
@@ -221,6 +247,9 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#64748b', marginBottom: 10 }}>
                 <span>{c.topic_count} topic{c.topic_count !== 1 ? 's' : ''}</span>
                 <span>{c.subtopic_count} subtopic{c.subtopic_count !== 1 ? 's' : ''}</span>
+                {(c.level_label || '').trim() ? (
+                  <span style={{ color: GOLD }}>{(c.level_label || '').trim()}</span>
+                ) : null}
               </div>
               {c.status !== 'draft' && c.questions_total > 0 && (
                 <div style={{ marginBottom: 8 }}>
@@ -249,12 +278,54 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
           <div style={modal}>
             <h3 style={{ margin: '0 0 6px', color: '#f1f5f9', fontSize: 16 }}>New Curriculum</h3>
             <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
-              Describe the subject, upload a curriculum document, or both. Claude will generate a topic and subtopic plan.
+              Name the subject, choose Stage 1 / Stage 2 or a year level (required), then describe the course or upload a syllabus. Claude will generate a topic and subtopic plan scoped to that cohort.
             </p>
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Subject name (short)
+            </label>
+            <input
+              type="text"
+              value={subjectTitle}
+              onChange={e => setSubjectTitle(e.target.value)}
+              placeholder="e.g. Mathematical Methods, Biology, Specialist Mathematics"
+              disabled={creating}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 9,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: '#0c1037', color: '#f1f5f9',
+                fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                boxSizing: 'border-box', marginBottom: 10,
+                opacity: creating ? 0.6 : 1,
+              }}
+            />
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Stage / year level *
+            </label>
+            <select
+              value={cohortLevel}
+              onChange={e => setCohortLevel(e.target.value)}
+              disabled={creating}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 9,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: '#0c1037', color: '#f1f5f9',
+                fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                boxSizing: 'border-box', marginBottom: 12,
+                opacity: creating ? 0.6 : 1,
+              }}
+            >
+              <option value="">Select…</option>
+              {COHORT_LEVEL_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Course description (optional if uploading a document)
+            </label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="e.g. Year 11 SACE Biology — Australian curriculum, covering cells, genetics, ecosystems, and evolution"
+              placeholder="e.g. SACE coverage: calculus, logarithmic/exponential functions, discrete and continuous probability…"
               rows={3}
               disabled={creating}
               style={{
@@ -290,11 +361,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               <button onClick={closeModal} disabled={creating} style={cancelBtn}>Cancel</button>
               <button
                 onClick={handleGeneratePlan}
-                disabled={(!description.trim() && !uploadedDoc) || creating}
+                disabled={!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating}
                 style={{
                   ...goldBtn,
-                  opacity: ((!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
-                  cursor: ((!description.trim() && !uploadedDoc) || creating) ? 'not-allowed' : 'pointer',
+                  opacity: (!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
+                  cursor: (!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating) ? 'not-allowed' : 'pointer',
                 }}
               >
                 {creating ? 'Generating plan…' : 'Generate Plan'}

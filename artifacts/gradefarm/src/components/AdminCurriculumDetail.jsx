@@ -4,8 +4,11 @@ import {
   updateCurriculum,
   updateCurriculumStatus,
   getSubtopicStatuses,
+  loadManagedCurriculaTopics,
 } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
+import { refreshManagedTopicsCache } from '../lib/adminTopics'
+import { COHORT_LEVEL_OPTIONS } from '../lib/subjects'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -109,6 +112,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           setCurriculum(prev => ({ ...prev, status: 'live' }))
           setGenerating(false)
           onGoLive?.()
+          refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
         }
       } catch {}
     }, 5000)
@@ -194,7 +198,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const handleSave = async () => {
     setSaving(true); setError(''); setSaveOk(false)
     try {
-      await updateCurriculum(curriculumId, { name: curriculum.name, topics })
+      await updateCurriculum(curriculumId, {
+        name: curriculum.name,
+        level_label: curriculum.level_label ?? '',
+        topics,
+      })
+      refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
       setSaveOk(true)
       setTimeout(() => setSaveOk(false), 2500)
     } catch (e) {
@@ -208,9 +217,18 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const handleApproveAndGenerate = async () => {
     const subtopicCount = topics.flatMap(t => t.subtopics).length
     if (!window.confirm(`Generate 25 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
+    if (!(curriculum.level_label || '').trim()) {
+      setError('Select a Stage / year level before generating questions.')
+      return
+    }
     setSaving(true); setError(''); setGenError('')
     try {
-      await updateCurriculum(curriculumId, { name: curriculum.name, topics })
+      await updateCurriculum(curriculumId, {
+        name: curriculum.name,
+        level_label: curriculum.level_label ?? '',
+        topics,
+      })
+      refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
       await updateCurriculumStatus(curriculumId, 'generating')
       setCurriculum(prev => ({ ...prev, status: 'generating' }))
       setGenerating(true)
@@ -296,6 +314,26 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           onSave={name => setCurriculum(prev => ({ ...prev, name }))}
           style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}
         />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8', marginLeft: 4 }}>
+          <span style={{ flexShrink: 0 }}>Cohort</span>
+          <select
+            value={curriculum.level_label || ''}
+            onChange={e => setCurriculum(prev => ({ ...prev, level_label: e.target.value }))}
+            disabled={generating}
+            style={{
+              padding: '4px 8px', borderRadius: 6,
+              border: '1px solid rgba(255,255,255,0.12)', background: '#0c1037',
+              color: '#e2e8f0', fontSize: 12, fontFamily: FONT_B,
+              minWidth: 120,
+              opacity: generating ? 0.5 : 1,
+            }}
+          >
+            <option value="">Select…</option>
+            {COHORT_LEVEL_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </label>
         <span style={{
           padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
           background: statusBg, border: `1px solid ${statusBdr}`, color: statusColor,

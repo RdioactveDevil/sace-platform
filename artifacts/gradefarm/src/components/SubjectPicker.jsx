@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
 import { countQuestionsForSubject } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
@@ -8,10 +8,12 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = `'Plus Jakarta Sans', sans-serif`
 
-// Built-in subject names as they appear in the curricula table (name + ' ' + stage, trimmed).
-const BUILT_IN_CURRICULUM_NAMES = new Set(
-  ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim())
-)
+// Built-in subject names as they appear in the curricula table (name + ' ' + stage, trimmed),
+// plus canonical `questions.subject` keys for built-in banks (e.g. "Year 7 Mathematics").
+const BUILT_IN_CURRICULUM_NAMES = new Set([
+  ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
+  ...Object.values(QUESTIONS_SUBJECT_BY_ID),
+])
 
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
@@ -28,7 +30,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           .map(c => ({
             id: `curriculum_${c.id}`,
             name: c.name,
-            stage: '',
+            stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
             icon: '📚',
             color: '#6366f1',
             topics: c.topicNames,
