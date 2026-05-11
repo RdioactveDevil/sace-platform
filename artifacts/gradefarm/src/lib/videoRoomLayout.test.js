@@ -55,19 +55,19 @@ for (const file of files) {
     assert.match(source, /\.gf-call-surface--whiteboard/)
   })
 
-  test(`${file} keeps the Tldraw canvas mounted through room updates`, () => {
+  test(`${file} embeds Excalidraw for the whiteboard`, () => {
     const source = readComponent(file)
 
-    assert.match(source, /const WHITEBOARD_OPTIONS = Object\.freeze/)
-    assert.match(source, /maxFontsToLoadBeforeRender:\s*0/)
+    assert.match(source, /from '@excalidraw\/excalidraw'/)
+    assert.match(source, /@excalidraw\/excalidraw\/index\.css/)
     assert.match(source, /function WhiteboardSurface\(\)/)
-    assert.match(source, /<Tldraw licenseKey=\{TLDRAW_LICENSE_KEY\} options=\{WHITEBOARD_OPTIONS\}/)
-    assert.match(source, /\.gf-whiteboard-surface\s+\.tl-container\s*\{/)
+    assert.match(source, /<Excalidraw /)
+    assert.match(source, /\.gf-whiteboard-surface\s+\.excalidraw\s*\{/)
     assert.match(source, /position:\s*absolute\s*!important;/)
     assert.match(source, /inset:\s*0\s*!important;/)
   })
 
-  test(`${file} uses latched LiveKit join overlay so mid-session flashes do not cover Tldraw`, () => {
+  test(`${file} uses latched LiveKit join overlay so mid-session flashes do not cover the whiteboard`, () => {
     const source = readComponent(file)
     assert.match(source, /useLiveKitJoinOverlay\(/)
     assert.match(source, /showJoinOverlay/)
