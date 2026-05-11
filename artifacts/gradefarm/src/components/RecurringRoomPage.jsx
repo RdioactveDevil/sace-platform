@@ -106,18 +106,7 @@ function RoomContent({ room }) {
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', position: 'relative' }}>
         {showWhiteboard ? (
           /* ── Whiteboard overlay ── */
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
-            <button
-              onClick={() => setShowWhiteboard(false)}
-              style={{
-                position: 'absolute', top: 12, left: 12, zIndex: 500,
-                background: '#0d0d1a', color: '#ccc', border: '1px solid #2a2a3e',
-                borderRadius: 8, padding: '7px 14px', fontFamily: FONT_B,
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              ← Back to video
-            </button>
+          <div className="gf-whiteboard-surface">
             <Tldraw />
           </div>
         ) : (
@@ -234,6 +223,8 @@ export default function RecurringRoomPage({ profile }) {
         .lk-grid-layout { background: #0a0a14 !important; min-height: 0 !important; }
         .lk-focus-layout { background: #0a0a14 !important; min-height: 0 !important; }
         .lk-participant-tile { border-radius: 14px !important; overflow: hidden; border: 1px solid #272742 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.28) !important; }
+        .gf-whiteboard-surface { flex: 1; width: 100%; height: 100% !important; min-height: 0 !important; overflow: hidden; position: relative; }
+        .gf-whiteboard-surface > .tl-container { width: 100% !important; height: 100% !important; }
         .lk-control-bar { background: rgba(13, 13, 26, 0.9) !important; border-top: 1px solid #2a2a3e !important; padding: 12px 16px !important; backdrop-filter: blur(6px); flex-shrink: 0 !important; }
         .lk-control-bar .lk-button { background: #23233a !important; color: #f4f4fb !important; border: 1px solid #3a3a58 !important; border-radius: 10px !important; }
         .lk-control-bar .lk-button:hover { background: #2d2d49 !important; border-color: #56567a !important; transform: translateY(-1px); }

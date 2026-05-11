@@ -32,4 +32,13 @@ for (const file of files) {
     assert.match(source, /\.lk-control-bar\s+\.lk-button:hover\s*\{/)
     assert.match(source, /\.lk-control-bar\s+\.lk-button\[aria-pressed="true"\]/)
   })
+
+  test(`${file} keeps whiteboard controls unobstructed`, () => {
+    const source = readComponent(file)
+
+    assert.doesNotMatch(source, /Back to video/)
+    assert.match(source, /className="gf-whiteboard-surface"/)
+    assert.match(source, /\.gf-whiteboard-surface\s*\{/)
+    assert.match(source, /height:\s*100%\s*!important;/)
+  })
 }
