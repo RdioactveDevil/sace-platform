@@ -32,6 +32,7 @@ import TutorRoute        from './components/TutorRoute'
 import TutorScreen       from './components/TutorScreen'
 import WritingScreen     from './components/WritingScreen'
 import DiagnosticScreen  from './components/DiagnosticScreen'
+import PricingPage       from './components/PricingPage'
 import SessionRoom       from './components/SessionRoom'
 import RecurringRoomPage from './components/RecurringRoomPage'
 
@@ -842,6 +843,7 @@ function AppInner() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
+      <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
