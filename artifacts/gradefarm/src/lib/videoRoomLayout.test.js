@@ -55,6 +55,17 @@ for (const file of files) {
     assert.match(source, /\.gf-call-surface--whiteboard/)
   })
 
+  test(`${file} shows participant video tiles beside the whiteboard`, () => {
+    const source = readComponent(file)
+
+    assert.match(source, /CarouselLayout/)
+    assert.match(source, /<CarouselLayout tracks=\{tracks\}/)
+    assert.match(source, /className="gf-whiteboard-split"/)
+    assert.match(source, /className="gf-video-rail"/)
+    assert.match(source, /\.gf-whiteboard-split\s*\{/)
+    assert.match(source, /\.gf-video-rail\s*\{/)
+  })
+
   test(`${file} embeds Excalidraw for the whiteboard`, () => {
     const source = readComponent(file)
 

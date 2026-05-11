@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
   GridLayout,
+  CarouselLayout,
   ParticipantTile,
   RoomAudioRenderer,
   Chat,
@@ -109,8 +110,17 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
 
       <div className={showWhiteboard ? 'gf-call-surface gf-call-surface--whiteboard' : 'gf-call-surface'}>
         {showWhiteboard ? (
-          <div className="gf-whiteboard-frame">
-            <WhiteboardSurface />
+          <div className="gf-whiteboard-split">
+            <div className="gf-whiteboard-main">
+              <div className="gf-whiteboard-frame">
+                <WhiteboardSurface />
+              </div>
+            </div>
+            <div className="gf-video-rail" aria-label="Participants">
+              <CarouselLayout tracks={tracks} className="gf-video-carousel">
+                <ParticipantTile />
+              </CarouselLayout>
+            </div>
           </div>
         ) : (
           <div className="gf-video-surface">
@@ -301,7 +311,12 @@ export default function SessionRoom({ profile }) {
         .gf-chat-header { min-height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #f5f5fb; font-size: 13px; font-weight: 800; }
         .gf-chat-header button { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: #a8a8bd; cursor: pointer; font-size: 16px; }
         .gf-chat-header button:hover { background: #1b1b2f; color: #fff; }
-        .gf-whiteboard-frame { position: absolute; inset: 12px 12px 86px; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
+        .gf-whiteboard-split { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: row; gap: 10px; align-items: stretch; }
+        .gf-whiteboard-main { flex: 1; min-width: 0; min-height: 0; position: relative; border-radius: 14px; }
+        .gf-whiteboard-frame { position: absolute; inset: 0; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
+        .gf-video-rail { flex-shrink: 0; width: 176px; min-height: 0; display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; background: #10101b; border: 1px solid rgba(255,255,255,0.08); padding: 6px; box-sizing: border-box; }
+        .gf-video-rail .gf-video-carousel { flex: 1; min-height: 0; width: 100%; --lk-grid-gap: 8px; }
+        .gf-video-rail .lk-participant-tile { min-height: 0 !important; }
         .gf-whiteboard-surface { position: absolute; inset: 0; width: 100%; height: 100% !important; min-height: 0 !important; overflow: visible; background: #f8fafc; border-radius: 14px; }
         .gf-whiteboard-surface .excalidraw { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
@@ -314,7 +329,8 @@ export default function SessionRoom({ profile }) {
           .gf-room-header { padding: 0 12px; }
           .gf-call-stage { flex-direction: column; }
           .gf-call-surface { padding: 8px 8px 84px; }
-          .gf-whiteboard-frame { inset: 8px 8px 84px; }
+          .gf-whiteboard-split { flex-direction: column; }
+          .gf-video-rail { width: 100%; height: 132px; flex-direction: row; }
           .gf-chat-panel { width: 100%; min-width: 0; height: 38%; border-left: 0; border-top: 1px solid rgba(255,255,255,0.08); }
           .gf-dock-button { padding: 0 11px; }
         }
