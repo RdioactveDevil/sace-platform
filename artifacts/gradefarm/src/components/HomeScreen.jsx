@@ -74,6 +74,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   // Pass 2: count every question, using subtopic fallback for old/AI-topic records
   const normTopicGroups = {}
+  /** @type {Record<string, Record<string, { total: number, attempted: number, correct: number, wrong: number }>>} */
+  const normSubtopicGroups = {}
   questions.forEach(q => {
     let n = topicNorm(q.topic)
     if (!n || !canonicalTopicKeys.has(n)) {
@@ -92,7 +94,20 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       normTopicGroups[n].correct += (s.attempts - s.wrong)
       normTopicGroups[n].wrong += s.wrong
     }
+    if (q.subtopic) {
+      if (!normSubtopicGroups[n]) normSubtopicGroups[n] = {}
+      const bucket = normSubtopicGroups[n][q.subtopic] || { total: 0, attempted: 0, correct: 0, wrong: 0 }
+      bucket.total++
+      if (s && s.attempts > 0) {
+        bucket.attempted++
+        bucket.correct += (s.attempts - s.wrong)
+        bucket.wrong += s.wrong
+      }
+      normSubtopicGroups[n][q.subtopic] = bucket
+    }
   })
+  const isManagedCurriculum = Boolean(subject?.id?.startsWith('curriculum_'))
+  const curriculumTopicCount = MACRO_GROUPS.reduce((n, m) => n + m.topics.length, 0)
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
   const selectedNormTopicCount = MACRO_GROUPS.reduce((acc, macro) => {
     return acc + macro.topics.filter(tn => {
@@ -457,10 +472,24 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     else setSelectedSubtopics(prev => [...new Set([...prev, ...subs])])
   }
 
+  const toggleSingleSubtopic = (sub) => {
+    if (selectedSubtopics.includes(sub)) setSelectedSubtopics(prev => prev.filter(s => s !== sub))
+    else setSelectedSubtopics(prev => [...prev, sub])
+  }
+
   const normTopicStatusColor = (topicName) => {
     const tg = normTopicGroups[topicName]
     if (!tg || tg.attempted === 0) return GOLD
     const rate = tg.wrong / tg.attempted
+    if (rate >= 0.5) return t.danger
+    if (rate >= 0.25) return GOLD
+    return t.success
+  }
+
+  const normSubtopicStatusColor = (topicName, sub) => {
+    const sg = normSubtopicGroups[topicName]?.[sub]
+    if (!sg || sg.attempted === 0) return GOLD
+    const rate = sg.wrong / sg.attempted
     if (rate >= 0.5) return t.danger
     if (rate >= 0.25) return GOLD
     return t.success
@@ -610,7 +639,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
             <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>{MACRO_GROUPS.length} topics · {questions.length} questions</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>
+                {isManagedCurriculum
+                  ? `${curriculumTopicCount} curriculum topic${curriculumTopicCount !== 1 ? 's' : ''} · ${questions.length} questions`
+                  : `${MACRO_GROUPS.length} topic${MACRO_GROUPS.length !== 1 ? 's' : ''} · ${questions.length} questions`}
+              </div>
             </div>
 
             <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)}
@@ -657,6 +690,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                       const topicPartial = subs.some(s => selectedSubtopics.includes(s)) && !topicSel
                       const accent = normTopicStatusColor(topicName)
                       const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
+                      const topicTitlePrefix = isManagedCurriculum ? `T${ti + 1}` : `${mi + 1}.${ti + 1}`
                       return (
                         <div key={topicName}>
                           <div
@@ -672,11 +706,37 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                             </div>
                             <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} title={topicName}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }} aria-label={topicName}>{mi + 1}.{ti + 1} {getY7ShortLabel(topicName)}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }} aria-label={topicName}>{topicTitlePrefix} {getY7ShortLabel(topicName)}</span>
                               <span style={{ fontSize: 11, color: t.textMuted }}> ({tg.attempted}/{tg.total})</span>
                             </div>
                             <span style={{ fontSize: 11, color: t.textFaint, flexShrink: 0 }}>{topicPct}%</span>
                           </div>
+                          {isManagedCurriculum && subs.length > 0 && subs.map((sub, si) => {
+                            const sg = normSubtopicGroups[topicName]?.[sub] || { total: 0, attempted: 0, correct: 0, wrong: 0 }
+                            const subSel = selectedSubtopics.includes(sub)
+                            const subAccent = normSubtopicStatusColor(topicName, sub)
+                            const subPct = sg.total > 0 ? Math.round((sg.attempted / sg.total) * 100) : 0
+                            return (
+                              <div
+                                key={`${topicName}::${sub}`}
+                                onClick={() => toggleSingleSubtopic(sub)}
+                                style={{ display: 'flex', alignItems: 'center', padding: '7px 16px 7px 52px', borderBottom: `1px solid ${t.border}`, gap: 8, cursor: 'pointer', background: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSingleSubtopic(sub) } }}
+                              >
+                                <div style={{ width: 14, height: 14, borderRadius: 4, border: `2px solid ${subSel ? GOLD : t.border}`, background: subSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                                  {subSel && <span style={{ fontSize: 8, color: '#0c1037', fontWeight: 800 }}>✓</span>}
+                                </div>
+                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: subAccent, flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} title={sub}>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: t.textMuted }} aria-label={sub}>{ti + 1}.{si + 1} {getY7ShortLabel(sub)}</span>
+                                  <span style={{ fontSize: 10, color: t.textFaint }}> ({sg.attempted}/{sg.total})</span>
+                                </div>
+                                <span style={{ fontSize: 10, color: t.textFaint, flexShrink: 0 }}>{subPct}%</span>
+                              </div>
+                            )
+                          })}
                         </div>
                       )
                     })}
