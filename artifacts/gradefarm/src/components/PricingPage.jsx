@@ -437,7 +437,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                 { q: 'Can I cancel anytime?', a: "Absolutely. Cancel your subscription from your account settings at any time. You keep access until the end of your billing period." },
                 { q: 'Do I pay per subject or for all subjects at once?', a: "Student plans are per-subject, so you only pay for what you use. Want Chemistry + Maths Methods? That's $14/month — two separate $7 subscriptions." },
                 { q: 'How does annual billing work?', a: "Annual billing charges you for 12 months upfront at a 20% discount. For example, Chemistry at $7/mo becomes $67.20/year instead of $84/year." },
-                { q: 'What happens to my tutors' students if I downgrade?', a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
+                { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },
               ].map(({ q, a }, i) => (
                 <FaqItem key={i} q={q} a={a} />
