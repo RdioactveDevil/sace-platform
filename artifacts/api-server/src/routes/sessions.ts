@@ -91,7 +91,85 @@ async function requireAuth(req: Request, res: Response): Promise<CallerContext |
   };
 }
 
-// POST /sessions — tutor creates a session
+/** Check if a user has access to a session (tutor, direct student, or participant). */
+async function userCanAccessSession(
+  admin: SupabaseClient & { auth: SupabaseAdminAuth },
+  sessionRow: { tutor_id: string; student_id: string | null },
+  userId: string
+): Promise<boolean> {
+  if (sessionRow.tutor_id === userId) return true;
+  if (sessionRow.student_id === userId) return true;
+  // Check participants table (covers group sessions)
+  const { data } = await admin
+    .from("session_participants")
+    .select("student_id")
+    .eq("session_id", (sessionRow as Record<string, unknown>)["id"] as string)
+    .eq("student_id", userId)
+    .maybeSingle();
+  return !!data;
+}
+
+/** Send a session invite email to a single student. */
+async function sendSessionInvite(
+  resend: Resend,
+  opts: {
+    studentId: string;
+    studentName: string;
+    studentEmail: string;
+    tutorName: string;
+    sessionId: string;
+    title: string | null;
+    scheduledAt: string;
+    durationMinutes: number;
+    isGroup: boolean;
+    participantCount?: number;
+  }
+) {
+  const sessionLink = `${process.env.APP_URL ?? "https://gradefarm.com.au"}/session/${opts.sessionId}`;
+  const sessionDate = new Date(opts.scheduledAt).toLocaleString("en-AU", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: "Australia/Adelaide",
+  });
+
+  const safeTitle = escapeHtml(opts.title ?? (opts.isGroup ? "Group Tutoring Session" : "Tutoring Session"));
+  const safeTutor = escapeHtml(opts.tutorName);
+  const safeStudent = escapeHtml(opts.studentName);
+  const safeDate = escapeHtml(sessionDate);
+  const groupLine = opts.isGroup && opts.participantCount
+    ? `<p style="margin:0 0 6px"><strong>👥 Participants:</strong> ${opts.participantCount} students</p>`
+    : "";
+
+  await resend.emails.send({
+    from: "GradeFarm <sessions@gradefarm.com.au>",
+    to: [opts.studentEmail],
+    subject: `${opts.isGroup ? "Group session" : "Session"} booked: ${safeTitle} on ${safeDate}`,
+    html: `
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:560px;margin:auto;color:#1a1a2e">
+        <div style="background:#0d0d1a;padding:24px 32px;border-radius:12px 12px 0 0">
+          <span style="font-size:22px;font-weight:700;color:#f1be43;letter-spacing:-0.5px">gradefarm.</span>
+        </div>
+        <div style="background:#f9f9fb;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e5e5ea">
+          <h2 style="margin:0 0 8px;font-size:20px">Hi ${safeStudent},</h2>
+          <p style="margin:0 0 20px;color:#555">
+            ${safeTutor} has booked a ${opts.isGroup ? "group " : ""}tutoring session${opts.isGroup ? " that you're invited to" : " with you"}.
+          </p>
+          <div style="background:#fff;border:1px solid #e5e5ea;border-radius:8px;padding:20px;margin-bottom:24px">
+            <p style="margin:0 0 6px"><strong>📅 When:</strong> ${safeDate} (ACST)</p>
+            <p style="margin:0 0 6px"><strong>⏱ Duration:</strong> ${opts.durationMinutes} minutes</p>
+            ${groupLine}
+            ${opts.title ? `<p style="margin:0"><strong>📝 Topic:</strong> ${safeTitle}</p>` : ""}
+          </div>
+          <a href="${sessionLink}" style="display:inline-block;background:#f1be43;color:#1a1a2e;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px">
+            Join Session
+          </a>
+          <p style="margin:20px 0 0;font-size:13px;color:#888">Opens in your browser — no downloads needed.</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+// POST /sessions — tutor creates an individual or group session
 router.post("/sessions", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
@@ -101,41 +179,98 @@ router.post("/sessions", async (req: Request, res: Response) => {
     return;
   }
 
-  const { student_id, scheduled_at, duration_minutes = 60, title, notes, class_id } = req.body as {
-    student_id: string;
+  const {
+    session_type = "individual",
+    student_id,
+    student_ids,
+    class_id,
+    scheduled_at,
+    duration_minutes = 60,
+    title,
+    notes,
+  } = req.body as {
+    session_type?: "individual" | "group";
+    student_id?: string;
+    student_ids?: string[];
+    class_id?: string;
     scheduled_at: string;
     duration_minutes?: number;
     title?: string;
     notes?: string;
-    class_id?: string;
   };
 
-  if (!student_id || !scheduled_at) {
-    res.status(400).json({ error: "student_id and scheduled_at are required" });
+  if (!scheduled_at) {
+    res.status(400).json({ error: "scheduled_at is required" });
     return;
   }
 
-  // Verify student is on tutor's roster
-  const { data: roster } = await ctx.admin
-    .from("tutor_students")
-    .select("student_id")
-    .eq("tutor_id", ctx.userId)
-    .eq("student_id", student_id)
-    .single();
+  const isGroup = session_type === "group";
 
-  if (!roster) {
-    res.status(403).json({ error: "Student is not on your roster" });
-    return;
+  // Resolve participant IDs
+  let participantIds: string[] = [];
+
+  if (isGroup) {
+    // Group: accept explicit student_ids list, class_id, or both
+    if (class_id) {
+      const { data: members } = await ctx.admin
+        .from("tutor_class_members")
+        .select("student_id")
+        .eq("class_id", class_id);
+      if (members) participantIds.push(...members.map((m: { student_id: string }) => m.student_id));
+    }
+    if (student_ids?.length) {
+      participantIds.push(...student_ids);
+    }
+    participantIds = [...new Set(participantIds)];
+
+    if (participantIds.length === 0) {
+      res.status(400).json({ error: "Group session requires at least one student (via student_ids or class_id)" });
+      return;
+    }
+
+    // Verify all students are on roster
+    const { data: roster } = await ctx.admin
+      .from("tutor_students")
+      .select("student_id")
+      .eq("tutor_id", ctx.userId)
+      .in("student_id", participantIds);
+
+    const rosteredIds = new Set((roster ?? []).map((r: { student_id: string }) => r.student_id));
+    const notRostered = participantIds.filter(id => !rosteredIds.has(id));
+    if (notRostered.length > 0) {
+      res.status(403).json({ error: "Some students are not on your roster", not_rostered: notRostered });
+      return;
+    }
+  } else {
+    // Individual: single student_id required
+    if (!student_id) {
+      res.status(400).json({ error: "student_id is required for individual sessions" });
+      return;
+    }
+    const { data: roster } = await ctx.admin
+      .from("tutor_students")
+      .select("student_id")
+      .eq("tutor_id", ctx.userId)
+      .eq("student_id", student_id)
+      .single();
+
+    if (!roster) {
+      res.status(403).json({ error: "Student is not on your roster" });
+      return;
+    }
+    participantIds = [student_id];
   }
 
-  const roomName = `session-${ctx.userId.slice(0, 8)}-${student_id.slice(0, 8)}-${Date.now()}`;
+  const roomName = `session-${ctx.userId.slice(0, 8)}-${Date.now()}`;
 
+  // Create the session row
   const { data: session, error } = await ctx.admin
     .from("tutoring_sessions")
     .insert({
       tutor_id: ctx.userId,
-      student_id,
+      student_id: isGroup ? null : (student_id ?? null),
       class_id: class_id ?? null,
+      session_type,
       scheduled_at,
       duration_minutes,
       livekit_room_name: roomName,
@@ -151,58 +286,45 @@ router.post("/sessions", async (req: Request, res: Response) => {
     return;
   }
 
-  // Email student
+  // Insert all participants
+  await ctx.admin.from("session_participants").insert(
+    participantIds.map(sid => ({ session_id: session.id, student_id: sid }))
+  );
+
+  // Fetch participant profiles + emails and send invites
   const resend = getResend();
   if (resend) {
-    const { data: studentProfile } = await ctx.admin
+    const { data: profiles } = await ctx.admin
       .from("profiles")
-      .select("display_name")
-      .eq("id", student_id)
-      .single<{ display_name: string | null }>();
+      .select("id, display_name")
+      .in("id", participantIds);
 
-    const { data: authUser } = await ctx.admin.auth.admin.getUserById(student_id);
-    const studentEmail = authUser?.user?.email;
-    const studentName = studentProfile?.display_name ?? "Student";
-    const sessionDate = new Date(scheduled_at).toLocaleString("en-AU", {
-      weekday: "long", day: "numeric", month: "long", year: "numeric",
-      hour: "2-digit", minute: "2-digit", timeZone: "Australia/Adelaide",
-    });
-    const sessionLink = `${process.env.APP_URL ?? "https://gradefarm.com.au"}/session/${roomName}`;
-    const safeTitle = escapeHtml(title ?? "Tutoring Session");
-    const safeTutor = escapeHtml(ctx.displayName);
-    const safeStudent = escapeHtml(studentName);
-    const safeDate = escapeHtml(sessionDate);
+    const nameMap = Object.fromEntries(
+      (profiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name ?? "Student"])
+    );
 
-    if (studentEmail) {
-      await resend.emails.send({
-        from: "GradeFarm <sessions@gradefarm.com.au>",
-        to: [studentEmail],
-        subject: `Session booked: ${safeTitle} on ${safeDate}`,
-        html: `
-          <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:560px;margin:auto;color:#1a1a2e">
-            <div style="background:#0d0d1a;padding:24px 32px;border-radius:12px 12px 0 0">
-              <span style="font-size:22px;font-weight:700;color:#f1be43;letter-spacing:-0.5px">gradefarm.</span>
-            </div>
-            <div style="background:#f9f9fb;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e5e5ea">
-              <h2 style="margin:0 0 8px;font-size:20px">Hi ${safeStudent},</h2>
-              <p style="margin:0 0 20px;color:#555">${safeTutor} has scheduled a tutoring session with you.</p>
-              <div style="background:#fff;border:1px solid #e5e5ea;border-radius:8px;padding:20px;margin-bottom:24px">
-                <p style="margin:0 0 6px"><strong>📅 When:</strong> ${safeDate} (ACST)</p>
-                <p style="margin:0 0 6px"><strong>⏱ Duration:</strong> ${duration_minutes} minutes</p>
-                ${title ? `<p style="margin:0"><strong>📝 Topic:</strong> ${safeTitle}</p>` : ""}
-              </div>
-              <a href="${sessionLink}" style="display:inline-block;background:#f1be43;color:#1a1a2e;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px">
-                Join Session
-              </a>
-              <p style="margin:20px 0 0;font-size:13px;color:#888">This link will open the video call and whiteboard. You can join from any browser — no downloads required.</p>
-            </div>
-          </div>
-        `,
-      });
-    }
+    await Promise.allSettled(
+      participantIds.map(async (sid) => {
+        const { data: authUser } = await ctx.admin.auth.admin.getUserById(sid);
+        const email = authUser?.user?.email;
+        if (!email) return;
+        await sendSessionInvite(resend, {
+          studentId: sid,
+          studentName: nameMap[sid] ?? "Student",
+          studentEmail: email,
+          tutorName: ctx.displayName,
+          sessionId: session.id,
+          title: title ?? null,
+          scheduledAt: scheduled_at,
+          durationMinutes: duration_minutes,
+          isGroup,
+          participantCount: participantIds.length,
+        });
+      })
+    );
   }
 
-  res.status(201).json({ session });
+  res.status(201).json({ session: { ...session, participant_count: participantIds.length } });
 });
 
 // GET /sessions — list sessions for the authenticated user
@@ -210,19 +332,32 @@ router.get("/sessions", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
 
-  const { status, limit = "20", offset = "0" } = req.query as Record<string, string>;
+  const { status, limit = "50", offset = "0" } = req.query as Record<string, string>;
+
+  // For students, we need to find sessions they're participating in (handles group sessions)
+  let sessionIds: string[] | null = null;
+  if (!ctx.isTutor) {
+    const { data: participations } = await ctx.admin
+      .from("session_participants")
+      .select("session_id")
+      .eq("student_id", ctx.userId);
+    sessionIds = (participations ?? []).map((p: { session_id: string }) => p.session_id);
+    if (sessionIds.length === 0) {
+      res.json({ sessions: [] });
+      return;
+    }
+  }
 
   let query = ctx.admin
     .from("tutoring_sessions")
     .select("*")
     .order("scheduled_at", { ascending: true })
-    .limit(parseInt(limit))
-    .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+    .limit(parseInt(limit));
 
   if (ctx.isTutor) {
     query = query.eq("tutor_id", ctx.userId);
   } else {
-    query = query.eq("student_id", ctx.userId);
+    query = query.in("id", sessionIds!);
   }
 
   if (status) query = query.eq("status", status);
@@ -233,35 +368,61 @@ router.get("/sessions", async (req: Request, res: Response) => {
     return;
   }
 
-  // Fetch display names for the other party
-  const otherIds = ctx.isTutor
-    ? (sessions ?? []).map((s: { student_id: string }) => s.student_id)
-    : (sessions ?? []).map((s: { tutor_id: string }) => s.tutor_id);
+  const sessionList = sessions ?? [];
 
-  const uniqueIds = [...new Set(otherIds)];
-  let nameMap: Record<string, string> = {};
+  // Fetch participant counts and names for all sessions
+  const sessionIdList = sessionList.map((s: { id: string }) => s.id);
+  let participantMap: Record<string, Array<{ student_id: string; display_name: string }>> = {};
 
-  if (uniqueIds.length > 0) {
-    const { data: profiles } = await ctx.admin
-      .from("profiles")
-      .select("id, display_name")
-      .in("id", uniqueIds);
-    nameMap = Object.fromEntries(
-      (profiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name ?? "Unknown"])
-    );
+  if (sessionIdList.length > 0) {
+    const { data: participants } = await ctx.admin
+      .from("session_participants")
+      .select("session_id, student_id, profiles(display_name)")
+      .in("session_id", sessionIdList);
+
+    for (const p of (participants ?? []) as Array<{ session_id: string; student_id: string; profiles: { display_name: string | null } | null }>) {
+      if (!participantMap[p.session_id]) participantMap[p.session_id] = [];
+      participantMap[p.session_id].push({
+        student_id: p.student_id,
+        display_name: p.profiles?.display_name ?? "Student",
+      });
+    }
   }
 
-  const enriched = (sessions ?? []).map((s: Record<string, unknown>) => ({
-    ...s,
-    other_party_name: ctx.isTutor
-      ? nameMap[s.student_id as string]
-      : nameMap[s.tutor_id as string],
-  }));
+  // Fetch tutor names for student view
+  let tutorMap: Record<string, string> = {};
+  if (!ctx.isTutor) {
+    const tutorIds = [...new Set(sessionList.map((s: { tutor_id: string }) => s.tutor_id))];
+    if (tutorIds.length > 0) {
+      const { data: tutorProfiles } = await ctx.admin
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", tutorIds);
+      tutorMap = Object.fromEntries(
+        (tutorProfiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name ?? "Tutor"])
+      );
+    }
+  }
+
+  const enriched = sessionList.map((s: Record<string, unknown>) => {
+    const parts = participantMap[s.id as string] ?? [];
+    return {
+      ...s,
+      participants: parts,
+      participant_count: parts.length,
+      // Convenience field: for individual sessions, the one student's name; for group, comma list
+      other_party_name: ctx.isTutor
+        ? (s.session_type === "group"
+          ? parts.map(p => p.display_name).join(", ") || "Group"
+          : (parts[0]?.display_name ?? "Student"))
+        : tutorMap[s.tutor_id as string] ?? "Tutor",
+    };
+  });
 
   res.json({ sessions: enriched });
 });
 
-// GET /sessions/:id — get a single session
+// GET /sessions/:id — get a single session with participants
 router.get("/sessions/:id", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
@@ -278,13 +439,27 @@ router.get("/sessions/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  // Only allow access to own sessions
-  if (session.tutor_id !== ctx.userId && session.student_id !== ctx.userId) {
+  const canAccess = await userCanAccessSession(ctx.admin, { ...session, id }, ctx.userId);
+  if (!canAccess) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
 
-  res.json({ session });
+  const { data: participants } = await ctx.admin
+    .from("session_participants")
+    .select("session_id, student_id, profiles(display_name)")
+    .eq("session_id", id);
+
+  res.json({
+    session: {
+      ...session,
+      participants: (participants ?? []).map((p: { student_id: string; profiles: { display_name: string | null } | null }) => ({
+        student_id: p.student_id,
+        display_name: p.profiles?.display_name ?? "Student",
+      })),
+      participant_count: (participants ?? []).length,
+    },
+  });
 });
 
 // POST /sessions/:id/token — generate a LiveKit access token
@@ -304,7 +479,8 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
     return;
   }
 
-  if (session.tutor_id !== ctx.userId && session.student_id !== ctx.userId) {
+  const canAccess = await userCanAccessSession(ctx.admin, { ...session, id }, ctx.userId);
+  if (!canAccess) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -333,12 +509,10 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
     canPublish: true,
     canSubscribe: true,
     canPublishData: true,
-    // Tutors can also manage the room
     roomAdmin: isTutor,
     roomCreate: isTutor,
   });
 
-  // Mark session as active when someone joins
   if (session.status === "scheduled") {
     await ctx.admin
       .from("tutoring_sessions")
@@ -350,7 +524,7 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
   res.json({ token, wsUrl, roomName: session.livekit_room_name });
 });
 
-// PATCH /sessions/:id — update a session (reschedule, cancel, add notes)
+// PATCH /sessions/:id — update a session (reschedule, notes, status)
 router.patch("/sessions/:id", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
@@ -398,7 +572,7 @@ router.patch("/sessions/:id", async (req: Request, res: Response) => {
   res.json({ session: updated });
 });
 
-// DELETE /sessions/:id — cancel (soft-delete via status)
+// DELETE /sessions/:id — cancel session
 router.delete("/sessions/:id", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;

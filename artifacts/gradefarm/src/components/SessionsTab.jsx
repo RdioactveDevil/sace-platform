@@ -7,6 +7,7 @@ import {
   createTutoringSession,
   fetchTutoringSessions,
   cancelTutoringSession,
+  fetchTutorClasses,
 } from '../lib/db'
 
 const GOLD = '#f1be43'
@@ -37,9 +38,12 @@ function StatusBadge({ status }) {
 }
 
 // ── Schedule Session Modal ────────────────────────────────────────────────────
-function ScheduleModal({ profile, theme, roster, emails, onClose, onCreated }) {
+function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCreated }) {
   const t = THEMES[theme]
+  const [sessionType, setSessionType] = useState('individual')
   const [studentId, setStudentId] = useState('')
+  const [selectedStudentIds, setSelectedStudentIds] = useState([])
+  const [classId, setClassId] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('16:00')
   const [duration, setDuration] = useState(60)
@@ -48,15 +52,31 @@ function ScheduleModal({ profile, theme, roster, emails, onClose, onCreated }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const isGroup = sessionType === 'group'
+
+  const toggleStudent = (id) => {
+    setSelectedStudentIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!studentId || !date || !time) { setError('Please fill in all required fields.'); return }
+    if (!date || !time) { setError('Please fill in date and time.'); return }
+    if (!isGroup && !studentId) { setError('Please select a student.'); return }
+    if (isGroup && selectedStudentIds.length === 0 && !classId) {
+      setError('Select at least one student or a class for a group session.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
       const scheduledAt = new Date(`${date}T${time}:00`).toISOString()
       const session = await createTutoringSession({
-        student_id: studentId,
+        session_type: sessionType,
+        student_id: isGroup ? undefined : studentId,
+        student_ids: isGroup ? selectedStudentIds : undefined,
+        class_id: isGroup && classId ? classId : undefined,
         scheduled_at: scheduledAt,
         duration_minutes: duration,
         title: title || undefined,
@@ -78,22 +98,99 @@ function ScheduleModal({ profile, theme, roster, emails, onClose, onCreated }) {
   }
   const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B }
 
+  const typeBtn = (type, label, icon) => ({
+    flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+    fontFamily: FONT_B, fontSize: 14, fontWeight: 600,
+    background: sessionType === type ? GOLD : t.bgNav,
+    color: sessionType === type ? '#1a1a2e' : t.textMuted,
+  })
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-      <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
+      <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto' }}>
         <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700, color: t.text }}>📅 Schedule a Session</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Session type toggle */}
           <div>
-            <label style={labelStyle}>Student *</label>
-            <select value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle} required>
-              <option value="">Select a student…</option>
-              {roster.map(s => (
-                <option key={s.student_id} value={s.student_id}>
-                  {s.display_name || emails[s.student_id] || s.student_id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
+            <label style={labelStyle}>Session Type</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" style={typeBtn('individual')} onClick={() => setSessionType('individual')}>
+                👤 1-on-1
+              </button>
+              <button type="button" style={typeBtn('group')} onClick={() => setSessionType('group')}>
+                👥 Group
+              </button>
+            </div>
           </div>
+
+          {/* Individual: single student picker */}
+          {!isGroup && (
+            <div>
+              <label style={labelStyle}>Student *</label>
+              <select value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle} required={!isGroup}>
+                <option value="">Select a student…</option>
+                {roster.map(s => (
+                  <option key={s.student_id} value={s.student_id}>
+                    {s.display_name || emails[s.student_id] || s.student_id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Group: class picker + multi-select students */}
+          {isGroup && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {classes.length > 0 && (
+                <div>
+                  <label style={labelStyle}>Add entire class (optional)</label>
+                  <select value={classId} onChange={e => setClassId(e.target.value)} style={inputStyle}>
+                    <option value="">None — pick students individually below</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}{c.subject ? ` · ${c.subject}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label style={labelStyle}>
+                  Students{classId ? ' (optional extras on top of class)' : ' *'}
+                </label>
+                <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, maxHeight: 180, overflowY: 'auto', background: t.bgNav }}>
+                  {roster.length === 0 ? (
+                    <p style={{ padding: 12, color: t.textMuted, fontSize: 13, margin: 0 }}>No students on your roster yet.</p>
+                  ) : roster.map(s => {
+                    const name = s.display_name || emails[s.student_id] || s.student_id.slice(0, 8)
+                    const checked = selectedStudentIds.includes(s.student_id)
+                    return (
+                      <label key={s.student_id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                        cursor: 'pointer', borderBottom: `1px solid ${t.border}`,
+                        background: checked ? (t.bg === '#ffffff' ? '#fdf8e8' : '#2a2a1a') : 'transparent',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleStudent(s.student_id)}
+                          style={{ accentColor: GOLD, width: 16, height: 16, flexShrink: 0 }}
+                        />
+                        <span style={{ color: t.text, fontSize: 14 }}>{name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {(selectedStudentIds.length > 0 || classId) && (
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: t.textMuted }}>
+                    {classId && `Class selected`}{classId && selectedStudentIds.length > 0 ? ` + ` : ''}{selectedStudentIds.length > 0 ? `${selectedStudentIds.length} individual student${selectedStudentIds.length !== 1 ? 's' : ''}` : ''}
+                    {' '}— all will receive an email invite
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Date / time */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={labelStyle}>Date *</label>
@@ -104,6 +201,7 @@ function ScheduleModal({ profile, theme, roster, emails, onClose, onCreated }) {
               <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required />
             </div>
           </div>
+
           <div>
             <label style={labelStyle}>Duration</label>
             <select value={duration} onChange={e => setDuration(Number(e.target.value))} style={inputStyle}>
@@ -114,21 +212,25 @@ function ScheduleModal({ profile, theme, roster, emails, onClose, onCreated }) {
               <option value={120}>2 hours</option>
             </select>
           </div>
+
           <div>
             <label style={labelStyle}>Topic / Title</label>
             <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Chemistry Unit 3 — Acids & Bases" style={inputStyle} />
           </div>
+
           <div>
-            <label style={labelStyle}>Notes for student</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+            <label style={labelStyle}>Notes for {isGroup ? 'students' : 'student'}</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
+
           {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
+
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 14, cursor: 'pointer' }}>
               Cancel
             </button>
             <button type="submit" disabled={loading} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: GOLD, color: '#1a1a2e', fontFamily: FONT_B, fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Scheduling…' : 'Schedule & Notify Student'}
+              {loading ? 'Scheduling…' : `Schedule & Notify ${isGroup ? 'Students' : 'Student'}`}
             </button>
           </div>
         </form>
@@ -165,7 +267,11 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
           <StatusBadge status={session.status} />
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <span>👤 {session.other_party_name || 'Student'}</span>
+          <span>
+            {session.session_type === 'group' ? '👥' : '👤'}{' '}
+            {session.other_party_name || 'Student'}
+            {session.session_type === 'group' && session.participant_count > 0 && ` (${session.participant_count})`}
+          </span>
           <span>📅 {fmtDateTime(session.scheduled_at)}</span>
           <span>⏱ {session.duration_minutes} min</span>
         </div>
@@ -206,6 +312,7 @@ export default function SessionsTab({ profile, theme }) {
   const [sessions, setSessions] = useState([])
   const [roster, setRoster] = useState([])
   const [emails, setEmails] = useState({})
+  const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [filter, setFilter] = useState('upcoming')
@@ -213,12 +320,14 @@ export default function SessionsTab({ profile, theme }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [allSessions, rosterData] = await Promise.all([
+      const [allSessions, rosterData, classData] = await Promise.all([
         fetchTutoringSessions({ limit: 50 }),
         fetchRoster(profile.id),
+        fetchTutorClasses(profile.id),
       ])
       setSessions(allSessions || [])
       setRoster(rosterData || [])
+      setClasses(classData || [])
       if (rosterData?.length) {
         const ids = rosterData.map(s => s.student_id)
         const emailMap = await fetchStudentEmails(ids)
@@ -318,6 +427,7 @@ export default function SessionsTab({ profile, theme }) {
           theme={theme}
           roster={roster}
           emails={emails}
+          classes={classes}
           onClose={() => setShowModal(false)}
           onCreated={handleCreated}
         />

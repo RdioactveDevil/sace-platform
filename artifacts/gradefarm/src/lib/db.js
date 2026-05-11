@@ -1085,14 +1085,14 @@ export async function downloadDiagnosticReportPdf(assessmentId, studentName) {
 // ── Tutoring Sessions ─────────────────────────────────────────────────────────
 
 /** Create a new tutoring session (tutor only). */
-export async function createTutoringSession({ student_id, scheduled_at, duration_minutes = 60, title, notes, class_id }) {
+export async function createTutoringSession({ session_type = 'individual', student_id, student_ids, scheduled_at, duration_minutes = 60, title, notes, class_id }) {
   const session = await getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not authenticated.')
   const res = await fetch('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ student_id, scheduled_at, duration_minutes, title, notes, class_id }),
+    body: JSON.stringify({ session_type, student_id, student_ids, scheduled_at, duration_minutes, title, notes, class_id }),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.error || 'Failed to create session.')
