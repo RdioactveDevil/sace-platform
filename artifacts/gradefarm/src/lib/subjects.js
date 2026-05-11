@@ -162,3 +162,16 @@ export const ALL_SUBJECTS = [
     available: true,
   },
 ]
+
+/**
+ * `curricula.name` values that already have a built-in tile in ALL_SUBJECTS / question bank.
+ * Seeded curricula use names like "Year 7 Mathematics" while tiles use "Mathematics Year 7"
+ * — both must be listed so live curricula are not shown twice (Subject Picker + onboarding).
+ */
+export const LIVE_CURRICULA_EXCLUDE_NAMES = new Set([
+  ...Object.values(QUESTIONS_SUBJECT_BY_ID),
+  ...ALL_SUBJECTS.map((s) => `${s.name} ${s.stage}`.trim()),
+  // Legacy labels that may still exist as `curricula.name` from older seeds or merges
+  'Victorian Year 10 Mathematics',
+  'Victorian Year 10A Mathematics',
+])

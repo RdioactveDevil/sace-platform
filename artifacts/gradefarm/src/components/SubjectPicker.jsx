@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, LIVE_CURRICULA_EXCLUDE_NAMES } from '../lib/subjects'
 import { countQuestionsForSubject } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
@@ -8,10 +8,7 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = `'Plus Jakarta Sans', sans-serif`
 
-// Built-in subject names as they appear in the curricula table (name + ' ' + stage, trimmed).
-const BUILT_IN_CURRICULUM_NAMES = new Set(
-  ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim())
-)
+// Hide live curricula that duplicate built-in tiles (Year 7/10 Maths naming mismatch vs DB, etc.)
 
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
@@ -24,7 +21,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
     fetchLiveCurricula()
       .then(curricula => {
         const dynamic = curricula
-          .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
+          .filter(c => !LIVE_CURRICULA_EXCLUDE_NAMES.has(c.name))
           .map(c => ({
             id: `curriculum_${c.id}`,
             name: c.name,
