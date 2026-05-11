@@ -61,7 +61,7 @@ for (const file of files) {
     assert.match(source, /const WHITEBOARD_OPTIONS = Object\.freeze/)
     assert.match(source, /maxFontsToLoadBeforeRender:\s*0/)
     assert.match(source, /function WhiteboardSurface\(\)/)
-    assert.match(source, /<Tldraw options=\{WHITEBOARD_OPTIONS\}/)
+    assert.match(source, /<Tldraw licenseKey=\{TLDRAW_LICENSE_KEY\} options=\{WHITEBOARD_OPTIONS\}/)
     assert.match(source, /\.gf-whiteboard-surface\s+\.tl-container\s*\{/)
     assert.match(source, /position:\s*absolute\s*!important;/)
     assert.match(source, /inset:\s*0\s*!important;/)

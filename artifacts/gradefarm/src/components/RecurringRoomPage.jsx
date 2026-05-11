@@ -16,6 +16,7 @@ import { Tldraw } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { getRoomInfo, getRoomToken } from '../lib/db'
 import { useLiveKitJoinOverlay } from '../hooks/useLiveKitJoinOverlay'
+import { TLDRAW_LICENSE_KEY } from '../lib/tldrawLicense'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -68,7 +69,7 @@ function useCallViewportLock() {
 const WhiteboardSurface = memo(function WhiteboardSurface() {
   return (
     <div className="gf-whiteboard-surface">
-      <Tldraw options={WHITEBOARD_OPTIONS} autoFocus={false} />
+      <Tldraw licenseKey={TLDRAW_LICENSE_KEY} options={WHITEBOARD_OPTIONS} autoFocus={false} />
     </div>
   )
 })
