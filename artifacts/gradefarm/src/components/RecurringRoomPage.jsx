@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
@@ -18,6 +18,50 @@ import { getRoomInfo, getRoomToken } from '../lib/db'
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const WHITEBOARD_OPTIONS = Object.freeze({ maxFontsToLoadBeforeRender: 0 })
+
+function useCallViewportLock() {
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') return undefined
+
+    const root = document.getElementById('root')
+    const previous = {
+      htmlHeight: document.documentElement.style.height,
+      htmlOverflow: document.documentElement.style.overflow,
+      bodyHeight: document.body.style.height,
+      bodyMaxHeight: document.body.style.maxHeight,
+      bodyOverflow: document.body.style.overflow,
+      rootHeight: root?.style.height || '',
+      rootMaxHeight: root?.style.maxHeight || '',
+      rootOverflow: root?.style.overflow || '',
+    }
+
+    document.documentElement.style.height = '100%'
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.height = '100dvh'
+    document.body.style.maxHeight = '100dvh'
+    document.body.style.overflow = 'hidden'
+
+    if (root) {
+      root.style.height = '100dvh'
+      root.style.maxHeight = '100dvh'
+      root.style.overflow = 'hidden'
+    }
+
+    return () => {
+      document.documentElement.style.height = previous.htmlHeight
+      document.documentElement.style.overflow = previous.htmlOverflow
+      document.body.style.height = previous.bodyHeight
+      document.body.style.maxHeight = previous.bodyMaxHeight
+      document.body.style.overflow = previous.bodyOverflow
+
+      if (root) {
+        root.style.height = previous.rootHeight
+        root.style.maxHeight = previous.rootMaxHeight
+        root.style.overflow = previous.rootOverflow
+      }
+    }
+  }, [])
+}
 
 function WhiteboardSurface() {
   return (
@@ -149,6 +193,8 @@ function StatusScreen({ message, isError, onBack }) {
 }
 
 export default function RecurringRoomPage({ profile }) {
+  useCallViewportLock()
+
   const { roomName } = useParams()
   const navigate = useNavigate()
   const [room, setRoom] = useState(null)

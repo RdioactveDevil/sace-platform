@@ -16,6 +16,10 @@ for (const file of files) {
   test(`${file} constrains video calls to the viewport`, () => {
     const source = readComponent(file)
 
+    assert.match(source, /useCallViewportLock\(\)/)
+    assert.match(source, /document\.documentElement\.style\.overflow = 'hidden'/)
+    assert.match(source, /document\.body\.style\.overflow = 'hidden'/)
+    assert.match(source, /root\.style\.height = '100dvh'/)
     assert.match(source, /height:\s*'100dvh'/)
     assert.match(source, /maxHeight:\s*'100dvh'/)
     assert.match(source, /overflow:\s*'hidden'/)
