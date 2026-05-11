@@ -67,7 +67,16 @@ function useCallViewportLock() {
 const WhiteboardSurface = memo(function WhiteboardSurface() {
   return (
     <div className="gf-whiteboard-surface">
-      <Tldraw options={WHITEBOARD_OPTIONS} autoFocus={false} />
+      <Tldraw
+        options={WHITEBOARD_OPTIONS}
+        onMount={(editor) => {
+          // Tldraw hides its toolbar when isFocused is false.
+          // Force it on immediately and re-apply after font re-renders (~5s).
+          editor.updateInstanceState({ isFocused: true })
+          setTimeout(() => editor.updateInstanceState({ isFocused: true }), 3000)
+          setTimeout(() => editor.updateInstanceState({ isFocused: true }), 7000)
+        }}
+      />
     </div>
   )
 })
@@ -276,7 +285,7 @@ export default function RecurringRoomPage({ profile }) {
         .gf-room-schedule { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9393ae; font-size: 12px; }
         .gf-live-pill { flex-shrink: 0; border-radius: 6px; background: #173225; color: #6ee7b7; font-size: 10px; font-weight: 800; padding: 3px 7px; }
         .gf-call-stage { flex: 1; min-height: 0; display: flex; position: relative; background: #05050d; overflow: hidden; }
-        .gf-connecting-overlay { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #05050d; }
+        .gf-connecting-overlay { position: absolute; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #05050d; }
         .gf-connecting-spinner { width: 40px; height: 40px; border: 3px solid ${GOLD}; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         .gf-connecting-text { color: #aaa; font-family: ${FONT_B}; font-size: 15px; margin: 0; }
         .gf-call-surface { flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; overflow: hidden; padding: 12px 12px 86px; }
