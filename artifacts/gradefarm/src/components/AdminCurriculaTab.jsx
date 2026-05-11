@@ -94,6 +94,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState('')
   const [showModal, setShowModal]       = useState(false)
+  const [curriculumName, setCurriculumName] = useState('')
   const [description, setDescription]  = useState('')
   const [uploadedDoc, setUploadedDoc]  = useState(null) // { base64, mediaType, name }
   const [creating, setCreating]         = useState(false)
@@ -112,7 +113,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   useEffect(() => { load() }, [load])
 
-  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null) }
+  const openModal = () => { setShowModal(true); setCreateError(''); setCurriculumName(''); setDescription(''); setUploadedDoc(null) }
   const closeModal = () => { if (!creating) setShowModal(false) }
 
   const handleFileUpload = (e) => {
@@ -128,6 +129,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   }
 
   const handleGeneratePlan = async () => {
+    if (!curriculumName.trim()) return
     if (!description.trim() && !uploadedDoc) return
     setCreating(true)
     setCreateError('')
@@ -135,7 +137,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
       const payload = { subjectDescription: description.trim() }
       if (uploadedDoc) { payload.base64Doc = uploadedDoc.base64; payload.mediaType = uploadedDoc.mediaType }
       const { topics } = await adminApiPost('/api/admin/curriculum-plan', payload)
-      const name = (description.trim() || uploadedDoc.name.replace(/\.[^.]+$/, '')).split('\n')[0].slice(0, 120)
+      const name = curriculumName.trim().slice(0, 120)
       const id = await createCurriculum({ name, subject_description: description.trim(), topics })
       setShowModal(false)
       onSelectCurriculum(id)
@@ -251,6 +253,27 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
             <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
               Describe the subject, upload a curriculum document, or both. Claude will generate a topic and subtopic plan.
             </p>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Curriculum Name <span style={{ color: '#f87171' }}>*</span>
+              </label>
+              <input
+                value={curriculumName}
+                onChange={e => setCurriculumName(e.target.value)}
+                placeholder="e.g. Stage 2 Mathematical Methods"
+                disabled={creating}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 9,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: '#0c1037', color: '#f1f5f9',
+                  fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                  boxSizing: 'border-box', opacity: creating ? 0.6 : 1,
+                }}
+              />
+            </div>
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Subject Description
+            </label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
@@ -290,11 +313,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               <button onClick={closeModal} disabled={creating} style={cancelBtn}>Cancel</button>
               <button
                 onClick={handleGeneratePlan}
-                disabled={(!description.trim() && !uploadedDoc) || creating}
+                disabled={!curriculumName.trim() || (!description.trim() && !uploadedDoc) || creating}
                 style={{
                   ...goldBtn,
-                  opacity: ((!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
-                  cursor: ((!description.trim() && !uploadedDoc) || creating) ? 'not-allowed' : 'pointer',
+                  opacity: (!curriculumName.trim() || (!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
+                  cursor: (!curriculumName.trim() || (!description.trim() && !uploadedDoc) || creating) ? 'not-allowed' : 'pointer',
                 }}
               >
                 {creating ? 'Generating plan…' : 'Generate Plan'}

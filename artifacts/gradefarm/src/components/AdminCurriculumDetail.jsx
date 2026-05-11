@@ -67,6 +67,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [generating, setGenerating]   = useState(false)
   const [progress, setProgress]       = useState(null)
   const [genError, setGenError]       = useState('')
+  const [genNotice, setGenNotice]     = useState('')
   const [reviseInstruction, setReviseInstruction] = useState('')
   const [reviseDoc, setReviseDoc]     = useState(null) // { base64, mediaType, name }
   const [revising, setRevising]       = useState(false)
@@ -108,6 +109,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           await updateCurriculumStatus(curriculumId, 'live')
           setCurriculum(prev => ({ ...prev, status: 'live' }))
           setGenerating(false)
+          setGenNotice('Questions are in the Review Queue — go to Admin → Review to approve them before they appear in the live question bank.')
           onGoLive?.()
         }
       } catch {}
@@ -333,6 +335,15 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
       {error && <div style={errorBox}>{error}</div>}
       {genError && <div style={errorBox}>{genError}</div>}
+      {genNotice && (
+        <div style={{
+          padding: '10px 14px', background: 'rgba(56,189,248,0.08)',
+          border: '1px solid rgba(56,189,248,0.3)', borderRadius: 8,
+          fontSize: 13, color: '#38bdf8', marginBottom: 14,
+        }}>
+          {genNotice}
+        </div>
+      )}
 
       {/* AI revise panel */}
       {!generating && (

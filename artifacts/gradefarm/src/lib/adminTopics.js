@@ -231,7 +231,7 @@ export function getTopicsBySubject(subjectId) {
     case 'Victorian Year 10 Mathematics':
     case 'Victorian Year 10A Mathematics': return Y10_MATHS_TOPICS
     default:
-      return _managedTopicsCache[subjectId] || S1_TOPICS
+      return _managedTopicsCache[subjectId] || []
   }
 }
 
