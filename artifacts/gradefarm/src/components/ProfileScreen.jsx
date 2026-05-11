@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogLast30Days, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
-import { SACE_STAGE1_TOPICS, SACE_STAGE2_TOPICS, getTopicConfig } from '../lib/saceTopics'
+import { getTopicConfigForSubject } from '../lib/saceTopics'
+import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 import ReadinessCard from './ReadinessCard'
 import StreakCalendar from './StreakCalendar'
 import SubtopicHeatmap from './SubtopicHeatmap'
@@ -14,8 +15,8 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLearn, subject }) {
   const t = THEMES[theme]
-  const { normFn: normalizeCurriculumTopic } = getTopicConfig(subject?.stage)
-  const curriculumTopics = subject?.stage === 'Stage 2' ? SACE_STAGE2_TOPICS : SACE_STAGE1_TOPICS
+  const { normFn: normalizeCurriculumTopic, macroGroups } = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
+  const curriculumTopics = macroGroups.flatMap((g) => g.topics)
   const [answerLog, setAnswerLog] = useState([])
   const [assessments, setAssessments] = useState([])
   const [addFormType, setAddFormType] = useState('Test')

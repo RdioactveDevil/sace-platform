@@ -1,5 +1,6 @@
 import { THEMES } from '../lib/theme'
-import { getTopicConfig } from '../lib/saceTopics'
+import { getTopicConfigForSubject } from '../lib/saceTopics'
+import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif'"
@@ -10,7 +11,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif'"
  */
 export default function SubtopicHeatmap({ questions, struggleMap, onStartSession, theme, subject }) {
   const t = THEMES[theme]
-  const { macroGroups, normFn } = getTopicConfig(subject?.stage)
+  const { macroGroups, normFn } = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
 
   const topicAgg = {}
   const topicTotals = {}

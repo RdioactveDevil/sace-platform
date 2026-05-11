@@ -8,7 +8,7 @@ import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
 import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS } from './lib/subjects'
-import { getTopicConfig } from './lib/saceTopics'
+import { getTopicConfigForSubject } from './lib/saceTopics'
 import { getY7TopicConfig } from './lib/australianCurriculumTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -1080,7 +1080,7 @@ function AppInner() {
             // names to their matching subtopics; keep direct subtopic matches as-is.
             let expandedSubtopics = nextSubtopics
             if (opts?.assignmentId && nextSubtopics.length > 0) {
-              const { normFn } = getY7TopicConfig(activeSubject?.id) ?? getTopicConfig(activeSubject?.stage)
+              const { normFn } = getY7TopicConfig(activeSubject?.id) ?? getTopicConfigForSubject(activeSubject)
               const allSubtopicsLower = new Map()
               activeQuestions.forEach(q => {
                 if (q.subtopic) allSubtopicsLower.set(q.subtopic.toLowerCase(), q.subtopic)
