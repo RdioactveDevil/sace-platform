@@ -45,6 +45,8 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   const [tab, setTab] = useState('students') // 'students' | 'tutors'
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
 
+  useEffect(() => { window.scrollTo(0, 0) }, [])
+
   const handleGetStarted = onGetStarted || (() => navigate('/auth'))
   const handleSignIn     = onSignIn     || (() => navigate('/auth'))
 
@@ -187,14 +189,28 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
       {/* ── NAV ── */}
       <nav style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', background: 'rgba(8,13,40,0.88)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 32px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+          <button onClick={() => navigate('/home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <span style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: 1 }}>
               <span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 2 }}>by Titanium Tutoring</span>
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
+            {[['features', 'Features'], ['how', 'How It Works'], ['subjects', 'Subjects']].map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => navigate(`/home#${id}`)}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'color 0.15s', whiteSpace: 'nowrap' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#f1f5f9' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
+              >{label}</button>
+            ))}
+            <button
+              style={{ background: 'none', border: 'none', color: GOLD, fontSize: 13.5, fontWeight: 700, cursor: 'default', fontFamily: FONT_B, whiteSpace: 'nowrap' }}
+            >Pricing</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
             <button onClick={handleSignIn} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.65)', fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>Sign in</button>
             <button onClick={handleGetStarted} className="pp-shimmer" style={{ padding: '9px 20px', borderRadius: 9, border: 'none', color: NAVYD, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B }}>Get started free</button>
           </div>
