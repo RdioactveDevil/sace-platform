@@ -210,7 +210,7 @@ router.post("/sessions", async (req: Request, res: Response) => {
   let participantIds: string[] = [];
 
   if (isGroup) {
-    // Group: accept explicit student_ids list, class_id, or both
+    // Group: accept explicit student_ids list, class_id, or both — all optional
     if (class_id) {
       const { data: members } = await ctx.admin
         .from("tutor_class_members")
@@ -223,42 +223,37 @@ router.post("/sessions", async (req: Request, res: Response) => {
     }
     participantIds = [...new Set(participantIds)];
 
-    if (participantIds.length === 0) {
-      res.status(400).json({ error: "Group session requires at least one student (via student_ids or class_id)" });
-      return;
-    }
+    // Verify any specified students are on roster
+    if (participantIds.length > 0) {
+      const { data: roster } = await ctx.admin
+        .from("tutor_students")
+        .select("student_id")
+        .eq("tutor_id", ctx.userId)
+        .in("student_id", participantIds);
 
-    // Verify all students are on roster
-    const { data: roster } = await ctx.admin
-      .from("tutor_students")
-      .select("student_id")
-      .eq("tutor_id", ctx.userId)
-      .in("student_id", participantIds);
-
-    const rosteredIds = new Set((roster ?? []).map((r: { student_id: string }) => r.student_id));
-    const notRostered = participantIds.filter(id => !rosteredIds.has(id));
-    if (notRostered.length > 0) {
-      res.status(403).json({ error: "Some students are not on your roster", not_rostered: notRostered });
-      return;
+      const rosteredIds = new Set((roster ?? []).map((r: { student_id: string }) => r.student_id));
+      const notRostered = participantIds.filter(id => !rosteredIds.has(id));
+      if (notRostered.length > 0) {
+        res.status(403).json({ error: "Some students are not on your roster", not_rostered: notRostered });
+        return;
+      }
     }
   } else {
-    // Individual: single student_id required
-    if (!student_id) {
-      res.status(400).json({ error: "student_id is required for individual sessions" });
-      return;
-    }
-    const { data: roster } = await ctx.admin
-      .from("tutor_students")
-      .select("student_id")
-      .eq("tutor_id", ctx.userId)
-      .eq("student_id", student_id)
-      .single();
+    // Individual: student optional — omitting creates an open meeting link
+    if (student_id) {
+      const { data: roster } = await ctx.admin
+        .from("tutor_students")
+        .select("student_id")
+        .eq("tutor_id", ctx.userId)
+        .eq("student_id", student_id)
+        .single();
 
-    if (!roster) {
-      res.status(403).json({ error: "Student is not on your roster" });
-      return;
+      if (!roster) {
+        res.status(403).json({ error: "Student is not on your roster" });
+        return;
+      }
+      participantIds = [student_id];
     }
-    participantIds = [student_id];
   }
 
   const roomName = `session-${ctx.userId.slice(0, 8)}-${Date.now()}`;
@@ -324,7 +319,14 @@ router.post("/sessions", async (req: Request, res: Response) => {
     );
   }
 
-  res.status(201).json({ session: { ...session, participant_count: participantIds.length } });
+  const appUrl = process.env.APP_URL ?? "https://gradefarm.com.au";
+  res.status(201).json({
+    session: {
+      ...session,
+      participant_count: participantIds.length,
+      join_link: `${appUrl}/session/${session.id}`,
+    },
+  });
 });
 
 // GET /sessions — list sessions for the authenticated user
@@ -479,10 +481,19 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
     return;
   }
 
-  const canAccess = await userCanAccessSession(ctx.admin, { ...session, id }, ctx.userId);
-  if (!canAccess) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
+  // Open sessions (no pre-assigned participants) are joinable by any authenticated user
+  const { count: participantCount } = await ctx.admin
+    .from("session_participants")
+    .select("*", { count: "exact", head: true })
+    .eq("session_id", id);
+
+  const isOpen = (participantCount ?? 0) === 0 && session.tutor_id !== ctx.userId;
+  if (!isOpen) {
+    const canAccess = await userCanAccessSession(ctx.admin, { ...session, id }, ctx.userId);
+    if (!canAccess) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
   }
 
   if (session.status === "cancelled") {

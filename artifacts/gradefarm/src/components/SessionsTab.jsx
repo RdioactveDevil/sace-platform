@@ -60,6 +60,8 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [createdLink, setCreatedLink] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   const isGroup = sessionType === 'group'
 
@@ -69,12 +71,14 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     )
   }
 
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(createdLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!isGroup && !studentId) { setError('Please select a student.'); return }
-    if (isGroup && selectedStudentIds.length === 0 && !classId) {
-      setError('Select at least one student or a class for a group session.'); return
-    }
     if (isRecurring && dayOfWeek === undefined) { setError('Please select a day of week.'); return }
     if (!isRecurring && (!date || !time)) { setError('Please fill in date and time.'); return }
     setLoading(true)
@@ -84,7 +88,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
         const startsAt = date || new Date().toISOString().split('T')[0]
         const result = await createSessionSeries({
           session_type: sessionType,
-          student_id: isGroup ? undefined : studentId,
+          student_id: isGroup ? undefined : studentId || undefined,
           student_ids: isGroup ? selectedStudentIds : undefined,
           class_id: isGroup && classId ? classId : undefined,
           recurrence_type: recurrenceType,
@@ -97,11 +101,12 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           ends_at: endsAt || undefined,
         })
         onCreated({ series: result.series, occurrence_count: result.occurrence_count })
+        onClose()
       } else {
         const scheduledAt = new Date(`${date}T${time}:00`).toISOString()
         const session = await createTutoringSession({
           session_type: sessionType,
-          student_id: isGroup ? undefined : studentId,
+          student_id: isGroup ? undefined : studentId || undefined,
           student_ids: isGroup ? selectedStudentIds : undefined,
           class_id: isGroup && classId ? classId : undefined,
           scheduled_at: scheduledAt,
@@ -110,8 +115,9 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           notes: notes || undefined,
         })
         onCreated({ session })
+        const link = session.join_link || `${window.location.origin}/session/${session.id}`
+        setCreatedLink(link)
       }
-      onClose()
     } catch (e) {
       setError(e.message || 'Failed to create session.')
     } finally {
@@ -133,10 +139,41 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     color: sessionType === type ? '#1a1a2e' : t.textMuted,
   })
 
+  if (createdLink) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+        <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: t.text }}>Meeting Created</h2>
+          <p style={{ margin: '0 0 24px', fontSize: 14, color: t.textMuted }}>
+            Share this link with anyone you want in the session.
+          </p>
+          <div style={{ background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ flex: 1, fontSize: 13, color: t.text, wordBreak: 'break-all', textAlign: 'left', fontFamily: 'monospace' }}>
+              {createdLink}
+            </span>
+            <button
+              onClick={handleCopyLink}
+              style={{ flexShrink: 0, background: copied ? '#1e3a2f' : GOLD, color: copied ? '#4ade80' : '#1a1a2e', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: GOLD, color: '#1a1a2e', fontFamily: FONT_B, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
       <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto' }}>
-        <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700, color: t.text }}>📅 Schedule a Session</h2>
+        <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700, color: t.text }}>📅 New Meeting</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Session type toggle */}
@@ -209,12 +246,12 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             </div>
           )}
 
-          {/* Individual: single student picker */}
+          {/* Individual: student picker (optional) */}
           {!isGroup && (
             <div>
-              <label style={labelStyle}>Student *</label>
-              <select value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle} required={!isGroup}>
-                <option value="">Select a student…</option>
+              <label style={labelStyle}>Invite student <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional — or share the link directly)</span></label>
+              <select value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle}>
+                <option value="">None — I'll share the link myself</option>
                 {roster.map(s => (
                   <option key={s.student_id} value={s.student_id}>
                     {s.display_name || emails[s.student_id] || s.student_id.slice(0, 8)}
@@ -240,7 +277,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               )}
               <div>
                 <label style={labelStyle}>
-                  Students{classId ? ' (optional extras on top of class)' : ' *'}
+                  Invite students <span style={{ fontWeight: 400, opacity: 0.6 }}>{classId ? '(optional extras on top of class)' : '(optional)'}</span>
                 </label>
                 <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, maxHeight: 180, overflowY: 'auto', background: t.bgNav }}>
                   {roster.length === 0 ? (
@@ -324,7 +361,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               Cancel
             </button>
             <button type="submit" disabled={loading} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: GOLD, color: '#1a1a2e', fontFamily: FONT_B, fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Creating…' : isRecurring ? `Create Recurring Series` : `Schedule & Notify ${isGroup ? 'Students' : 'Student'}`}
+              {loading ? 'Creating…' : isRecurring ? 'Create Recurring Series' : 'Create Meeting Link'}
             </button>
           </div>
         </form>
@@ -337,6 +374,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 function SessionCard({ session, theme, onJoin, onCancel }) {
   const t = THEMES[theme]
   const [cancelling, setCancelling] = useState(false)
+  const [copied, setCopied] = useState(false)
   const isPast = new Date(session.scheduled_at) < new Date()
   const canJoin = session.status === 'scheduled' || session.status === 'active'
   const canCancel = session.status === 'scheduled'
@@ -345,6 +383,13 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
     if (!window.confirm('Cancel this session?')) return
     setCancelling(true)
     try { await onCancel(session.id) } finally { setCancelling(false) }
+  }
+
+  const handleCopyLink = () => {
+    const link = `${window.location.origin}/session/${session.id}`
+    navigator.clipboard.writeText(link)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -376,6 +421,13 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button
+          onClick={handleCopyLink}
+          style={{ background: copied ? '#1e3a2f' : t.bgNav, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
+          title="Copy meeting link"
+        >
+          {copied ? '✓' : '🔗'}
+        </button>
         {canJoin && (
           <button
             onClick={() => onJoin(session.id)}
