@@ -16,19 +16,15 @@ async function countForAliases(
   admin: SupabaseClient,
   aliases: string[],
 ): Promise<{ live: number; pendingDrafts: number }> {
-  const { count: live, error: qErr } = await admin
-    .from("questions")
-    .select("*", { count: "exact", head: true })
-    .in("subject", aliases);
+  const [
+    { count: live, error: qErr },
+    { count: pendingDrafts, error: dErr },
+  ] = await Promise.all([
+    admin.from("questions").select("*", { count: "exact", head: true }).in("subject", aliases),
+    admin.from("draft_questions").select("*", { count: "exact", head: true }).in("subject", aliases).eq("status", "pending"),
+  ]);
   if (qErr) throw new Error(qErr.message);
-
-  const { count: pendingDrafts, error: dErr } = await admin
-    .from("draft_questions")
-    .select("*", { count: "exact", head: true })
-    .in("subject", aliases)
-    .eq("status", "pending");
   if (dErr) throw new Error(dErr.message);
-
   return { live: live ?? 0, pendingDrafts: pendingDrafts ?? 0 };
 }
 
@@ -59,12 +55,14 @@ router.post("/subject-question-counts", async (req, res) => {
 
   try {
     const admin = getAdmin();
-    const counts: Record<string, number> = {};
-    for (const { key, level } of normalized) {
-      const aliases = expandCurriculumRenameSources(key, level);
-      const { live, pendingDrafts } = await countForAliases(admin, aliases);
-      counts[key] = live + pendingDrafts;
-    }
+    const results = await Promise.all(
+      normalized.map(async ({ key, level }) => {
+        const aliases = expandCurriculumRenameSources(key, level);
+        const { live, pendingDrafts } = await countForAliases(admin, aliases);
+        return [key, live + pendingDrafts] as const;
+      }),
+    );
+    const counts = Object.fromEntries(results);
     res.json({ counts });
   } catch (err) {
     logger.error({ err }, "subject-question-counts failed");

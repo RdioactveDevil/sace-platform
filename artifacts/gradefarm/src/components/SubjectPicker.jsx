@@ -18,7 +18,7 @@ const BUILT_IN_CURRICULUM_NAMES = new Set([
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
-  const [liveQuestionCounts, setLiveQuestionCounts] = useState({})
+  const [liveQuestionCounts, setLiveQuestionCounts] = useState(null)
   const [dynamicSubjects, setDynamicSubjects] = useState([])
   const t = THEMES[theme]
 
@@ -61,7 +61,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
       .then((counts) => {
         if (cancelled) return
         const results = pairs.map(([id, subjectName]) => [id, counts[subjectName] ?? 0])
-        setLiveQuestionCounts(Object.fromEntries(results))
+        setLiveQuestionCounts(prev => ({ ...(prev ?? {}), ...Object.fromEntries(results) }))
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -127,7 +127,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: locked ? '#a0aec0' : '#64748b' }}>
-            {liveQuestionCounts[subj.id] !== undefined ? liveQuestionCounts[subj.id] : subj.questionCount} questions
+            {liveQuestionCounts === null ? '…' : (liveQuestionCounts[subj.id] ?? 0)} questions
           </span>
           {locked ? (
             <button
