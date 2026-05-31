@@ -325,3 +325,43 @@ async function _replaceTopicsAndSubtopics(curriculumId, topics, defaultGenStatus
     }
   }
 }
+
+/**
+ * Load curriculum topics and subtopics for a given curriculum name,
+ * formatted as macroGroups for HomeScreen two-level topic display.
+ * Each macro group = one curriculum topic; its `topics` array = subtopic names.
+ * @param {string} curriculumName  e.g. 'Mathematical Methods Stage 2'
+ * @returns {Promise<Array<{id:string,num:number,label:string,topics:string[]}>|null>}
+ */
+export async function loadCurriculumMacroGroups(curriculumName) {
+  const { data: curriculum } = await supabase
+    .from('curricula')
+    .select('id')
+    .eq('name', curriculumName)
+    .single()
+  if (!curriculum) return null
+
+  const [{ data: topics }, { data: subtopics }] = await Promise.all([
+    supabase
+      .from('curriculum_topics')
+      .select('id, name, order_index')
+      .eq('curriculum_id', curriculum.id)
+      .order('order_index'),
+    supabase
+      .from('curriculum_subtopics')
+      .select('topic_id, name, order_index')
+      .eq('curriculum_id', curriculum.id)
+      .order('order_index'),
+  ])
+
+  if (!topics?.length) return null
+
+  return topics.map((t, i) => ({
+    id: `g${i + 1}`,
+    num: i + 1,
+    label: t.name,
+    topics: (subtopics || [])
+      .filter(s => s.topic_id === t.id)
+      .map(s => s.name),
+  }))
+}

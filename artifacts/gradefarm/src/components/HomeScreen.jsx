@@ -4,8 +4,9 @@ import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent } from '../lib/db'
-import { getTopicConfigForSubject } from '../lib/saceTopics'
+import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/saceTopics'
 import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -14,7 +15,10 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
-  const { macroGroups: MACRO_GROUPS, normFn: topicNormFn } = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
+  const [curriculumMacroGroups, setCurriculumMacroGroups] = useState(null)
+  const baseTopicConfig = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
+  const { macroGroups: MACRO_GROUPS, normFn: topicNormFn, isTwoLevel = false } =
+    (curriculumMacroGroups ? buildCurriculumTopicConfig(curriculumMacroGroups) : baseTopicConfig)
   const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([])
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
@@ -29,6 +33,16 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     fetchAssignmentsForStudent(profile.id).then(rows => { if (!cancelled) setAssignments(rows) }).catch(() => {})
     return () => { cancelled = true }
   }, [profile.id, assignmentsVersion])
+
+  useEffect(() => {
+    setCurriculumMacroGroups(null)
+    if (!subject?.curriculumName) return
+    let cancelled = false
+    loadCurriculumMacroGroups(subject.curriculumName)
+      .then(groups => { if (!cancelled && groups) setCurriculumMacroGroups(groups) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [subject?.curriculumName])
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {
@@ -57,33 +71,49 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   // Set of all canonical topic keys from MACRO_GROUPS
   const canonicalTopicKeys = new Set(MACRO_GROUPS.flatMap(m => m.topics))
 
-  // Pass 1: build normTopicToSubs from canonical-topic questions only,
-  // then build subtopic → canonical topic reverse map for fallback
+  // Pass 1: build normTopicToSubs.
+  // For isTwoLevel (curriculum subjects): q.subtopic is the selectable leaf, self-referential.
+  // For standard subjects: q.topic → canonical topic → subtopics list.
   const normTopicToSubs = {}
   questions.forEach(q => {
-    const n = topicNorm(q.topic)
-    if (!n || !canonicalTopicKeys.has(n)) return
-    if (!normTopicToSubs[n]) normTopicToSubs[n] = []
-    if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
+    if (isTwoLevel) {
+      const n = topicNorm(q.subtopic)
+      if (!n || !canonicalTopicKeys.has(n)) return
+      if (!normTopicToSubs[n]) normTopicToSubs[n] = [n]
+    } else {
+      const n = topicNorm(q.topic)
+      if (!n || !canonicalTopicKeys.has(n)) return
+      if (!normTopicToSubs[n]) normTopicToSubs[n] = []
+      if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
+    }
   })
-  // Reverse map: subtopic string → canonical topic key
+  // Reverse map: subtopic string → canonical topic key (standard subjects only)
   const subToCanonicalTopic = {}
-  Object.entries(normTopicToSubs).forEach(([normKey, subs]) => {
-    subs.forEach(sub => { subToCanonicalTopic[sub] = normKey })
-  })
+  if (!isTwoLevel) {
+    Object.entries(normTopicToSubs).forEach(([normKey, subs]) => {
+      subs.forEach(sub => { subToCanonicalTopic[sub] = normKey })
+    })
+  }
 
-  // Pass 2: count every question, using subtopic fallback for old/AI-topic records
+  // Pass 2: count every question.
   const normTopicGroups = {}
   questions.forEach(q => {
-    let n = topicNorm(q.topic)
-    if (!n || !canonicalTopicKeys.has(n)) {
-      // Fallback: look up canonical topic via subtopic (handles old DB records with wrong topic strings)
-      n = q.subtopic ? subToCanonicalTopic[q.subtopic] : null
+    let n
+    if (isTwoLevel) {
+      n = topicNorm(q.subtopic)
+    } else {
+      n = topicNorm(q.topic)
+      if (!n || !canonicalTopicKeys.has(n)) {
+        // Fallback: look up canonical topic via subtopic (handles old DB records with wrong topic strings)
+        n = q.subtopic ? subToCanonicalTopic[q.subtopic] : null
+      }
+      // Ensure normTopicToSubs is populated for questions resolved via subtopic fallback
+      if (n) {
+        if (!normTopicToSubs[n]) normTopicToSubs[n] = []
+        if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
+      }
     }
     if (!n) return
-    // Ensure normTopicToSubs is populated for questions resolved via subtopic fallback
-    if (!normTopicToSubs[n]) normTopicToSubs[n] = []
-    if (q.subtopic && !normTopicToSubs[n].includes(q.subtopic)) normTopicToSubs[n].push(q.subtopic)
     if (!normTopicGroups[n]) normTopicGroups[n] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
     normTopicGroups[n].total++
     const s = currentStruggleMap[q.id]
@@ -610,7 +640,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
             <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>{MACRO_GROUPS.length} topics · {questions.length} questions</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>{isTwoLevel ? MACRO_GROUPS.length : topicsInBankCount} topics · {questions.length} questions</div>
             </div>
 
             <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)}

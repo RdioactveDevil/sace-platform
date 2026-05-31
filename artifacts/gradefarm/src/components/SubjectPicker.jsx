@@ -15,10 +15,36 @@ const BUILT_IN_CURRICULUM_NAMES = new Set([
   ...Object.values(QUESTIONS_SUBJECT_BY_ID),
 ])
 
+const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
+const COUNTS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function readCountsCache() {
+  try {
+    const raw = localStorage.getItem(COUNTS_CACHE_KEY)
+    if (!raw) return null
+    const { ts, counts } = JSON.parse(raw)
+    if (Date.now() - ts > COUNTS_CACHE_TTL) return null
+    return counts
+  } catch { return null }
+}
+
+function writeCountsCache(counts) {
+  try { localStorage.setItem(COUNTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), counts })) } catch {}
+}
+
+// Match a subscription row to a subject tile.
+// Handles both short-name subscriptions (subject_name === s.name)
+// and full canonical-name subscriptions (subject_name === s.curriculumName).
+function subMatchesSubject(sub, s) {
+  if (sub.subject_name === s.name && (sub.stage === s.stage || !sub.stage)) return true
+  if (s.curriculumName && sub.subject_name === s.curriculumName) return true
+  return false
+}
+
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
-  const [liveQuestionCounts, setLiveQuestionCounts] = useState({})
+  const [liveQuestionCounts, setLiveQuestionCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamicSubjects] = useState([])
   const t = THEMES[theme]
 
@@ -61,7 +87,9 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
       .then((counts) => {
         if (cancelled) return
         const results = pairs.map(([id, subjectName]) => [id, counts[subjectName] ?? 0])
-        setLiveQuestionCounts(Object.fromEntries(results))
+        const merged = { ...(readCountsCache() ?? {}), ...Object.fromEntries(results) }
+        writeCountsCache(merged)
+        setLiveQuestionCounts(merged)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -73,14 +101,14 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const subscribed = allSubjects.filter(s =>
     s.available && (
       !hasSubscriptions ||
-      subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
+      subscriptions.some(sub => subMatchesSubject(sub, s))
     )
   )
 
   const notSubscribed = hasSubscriptions
     ? allSubjects.filter(s =>
         s.available &&
-        !subscriptions.some(sub => sub.subject_name === s.name && sub.stage === s.stage)
+        !subscriptions.some(sub => subMatchesSubject(sub, s))
       )
     : []
 
@@ -127,7 +155,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: locked ? '#a0aec0' : '#64748b' }}>
-            {liveQuestionCounts[subj.id] !== undefined ? liveQuestionCounts[subj.id] : subj.questionCount} questions
+            {liveQuestionCounts?.[subj.id] != null ? liveQuestionCounts[subj.id] : '…'} questions
           </span>
           {locked ? (
             <button
