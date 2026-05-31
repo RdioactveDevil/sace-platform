@@ -325,3 +325,22 @@ export function getTopicConfigForSubject(subject) {
   }
   return getTopicConfig(subject.stage)
 }
+
+/**
+ * Build a two-level topic config from DB-loaded macro groups.
+ * Each group's label = curriculum topic (e.g. "Functions");
+ * each group's topics[] = curriculum subtopic names (e.g. "Exponential functions").
+ * HomeScreen uses q.subtopic (not q.topic) as the selectable leaf when isTwoLevel=true.
+ */
+export function buildCurriculumTopicConfig(macroGroups) {
+  const allSubtopics = macroGroups.flatMap(g => g.topics)
+  const lowerToCanon = new Map(allSubtopics.map(s => [String(s).trim().toLowerCase(), s]))
+  return {
+    macroGroups,
+    normFn: (raw) => {
+      if (!raw) return null
+      return lowerToCanon.get(String(raw).trim().toLowerCase()) ?? null
+    },
+    isTwoLevel: true,
+  }
+}

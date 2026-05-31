@@ -94,9 +94,10 @@ export const ALL_SUBJECTS = [
     stage: 'Stage 2',
     icon: '∫',
     color: '#6366f1',
-    topics: ['Functions', 'Differential Calculus', 'Integral Calculus', 'Probability', 'Statistics'],
+    topics: ['Functions', 'Differential Calculus', 'Applications of Differential Calculus', 'Integration', 'Applications of Integration', 'Statistics', 'Discrete Random Variables', 'Continuous Random Variables', 'Sampling and Confidence Intervals'],
     questionCount: 0,
     available: true,
+    curriculumName: 'Mathematical Methods Stage 2',
   },
   {
     id: 'english_s2',
