@@ -10,6 +10,7 @@ export const QUESTIONS_SUBJECT_BY_ID = {
   english_y7: 'Year 7 English',
   maths_y10: 'Year 10 Mathematics',
   maths_methods_s2: 'Mathematical Methods Stage 2',
+  quant_y10: 'Year 10 Quantitative Reasoning',
 }
 
 export const ALL_SUBJECTS = [
@@ -76,6 +77,16 @@ export const ALL_SUBJECTS = [
     questionCount: 0,
     available: false,
     comingSoon: true,
+  },
+  {
+    id: 'quant_y10',
+    name: 'Quantitative Reasoning',
+    stage: 'Year 10',
+    icon: '🧮',
+    color: '#8b5cf6',
+    topics: ['Numerical Reasoning', 'Pattern Recognition', 'Data Interpretation', 'Problem Solving'],
+    questionCount: 0,
+    available: true,
   },
   {
     id: 'maths_methods_s2',
