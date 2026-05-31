@@ -9,6 +9,7 @@ export const QUESTIONS_SUBJECT_BY_ID = {
   maths_y7: 'Year 7 Mathematics',
   english_y7: 'Year 7 English',
   maths_y10: 'Year 10 Mathematics',
+  maths_methods_s2: 'Mathematical Methods Stage 2',
 }
 
 export const ALL_SUBJECTS = [
@@ -19,7 +20,7 @@ export const ALL_SUBJECTS = [
     icon: '⚗️',
     color: '#f1be43',
     topics: ['Atomic Structure', 'Bonding', 'Quantities', 'Periodic Table', 'Solutions', 'Acid–Base', 'Redox'],
-    questionCount: 50,
+    questionCount: 0,
     available: true,
   },
   {
@@ -29,7 +30,7 @@ export const ALL_SUBJECTS = [
     icon: '⚗️',
     color: '#f1be43',
     topics: ['Monitoring the Environment', 'Chemical Processes', 'Organic Chemistry', 'Managing Resources'],
-    questionCount: 15,
+    questionCount: 0,
     available: true,
   },
   {
@@ -82,10 +83,9 @@ export const ALL_SUBJECTS = [
     stage: 'Stage 2',
     icon: '∫',
     color: '#6366f1',
-    topics: ['Differentiation', 'Integration', 'Functions', 'Probability'],
+    topics: ['Functions', 'Differential Calculus', 'Integral Calculus', 'Probability', 'Statistics'],
     questionCount: 0,
-    available: false,
-    comingSoon: true,
+    available: true,
   },
   {
     id: 'english_s2',
@@ -105,7 +105,7 @@ export const ALL_SUBJECTS = [
     icon: '📐',
     color: '#6366f1',
     topics: ['Number', 'Algebra', 'Measurement', 'Space', 'Statistics', 'Probability'],
-    questionCount: 36,
+    questionCount: 0,
     available: true,
   },
   {
@@ -115,7 +115,7 @@ export const ALL_SUBJECTS = [
     icon: '📝',
     color: '#ec4899',
     topics: ['Language', 'Literature', 'Literacy'],
-    questionCount: 18,
+    questionCount: 0,
     available: true,
   },
   {
@@ -125,7 +125,7 @@ export const ALL_SUBJECTS = [
     icon: '📐',
     color: '#8b5cf6',
     topics: ['Number', 'Algebra', 'Functions & Graphs', 'Measurement', 'Geometry', 'Statistics', 'Probability'],
-    questionCount: 217,
+    questionCount: 0,
     available: true,
   },
   {
