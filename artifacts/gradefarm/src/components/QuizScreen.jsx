@@ -1497,7 +1497,9 @@ export default function QuizScreen({
                       <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                         {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
                       </span>
-                      <MathText text={opt} />
+                      <span style={{ minWidth: 0, flex: 1, overflowX: 'auto' }}>
+                        <MathText text={opt} />
+                      </span>
                     </button>
                   )
                 })}
