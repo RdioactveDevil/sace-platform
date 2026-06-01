@@ -213,7 +213,7 @@ function SpotlightSlices({ rect }) {
   )
 }
 
-export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onFinish }) {
+export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onSeen, onFinish }) {
   const navigate = useNavigate()
   const location = useLocation()
   const t = THEMES[theme] || THEMES.dark
@@ -224,6 +224,11 @@ export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onF
   }, [writingNav, isTutor])
 
   const [ix, setIx] = useState(0)
+
+  useEffect(() => {
+    if (onSeen) onSeen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [rect, setRect] = useState(null)
   const [tooltipStyle, setTooltipStyle] = useState(() => computeTooltipStyle(null))
   const [finishing, setFinishing] = useState(false)
