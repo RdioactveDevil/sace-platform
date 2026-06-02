@@ -241,17 +241,37 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         newCurriculumTree: { topics },
       })
       if (result.suggestions) {
+        // Build a lookup from normalised subtopic name → { topic, subtopic } so we can
+        // correct any leading numbers/punctuation Claude may have added (e.g. "5.2. Foo" → "Foo").
+        const stripLeading = (s) => String(s || '').replace(/^\d[\d.]*\.?\s*/, '').trim()
+        const normKey = (s) => stripLeading(s).toLowerCase()
+        const subtopicLookup = new Map()
+        topics.forEach(t => {
+          t.subtopics?.forEach(s => {
+            subtopicLookup.set(normKey(s.name), { topic: t.name, subtopic: s.name })
+          })
+        })
+
         setRemapMappings(prev => prev.map(m => {
           const suggestion = result.suggestions.find(s => s.oldSubtopic === m.name)
-          if (suggestion) {
-            return {
-              ...m,
-              action: suggestion.action || 'ignore',
-              newTopic: suggestion.newTopic || '',
-              newSubtopic: suggestion.newSubtopic || '',
+          if (!suggestion) return m
+          if (suggestion.action === 'delete') {
+            return { ...m, action: 'delete', newTopic: '', newSubtopic: '' }
+          }
+          if (suggestion.action === 'remap') {
+            // Try exact match first, then normalised match
+            const exactKey = `${suggestion.newTopic || ''}|||${suggestion.newSubtopic || ''}`
+            const allOptions = topics.flatMap(t => t.subtopics?.map(s => `${t.name}|||${s.name}`) || [])
+            if (allOptions.includes(exactKey)) {
+              return { ...m, action: 'remap', newTopic: suggestion.newTopic, newSubtopic: suggestion.newSubtopic }
+            }
+            // Fuzzy: strip numbers from suggested subtopic name and look up in map
+            const fuzzy = subtopicLookup.get(normKey(suggestion.newSubtopic || ''))
+            if (fuzzy) {
+              return { ...m, action: 'remap', newTopic: fuzzy.topic, newSubtopic: fuzzy.subtopic }
             }
           }
-          return m
+          return { ...m, action: suggestion.action || 'ignore', newTopic: '', newSubtopic: '' }
         }))
       }
     } catch (e) {
