@@ -74,10 +74,28 @@ function topicsAsPromptList(stage: string): string {
 }
 
 router.post("/extract-pdf", async (req, res) => {
-  const { base64, filename, stage } = req.body;
-  if (!base64 || !stage) {
-    res.status(400).json({ error: "base64 and stage required" });
+  const { base64, storagePath, filename, stage } = req.body;
+  if ((!base64 && !storagePath) || !stage) {
+    res.status(400).json({ error: "storagePath (or base64) and stage required" });
     return;
+  }
+
+  let pdfBase64 = base64 as string | undefined;
+
+  if (storagePath && !pdfBase64) {
+    // Download from Supabase Storage server-side to avoid Vercel 4.5 MB body limit
+    const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+    const { data: blob, error: dlErr } = await supabaseAdmin.storage
+      .from("admin-uploads")
+      .download(storagePath as string);
+    if (dlErr || !blob) {
+      res.status(500).json({ error: "Failed to download PDF from storage", detail: dlErr?.message });
+      return;
+    }
+    const arrayBuf = await blob.arrayBuffer();
+    pdfBase64 = Buffer.from(arrayBuf).toString("base64");
+    // Clean up the temporary file
+    supabaseAdmin.storage.from("admin-uploads").remove([storagePath as string]).catch(() => {});
   }
 
   const topicList = topicsAsPromptList(stage);
@@ -124,7 +142,7 @@ router.post("/extract-pdf", async (req, res) => {
             content: [
               {
                 type: "document",
-                source: { type: "base64", media_type: "application/pdf", data: base64 },
+                source: { type: "base64", media_type: "application/pdf", data: pdfBase64 },
               },
               { type: "text", text: user },
             ],
