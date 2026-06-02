@@ -1445,6 +1445,13 @@ export default function QuizScreen({
               {currentQ.table_data && (
                 <TableView table={currentQ.table_data} theme={theme} />
               )}
+              {currentQ.image_url && (
+                <img
+                  src={currentQ.image_url}
+                  alt="Question diagram"
+                  style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }}
+                />
+              )}
               <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
                 <MathText text={currentQ.question} />
               </div>
