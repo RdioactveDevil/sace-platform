@@ -23,6 +23,7 @@ export const ALL_SUBJECTS = [
     topics: ['Atomic Structure', 'Bonding', 'Quantities', 'Periodic Table', 'Solutions', 'Acid–Base', 'Redox'],
     questionCount: 0,
     available: true,
+    curriculumName: 'Chemistry Stage 1',
   },
   {
     id: 'chemistry_s2',
@@ -33,6 +34,7 @@ export const ALL_SUBJECTS = [
     topics: ['Monitoring the Environment', 'Chemical Processes', 'Organic Chemistry', 'Managing Resources'],
     questionCount: 0,
     available: true,
+    curriculumName: 'Chemistry Stage 2',
   },
   {
     id: 'biology_s1',
@@ -119,6 +121,7 @@ export const ALL_SUBJECTS = [
     topics: ['Number', 'Algebra', 'Measurement', 'Space', 'Statistics', 'Probability'],
     questionCount: 0,
     available: true,
+    curriculumName: 'Year 7 Mathematics',
   },
   {
     id: 'english_y7',
@@ -129,6 +132,7 @@ export const ALL_SUBJECTS = [
     topics: ['Language', 'Literature', 'Literacy'],
     questionCount: 0,
     available: true,
+    curriculumName: 'Year 7 English',
   },
   {
     id: 'maths_y10',
