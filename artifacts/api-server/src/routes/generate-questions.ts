@@ -419,10 +419,6 @@ router.post("/generate-questions", async (req, res) => {
 
   const learningObjectives = learningObjectivesMap[topicCode] || topicName;
 
-  // For curriculum-managed subjects (the else branch), generation_flags are fetched from DB.
-  // Built-in subjects (Y7/Y10/Chemistry) use their own hardcoded branches.
-  let curriculumSubjectCategory: string | null = null;
-
   const GRAPH_INSTRUCTIONS = [
     `  graph (optional — include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
     `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
