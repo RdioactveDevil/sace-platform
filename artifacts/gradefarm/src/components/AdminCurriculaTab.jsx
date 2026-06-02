@@ -99,9 +99,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [uploadedDoc, setUploadedDoc]  = useState(null) // { base64, mediaType, name }
   const [creating, setCreating]         = useState(false)
   const [createError, setCreateError]  = useState('')
-  const [subjectTitle, setSubjectTitle]         = useState('')
-  const [cohortLevel, setCohortLevel]           = useState('')
-  const [subjectCategory, setSubjectCategory]   = useState('')
+  const [subjectTitle, setSubjectTitle] = useState('')
+  const [cohortLevel, setCohortLevel]   = useState('')
+  const [flagLatex, setFlagLatex]       = useState(true)
+  const [flagGraphs, setFlagGraphs]     = useState(false)
+  const [flagTables, setFlagTables]     = useState(false)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -116,7 +118,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   useEffect(() => { load() }, [load])
 
-  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel(''); setSubjectCategory('') }
+  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel(''); setFlagLatex(true); setFlagGraphs(false); setFlagTables(false) }
   const closeModal = () => { if (!creating) setShowModal(false) }
 
   const handleFileUpload = (e) => {
@@ -163,7 +165,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         subject_description,
         topics,
         level_label: cohortLevel,
-        subject_category: subjectCategory || null,
+        generation_flags: { latex: flagLatex, graphs: flagGraphs, tables: flagTables },
       })
       setShowModal(false)
       onSelectCurriculum(id)
@@ -322,27 +324,27 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               ))}
             </select>
             <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Subject category *
+              Question features
             </label>
-            <select
-              value={subjectCategory}
-              onChange={e => setSubjectCategory(e.target.value)}
-              disabled={creating}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: '#0c1037', color: subjectCategory ? '#f1f5f9' : '#64748b',
-                fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                boxSizing: 'border-box', marginBottom: 12,
-                opacity: creating ? 0.6 : 1,
-              }}
-            >
-              <option value="">Select…</option>
-              <option value="maths">Maths — enables graph generation in questions</option>
-              <option value="science">Science — LaTeX equations, no graphs</option>
-              <option value="english">English — no maths features</option>
-              <option value="humanities">Humanities — no maths features</option>
-            </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, opacity: creating ? 0.6 : 1 }}>
+              {[
+                { key: 'latex',  val: flagLatex,  set: setFlagLatex,  label: 'LaTeX',  desc: 'Mathematical notation in questions and solutions' },
+                { key: 'graphs', val: flagGraphs, set: setFlagGraphs, label: 'Graphs', desc: 'AI generates function graphs when relevant' },
+                { key: 'tables', val: flagTables, set: setFlagTables, label: 'Tables', desc: 'AI generates data tables when relevant' },
+              ].map(({ key, val, set, label, desc }) => (
+                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: creating ? 'not-allowed' : 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={val}
+                    onChange={e => set(e.target.checked)}
+                    disabled={creating}
+                    style={{ width: 15, height: 15, accentColor: '#f1be43', cursor: 'inherit' }}
+                  />
+                  <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>{label}</span>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>{desc}</span>
+                </label>
+              ))}
+            </div>
             <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Course description (optional if uploading a document)
             </label>
@@ -385,7 +387,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               <button onClick={closeModal} disabled={creating} style={cancelBtn}>Cancel</button>
               <button
                 onClick={handleGeneratePlan}
-                disabled={!subjectTitle.trim() || !cohortLevel || !subjectCategory || (!description.trim() && !uploadedDoc) || creating}
+                disabled={!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating}
                 style={{
                   ...goldBtn,
                   opacity: (!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,

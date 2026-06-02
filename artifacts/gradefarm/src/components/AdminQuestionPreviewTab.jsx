@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import MathText from './MathText'
 import GraphView from './GraphView'
+import TableView from './TableView'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -47,8 +48,9 @@ export default function AdminQuestionPreviewTab() {
     else {
       setQuestion({
         ...data,
-        options: typeof data.options === 'string' ? JSON.parse(data.options) : data.options,
-        graph:   typeof data.graph   === 'string' ? JSON.parse(data.graph)   : data.graph,
+        options:     typeof data.options     === 'string' ? JSON.parse(data.options)     : data.options,
+        graph:       typeof data.graph       === 'string' ? JSON.parse(data.graph)       : data.graph,
+        table_data:  typeof data.table_data  === 'string' ? JSON.parse(data.table_data)  : data.table_data,
       })
     }
     setLoading(false)
@@ -94,6 +96,11 @@ export default function AdminQuestionPreviewTab() {
             <div style={{ marginBottom: 18 }}>
               <GraphView graph={question.graph} theme="dark" />
             </div>
+          )}
+
+          {/* Table */}
+          {question.table_data && (
+            <TableView table={question.table_data} theme="dark" />
           )}
 
           {/* Question text */}
@@ -142,11 +149,17 @@ export default function AdminQuestionPreviewTab() {
             </div>
           )}
 
-          {/* Raw graph spec */}
+          {/* Raw specs */}
           {question.graph && (
             <details style={s.details}>
               <summary style={s.summary}>Raw graph spec</summary>
               <pre style={s.pre}>{JSON.stringify(question.graph, null, 2)}</pre>
+            </details>
+          )}
+          {question.table_data && (
+            <details style={s.details}>
+              <summary style={s.summary}>Raw table spec</summary>
+              <pre style={s.pre}>{JSON.stringify(question.table_data, null, 2)}</pre>
             </details>
           )}
         </div>

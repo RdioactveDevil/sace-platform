@@ -419,8 +419,8 @@ router.post("/generate-questions", async (req, res) => {
 
   const learningObjectives = learningObjectivesMap[topicCode] || topicName;
 
-  // For curriculum-managed subjects (the else branch), fetch subject_category from DB.
-  // Built-in subjects (Y7/Y10/Chemistry) use their own hardcoded branches and don't need this.
+  // For curriculum-managed subjects (the else branch), generation_flags are fetched from DB.
+  // Built-in subjects (Y7/Y10/Chemistry) use their own hardcoded branches.
   let curriculumSubjectCategory: string | null = null;
 
   const GRAPH_INSTRUCTIONS = [
@@ -429,6 +429,13 @@ router.post("/generate-questions", async (req, res) => {
     `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4".`,
     `    Include graph for questions about: identifying graph features (vertex, intercepts, turning points), reading values off a graph, matching an equation to a graph, or describing transformations shown visually.`,
     `    Do NOT include graph for purely algebraic or numeric questions.`,
+  ];
+
+  const TABLE_INSTRUCTIONS = [
+    `  table_data (optional — include ONLY when the question requires a data table to be answered. If not needed, omit the key entirely or set to null.)`,
+    `    table_data schema: { "headers": ["col1", "col2", ...], "rows": [[val, val, ...], ...], "caption": "<optional string>" }`,
+    `    Include table_data for questions about: reading values from a table, completing a table of values, comparing data sets, frequency/probability tables, or any question that presents structured data.`,
+    `    Do NOT include table_data for questions that can be answered from text or equations alone.`,
   ];
 
   let system: string;
@@ -502,23 +509,22 @@ router.post("/generate-questions", async (req, res) => {
     ].join("\n");
   } else {
     // Generic path: handles curriculum-managed subjects (Mathematical Methods, Chemistry, etc.)
-    // Fetch subject_category from the curricula table — drives prompt features without
-    // any hardcoded name matching in application code.
+    // Fetch generation_flags from curricula table — drives all prompt features from DB,
+    // no hardcoded name matching in application code.
     const _supabaseForCat = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
     const { data: _curriculumRow } = await _supabaseForCat
       .from("curricula")
-      .select("subject_category")
+      .select("generation_flags")
       .eq("name", normalizedSubject)
       .maybeSingle();
-    curriculumSubjectCategory = _curriculumRow?.subject_category ?? null;
+    const flags: Record<string, boolean> = (_curriculumRow?.generation_flags as Record<string, boolean>) ?? {};
 
-    const isMaths   = curriculumSubjectCategory === "maths";
-    const isScience = curriculumSubjectCategory === "science";
-    const latexExamples = isMaths
+    const flagGraphs = !!flags.graphs;
+    const flagTables = !!flags.tables;
+    const flagLatex  = flags.latex !== false; // default true
+    const latexExamples = flagGraphs
       ? "$\\frac{d}{dx}f(x)$, $$\\int_0^1 f(x)\\,dx$$"
-      : isScience
-        ? "$\\frac{n}{V}$, $$\\Delta H = \\sum H_{\\text{products}} - \\sum H_{\\text{reactants}}$$"
-        : "$x^2 + 3x - 4$";
+      : "$x^2 + 3x - 4$";
 
     system = [
       `You are generating multiple-choice questions for ${curriculumLabel} students.`,
@@ -534,8 +540,9 @@ router.post("/generate-questions", async (req, res) => {
       "  solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
       "  subtopic (short free-text label for the specific concept tested)",
       "  difficulty (integer 1\u20135)",
-      ...(isMaths ? GRAPH_INSTRUCTIONS : []),
-      `IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${latexExamples}. Never use plain Unicode for equations.`,
+      ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
+      ...(flagTables ? TABLE_INSTRUCTIONS : []),
+      ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${latexExamples}. Never use plain Unicode for equations.`] : []),
       "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
       `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
       "Do not repeat the same scenario across questions.",
@@ -616,6 +623,7 @@ router.post("/generate-questions", async (req, res) => {
     subtopic?: string; question: string; options: string[];
     answer_index: number; solution?: string; difficulty?: number;
     graph?: Record<string, unknown> | null;
+    table_data?: Record<string, unknown> | null;
   }>;
 
   if (!questions.length) {
@@ -641,6 +649,7 @@ router.post("/generate-questions", async (req, res) => {
         answer_index: q.answer_index,
         solution: q.solution || "",
         graph: q.graph || null,
+        table_data: q.table_data || null,
         tip: null,
         created_at: now,
       }));
@@ -680,6 +689,7 @@ router.post("/generate-questions", async (req, res) => {
     answer_index: q.answer_index,
     solution: q.solution || null,
     graph: q.graph || null,
+    table_data: q.table_data || null,
     difficulty: q.difficulty || null,
     status: "pending",
   }));
