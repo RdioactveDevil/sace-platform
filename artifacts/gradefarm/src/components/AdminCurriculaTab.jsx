@@ -16,7 +16,7 @@ function groupIntoSections(topics, sectionNames) {
   }
   return order.map(key => ({
     name: sectionNames[key] || `Section ${key}`,
-    subtopics: groups[key].map(t => ({ name: `${t.code} — ${t.short || t.name}` })),
+    subtopics: groups[key].map(t => ({ name: t.name })),
   }))
 }
 

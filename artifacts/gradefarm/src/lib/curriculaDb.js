@@ -308,11 +308,25 @@ export async function deleteCurriculum(id) {
  * @param {Array<{ name: string, description: string, topics: Array }>} builtIns
  */
 export async function seedBuiltInSubjectsIfNeeded(builtIns) {
-  const { data: existing } = await supabase.from('curricula').select('name')
-  const existingNames = new Set((existing || []).map(c => c.name))
+  const { data: existing } = await supabase.from('curricula').select('id, name')
+  const existingMap = new Map((existing || []).map(c => [c.name, c.id]))
 
   for (const { name, description, topics, generation_flags } of builtIns) {
-    if (existingNames.has(name)) continue
+    const existingId = existingMap.get(name)
+    if (existingId) {
+      // If topics are still in the old "code — name" format, replace them with canonical names.
+      // This runs once after a deploy; subsequent loads find no " — " and skip.
+      const { data: firstSub } = await supabase
+        .from('curriculum_subtopics')
+        .select('name')
+        .eq('curriculum_id', existingId)
+        .limit(1)
+        .maybeSingle()
+      if (firstSub?.name?.includes(' \u2014 ')) {
+        await _replaceTopicsAndSubtopics(existingId, topics, 'done')
+      }
+      continue
+    }
     const level = inferCohortLabelFromCurriculumName(name)
     const { data: c, error } = await supabase
       .from('curricula')
