@@ -12,6 +12,7 @@ import AdminCurriculaTab         from './AdminCurriculaTab'
 import AdminCurriculumDetail     from './AdminCurriculumDetail'
 import AdminCohortTab            from './AdminCohortTab'
 import AdminSettingsTab          from './AdminSettingsTab'
+import AdminQuestionPreviewTab   from './AdminQuestionPreviewTab'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -46,6 +47,7 @@ export default function AdminScreen({ profile }) {
     { label: 'Upload PDF',         path: '/admin/upload' },
     { label: 'Generate',           path: '/admin/generate' },
     { label: 'Review Queue',       path: '/admin/review' },
+    { label: 'Preview Question',   path: '/admin/preview' },
     { label: 'Settings',           path: '/admin/settings' },
   ]
 
@@ -126,6 +128,7 @@ export default function AdminScreen({ profile }) {
           <Route path="upload"       element={<AdminUploadScreen />} />
           <Route path="generate"     element={<AdminGenerateScreen />} />
           <Route path="review"       element={<AdminReviewScreen profile={profile} />} />
+          <Route path="preview"      element={<AdminQuestionPreviewTab />} />
           <Route path="settings"     element={<AdminSettingsTab />} />
         </Routes>
       </div>
