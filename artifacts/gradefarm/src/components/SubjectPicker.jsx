@@ -88,10 +88,14 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
 
   // Built-in subjects filtered by what the admin has kept live in the curricula table.
   // Before DB responds (liveCurriculaNames === null) we show all to avoid a flash.
+  // Subjects with no QUESTIONS_SUBJECT_BY_ID entry and no curriculumName (e.g. writing
+  // subjects) are not expected to have a curricula row — always show them if available.
   const builtInSubjects = liveCurriculaNames === null
     ? ALL_SUBJECTS
     : ALL_SUBJECTS.filter(s => {
         if (!s.available) return true // coming-soon entries always show
+        const expectsCurriculumRow = !!(QUESTIONS_SUBJECT_BY_ID[s.id] || s.curriculumName)
+        if (!expectsCurriculumRow) return true
         return [...builtInCanonicalNames(s)].some(n => liveCurriculaNames.has(n))
       })
 
