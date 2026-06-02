@@ -311,12 +311,12 @@ export async function seedBuiltInSubjectsIfNeeded(builtIns) {
   const { data: existing } = await supabase.from('curricula').select('name')
   const existingNames = new Set((existing || []).map(c => c.name))
 
-  for (const { name, description, topics } of builtIns) {
+  for (const { name, description, topics, generation_flags } of builtIns) {
     if (existingNames.has(name)) continue
     const level = inferCohortLabelFromCurriculumName(name)
     const { data: c, error } = await supabase
       .from('curricula')
-      .insert({ name, subject_description: description || name, level_label: level, status: 'live' })
+      .insert({ name, subject_description: description || name, level_label: level, status: 'live', generation_flags: generation_flags || {} })
       .select('id')
       .single()
     if (error || !c) continue

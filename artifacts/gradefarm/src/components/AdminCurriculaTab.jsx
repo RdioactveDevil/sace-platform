@@ -24,6 +24,7 @@ const BUILT_IN_SUBJECTS = [
   {
     name: 'Chemistry Stage 1',
     description: 'SACE Chemistry Stage 1 — Australian curriculum covering properties of matter, atomic structure, molecular materials, solutions, acid-base and redox chemistry.',
+    generation_flags: { graphs: false, tables: false, latex: true },
     topics: groupIntoSections(S1_TOPICS, {
       1: 'Properties and Atomic Structure',
       2: 'Types of Materials',
@@ -36,6 +37,7 @@ const BUILT_IN_SUBJECTS = [
   {
     name: 'Chemistry Stage 2',
     description: 'SACE Chemistry Stage 2 — covering environmental chemistry, rates and equilibrium, organic chemistry, and sustainability.',
+    generation_flags: { graphs: false, tables: false, latex: true },
     topics: groupIntoSections(S2_TOPICS, {
       1: 'Environmental Chemistry and Analysis',
       2: 'Rates and Equilibrium',
@@ -46,6 +48,7 @@ const BUILT_IN_SUBJECTS = [
   {
     name: 'Year 7 Mathematics',
     description: 'Australian Curriculum v9 — Year 7 Mathematics covering Number, Algebra, Measurement, Space, Statistics and Probability.',
+    generation_flags: { graphs: true, tables: true, latex: true },
     topics: groupIntoSections(Y7_MATHS_TOPICS, {
       N: 'Number', A: 'Algebra', M: 'Measurement', SP: 'Space', ST: 'Statistics', P: 'Probability',
     }),
@@ -53,6 +56,7 @@ const BUILT_IN_SUBJECTS = [
   {
     name: 'Year 7 English',
     description: 'Australian Curriculum v9 — Year 7 English covering Language, Literature and Literacy strands.',
+    generation_flags: { graphs: false, tables: false, latex: false },
     topics: groupIntoSections(Y7_ENGLISH_TOPICS, {
       L: 'Language', LT: 'Literature', LC: 'Literacy',
     }),
@@ -60,6 +64,7 @@ const BUILT_IN_SUBJECTS = [
   {
     name: 'Year 10 Mathematics',
     description: 'Australian Curriculum — Year 10 and 10A Mathematics covering Number, Algebra, Measurement, Geometry, Statistics, Probability and extension topics.',
+    generation_flags: { graphs: true, tables: true, latex: true },
     topics: groupIntoSections(Y10_MATHS_TOPICS, {
       N: 'Number', A: 'Algebra', M: 'Measurement', SP: 'Geometry', ST: 'Statistics', P: 'Probability',
       XN: 'Year 10A — Number', XA: 'Year 10A — Algebra', XM: 'Year 10A — Measurement',
