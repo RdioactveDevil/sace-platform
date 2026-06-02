@@ -217,26 +217,17 @@ export function getManagedSubjectNames() {
  * @returns {{ code: string, name: string }[]}
  */
 export function getTopicsBySubject(subjectId) {
-  // DB-loaded managed cache takes priority so live curriculum edits are reflected immediately.
+  // DB-loaded managed cache is the authoritative source.
   if (_managedTopicsCache[subjectId]?.length) return _managedTopicsCache[subjectId]
 
-  // Hardcoded fallbacks — used only when the cache hasn't loaded yet or subject is unknown.
-  switch (subjectId) {
-    case 'chemistry_s1':
-    case 'Chemistry Stage 1': return S1_TOPICS
-    case 'chemistry_s2':
-    case 'Chemistry Stage 2': return S2_TOPICS
-    case 'maths_y7':
-    case 'Year 7 Mathematics': return Y7_MATHS_TOPICS
-    case 'english_y7':
-    case 'Year 7 English': return Y7_ENGLISH_TOPICS
-    case 'maths_y10':
-    case 'Year 10 Mathematics':
-    case 'Victorian Year 10 Mathematics':
-    case 'Victorian Year 10A Mathematics': return Y10_MATHS_TOPICS
-    default:
-      return S1_TOPICS
-  }
+  // Hardcoded fallbacks while the cache is still loading on first mount.
+  if (subjectId === 'chemistry_s1' || subjectId === 'Chemistry Stage 1') return S1_TOPICS
+  if (subjectId === 'chemistry_s2' || subjectId === 'Chemistry Stage 2') return S2_TOPICS
+  if (subjectId === 'maths_y7'    || subjectId === 'Year 7 Mathematics')  return Y7_MATHS_TOPICS
+  if (subjectId === 'english_y7'  || subjectId === 'Year 7 English')      return Y7_ENGLISH_TOPICS
+  if (subjectId === 'maths_y10'   || subjectId === 'Year 10 Mathematics'  ||
+      subjectId === 'Victorian Year 10 Mathematics' || subjectId === 'Victorian Year 10A Mathematics') return Y10_MATHS_TOPICS
+  return []
 }
 
 /**
