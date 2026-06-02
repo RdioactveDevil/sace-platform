@@ -1327,6 +1327,19 @@ export async function endTutoringSession(sessionId) {
   return json
 }
 
+// ── PLATFORM SETTINGS ─────────────────────────────────────────────────────────
+
+export async function getPlatformSettings(key) {
+  const { data, error } = await supabase.from('platform_settings').select('value').eq('key', key).single()
+  if (error) return null
+  return data?.value ?? null
+}
+
+export async function setPlatformSetting(key, value) {
+  const { error } = await supabase.from('platform_settings').upsert({ key, value, updated_at: new Date().toISOString() })
+  if (error) throw error
+}
+
 /** Generate a LiveKit token by room name (for permanent links). */
 export async function getRoomToken(roomName) {
   const session = await getSession()
