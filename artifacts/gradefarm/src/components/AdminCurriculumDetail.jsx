@@ -739,11 +739,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 onClick={handleRevise}
                 disabled={revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())}
                 style={{
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
+                  padding: '8px 16px', borderRadius: 8,
+                  border: '1px solid rgba(56,189,248,0.2)',
                   background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
                   color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? '#64748b' : '#38bdf8',
                   fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'not-allowed' : 'pointer',
-                  fontFamily: FONT_B, border: '1px solid rgba(56,189,248,0.2)',
+                  fontFamily: FONT_B,
                 }}
               >
                 {revising ? 'Revising…' : 'Apply'}
