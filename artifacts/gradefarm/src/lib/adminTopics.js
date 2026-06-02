@@ -217,6 +217,10 @@ export function getManagedSubjectNames() {
  * @returns {{ code: string, name: string }[]}
  */
 export function getTopicsBySubject(subjectId) {
+  // DB-loaded managed cache takes priority so live curriculum edits are reflected immediately.
+  if (_managedTopicsCache[subjectId]?.length) return _managedTopicsCache[subjectId]
+
+  // Hardcoded fallbacks — used only when the cache hasn't loaded yet or subject is unknown.
   switch (subjectId) {
     case 'chemistry_s1':
     case 'Chemistry Stage 1': return S1_TOPICS
@@ -231,7 +235,7 @@ export function getTopicsBySubject(subjectId) {
     case 'Victorian Year 10 Mathematics':
     case 'Victorian Year 10A Mathematics': return Y10_MATHS_TOPICS
     default:
-      return _managedTopicsCache[subjectId] || S1_TOPICS
+      return S1_TOPICS
   }
 }
 
