@@ -434,129 +434,57 @@ router.post("/generate-questions", async (req, res) => {
     `    Do NOT include table_data for questions that can be answered from text or equations alone.`,
   ];
 
+  // Fetch generation_flags from DB for every subject (built-in or curriculum-managed)
+  const _supa = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+  const { data: _curriculumRow } = await _supa
+    .from("curricula")
+    .select("generation_flags")
+    .eq("name", normalizedSubject)
+    .maybeSingle();
+  const flags: Record<string, boolean> = (_curriculumRow?.generation_flags as Record<string, boolean>) ?? {};
+  const flagGraphs = !!flags.graphs;
+  const flagTables = !!flags.tables;
+  const flagLatex  = flags.latex !== false; // default true
+
+  const latexExample = flagGraphs
+    ? "$\\frac{d}{dx}f(x)$, $$\\int_0^1 f(x)\\,dx$$"
+    : "$x^2 + 3x - 4$";
+
   let system: string;
   let user: string;
 
-  if (isY10) {
-    const yearLabel = topicCode.startsWith("X") ? "Year 10A" : "Year 10";
-    system = [
-      `You are generating multiple-choice questions for ${curriculumLabel} students.`,
-      `CRITICAL CONSTRAINT: All questions must be strictly based on the ${yearLabel} Mathematics curriculum scope.`,
-      `Do NOT draw on knowledge that falls outside the ${yearLabel} Mathematics curriculum level.`,
-      `Every question must be directly answerable using only what a ${yearLabel} Mathematics student is expected to know.`,
-      "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
-      `Generate exactly ${count} questions.`,
-      "Each object must have these exact keys:",
-      "  question (string)",
-      "  options (array of exactly 4 strings)",
-      "  answer_index (integer 0\u20133)",
-      `  solution (string \u2014 explain why the answer is correct with clear mathematical reasoning, 2\u20134 sentences)`,
-      "  subtopic (short free-text label for the specific concept tested)",
-      "  difficulty (integer 1\u20135)",
-      ...GRAPH_INSTRUCTIONS,
-      ...TABLE_INSTRUCTIONS,
-      "IMPORTANT: Use LaTeX notation for ALL mathematical expressions in question/options/solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
-      "Questions must be accurate, unambiguous, and test conceptual understanding.",
-      "Use standard mathematical terminology. Avoid SACE, VCE, HSC, IB or curriculum-specific branding.",
-      "Do not repeat the same scenario across questions.",
-      difficultyInstruction,
-    ].join("\n");
+  system = [
+    `You are generating multiple-choice questions for ${curriculumLabel} students.`,
+    `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
+    `Do NOT draw on knowledge that falls outside the scope of ${curriculumLabel}.`,
+    `Every question must be directly answerable using only what a ${curriculumLabel} student is expected to know.`,
+    "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
+    `Generate exactly ${count} questions.`,
+    "Each object must have these exact keys:",
+    "  question (string)",
+    "  options (array of exactly 4 strings)",
+    "  answer_index (integer 0\u20133)",
+    "  solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
+    "  subtopic (short free-text label for the specific concept tested)",
+    "  difficulty (integer 1\u20135)",
+    ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
+    ...(flagTables ? TABLE_INSTRUCTIONS : []),
+    ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$  and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${latexExample}. Never use plain Unicode for equations.`] : []),
+    "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
+    `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
+    "Do not repeat the same scenario across questions.",
+    difficultyInstruction,
+  ].join("\n");
 
-    user = [
-      `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
-      "",
-      `Learning requirements for this topic:`,
-      learningObjectives,
-      "",
-      "All questions must directly assess one or more of the specific concepts listed above.",
-      "Use the exact scope and terminology listed \u2014 nothing broader.",
-    ].join("\n");
-  } else if (isY7) {
-
-    system = [
-      `You are generating multiple-choice questions for Australian Curriculum v9 Year 7 students.`,
-      `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
-      "Do NOT draw on knowledge that falls outside the Year 7 curriculum level and scope.",
-      "Every question must be directly answerable using only what a Year 7 student is expected to know.",
-      "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
-      `Generate exactly ${count} questions.`,
-      "Each object must have these exact keys:",
-      "  question (string)",
-      "  options (array of exactly 4 strings)",
-      "  answer_index (integer 0\u20133)",
-      "  solution (string \u2014 explain why the answer is correct using Australian Curriculum v9 language, 2\u20134 sentences)",
-      "  subtopic (short free-text label for the specific concept tested, using AC v9 content descriptor language)",
-      "  difficulty (integer 1\u20135)",
-      ...(isY7Maths ? GRAPH_INSTRUCTIONS : []),
-      ...(isY7Maths ? TABLE_INSTRUCTIONS : []),
-      "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{a}{b}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
-      "Questions must be accurate, unambiguous, and test conceptual understanding aligned with AC v9 achievement standards.",
-      "Use terminology consistent with the Australian Curriculum v9. Avoid SACE, VCE, IB or HSC-specific content.",
-      "Do not repeat the same scenario across questions.",
-      difficultyInstruction,
-    ].join("\n");
-
-    user = [
-      `Generate ${count} MCQs for the ${curriculumLabel} content description: ${topicName} (${topicCode}).`,
-      "",
-      "AC v9 elaborations for this content description:",
-      learningObjectives,
-      "",
-      "All questions must directly assess one or more of the specific concepts listed above.",
-      "Use the exact scope and terminology of the content description \u2014 nothing broader.",
-    ].join("\n");
-  } else {
-    // Generic path: handles curriculum-managed subjects (Mathematical Methods, Chemistry, etc.)
-    // Fetch generation_flags from curricula table — drives all prompt features from DB,
-    // no hardcoded name matching in application code.
-    const _supabaseForCat = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
-    const { data: _curriculumRow } = await _supabaseForCat
-      .from("curricula")
-      .select("generation_flags")
-      .eq("name", normalizedSubject)
-      .maybeSingle();
-    const flags: Record<string, boolean> = (_curriculumRow?.generation_flags as Record<string, boolean>) ?? {};
-
-    const flagGraphs = !!flags.graphs;
-    const flagTables = !!flags.tables;
-    const flagLatex  = flags.latex !== false; // default true
-    const latexExamples = flagGraphs
-      ? "$\\frac{d}{dx}f(x)$, $$\\int_0^1 f(x)\\,dx$$"
-      : "$x^2 + 3x - 4$";
-
-    system = [
-      `You are generating multiple-choice questions for ${curriculumLabel} students.`,
-      `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
-      `Do NOT draw on knowledge that falls outside the scope of ${curriculumLabel}.`,
-      `Every question must be directly answerable using only what a ${curriculumLabel} student is expected to know for this topic.`,
-      "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
-      `Generate exactly ${count} questions.`,
-      "Each object must have these exact keys:",
-      "  question (string)",
-      "  options (array of exactly 4 strings)",
-      "  answer_index (integer 0\u20133)",
-      "  solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
-      "  subtopic (short free-text label for the specific concept tested)",
-      "  difficulty (integer 1\u20135)",
-      ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
-      ...(flagTables ? TABLE_INSTRUCTIONS : []),
-      ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${latexExamples}. Never use plain Unicode for equations.`] : []),
-      "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
-      `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
-      "Do not repeat the same scenario across questions.",
-      difficultyInstruction,
-    ].join("\n");
-
-    user = [
-      `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
-      "",
-      "Curriculum learning requirements for this topic:",
-      learningObjectives,
-      "",
-      "All questions must directly assess one or more of these specific learning requirements.",
-      "Use the exact concepts, terminology and scope listed above \u2014 nothing broader.",
-    ].join("\n");
-  }
+  user = [
+    `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
+    "",
+    "Curriculum learning requirements for this topic:",
+    learningObjectives,
+    "",
+    "All questions must directly assess one or more of these specific learning requirements.",
+    "Use the exact concepts, terminology and scope listed above \u2014 nothing broader.",
+  ].join("\n");
 
   // ── Pre-fetch existing questions BEFORE calling the AI ────────────────────
   // We pass a sample to the AI so it generates genuinely different content,
