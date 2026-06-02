@@ -419,8 +419,9 @@ router.post("/generate-questions", async (req, res) => {
 
   const learningObjectives = learningObjectivesMap[topicCode] || topicName;
 
-  // Detect maths subjects so graph instructions are included regardless of curriculum path.
-  const isMathsSubject = /math|methods|calculus|specialist|quantitative/i.test(normalizedSubject);
+  // For curriculum-managed subjects (the else branch), fetch subject_category from DB.
+  // Built-in subjects (Y7/Y10/Chemistry) use their own hardcoded branches and don't need this.
+  let curriculumSubjectCategory: string | null = null;
 
   const GRAPH_INSTRUCTIONS = [
     `  graph (optional — include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
@@ -500,9 +501,25 @@ router.post("/generate-questions", async (req, res) => {
       "Use the exact scope and terminology of the content description \u2014 nothing broader.",
     ].join("\n");
   } else {
-    // Generic path: handles curriculum-managed subjects (e.g. Mathematical Methods,
-    // Chemistry, future subjects). Prompt adapts based on whether the subject is maths.
-    const isChemistry = /chemistry/i.test(normalizedSubject);
+    // Generic path: handles curriculum-managed subjects (Mathematical Methods, Chemistry, etc.)
+    // Fetch subject_category from the curricula table — drives prompt features without
+    // any hardcoded name matching in application code.
+    const _supabaseForCat = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+    const { data: _curriculumRow } = await _supabaseForCat
+      .from("curricula")
+      .select("subject_category")
+      .eq("name", normalizedSubject)
+      .maybeSingle();
+    curriculumSubjectCategory = _curriculumRow?.subject_category ?? null;
+
+    const isMaths   = curriculumSubjectCategory === "maths";
+    const isScience = curriculumSubjectCategory === "science";
+    const latexExamples = isMaths
+      ? "$\\frac{d}{dx}f(x)$, $$\\int_0^1 f(x)\\,dx$$"
+      : isScience
+        ? "$\\frac{n}{V}$, $$\\Delta H = \\sum H_{\\text{products}} - \\sum H_{\\text{reactants}}$$"
+        : "$x^2 + 3x - 4$";
+
     system = [
       `You are generating multiple-choice questions for ${curriculumLabel} students.`,
       `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
@@ -517,8 +534,8 @@ router.post("/generate-questions", async (req, res) => {
       "  solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
       "  subtopic (short free-text label for the specific concept tested)",
       "  difficulty (integer 1\u20135)",
-      ...(isMathsSubject ? GRAPH_INSTRUCTIONS : []),
-      `IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${isChemistry ? "$\\\\frac{n}{V}$, $$\\\\Delta H = \\\\sum H_{products} - \\\\sum H_{reactants}$$" : "$\\\\frac{d}{dx}f(x)$, $$\\\\int_0^1 f(x)\\\\,dx$$"}. Never use plain Unicode for equations.`,
+      ...(isMaths ? GRAPH_INSTRUCTIONS : []),
+      `IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${latexExamples}. Never use plain Unicode for equations.`,
       "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
       `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
       "Do not repeat the same scenario across questions.",

@@ -10,7 +10,7 @@ export async function listCurricula() {
   const { data, error } = await supabase
     .from('curricula')
     .select(`
-      id, name, level_label, subject_description, status, created_at,
+      id, name, level_label, subject_description, subject_category, status, created_at,
       curriculum_topics (
         id,
         curriculum_subtopics ( id, gen_status, questions_generated )
@@ -27,6 +27,7 @@ export async function listCurricula() {
       name: c.name,
       level_label: c.level_label ?? '',
       subject_description: c.subject_description,
+      subject_category: c.subject_category ?? null,
       status: c.status,
       created_at: c.created_at,
       topic_count: topics.length,
@@ -82,10 +83,10 @@ export async function getCurriculumDetail(id) {
  * @param {{ name: string, subject_description: string, topics: Array, level_label?: string }} data
  * @returns {Promise<string>} curriculum id
  */
-export async function createCurriculum({ name, subject_description, topics, level_label = '' }) {
+export async function createCurriculum({ name, subject_description, topics, level_label = '', subject_category = null }) {
   const { data: curriculum, error: cErr } = await supabase
     .from('curricula')
-    .insert({ name, subject_description, level_label: level_label || '', status: 'draft' })
+    .insert({ name, subject_description, level_label: level_label || '', subject_category: subject_category || null, status: 'draft' })
     .select('id')
     .single()
   if (cErr) throw cErr
@@ -101,7 +102,7 @@ export async function createCurriculum({ name, subject_description, topics, leve
  * @param {string} id
  * @param {{ name?: string, subject_description?: string, level_label?: string, topics?: Array }} updates
  */
-export async function updateCurriculum(id, { name, subject_description, level_label, topics } = {}) {
+export async function updateCurriculum(id, { name, subject_description, level_label, subject_category, topics } = {}) {
   const { data: cur, error: curErr } = await supabase
     .from('curricula')
     .select('name, level_label')
@@ -136,6 +137,7 @@ export async function updateCurriculum(id, { name, subject_description, level_la
   if (name !== undefined) patch.name = name
   if (subject_description !== undefined) patch.subject_description = subject_description
   if (level_label !== undefined) patch.level_label = level_label
+  if (subject_category !== undefined) patch.subject_category = subject_category || null
 
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('curricula').update(patch).eq('id', id)

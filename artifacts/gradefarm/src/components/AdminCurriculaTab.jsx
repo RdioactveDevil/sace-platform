@@ -99,8 +99,9 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [uploadedDoc, setUploadedDoc]  = useState(null) // { base64, mediaType, name }
   const [creating, setCreating]         = useState(false)
   const [createError, setCreateError]  = useState('')
-  const [subjectTitle, setSubjectTitle] = useState('')
-  const [cohortLevel, setCohortLevel]   = useState('')
+  const [subjectTitle, setSubjectTitle]         = useState('')
+  const [cohortLevel, setCohortLevel]           = useState('')
+  const [subjectCategory, setSubjectCategory]   = useState('')
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -115,7 +116,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   useEffect(() => { load() }, [load])
 
-  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel('') }
+  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel(''); setSubjectCategory('') }
   const closeModal = () => { if (!creating) setShowModal(false) }
 
   const handleFileUpload = (e) => {
@@ -162,6 +163,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         subject_description,
         topics,
         level_label: cohortLevel,
+        subject_category: subjectCategory || null,
       })
       setShowModal(false)
       onSelectCurriculum(id)
@@ -320,6 +322,28 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               ))}
             </select>
             <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Subject category *
+            </label>
+            <select
+              value={subjectCategory}
+              onChange={e => setSubjectCategory(e.target.value)}
+              disabled={creating}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 9,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: '#0c1037', color: subjectCategory ? '#f1f5f9' : '#64748b',
+                fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                boxSizing: 'border-box', marginBottom: 12,
+                opacity: creating ? 0.6 : 1,
+              }}
+            >
+              <option value="">Select…</option>
+              <option value="maths">Maths — enables graph generation in questions</option>
+              <option value="science">Science — LaTeX equations, no graphs</option>
+              <option value="english">English — no maths features</option>
+              <option value="humanities">Humanities — no maths features</option>
+            </select>
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Course description (optional if uploading a document)
             </label>
             <textarea
@@ -361,7 +385,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               <button onClick={closeModal} disabled={creating} style={cancelBtn}>Cancel</button>
               <button
                 onClick={handleGeneratePlan}
-                disabled={!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating}
+                disabled={!subjectTitle.trim() || !cohortLevel || !subjectCategory || (!description.trim() && !uploadedDoc) || creating}
                 style={{
                   ...goldBtn,
                   opacity: (!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
