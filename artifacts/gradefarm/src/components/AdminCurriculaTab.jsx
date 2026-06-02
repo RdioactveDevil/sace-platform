@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded, deleteCurriculum } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
-import { S1_TOPICS, S2_TOPICS, Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS, Y10_MATHS_TOPICS } from '../lib/adminTopics'
+import { S1_TOPICS, S2_TOPICS, Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS, Y10_MATHS_TOPICS, MATHS_METHODS_S2_TOPICS } from '../lib/adminTopics'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
 // Group a flat topic array into sections by the prefix of each code.
@@ -21,6 +21,22 @@ function groupIntoSections(topics, sectionNames) {
 }
 
 const BUILT_IN_SUBJECTS = [
+  {
+    name: 'Mathematical Methods Stage 2',
+    description: 'SACE Mathematical Methods Stage 2 — covering Functions, Differential and Integral Calculus, Statistics, Probability Distributions, and Statistical Inference.',
+    generation_flags: { graphs: true, tables: false, latex: true },
+    topics: groupIntoSections(MATHS_METHODS_S2_TOPICS, {
+      1: 'Functions',
+      2: 'Differential Calculus',
+      3: 'Applications of Differential Calculus',
+      4: 'Integration',
+      5: 'Applications of Integration',
+      6: 'Statistics',
+      7: 'Discrete Random Variables',
+      8: 'Continuous Random Variables',
+      9: 'Sampling and Confidence Intervals',
+    }),
+  },
   {
     name: 'Chemistry Stage 1',
     description: 'SACE Chemistry Stage 1 — Australian curriculum covering properties of matter, atomic structure, molecular materials, solutions, acid-base and redox chemistry.',

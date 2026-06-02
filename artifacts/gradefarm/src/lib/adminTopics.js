@@ -1,3 +1,52 @@
+export const MATHS_METHODS_S2_TOPICS = [
+  { code: '1.1', name: 'Exponential functions' },
+  { code: '1.2', name: 'Logarithms' },
+  { code: '1.3', name: 'Logarithmic functions' },
+  { code: '1.4', name: 'Trigonometric functions' },
+  { code: '2.1', name: 'First principles' },
+  { code: '2.2', name: 'Simple rules of differentiation' },
+  { code: '2.3', name: 'The chain rule' },
+  { code: '2.4', name: 'The product rule' },
+  { code: '2.5', name: 'The quotient rule' },
+  { code: '2.6', name: 'Derivatives of exponential, logarithmic and trigonometric functions' },
+  { code: '2.7', name: 'Second derivatives' },
+  { code: '3.1', name: 'Equations of tangents' },
+  { code: '3.2', name: 'Increasing and decreasing functions' },
+  { code: '3.3', name: 'Stationary points' },
+  { code: '3.4', name: 'Inflections and shape' },
+  { code: '3.5', name: 'Kinematics' },
+  { code: '3.6', name: 'Rates of change' },
+  { code: '3.7', name: 'Optimisation' },
+  { code: '4.1', name: 'Antidifferentiation' },
+  { code: '4.2', name: 'The Fundamental Theorem of Calculus' },
+  { code: '4.3', name: 'Rules for integration' },
+  { code: '4.4', name: 'Integrating f(ax + b)' },
+  { code: '4.5', name: 'Definite integrals' },
+  { code: '5.1', name: 'The area under a curve' },
+  { code: '5.2', name: 'The area between two functions' },
+  { code: '5.3', name: 'Kinematics' },
+  { code: '5.4', name: 'Problem solving by integration' },
+  { code: '6.1', name: 'Key statistical concepts' },
+  { code: '6.2', name: 'Measuring the centre of data' },
+  { code: '6.3', name: 'Variance and standard deviation' },
+  { code: '7.1', name: 'Random variables' },
+  { code: '7.2', name: 'Discrete probability distributions' },
+  { code: '7.3', name: 'Expected value' },
+  { code: '7.4', name: 'Variance and standard deviation' },
+  { code: '7.5', name: 'Properties of aX + b' },
+  { code: '7.6', name: 'The Bernoulli and binomial distributions' },
+  { code: '8.1', name: 'Continuous random variables' },
+  { code: '8.2', name: 'Probability density functions' },
+  { code: '8.3', name: 'The normal distribution' },
+  { code: '8.4', name: 'The standard normal distribution (Z-distribution)' },
+  { code: '8.5', name: 'Quantiles and probability calculations' },
+  { code: '9.1', name: 'Sampling distributions' },
+  { code: '9.2', name: 'Distributions of sample means' },
+  { code: '9.3', name: 'The Central Limit Theorem' },
+  { code: '9.4', name: 'Confidence intervals for means' },
+  { code: '9.5', name: 'Sample proportions and confidence intervals for proportions' },
+]
+
 export const S1_TOPICS = [
   { code: '1.1', name: 'Properties and uses of materials' },
   { code: '1.2', name: 'Atomic structure' },
@@ -227,6 +276,7 @@ export function getTopicsBySubject(subjectId) {
   if (subjectId === 'english_y7'  || subjectId === 'Year 7 English')      return Y7_ENGLISH_TOPICS
   if (subjectId === 'maths_y10'   || subjectId === 'Year 10 Mathematics'  ||
       subjectId === 'Victorian Year 10 Mathematics' || subjectId === 'Victorian Year 10A Mathematics') return Y10_MATHS_TOPICS
+  if (subjectId === 'maths_methods_s2' || subjectId === 'Mathematical Methods Stage 2') return MATHS_METHODS_S2_TOPICS
   return []
 }
 
