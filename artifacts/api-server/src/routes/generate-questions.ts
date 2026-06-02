@@ -438,7 +438,12 @@ router.post("/generate-questions", async (req, res) => {
       `  solution (string \u2014 explain why the answer is correct with clear mathematical reasoning, 2\u20134 sentences)`,
       "  subtopic (short free-text label for the specific concept tested)",
       "  difficulty (integer 1\u20135)",
-      "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
+      `  graph (optional \u2014 include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
+      `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
+      `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4".`,
+      `    Include graph for questions about: identifying graph features (vertex, intercepts, turning points), reading values off a graph, matching an equation to a graph, or describing transformations shown visually.`,
+      `    Do NOT include graph for purely algebraic or numeric questions.`,
+      "IMPORTANT: Use LaTeX notation for ALL mathematical expressions in question/options/solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
       "Questions must be accurate, unambiguous, and test conceptual understanding.",
       "Use standard mathematical terminology. Avoid SACE, VCE, HSC, IB or curriculum-specific branding.",
       "Do not repeat the same scenario across questions.",
@@ -455,6 +460,14 @@ router.post("/generate-questions", async (req, res) => {
       "Use the exact scope and terminology listed \u2014 nothing broader.",
     ].join("\n");
   } else if (isY7) {
+    const graphInstructions = isY7Maths ? [
+      `  graph (optional \u2014 include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
+      `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
+      `    expr must be valid JavaScript math using x as the variable. Use ** for powers. Examples: "2*x + 1", "x**2 - 4".`,
+      `    Include graph for questions about: plotting points on the Cartesian plane, describing relationships from graphs, or identifying key features of a graph.`,
+      `    Do NOT include graph for purely arithmetic, algebraic or numeric questions.`,
+    ] : [];
+
     system = [
       `You are generating multiple-choice questions for Australian Curriculum v9 Year 7 students.`,
       `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
@@ -469,6 +482,7 @@ router.post("/generate-questions", async (req, res) => {
       "  solution (string \u2014 explain why the answer is correct using Australian Curriculum v9 language, 2\u20134 sentences)",
       "  subtopic (short free-text label for the specific concept tested, using AC v9 content descriptor language)",
       "  difficulty (integer 1\u20135)",
+      ...graphInstructions,
       "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{a}{b}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
       "Questions must be accurate, unambiguous, and test conceptual understanding aligned with AC v9 achievement standards.",
       "Use terminology consistent with the Australian Curriculum v9. Avoid SACE, VCE, IB or HSC-specific content.",
@@ -580,6 +594,7 @@ router.post("/generate-questions", async (req, res) => {
   const questions = extractJsonArray(rawText) as Array<{
     subtopic?: string; question: string; options: string[];
     answer_index: number; solution?: string; difficulty?: number;
+    graph?: Record<string, unknown> | null;
   }>;
 
   if (!questions.length) {
@@ -604,6 +619,7 @@ router.post("/generate-questions", async (req, res) => {
         options: q.options,
         answer_index: q.answer_index,
         solution: q.solution || "",
+        graph: q.graph || null,
         tip: null,
         created_at: now,
       }));
@@ -642,6 +658,7 @@ router.post("/generate-questions", async (req, res) => {
     options: q.options,
     answer_index: q.answer_index,
     solution: q.solution || null,
+    graph: q.graph || null,
     difficulty: q.difficulty || null,
     status: "pending",
   }));
