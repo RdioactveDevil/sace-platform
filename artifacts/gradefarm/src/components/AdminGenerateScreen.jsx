@@ -1,18 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { getTopicsBySubject, refreshManagedTopicsCache, getManagedSubjectNames } from '../lib/adminTopics'
 import { adminApiPost } from '../lib/adminApi'
-import { loadManagedCurriculaTopics } from '../lib/curriculaDb'
+import { loadManagedCurriculaTopics, fetchLiveCurricula } from '../lib/curriculaDb'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
-
-const SUBJECTS = [
-  { id: 'Chemistry Stage 1',  label: 'Chemistry Stage 1' },
-  { id: 'Chemistry Stage 2',  label: 'Chemistry Stage 2' },
-  { id: 'Year 7 Mathematics', label: 'Year 7 Mathematics' },
-  { id: 'Year 7 English',     label: 'Year 7 English' },
-  { id: 'maths_y10', label: 'Year 10 Mathematics' },
-]
 
 const COUNTS = [5, 10, 20]
 const DIFFICULTIES = [
@@ -24,15 +16,8 @@ const DIFFICULTIES = [
   { value: '5', label: '5 — Hard' },
 ]
 
-// Subjects that send { subject } in the payload (not { stage: subject } used for SACE).
-const NON_SACE_SUBJECT_IDS = new Set([
-  'Year 7 Mathematics',
-  'Year 7 English',
-  'maths_y10',
-])
-
 export default function AdminGenerateScreen() {
-  const [subject,         setSubject]         = useState('Chemistry Stage 1')
+  const [subject,         setSubject]         = useState('')
   const [topicCode,       setTopicCode]       = useState('')
   const [count,           setCount]           = useState(10)
   const [difficulty,      setDifficulty]      = useState('mixed')
@@ -41,6 +26,7 @@ export default function AdminGenerateScreen() {
   const [result,          setResult]          = useState(null)
   const [error,           setError]           = useState(null)
   const [managedSubjects, setManagedSubjects] = useState([])
+  const [builtInSubjects, setBuiltInSubjects] = useState([])
   const timerRef = useRef(null)
 
   useEffect(() => {
@@ -48,6 +34,19 @@ export default function AdminGenerateScreen() {
       .then(() => setManagedSubjects(getManagedSubjectNames()))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetchLiveCurricula()
+      .then(curricula => {
+        const subjects = curricula.map(c => ({ id: c.name, label: c.name }))
+        setBuiltInSubjects(subjects)
+        // Default to the first subject if none selected yet
+        if (!subject && subjects.length > 0) {
+          setSubject(subjects[0].id)
+        }
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (loading) {
@@ -76,7 +75,9 @@ export default function AdminGenerateScreen() {
 
     try {
       const isManaged = managedSubjects.includes(subject)
-      const payload = (NON_SACE_SUBJECT_IDS.has(subject) || isManaged)
+      const isBuiltIn = builtInSubjects.some(s => s.id === subject)
+      // Curricula-loaded subjects and managed subjects both use { subject } payload
+      const payload = (isBuiltIn || isManaged)
         ? { subject, topicCode, count, difficulty }
         : { stage: subject, topicCode, count, difficulty }
 
@@ -96,6 +97,11 @@ export default function AdminGenerateScreen() {
     color: '#fff', fontSize: 13, fontFamily: FONT_B, outline: 'none',
   }
 
+  // Built-in subjects that are not already covered by managed subjects
+  const filteredBuiltIn = builtInSubjects.filter(
+    s => !managedSubjects.includes(s.label) && !managedSubjects.includes(s.id)
+  )
+
   return (
     <div>
       <h2 style={{ color: '#fff', marginTop: 0 }}>Generate Questions</h2>
@@ -107,7 +113,7 @@ export default function AdminGenerateScreen() {
       <div style={{ marginBottom: 18 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {SUBJECTS.filter(s => !managedSubjects.includes(s.label) && !managedSubjects.includes(s.id)).map(s => (
+          {filteredBuiltIn.map(s => (
             <button
               key={s.id}
               onClick={() => handleSubjectChange(s.id)}

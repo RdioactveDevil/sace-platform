@@ -261,6 +261,37 @@ export async function fetchLiveCurricula() {
 }
 
 /**
+ * Fetch all curricula with status in ['draft', 'generating', 'live'], with topic names.
+ * Used to show draft curricula as "Coming Soon" in SubjectPicker.
+ * @returns {Promise<Array<{ id: string, name: string, level_label: string, status: string, topicNames: string[] }>>}
+ */
+export async function fetchAllActiveCurricula() {
+  const { data: curricula, error: cErr } = await supabase
+    .from('curricula')
+    .select('id, name, level_label, status')
+    .in('status', ['draft', 'generating', 'live'])
+    .order('created_at', { ascending: true })
+  if (cErr) throw cErr
+  if (!curricula?.length) return []
+
+  const ids = curricula.map(c => c.id)
+  const { data: topics, error: tErr } = await supabase
+    .from('curriculum_topics')
+    .select('curriculum_id, name')
+    .in('curriculum_id', ids)
+    .order('order_index')
+  if (tErr) throw tErr
+
+  return curricula.map(c => ({
+    id: c.id,
+    name: c.name,
+    level_label: (c.level_label ?? '').trim(),
+    status: c.status,
+    topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
+  }))
+}
+
+/**
  * Delete a curriculum and all its topics/subtopics (cascade).
  * @param {string} id
  */
@@ -324,44 +355,4 @@ async function _replaceTopicsAndSubtopics(curriculumId, topics, defaultGenStatus
       if (sErr) throw sErr
     }
   }
-}
-
-/**
- * Load curriculum topics and subtopics for a given curriculum name,
- * formatted as macroGroups for HomeScreen two-level topic display.
- * Each macro group = one curriculum topic; its `topics` array = subtopic names.
- * @param {string} curriculumName  e.g. 'Mathematical Methods Stage 2'
- * @returns {Promise<Array<{id:string,num:number,label:string,topics:string[]}>|null>}
- */
-export async function loadCurriculumMacroGroups(curriculumName) {
-  const { data: curriculum } = await supabase
-    .from('curricula')
-    .select('id')
-    .eq('name', curriculumName)
-    .single()
-  if (!curriculum) return null
-
-  const [{ data: topics }, { data: subtopics }] = await Promise.all([
-    supabase
-      .from('curriculum_topics')
-      .select('id, name, order_index')
-      .eq('curriculum_id', curriculum.id)
-      .order('order_index'),
-    supabase
-      .from('curriculum_subtopics')
-      .select('topic_id, name, order_index')
-      .eq('curriculum_id', curriculum.id)
-      .order('order_index'),
-  ])
-
-  if (!topics?.length) return null
-
-  return topics.map((t, i) => ({
-    id: `g${i + 1}`,
-    num: i + 1,
-    label: t.name,
-    topics: (subtopics || [])
-      .filter(s => s.topic_id === t.id)
-      .map(s => s.name),
-  }))
 }

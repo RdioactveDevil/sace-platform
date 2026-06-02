@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
 import { fetchSubjectBankCounts } from '../lib/db'
-import { fetchLiveCurricula } from '../lib/curriculaDb'
+import { fetchAllActiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -14,23 +14,6 @@ const BUILT_IN_CURRICULUM_NAMES = new Set([
   ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
   ...Object.values(QUESTIONS_SUBJECT_BY_ID),
 ])
-
-const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
-const COUNTS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
-function readCountsCache() {
-  try {
-    const raw = localStorage.getItem(COUNTS_CACHE_KEY)
-    if (!raw) return null
-    const { ts, counts } = JSON.parse(raw)
-    if (Date.now() - ts > COUNTS_CACHE_TTL) return null
-    return counts
-  } catch { return null }
-}
-
-function writeCountsCache(counts) {
-  try { localStorage.setItem(COUNTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), counts })) } catch {}
-}
 
 // Match a subscription row to a subject tile.
 // Handles both short-name subscriptions (subject_name === s.name)
@@ -50,6 +33,23 @@ function builtInCanonicalNames(s) {
   return names
 }
 
+const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
+const COUNTS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function readCountsCache() {
+  try {
+    const raw = localStorage.getItem(COUNTS_CACHE_KEY)
+    if (!raw) return null
+    const { ts, counts } = JSON.parse(raw)
+    if (Date.now() - ts > COUNTS_CACHE_TTL) return null
+    return counts
+  } catch { return null }
+}
+
+function writeCountsCache(counts) {
+  try { localStorage.setItem(COUNTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), counts })) } catch {}
+}
+
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
@@ -60,10 +60,15 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const t = THEMES[theme]
 
   useEffect(() => {
-    fetchLiveCurricula()
+    fetchAllActiveCurricula()
       .then(curricula => {
-        const names = new Set(curricula.map(c => c.name))
-        setLiveCurriculaNames(names)
+        // Track names of live/generating curricula for filtering built-in subjects
+        const liveOrGeneratingNames = new Set(
+          curricula.filter(c => c.status === 'live' || c.status === 'generating').map(c => c.name)
+        )
+        setLiveCurriculaNames(liveOrGeneratingNames)
+
+        // Custom (non-built-in) curricula: live/generating → available; draft → coming soon
         const dynamic = curricula
           .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
           .map(c => ({
