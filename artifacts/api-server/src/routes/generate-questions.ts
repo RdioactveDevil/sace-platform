@@ -375,9 +375,9 @@ router.post("/generate-questions", async (req, res) => {
     ...VIC_Y10A_LEARNING_OBJECTIVES,
   };
 
-  let topicMap: Record<string, string>;
-  let learningObjectivesMap: Record<string, string>;
-  let curriculumLabel: string;
+  let topicMap: Record<string, string> = {};
+  let learningObjectivesMap: Record<string, string> = {};
+  let curriculumLabel = '';
   let managedParentTopicName: string | null = null;
 
   if (isY7Maths) {
@@ -422,7 +422,7 @@ router.post("/generate-questions", async (req, res) => {
           }
         }
       }
-      if (!topicMap!) {
+      if (!managedParentTopicName) {
         res.status(400).json({ error: `Could not resolve topic code: ${topicCode} for ${normalizedSubject}` });
         return;
       }
