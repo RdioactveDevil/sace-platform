@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
-import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -150,7 +151,7 @@ export default function LearnScreen({
   const fileRef   = useRef(null)
   const photoRef  = useRef(null)
 
-  const subjectTopicConfig = useMemo(() => getY7TopicConfig(subject?.id), [subject?.id])
+  const subjectTopicConfig = useCurriculumTopicConfig(subject)
 
   const struggleTopics = useMemo(() => {
     const bySubtopic = new Map()

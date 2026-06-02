@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { THEMES } from '../lib/theme'
-import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -11,14 +12,16 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 export default function StudyPlanScreen({ profile, questions, struggleMap, theme, onStartSession, subject, lastSessionAt, onOpenLearn }) {
   const t = THEMES[theme]
 
-  const y7Config = getY7TopicConfig(subject?.id)
+  const y7Config = useCurriculumTopicConfig(subject)
+  const isTwoLevel = y7Config?.isTwoLevel ?? false
 
-  // Per-topic aggregated stats (normalize topic names for Y7 subjects)
+  // Per-topic aggregated stats (normalize topic names; for DB two-level curricula use q.subtopic)
   const topicStats = useMemo(() => {
     const normFn = y7Config?.normFn
     const map = {}
     for (const q of questions) {
-      const topicKey = normFn ? (normFn(q.topic) ?? q.topic) : q.topic
+      const rawKey = isTwoLevel ? q.subtopic : q.topic
+      const topicKey = normFn ? (normFn(rawKey) ?? rawKey) : rawKey
       if (!map[topicKey]) map[topicKey] = { topic: topicKey, subtopics: new Set(), total: 0, attempts: 0, wrong: 0 }
       map[topicKey].subtopics.add(q.subtopic)
       map[topicKey].total++
@@ -39,7 +42,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
       if (a.attempts === 0 && b.attempts > 0) return 1
       return b.errorRate - a.errorRate
     })
-  }, [questions, struggleMap, y7Config])
+  }, [questions, struggleMap, y7Config, isTwoLevel])
 
   // Questions due within 48h, grouped by topic
   const todayFocus = useMemo(() => {
