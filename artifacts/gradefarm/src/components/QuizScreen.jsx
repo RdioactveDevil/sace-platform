@@ -34,6 +34,7 @@ import {
 } from '../lib/remediation'
 import MathText from './MathText'
 import GraphView from './GraphView'
+import TableView from './TableView'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -1440,6 +1441,9 @@ export default function QuizScreen({
             <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: t.shadowCard, marginBottom: showAns ? 14 : 0 }}>
               {currentQ.graph && (
                 <GraphView graph={currentQ.graph} theme={theme} />
+              )}
+              {currentQ.table_data && (
+                <TableView table={currentQ.table_data} theme={theme} />
               )}
               <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
                 <MathText text={currentQ.question} />
