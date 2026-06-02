@@ -44,8 +44,12 @@ export function useCurriculumTopicConfig(subject, { withFallback = false } = {})
   const hardcoded = getY7TopicConfig(subject?.id)
   if (hardcoded) return hardcoded
 
-  // Still loading DB config — return null so callers can show a loading state
-  if (curriculumName) return null
+  // Still loading DB config — callers with withFallback=true get a temporary fallback
+  // instead of null so destructuring { normFn } doesn't crash during the async load
+  if (curriculumName) {
+    if (withFallback) return getTopicConfigForSubject(subject)
+    return null
+  }
 
   // No DB or hardcoded config — use Chemistry/generic fallback if requested
   if (withFallback) return getTopicConfigForSubject(subject)
