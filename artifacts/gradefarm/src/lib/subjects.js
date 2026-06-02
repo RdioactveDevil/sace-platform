@@ -139,6 +139,7 @@ export const ALL_SUBJECTS = [
     topics: ['Number', 'Algebra', 'Functions & Graphs', 'Measurement', 'Geometry', 'Statistics', 'Probability'],
     questionCount: 0,
     available: true,
+    curriculumName: 'Year 10 Mathematics',
   },
   {
     id: 'writing_y56',
