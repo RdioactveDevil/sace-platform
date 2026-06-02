@@ -36,13 +36,16 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   useEffect(() => {
     setCurriculumMacroGroups(null)
-    if (!subject?.curriculumName) return
+    const curriculumName =
+      subject?.curriculumName ||
+      (subject?.id?.startsWith('curriculum_') ? subject?.name : null)
+    if (!curriculumName) return
     let cancelled = false
-    loadCurriculumMacroGroups(subject.curriculumName)
+    loadCurriculumMacroGroups(curriculumName)
       .then(groups => { if (!cancelled && groups) setCurriculumMacroGroups(groups) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [subject?.curriculumName])
+  }, [subject?.curriculumName, subject?.id, subject?.name])
 
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
   const currentStruggleMap = useMemo(() => {

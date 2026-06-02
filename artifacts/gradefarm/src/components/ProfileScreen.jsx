@@ -3,7 +3,7 @@ import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogLast30Days, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
 import { getTopicConfigForSubject } from '../lib/saceTopics'
-import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
+import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import ReadinessCard from './ReadinessCard'
 import StreakCalendar from './StreakCalendar'
 import SubtopicHeatmap from './SubtopicHeatmap'
@@ -15,7 +15,9 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLearn, subject }) {
   const t = THEMES[theme]
-  const { normFn: normalizeCurriculumTopic, macroGroups } = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
+  const topicConfig = useCurriculumTopicConfig(subject, { withFallback: true })
+  const { normFn: normalizeCurriculumTopicRaw, macroGroups, isTwoLevel = false } = topicConfig
+  const normalizeCurriculumTopic = (q) => normalizeCurriculumTopicRaw(isTwoLevel ? q.subtopic : q.topic)
   const curriculumTopics = macroGroups.flatMap((g) => g.topics)
   const [answerLog, setAnswerLog] = useState([])
   const [assessments, setAssessments] = useState([])
@@ -40,7 +42,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const topicStats = {}
   const topicSubtopics = {}
   questions.forEach((q) => {
-    const topic = normalizeCurriculumTopic(q.topic)
+    const topic = normalizeCurriculumTopic(q)
     if (!topic) return // skip questions whose topic isn't in the current stage curriculum
     if (!topicStats[topic]) topicStats[topic] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
     if (!topicSubtopics[topic]) topicSubtopics[topic] = []

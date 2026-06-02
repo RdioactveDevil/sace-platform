@@ -375,9 +375,10 @@ router.post("/generate-questions", async (req, res) => {
     ...VIC_Y10A_LEARNING_OBJECTIVES,
   };
 
-  let topicMap: Record<string, string>;
-  let learningObjectivesMap: Record<string, string>;
-  let curriculumLabel: string;
+  let topicMap: Record<string, string> = {};
+  let learningObjectivesMap: Record<string, string> = {};
+  let curriculumLabel = '';
+  let managedParentTopicName: string | null = null;
 
   if (isY7Maths) {
     topicMap = Y7_MATHS_TOPICS;
@@ -395,10 +396,43 @@ router.post("/generate-questions", async (req, res) => {
       ? "Year 10 Mathematics (10A extension)"
       : "Year 10 Mathematics";
   } else {
-    const stageKey = resolvedSubject === "Chemistry Stage 1" ? "s1" : "s2";
-    topicMap = stageKey === "s1" ? S1_TOPICS : S2_TOPICS;
-    learningObjectivesMap = stageKey === "s1" ? S1_LEARNING_OBJECTIVES : S2_LEARNING_OBJECTIVES;
-    curriculumLabel = `SACE ${resolvedSubject}`;
+    // topicCode "T{n}.{m}" means a managed DB curriculum — look up topic/subtopic from DB.
+    const managedMatch = topicCode.match(/^T(\d+)\.(\d+)$/);
+    if (managedMatch) {
+      const topicIdx    = parseInt(managedMatch[1]) - 1;
+      const subtopicIdx = parseInt(managedMatch[2]) - 1;
+      const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+      const { data: currRow } = await adminDb
+        .from("curricula").select("id").eq("name", normalizedSubject).maybeSingle();
+      if (currRow?.id) {
+        const { data: tRows } = await adminDb
+          .from("curriculum_topics").select("id, name")
+          .eq("curriculum_id", currRow.id).order("order_index");
+        const tRow = (tRows ?? [])[topicIdx];
+        if (tRow) {
+          const { data: sRows } = await adminDb
+            .from("curriculum_subtopics").select("name")
+            .eq("topic_id", tRow.id).order("order_index");
+          const sRow = (sRows ?? [])[subtopicIdx];
+          if (sRow) {
+            managedParentTopicName = tRow.name;
+            topicMap = { [topicCode]: sRow.name };
+            learningObjectivesMap = {};
+            curriculumLabel = normalizedSubject;
+          }
+        }
+      }
+      if (!managedParentTopicName) {
+        res.status(400).json({ error: `Could not resolve topic code: ${topicCode} for ${normalizedSubject}` });
+        return;
+      }
+    } else {
+      // Chemistry S1/S2 or other SACE subject
+      const stageKey = resolvedSubject === "Chemistry Stage 1" ? "s1" : "s2";
+      topicMap = stageKey === "s1" ? S1_TOPICS : S2_TOPICS;
+      learningObjectivesMap = stageKey === "s1" ? S1_LEARNING_OBJECTIVES : S2_LEARNING_OBJECTIVES;
+      curriculumLabel = `SACE ${resolvedSubject}`;
+    }
   }
 
   const topicName = topicMap[topicCode];
@@ -566,9 +600,9 @@ router.post("/generate-questions", async (req, res) => {
       .map((q) => ({
         id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         subject: normalizedSubject,
-        topic: topicName,
-        subtopic: q.subtopic || topicName,
-        concept_tag: `${normalizedSubject}|${topicName}|${q.subtopic || topicName}`.toLowerCase(),
+        topic: managedParentTopicName ?? topicName,
+        subtopic: topicName,
+        concept_tag: `${normalizedSubject}|${managedParentTopicName ?? topicName}|${topicName}`.toLowerCase(),
         difficulty: q.difficulty || 3,
         question: q.question,
         options: q.options,
@@ -608,8 +642,8 @@ router.post("/generate-questions", async (req, res) => {
     source: "ai_generated",
     subject: normalizedSubject,
     topic_code: topicCode,
-    topic: topicName,
-    subtopic: q.subtopic || null,
+    topic: managedParentTopicName ?? topicName,
+    subtopic: topicName,
     question: q.question,
     options: q.options,
     answer_index: q.answer_index,
