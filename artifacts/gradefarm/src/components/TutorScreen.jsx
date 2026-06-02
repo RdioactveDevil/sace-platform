@@ -29,6 +29,7 @@ import {
   fetchDiagnosticReport,
 } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
 
 const GOLD   = '#f1be43'
@@ -1400,17 +1401,48 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
   },
 ]
 
-function getSubjectsForYearLevel(yearLevel) {
+function getSubjectsForYearLevel(yearLevel, subjectList = ALL_DIAGNOSTIC_SUBJECTS) {
   if (!yearLevel) return []
   const lower = yearLevel.toLowerCase()
-  if (lower.includes('stage 2') || lower.includes('year 12')) return ALL_DIAGNOSTIC_SUBJECTS.filter(s => s.yearGroups.includes('stage2'))
-  if (lower.includes('stage 1') || lower.includes('year 11')) return ALL_DIAGNOSTIC_SUBJECTS.filter(s => s.yearGroups.includes('stage1'))
-  if (['year 7', 'year 8', 'year 9', 'year 10'].some(y => lower.includes(y))) return ALL_DIAGNOSTIC_SUBJECTS.filter(s => s.yearGroups.includes('junior'))
-  return ALL_DIAGNOSTIC_SUBJECTS.filter(s => s.yearGroups.includes('primary'))
+  if (lower.includes('stage 2') || lower.includes('year 12')) return subjectList.filter(s => s.yearGroups.includes('stage2'))
+  if (lower.includes('stage 1') || lower.includes('year 11')) return subjectList.filter(s => s.yearGroups.includes('stage1'))
+  if (['year 7', 'year 8', 'year 9', 'year 10'].some(y => lower.includes(y))) return subjectList.filter(s => s.yearGroups.includes('junior'))
+  return subjectList.filter(s => s.yearGroups.includes('primary'))
+}
+
+function curriculumToYearGroups(level_label) {
+  const l = (level_label || '').toLowerCase()
+  if (l.includes('stage 2') || l.includes('year 12')) return ['stage2']
+  if (l.includes('stage 1') || l.includes('year 11')) return ['stage1']
+  if (['year 7', 'year 8', 'year 9', 'year 10'].some(y => l.includes(y))) return ['junior']
+  return ['junior']
 }
 
 function DiagnosticTab({ profile, theme }) {
   const t = THEMES[theme]
+
+  // ── Dynamic subjects from DB (merged with static fallback) ──
+  const [mergedSubjects, setMergedSubjects] = useState(ALL_DIAGNOSTIC_SUBJECTS)
+  useEffect(() => {
+    let cancelled = false
+    fetchLiveCurricula()
+      .then(curricula => {
+        if (cancelled) return
+        const builtInNames = new Set(ALL_DIAGNOSTIC_SUBJECTS.map(s => s.name.toLowerCase()))
+        const dynamic = curricula
+          .filter(c => !builtInNames.has(c.name.toLowerCase()))
+          .map(c => ({
+            id: `db_${c.id}`,
+            name: c.name,
+            yearGroups: curriculumToYearGroups(c.level_label),
+            topics: [],
+            isWriting: false,
+          }))
+        setMergedSubjects([...ALL_DIAGNOSTIC_SUBJECTS, ...dynamic])
+      })
+      .catch(() => { /* fall back to static list already set */ })
+    return () => { cancelled = true }
+  }, [])
 
   // ── Form state ──
   const [step, setStep] = useState('form')  // form | preview | created | list | report
@@ -1439,7 +1471,7 @@ function DiagnosticTab({ profile, theme }) {
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState('')
 
-  const availableSubjects = getSubjectsForYearLevel(yearLevel)
+  const availableSubjects = getSubjectsForYearLevel(yearLevel, mergedSubjects)
   const selectedSubject = availableSubjects.find(s => s.id === selectedSubjectId)
 
   const loadList = useCallback(async () => {

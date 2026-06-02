@@ -11,6 +11,7 @@ import {
   downloadWritingReportPdf,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -60,6 +61,13 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [writingAttempts, setWritingAttempts] = useState(null)
   const [writingLoading, setWritingLoading] = useState(false)
   const [pdfBusyId, setPdfBusyId] = useState(null)
+  const [subscriptions, setSubscriptions]       = useState([])
+  const [subsLoading, setSubsLoading]           = useState(false)
+  const [subsError, setSubsError]               = useState('')
+  const [liveCurricula, setLiveCurricula]       = useState([])
+  const [curriculaLoading, setCurriculaLoading] = useState(false)
+  const [grantSubject, setGrantSubject]         = useState('')
+  const [grantBusy, setGrantBusy]               = useState(false)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -102,6 +110,23 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     }
   }, [])
 
+  const loadSubscriptions = useCallback(async (userId) => {
+    setSubsLoading(true)
+    setSubsError('')
+    try {
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+      if (error) throw error
+      setSubscriptions(data || [])
+    } catch (e) {
+      setSubsError(e.message)
+    }
+    setSubsLoading(false)
+  }, [])
+
   const openDetail = (student) => {
     setSelected(student)
     setDetailStats(null)
@@ -111,6 +136,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setStatsLoading(true)
     setAssignmentsLoading(true)
     setWritingLoading(true)
+    setSubscriptions([])
+    setSubsError('')
+    setGrantSubject('')
     adminGetStudentStats(student.id)
       .then(s => { setDetailStats(s); setStatsLoading(false) })
       .catch(() => setStatsLoading(false))
@@ -120,9 +148,24 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     adminGetStudentWritingAttempts(student.id)
       .then(w => { setWritingAttempts(w); setWritingLoading(false) })
       .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
+    loadSubscriptions(student.id)
+    if (liveCurricula.length === 0) {
+      setCurriculaLoading(true)
+      fetchLiveCurricula()
+        .then(c => { setLiveCurricula(c); setCurriculaLoading(false) })
+        .catch(() => setCurriculaLoading(false))
+    }
   }
 
-  const closeDetail = () => { setSelected(null); setDetailStats(null); setDetailAssignments(null); setWritingAttempts(null) }
+  const closeDetail = () => {
+    setSelected(null)
+    setDetailStats(null)
+    setDetailAssignments(null)
+    setWritingAttempts(null)
+    setSubscriptions([])
+    setSubsError('')
+    setGrantSubject('')
+  }
 
   const runRole = async (id, fn) => {
     setBusyId(id)
@@ -518,6 +561,49 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 )}
               </Section>
 
+              {/* Subject Access */}
+              <SubjectAccessSection
+                userId={selected.id}
+                subscriptions={subscriptions}
+                subsLoading={subsLoading}
+                subsError={subsError}
+                liveCurricula={liveCurricula}
+                curriculaLoading={curriculaLoading}
+                grantSubject={grantSubject}
+                setGrantSubject={setGrantSubject}
+                grantBusy={grantBusy}
+                onGrant={async () => {
+                  if (!grantSubject) return
+                  setGrantBusy(true)
+                  setSubsError('')
+                  try {
+                    const cur = liveCurricula.find(c => c.id === grantSubject)
+                    if (!cur) throw new Error('Subject not found')
+                    const { error } = await supabase.from('user_subscriptions').upsert(
+                      { user_id: selected.id, subject_name: cur.name, stage: cur.level_label || '', active: true, beta: true },
+                      { onConflict: 'user_id,subject_name,stage' }
+                    )
+                    if (error) throw error
+                    setGrantSubject('')
+                    await loadSubscriptions(selected.id)
+                  } catch (e) {
+                    setSubsError(e.message)
+                  }
+                  setGrantBusy(false)
+                }}
+                onRevoke={async (subId) => {
+                  if (!window.confirm('Remove this subscription?')) return
+                  setSubsError('')
+                  try {
+                    const { error } = await supabase.from('user_subscriptions').delete().eq('id', subId)
+                    if (error) throw error
+                    await loadSubscriptions(selected.id)
+                  } catch (e) {
+                    setSubsError(e.message)
+                  }
+                }}
+              />
+
               {/* Role management */}
               <Section title="Role Management">
                 {roleError && (
@@ -572,6 +658,101 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function SubjectAccessSection({
+  userId,
+  subscriptions,
+  subsLoading,
+  subsError,
+  liveCurricula,
+  curriculaLoading,
+  grantSubject,
+  setGrantSubject,
+  grantBusy,
+  onGrant,
+  onRevoke,
+}) {
+  // Build a set of already-granted curriculum ids for the dropdown filter
+  const grantedKeys = new Set(subscriptions.map(s => `${s.subject_name}||${s.stage || ''}`))
+
+  const availableCurricula = liveCurricula.filter(
+    c => !grantedKeys.has(`${c.name}||${c.level_label || ''}`)
+  )
+
+  return (
+    <Section title="Subject Access">
+      {subsError && (
+        <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{subsError}</div>
+      )}
+
+      {/* Current subscriptions */}
+      {subsLoading ? (
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Loading…</div>
+      ) : subscriptions.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#475569', marginBottom: 10 }}>No active subscriptions.</div>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          {subscriptions.map(sub => (
+            <span
+              key={sub.id}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 8px 4px 10px', borderRadius: 6,
+                background: 'rgba(241,190,67,0.1)', border: `1px solid ${GOLD}44`,
+                fontSize: 12, fontWeight: 600, color: GOLD,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {sub.subject_name}
+              {sub.stage && <span style={{ opacity: 0.65, fontSize: 11 }}>{sub.stage}</span>}
+              <button
+                onClick={() => onRevoke(sub.id)}
+                title="Remove subscription"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#f87171', fontSize: 14, lineHeight: 1, padding: '0 2px',
+                  display: 'flex', alignItems: 'center',
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Grant access row */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select
+          value={grantSubject}
+          onChange={e => setGrantSubject(e.target.value)}
+          disabled={curriculaLoading || grantBusy}
+          style={{
+            ...selectStyle,
+            flex: 1, minWidth: 0,
+            opacity: curriculaLoading || grantBusy ? 0.5 : 1,
+          }}
+        >
+          <option value="">
+            {curriculaLoading ? 'Loading subjects…' : availableCurricula.length === 0 ? 'No subjects available' : 'Select subject…'}
+          </option>
+          {availableCurricula.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.name}{c.level_label ? ` (${c.level_label})` : ''}
+            </option>
+          ))}
+        </select>
+        <Btn
+          onClick={onGrant}
+          disabled={!grantSubject || grantBusy}
+          variant="primary"
+        >
+          {grantBusy ? 'Granting…' : 'Grant Access'}
+        </Btn>
+      </div>
+    </Section>
+  )
+}
 
 function Section({ title, children }) {
   return (
