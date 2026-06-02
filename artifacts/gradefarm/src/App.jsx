@@ -806,19 +806,23 @@ function AppInner() {
           writingNav: selectedSubject?.type === 'writing',
           isTutor: !!profile.is_tutor,
           theme,
-          onFinish: async () => {
+          // Called as soon as the overlay mounts — prevents re-showing if the user
+          // closes the tab or navigates away before explicitly skipping/finishing.
+          onSeen: async () => {
             const uid = profile.id
             const ts = new Date().toISOString()
             try {
               localStorage.setItem(gfTutorialStorageKey(uid), ts)
             } catch (_) {}
             setProfile(prev => ({ ...prev, app_tutorial_completed_at: ts }))
-            setWelcomeCelebration(true)
             try {
               await markTutorialComplete(uid)
             } catch (e) {
-              console.error('[tutorial complete]', e)
+              console.error('[tutorial seen]', e)
             }
+          },
+          onFinish: () => {
+            setWelcomeCelebration(true)
           },
         }
       : null

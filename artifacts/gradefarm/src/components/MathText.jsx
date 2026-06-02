@@ -85,9 +85,8 @@ export default function MathText({ text = '', style = {} }) {
 
   const withBreaks = insertLineBreaks(text)
   const processed = preprocess(withBreaks)
-  const outerStyle = { whiteSpace: 'pre-line', ...style }
 
-  if (!processed.includes('$')) return <span style={outerStyle}>{processed}</span>
+  if (!processed.includes('$')) return <span style={{ whiteSpace: 'pre-line', ...style }}>{processed}</span>
 
   const parts = []
   const pattern = /(\$\$[\s\S]+?\$\$|\$(?!\d)[^$\n]+?\$)/g
@@ -110,8 +109,13 @@ export default function MathText({ text = '', style = {} }) {
     parts.push({ type: 'text', content: processed.slice(lastIndex) })
   }
 
+  // Use a block container when any part is display math so we avoid the
+  // invalid block-inside-inline pattern that breaks mobile layout.
+  const hasDisplay = parts.some(p => p.type === 'math' && p.display)
+  const Tag = hasDisplay ? 'div' : 'span'
+
   return (
-    <span style={outerStyle}>
+    <Tag style={{ whiteSpace: 'pre-line', maxWidth: '100%', ...style }}>
       {parts.map((part, i) => {
         if (part.type === 'text') return <span key={i}>{part.content}</span>
         try {
@@ -120,17 +124,26 @@ export default function MathText({ text = '', style = {} }) {
             displayMode: part.display,
             strict: false,
           })
+          if (part.display) {
+            return (
+              <div
+                key={i}
+                dangerouslySetInnerHTML={{ __html: html }}
+                style={{ overflowX: 'auto', textAlign: 'center', margin: '8px 0', maxWidth: '100%' }}
+              />
+            )
+          }
           return (
             <span
               key={i}
               dangerouslySetInnerHTML={{ __html: html }}
-              style={part.display ? { display: 'block', textAlign: 'center', margin: '8px 0' } : {}}
+              style={{ verticalAlign: 'middle' }}
             />
           )
         } catch {
           return <span key={i}>{part.display ? `$$${part.content}$$` : `$${part.content}$`}</span>
         }
       })}
-    </span>
+    </Tag>
   )
 }
