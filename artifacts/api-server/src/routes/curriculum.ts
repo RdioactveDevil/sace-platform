@@ -573,11 +573,12 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 
+  // Show names only — no section numbers — so Claude returns exactly the stored names.
   const treeText = (newCurriculumTree.topics as Array<{ name: string; subtopics: Array<{ name: string }> }>)
-    .map((t, ti) =>
-      `T${ti + 1}. ${t.name}\n${(t.subtopics || []).map((s, si) => `  ${ti + 1}.${si + 1}. ${s.name}`).join("\n")}`
+    .map(t =>
+      `Topic: ${t.name}\n${(t.subtopics || []).map(s => `  - ${s.name}`).join("\n")}`
     )
-    .join("\n");
+    .join("\n\n");
 
   const system = [
     "You are a curriculum expert. Return ONLY a valid JSON object — no markdown, no commentary.",
@@ -585,7 +586,7 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
     'Each suggestion has: oldSubtopic (string), action ("remap" or "delete"), newTopic (string or null), newSubtopic (string or null).',
     'Use action "remap" when the old subtopic clearly corresponds to a subtopic in the new curriculum.',
     'Use action "delete" only if the content has been completely removed from the new curriculum.',
-    'newTopic and newSubtopic must exactly match the names in the new curriculum tree.',
+    'CRITICAL: newTopic and newSubtopic must be EXACT verbatim copies of the topic/subtopic names shown after "Topic:" and "  - " in the curriculum tree. Do not add numbers, punctuation, or any other text.',
   ].join("\n");
 
   // Call Claude for a batch of orphaned subtopics, return parsed suggestions array or throw.
