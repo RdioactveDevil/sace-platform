@@ -53,10 +53,13 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const [selectedSubs, setSelectedSubs] = useState([])
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [dynamicSubjects, setDynamicSubjects] = useState([])
+  const [liveCurriculaNames, setLiveCurriculaNames] = useState(null)
 
   useEffect(() => {
     fetchLiveCurricula()
       .then(curricula => {
+        const names = new Set(curricula.map(c => c.name))
+        setLiveCurriculaNames(names)
         setDynamicSubjects(
           curricula
             .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
@@ -72,10 +75,23 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
             }))
         )
       })
-      .catch(() => {})
+      .catch(() => { setLiveCurriculaNames(new Set()) })
   }, [])
 
-  const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
+  // Filter built-in subjects by what the admin has live in the curricula table.
+  const builtInSubjects = liveCurriculaNames === null
+    ? ALL_SUBJECTS
+    : ALL_SUBJECTS.filter(s => {
+        if (!s.available) return true
+        const namesToCheck = [
+          QUESTIONS_SUBJECT_BY_ID[s.id],
+          s.curriculumName,
+          `${s.name} ${s.stage}`.trim(),
+        ].filter(Boolean)
+        return namesToCheck.some(n => liveCurriculaNames.has(n))
+      })
+
+  const allSubjects = [...builtInSubjects, ...dynamicSubjects]
   const AVAILABLE_SUBJECTS = allSubjects.filter(s => s.available)
   const COMING_SUBJECTS    = allSubjects.filter(s => !s.available)
 

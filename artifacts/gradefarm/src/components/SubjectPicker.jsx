@@ -41,16 +41,29 @@ function subMatchesSubject(sub, s) {
   return false
 }
 
+// Returns all canonical names for a built-in subject tile for DB lookup.
+function builtInCanonicalNames(s) {
+  const names = new Set()
+  if (QUESTIONS_SUBJECT_BY_ID[s.id]) names.add(QUESTIONS_SUBJECT_BY_ID[s.id])
+  if (s.curriculumName) names.add(s.curriculumName)
+  names.add(`${s.name} ${s.stage}`.trim())
+  return names
+}
+
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
   const [selected, setSelected] = useState(null)
   const [hovering, setHovering] = useState(null)
   const [liveQuestionCounts, setLiveQuestionCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamicSubjects] = useState([])
+  // null = not yet loaded (show all to avoid flash); Set = DB responded
+  const [liveCurriculaNames, setLiveCurriculaNames] = useState(null)
   const t = THEMES[theme]
 
   useEffect(() => {
     fetchLiveCurricula()
       .then(curricula => {
+        const names = new Set(curricula.map(c => c.name))
+        setLiveCurriculaNames(names)
         const dynamic = curricula
           .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
           .map(c => ({
@@ -65,13 +78,22 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           }))
         setDynamicSubjects(dynamic)
       })
-      .catch(() => {})
+      .catch(() => { setLiveCurriculaNames(new Set()) })
   }, [])
+
+  // Built-in subjects filtered by what the admin has kept live in the curricula table.
+  // Before DB responds (liveCurriculaNames === null) we show all to avoid a flash.
+  const builtInSubjects = liveCurriculaNames === null
+    ? ALL_SUBJECTS
+    : ALL_SUBJECTS.filter(s => {
+        if (!s.available) return true // coming-soon entries always show
+        return [...builtInCanonicalNames(s)].some(n => liveCurriculaNames.has(n))
+      })
 
   useEffect(() => {
     let cancelled = false
     const pairs = [
-      ...ALL_SUBJECTS
+      ...builtInSubjects
         .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
         .map(s => [s.id, QUESTIONS_SUBJECT_BY_ID[s.id], s.stage || '']),
       ...dynamicSubjects
@@ -93,10 +115,10 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [dynamicSubjects])
+  }, [dynamicSubjects, liveCurriculaNames]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasSubscriptions = subscriptions.length > 0
-  const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
+  const allSubjects = [...builtInSubjects, ...dynamicSubjects]
 
   const subscribed = allSubjects.filter(s =>
     s.available && (

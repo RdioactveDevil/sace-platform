@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { adminApiPost } from '../lib/adminApi'
 import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -8,23 +9,38 @@ const GOLD   = '#f1be43'
 /** ~3 MB raw PDF keeps base64+JSON under Vercel serverless ~4.5 MB body limit */
 const MAX_PDF_BYTES = 3 * 1024 * 1024
 
-/** Build the stage list from the shared subjects source so newly added subjects
- *  automatically appear here. Each option's `value` is the canonical
- *  `questions.subject` string sent to /api/extract-pdf. */
-const STAGE_OPTIONS = ALL_SUBJECTS
-  .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
-  .map(s => ({
-    value: QUESTIONS_SUBJECT_BY_ID[s.id],
-    label: QUESTIONS_SUBJECT_BY_ID[s.id],
-  }))
-
 export default function AdminUploadScreen() {
-  const [stage, setStage]     = useState(STAGE_OPTIONS[0]?.value || '')
+  const [stageOptions, setStageOptions] = useState([])
+  const [stage, setStage]     = useState('')
   const [file, setFile]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState(null)
   const fileRef = useRef()
+
+  useEffect(() => {
+    fetchLiveCurricula()
+      .then(curricula => {
+        const liveNames = new Set(curricula.map(c => c.name))
+        // Built-in subjects that still exist in the DB
+        const builtIn = ALL_SUBJECTS
+          .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
+          .filter(s => {
+            const names = [QUESTIONS_SUBJECT_BY_ID[s.id], s.curriculumName, `${s.name} ${s.stage}`.trim()].filter(Boolean)
+            return names.some(n => liveNames.has(n))
+          })
+          .map(s => ({ value: QUESTIONS_SUBJECT_BY_ID[s.id], label: QUESTIONS_SUBJECT_BY_ID[s.id] }))
+        // Dynamic curricula not in built-ins
+        const builtInQKeys = new Set(builtIn.map(o => o.value))
+        const dynamic = curricula
+          .filter(c => !builtInQKeys.has(c.name))
+          .map(c => ({ value: c.name, label: c.name }))
+        const opts = [...builtIn, ...dynamic]
+        setStageOptions(opts)
+        if (opts.length > 0) setStage(opts[0].value)
+      })
+      .catch(() => {})
+  }, [])
 
   const handleFile = (f) => {
     if (f && f.type === 'application/pdf') { setFile(f); setResult(null); setError(null) }
@@ -77,7 +93,7 @@ export default function AdminUploadScreen() {
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stage</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {STAGE_OPTIONS.map(opt => (
+          {stageOptions.map(opt => (
             <button
               key={opt.value}
               onClick={() => setStage(opt.value)}
