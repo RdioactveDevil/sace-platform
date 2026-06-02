@@ -419,6 +419,17 @@ router.post("/generate-questions", async (req, res) => {
 
   const learningObjectives = learningObjectivesMap[topicCode] || topicName;
 
+  // Detect maths subjects so graph instructions are included regardless of curriculum path.
+  const isMathsSubject = /math|methods|calculus|specialist|quantitative/i.test(normalizedSubject);
+
+  const GRAPH_INSTRUCTIONS = [
+    `  graph (optional — include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
+    `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
+    `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4".`,
+    `    Include graph for questions about: identifying graph features (vertex, intercepts, turning points), reading values off a graph, matching an equation to a graph, or describing transformations shown visually.`,
+    `    Do NOT include graph for purely algebraic or numeric questions.`,
+  ];
+
   let system: string;
   let user: string;
 
@@ -438,11 +449,7 @@ router.post("/generate-questions", async (req, res) => {
       `  solution (string \u2014 explain why the answer is correct with clear mathematical reasoning, 2\u20134 sentences)`,
       "  subtopic (short free-text label for the specific concept tested)",
       "  difficulty (integer 1\u20135)",
-      `  graph (optional \u2014 include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
-      `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
-      `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4".`,
-      `    Include graph for questions about: identifying graph features (vertex, intercepts, turning points), reading values off a graph, matching an equation to a graph, or describing transformations shown visually.`,
-      `    Do NOT include graph for purely algebraic or numeric questions.`,
+      ...GRAPH_INSTRUCTIONS,
       "IMPORTANT: Use LaTeX notation for ALL mathematical expressions in question/options/solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
       "Questions must be accurate, unambiguous, and test conceptual understanding.",
       "Use standard mathematical terminology. Avoid SACE, VCE, HSC, IB or curriculum-specific branding.",
@@ -460,13 +467,6 @@ router.post("/generate-questions", async (req, res) => {
       "Use the exact scope and terminology listed \u2014 nothing broader.",
     ].join("\n");
   } else if (isY7) {
-    const graphInstructions = isY7Maths ? [
-      `  graph (optional \u2014 include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
-      `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
-      `    expr must be valid JavaScript math using x as the variable. Use ** for powers. Examples: "2*x + 1", "x**2 - 4".`,
-      `    Include graph for questions about: plotting points on the Cartesian plane, describing relationships from graphs, or identifying key features of a graph.`,
-      `    Do NOT include graph for purely arithmetic, algebraic or numeric questions.`,
-    ] : [];
 
     system = [
       `You are generating multiple-choice questions for Australian Curriculum v9 Year 7 students.`,
@@ -482,7 +482,7 @@ router.post("/generate-questions", async (req, res) => {
       "  solution (string \u2014 explain why the answer is correct using Australian Curriculum v9 language, 2\u20134 sentences)",
       "  subtopic (short free-text label for the specific concept tested, using AC v9 content descriptor language)",
       "  difficulty (integer 1\u20135)",
-      ...graphInstructions,
+      ...(isY7Maths ? GRAPH_INSTRUCTIONS : []),
       "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{a}{b}$, $$\\int_0^1 f(x)\\,dx$$. Never use plain Unicode for equations.",
       "Questions must be accurate, unambiguous, and test conceptual understanding aligned with AC v9 achievement standards.",
       "Use terminology consistent with the Australian Curriculum v9. Avoid SACE, VCE, IB or HSC-specific content.",
@@ -500,31 +500,35 @@ router.post("/generate-questions", async (req, res) => {
       "Use the exact scope and terminology of the content description \u2014 nothing broader.",
     ].join("\n");
   } else {
+    // Generic path: handles curriculum-managed subjects (e.g. Mathematical Methods,
+    // Chemistry, future subjects). Prompt adapts based on whether the subject is maths.
+    const isChemistry = /chemistry/i.test(normalizedSubject);
     system = [
-      "You are generating multiple-choice questions for SACE Chemistry students.",
-      "CRITICAL CONSTRAINT: All questions must be strictly based on the SACE Chemistry syllabus.",
-      "Do NOT draw on general chemistry knowledge that falls outside the SACE learning requirements.",
-      "Every question must be directly answerable using only what a SACE student is expected to know for this topic.",
+      `You are generating multiple-choice questions for ${curriculumLabel} students.`,
+      `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
+      `Do NOT draw on knowledge that falls outside the scope of ${curriculumLabel}.`,
+      `Every question must be directly answerable using only what a ${curriculumLabel} student is expected to know for this topic.`,
       "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
       `Generate exactly ${count} questions.`,
       "Each object must have these exact keys:",
       "  question (string)",
       "  options (array of exactly 4 strings)",
       "  answer_index (integer 0\u20133)",
-      "  solution (string \u2014 explain why the answer is correct using SACE curriculum language, 2\u20134 sentences)",
-      "  subtopic (short free-text label for the specific concept, matching SACE dot-point language)",
+      "  solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
+      "  subtopic (short free-text label for the specific concept tested)",
       "  difficulty (integer 1\u20135)",
-      "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{n}{V}$, $$\\Delta H = \\sum H_{products} - \\sum H_{reactants}$$. Never use plain Unicode for equations.",
-      "Questions must be accurate, unambiguous, and test conceptual understanding aligned with SACE assessment descriptors.",
-      "Use terminology consistent with the SACE Chemistry subject outline. Avoid IB, VCE, or HSC-specific content.",
+      ...(isMathsSubject ? GRAPH_INSTRUCTIONS : []),
+      `IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${isChemistry ? "$\\\\frac{n}{V}$, $$\\\\Delta H = \\\\sum H_{products} - \\\\sum H_{reactants}$$" : "$\\\\frac{d}{dx}f(x)$, $$\\\\int_0^1 f(x)\\\\,dx$$"}. Never use plain Unicode for equations.`,
+      "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
+      `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
       "Do not repeat the same scenario across questions.",
       difficultyInstruction,
     ].join("\n");
 
     user = [
-      `Generate ${count} MCQs for the SACE ${resolvedSubject} topic: ${topicName} (${topicCode}).`,
+      `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
       "",
-      "SACE curriculum learning requirements for this topic:",
+      "Curriculum learning requirements for this topic:",
       learningObjectives,
       "",
       "All questions must directly assess one or more of these specific learning requirements.",
