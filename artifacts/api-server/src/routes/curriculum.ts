@@ -309,6 +309,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "  answer_index (integer 0–3)",
     "  solution (string — explain why the answer is correct, 2–4 sentences)",
     "  difficulty (integer 1–5)",
+    "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$. Never use plain Unicode for equations.",
     "Questions must be accurate, unambiguous, and test conceptual understanding.",
     "Vary difficulty: include easy (1–2), medium (3), and hard (4–5) questions.",
     "Do not repeat the same scenario across questions.",
