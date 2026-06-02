@@ -510,4 +510,189 @@ router.post("/admin/curriculum-revise", async (req, res) => {
   res.json({ topics: parsed.topics });
 });
 
+// POST /api/admin/curriculum-orphaned-questions
+// Body: { subjectName: string, validSubtopics: string[] }
+// Returns: { count: number, orphanedSubtopics: { name: string, topic: string, count: number }[] }
+router.post("/admin/curriculum-orphaned-questions", async (req, res) => {
+  const { subjectName, validSubtopics } = req.body || {};
+  if (!subjectName || !Array.isArray(validSubtopics)) {
+    res.status(400).json({ error: "subjectName and validSubtopics[] are required" });
+    return;
+  }
+  try {
+    const admin = getAdmin();
+    const validSet = new Set<string>(validSubtopics);
+    const orphanMap = new Map<string, { topic: string; count: number }>();
+
+    let offset = 0;
+    const batchSize = 1000;
+    for (;;) {
+      const { data, error } = await admin
+        .from("questions")
+        .select("topic, subtopic")
+        .eq("subject", subjectName)
+        .range(offset, offset + batchSize - 1);
+      if (error) throw new Error(error.message);
+      if (!data?.length) break;
+      for (const row of data as { topic: string; subtopic: string }[]) {
+        if (!validSet.has(row.subtopic)) {
+          const existing = orphanMap.get(row.subtopic);
+          if (existing) {
+            existing.count++;
+          } else {
+            orphanMap.set(row.subtopic, { topic: row.topic, count: 1 });
+          }
+        }
+      }
+      if (data.length < batchSize) break;
+      offset += batchSize;
+    }
+
+    const orphanedSubtopics = Array.from(orphanMap.entries())
+      .map(([name, { topic, count }]) => ({ name, topic, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const count = orphanedSubtopics.reduce((sum, s) => sum + s.count, 0);
+    res.json({ count, orphanedSubtopics });
+  } catch (err) {
+    logger.error({ err }, "curriculum-orphaned-questions failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
+  }
+});
+
+// POST /api/admin/curriculum-suggest-remap
+// Body: { subjectName, orphanedSubtopics: [{ name, topic, count }], newCurriculumTree: { topics: [...] } }
+// Returns: { suggestions: [{ oldSubtopic, newTopic, newSubtopic, action }] }
+router.post("/admin/curriculum-suggest-remap", async (req, res) => {
+  const { subjectName, orphanedSubtopics, newCurriculumTree } = req.body || {};
+  if (!subjectName || !Array.isArray(orphanedSubtopics) || !newCurriculumTree?.topics) {
+    res.status(400).json({ error: "subjectName, orphanedSubtopics[], and newCurriculumTree are required" });
+    return;
+  }
+
+  const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+  const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+
+  const treeText = (newCurriculumTree.topics as Array<{ name: string; subtopics: Array<{ name: string }> }>)
+    .map((t, ti) =>
+      `T${ti + 1}. ${t.name}\n${(t.subtopics || []).map((s, si) => `  ${ti + 1}.${si + 1}. ${s.name}`).join("\n")}`
+    )
+    .join("\n");
+
+  const orphanList = (orphanedSubtopics as Array<{ name: string; topic: string; count: number }>)
+    .map(o => `- "${o.name}" (was under topic "${o.topic}", ${o.count} questions)`)
+    .join("\n");
+
+  const system = [
+    "You are a curriculum expert. Return ONLY a valid JSON object — no markdown, no commentary.",
+    'The object must have a single key "suggestions" whose value is an array.',
+    'Each suggestion has: oldSubtopic (string), action ("remap" or "delete"), newTopic (string or null), newSubtopic (string or null).',
+    'Use action "remap" when the old subtopic clearly corresponds to a subtopic in the new curriculum.',
+    'Use action "delete" only if the content has been completely removed from the new curriculum.',
+    'newTopic and newSubtopic must exactly match the names in the new curriculum tree.',
+  ].join("\n");
+
+  const userText = [
+    `Subject: ${subjectName}`,
+    "",
+    "New curriculum tree:",
+    treeText,
+    "",
+    "Orphaned subtopics (exist in questions but not in the new curriculum):",
+    orphanList,
+    "",
+    "For each orphaned subtopic, suggest the best matching subtopic in the new curriculum, or 'delete' if it no longer exists.",
+  ].join("\n");
+
+  let claudeRes: Response;
+  try {
+    claudeRes = await fetch(`${baseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 4000,
+        system,
+        messages: [{ role: "user", content: userText }],
+      }),
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to reach Claude API for suggest-remap");
+    res.status(500).json({ error: "Failed to reach Claude API" });
+    return;
+  }
+
+  if (!claudeRes.ok) {
+    const text = await claudeRes.text();
+    res.status(500).json({ error: "Claude API error", detail: text });
+    return;
+  }
+
+  const claudeData = await claudeRes.json() as { content?: { text: string }[] };
+  const rawText = claudeData?.content?.[0]?.text || "";
+  const parsed = extractJson(rawText) as { suggestions?: unknown[] } | null;
+
+  if (!parsed?.suggestions) {
+    res.status(500).json({ error: "Could not parse remap suggestions from AI", raw: rawText.slice(0, 500) });
+    return;
+  }
+
+  res.json({ suggestions: parsed.suggestions });
+});
+
+// POST /api/admin/curriculum-apply-remap
+// Body: { subjectName, mappings: [{ oldSubtopic, action: 'remap'|'delete'|'ignore', newTopic?, newSubtopic? }] }
+// Returns: { updated: number, deleted: number }
+router.post("/admin/curriculum-apply-remap", async (req, res) => {
+  const { subjectName, mappings } = req.body || {};
+  if (!subjectName || !Array.isArray(mappings)) {
+    res.status(400).json({ error: "subjectName and mappings[] are required" });
+    return;
+  }
+
+  const admin = getAdmin();
+  let updated = 0;
+  let deleted = 0;
+
+  for (const mapping of mappings as Array<{ oldSubtopic: string; action: string; newTopic?: string; newSubtopic?: string }>) {
+    const { oldSubtopic, action, newTopic, newSubtopic } = mapping;
+
+    if (action === "delete") {
+      const { error } = await admin.from("questions").delete()
+        .eq("subject", subjectName)
+        .eq("subtopic", oldSubtopic);
+      if (error) { logger.error({ error }, "apply-remap delete questions failed"); continue; }
+
+      await admin.from("draft_questions").delete()
+        .eq("subject", subjectName)
+        .eq("subtopic", oldSubtopic);
+
+      deleted++;
+    } else if (action === "remap" && newTopic && newSubtopic) {
+      const ct = conceptTag(subjectName, newTopic, newSubtopic);
+
+      const { error } = await admin.from("questions").update({
+        topic: newTopic,
+        subtopic: newSubtopic,
+        concept_tag: ct,
+      }).eq("subject", subjectName).eq("subtopic", oldSubtopic);
+      if (error) { logger.error({ error }, "apply-remap update questions failed"); continue; }
+
+      await admin.from("draft_questions").update({
+        topic: newTopic,
+        subtopic: newSubtopic,
+      }).eq("subject", subjectName).eq("subtopic", oldSubtopic);
+
+      updated++;
+    }
+    // action === 'ignore' → do nothing
+  }
+
+  res.json({ ok: true, updated, deleted });
+});
+
 export default router;
