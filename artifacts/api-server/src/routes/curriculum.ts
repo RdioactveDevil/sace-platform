@@ -579,10 +579,6 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
     )
     .join("\n");
 
-  const orphanList = (orphanedSubtopics as Array<{ name: string; topic: string; count: number }>)
-    .map(o => `- "${o.name}" (was under topic "${o.topic}", ${o.count} questions)`)
-    .join("\n");
-
   const system = [
     "You are a curriculum expert. Return ONLY a valid JSON object — no markdown, no commentary.",
     'The object must have a single key "suggestions" whose value is an array.',
@@ -592,56 +588,67 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
     'newTopic and newSubtopic must exactly match the names in the new curriculum tree.',
   ].join("\n");
 
-  const userText = [
-    `Subject: ${subjectName}`,
-    "",
-    "New curriculum tree:",
-    treeText,
-    "",
-    "Orphaned subtopics (exist in questions but not in the new curriculum):",
-    orphanList,
-    "",
-    "For each orphaned subtopic, suggest the best matching subtopic in the new curriculum, or 'delete' if it no longer exists.",
-  ].join("\n");
+  // Call Claude for a batch of orphaned subtopics, return parsed suggestions array or throw.
+  const callClaude = async (batch: Array<{ name: string; topic: string; count: number }>): Promise<unknown[]> => {
+    const orphanList = batch
+      .map(o => `- "${o.name}" (was under topic "${o.topic}", ${o.count} questions)`)
+      .join("\n");
 
-  let claudeRes: Response;
-  try {
-    claudeRes = await fetch(`${baseUrl}/v1/messages`, {
+    const userText = [
+      `Subject: ${subjectName}`,
+      "",
+      "New curriculum tree:",
+      treeText,
+      "",
+      "Orphaned subtopics (exist in questions but not in the new curriculum):",
+      orphanList,
+      "",
+      "For each orphaned subtopic, suggest the best matching subtopic in the new curriculum, or 'delete' if it no longer exists.",
+    ].join("\n");
+
+    const claudeRes = await fetch(`${baseUrl}/v1/messages`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,
         system,
         messages: [{ role: "user", content: userText }],
       }),
     });
+
+    if (!claudeRes.ok) {
+      const text = await claudeRes.text();
+      throw new Error(`Claude API error: ${text.slice(0, 200)}`);
+    }
+
+    const claudeData = await claudeRes.json() as { content?: { text: string }[] };
+    const rawText = claudeData?.content?.[0]?.text || "";
+    const parsed = extractJson(rawText) as { suggestions?: unknown[] } | null;
+
+    if (!parsed?.suggestions) {
+      logger.error({ rawText: rawText.slice(0, 1000) }, "suggest-remap: could not parse AI response");
+      throw new Error("Could not parse remap suggestions from AI");
+    }
+    return parsed.suggestions;
+  };
+
+  try {
+    const allOrphans = orphanedSubtopics as Array<{ name: string; topic: string; count: number }>;
+    // Batch into chunks of 30 to stay well within token limits for large orphan lists.
+    const BATCH_SIZE = 30;
+    const allSuggestions: unknown[] = [];
+    for (let i = 0; i < allOrphans.length; i += BATCH_SIZE) {
+      const batch = allOrphans.slice(i, i + BATCH_SIZE);
+      const batchSuggestions = await callClaude(batch);
+      allSuggestions.push(...batchSuggestions);
+    }
+    res.json({ suggestions: allSuggestions });
   } catch (err) {
-    logger.error({ err }, "Failed to reach Claude API for suggest-remap");
-    res.status(500).json({ error: "Failed to reach Claude API" });
-    return;
+    logger.error({ err }, "curriculum-suggest-remap failed");
+    const message = err instanceof Error ? err.message : "Suggest remap failed";
+    res.status(500).json({ error: message });
   }
-
-  if (!claudeRes.ok) {
-    const text = await claudeRes.text();
-    res.status(500).json({ error: "Claude API error", detail: text });
-    return;
-  }
-
-  const claudeData = await claudeRes.json() as { content?: { text: string }[] };
-  const rawText = claudeData?.content?.[0]?.text || "";
-  const parsed = extractJson(rawText) as { suggestions?: unknown[] } | null;
-
-  if (!parsed?.suggestions) {
-    res.status(500).json({ error: "Could not parse remap suggestions from AI", raw: rawText.slice(0, 500) });
-    return;
-  }
-
-  res.json({ suggestions: parsed.suggestions });
 });
 
 // POST /api/admin/curriculum-apply-remap
