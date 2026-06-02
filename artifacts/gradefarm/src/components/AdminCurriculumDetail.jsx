@@ -71,6 +71,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [progress, setProgress]       = useState(null)
   const [genError, setGenError]       = useState('')
   const [reviseInstruction, setReviseInstruction] = useState('')
+  const [reviseSourceText, setReviseSourceText]   = useState('')
+  const [showPasteArea, setShowPasteArea]         = useState(false)
   const [reviseDoc, setReviseDoc]     = useState(null) // { base64, mediaType, name }
   const [revising, setRevising]       = useState(false)
   const pollRef = useRef(null)
@@ -174,19 +176,22 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   }
 
   const handleRevise = async () => {
-    if (!reviseInstruction.trim() && !reviseDoc) return
+    if (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim()) return
     setRevising(true); setError('')
     try {
       const payload = {
         currentTopics: topics,
         instruction: reviseInstruction.trim(),
+        sourceText: reviseSourceText.trim(),
         subjectName: curriculum.name,
       }
       if (reviseDoc) { payload.base64Doc = reviseDoc.base64; payload.mediaType = reviseDoc.mediaType }
       const { topics: revised } = await adminApiPost('/api/admin/curriculum-revise', payload)
       setTopics(revised.map(t => ({ ...t, subtopics: (t.subtopics || []).map(s => ({ ...s })) })))
       setReviseInstruction('')
+      setReviseSourceText('')
       setReviseDoc(null)
+      setShowPasteArea(false)
     } catch (e) {
       setError(e.message)
     }
@@ -382,19 +387,48 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             Revise with AI
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <textarea
-              value={reviseInstruction}
-              onChange={e => setReviseInstruction(e.target.value)}
-              placeholder='e.g. "Add a topic on plant biology with 4 subtopics" or "Split Topic 3 into two separate topics"'
-              rows={2}
-              disabled={revising}
-              style={{
-                flex: 1, minWidth: 220, padding: '8px 10px', borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
-                color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
-              }}
-            />
+            <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <textarea
+                value={reviseInstruction}
+                onChange={e => setReviseInstruction(e.target.value)}
+                placeholder='e.g. "Restructure to match the pasted TOC below" or "Add a topic on probability with 3 subtopics"'
+                rows={2}
+                disabled={revising}
+                style={{
+                  width: '100%', padding: '8px 10px', borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
+                  color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                  resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+                }}
+              />
+              {/* Toggle paste area */}
+              <button
+                onClick={() => setShowPasteArea(v => !v)}
+                disabled={revising}
+                style={{
+                  alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: '1px dashed rgba(255,255,255,0.15)',
+                  background: showPasteArea ? 'rgba(241,190,67,0.08)' : 'transparent',
+                  color: showPasteArea ? '#f1be43' : '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
+                }}
+              >
+                {showPasteArea ? '▾ Hide paste area' : '▸ Paste TOC / text document'}
+              </button>
+              {showPasteArea && (
+                <textarea
+                  value={reviseSourceText}
+                  onChange={e => setReviseSourceText(e.target.value)}
+                  placeholder={'Paste a table of contents, topic list, or any text here.\nClaude will use it as the source to restructure the curriculum.'}
+                  rows={8}
+                  disabled={revising}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: 8,
+                    border: '1px solid rgba(241,190,67,0.2)', background: 'rgba(241,190,67,0.03)',
+                    color: '#f1f5f9', fontSize: 12, fontFamily: FONT_B, outline: 'none',
+                    resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+                  }}
+                />
+              )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
@@ -411,12 +445,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
               </label>
               <button
                 onClick={handleRevise}
-                disabled={revising || (!reviseInstruction.trim() && !reviseDoc)}
+                disabled={revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())}
                 style={{
                   padding: '8px 16px', borderRadius: 8, border: 'none',
-                  background: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
-                  color: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? '#64748b' : '#38bdf8',
-                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? 'not-allowed' : 'pointer',
+                  background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
+                  color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? '#64748b' : '#38bdf8',
+                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'not-allowed' : 'pointer',
                   fontFamily: FONT_B, border: '1px solid rgba(56,189,248,0.2)',
                 }}
               >

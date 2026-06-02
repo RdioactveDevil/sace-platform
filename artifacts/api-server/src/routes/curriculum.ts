@@ -429,9 +429,9 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 // Body: { currentTopics, instruction, subjectName, base64Doc?, mediaType? }
 // Returns: { topics: [{ name, subtopics: [{ name }] }] }
 router.post("/admin/curriculum-revise", async (req, res) => {
-  const { currentTopics, instruction, subjectName, base64Doc, mediaType } = req.body || {};
-  if (!currentTopics || (!instruction?.trim() && !base64Doc)) {
-    res.status(400).json({ error: "currentTopics and either instruction or a document are required" });
+  const { currentTopics, instruction, sourceText, subjectName, base64Doc, mediaType } = req.body || {};
+  if (!currentTopics || (!instruction?.trim() && !base64Doc && !sourceText?.trim())) {
+    res.status(400).json({ error: "currentTopics and either instruction, sourceText, or a document are required" });
     return;
   }
 
@@ -444,17 +444,21 @@ router.post("/admin/curriculum-revise", async (req, res) => {
     "You are a curriculum designer. Return ONLY a valid JSON object — no markdown, no commentary.",
     "The object must have a single key 'topics' whose value is an array.",
     "Each topic object has: name (string), subtopics (array of objects with a single key: name (string)).",
-    "You will be given the current curriculum tree and either a revision instruction, an uploaded document, or both.",
-    "Apply the requested changes while preserving the rest of the tree structure.",
-    "If a document is provided, use it to inform or replace the curriculum structure as appropriate.",
+    "You will receive the current curriculum tree plus one or more of: a revision instruction, a pasted reference document (table of contents, topic list, etc.), or an uploaded PDF.",
+    "If a reference document or PDF is provided, use it as the authoritative source to restructure the curriculum — extract topics and subtopics from it.",
+    "If only a revision instruction is provided, apply those targeted changes while preserving the rest of the tree.",
+    "Always return a complete, valid curriculum tree even if restructuring from scratch.",
   ].join("\n");
 
-  const instructionText = instruction?.trim()
-    ? `Revision instruction: ${instruction.trim()}\n\n`
+  const instructionLine = instruction?.trim() ? `Instruction: ${instruction.trim()}\n\n` : "";
+  const sourceLine = sourceText?.trim()
+    ? `Reference document (use this as the source of topics/subtopics):\n---\n${sourceText.trim()}\n---\n\n`
     : "";
-  const userText = base64Doc
-    ? `${instructionText}Current curriculum tree for "${subjectName}":\n${currentTree}\n\nRevise the curriculum tree based on the attached document${instruction?.trim() ? " and the instruction above" : ""}.`
-    : `Current curriculum tree for "${subjectName}":\n${currentTree}\n\nRevision instruction: ${instruction.trim()}`;
+  const baseUserText = `${instructionLine}${sourceLine}Current curriculum tree for "${subjectName}":\n${currentTree}`;
+  const actionLine = base64Doc || sourceText?.trim()
+    ? "\n\nRebuild the curriculum tree based on the reference material above."
+    : "\n\nApply the instruction and return the revised curriculum tree.";
+  const userText = baseUserText + actionLine;
 
   const userContent = base64Doc
     ? [
