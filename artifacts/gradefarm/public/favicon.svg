@@ -1,4 +1,6 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="180" height="180" rx="36" fill="#FF3C00"/>
-  <text x="90" y="118" font-family="Georgia, 'Times New Roman', serif" font-size="72" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-2">gf.</text>
+  <rect width="180" height="180" rx="36" fill="#16192A"/>
+  <text font-family="Georgia, 'Times New Roman', serif" font-size="86" font-weight="700" y="122" text-anchor="middle">
+    <tspan x="72" fill="white">g</tspan><tspan fill="#D4A94B">f.</tspan>
+  </text>
 </svg>
