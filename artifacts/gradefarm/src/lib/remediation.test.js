@@ -648,6 +648,29 @@ describe('runLoadNextRemediationQuestion', () => {
     assert.equal(recFinal.calls.displayQuestion.at(-1).id, 'd3a', 'final question is at the original difficulty')
   })
 
+  test('concept-builder jumps the queue ahead of a difficulty-matched question', async () => {
+    const parent = makeParent({ difficulty: 3 })
+    // streak 0 / target 3 → difficulty curve wants the eased (difficulty-2) question,
+    // but a concept-builder is present and must be served first regardless.
+    const queue = [
+      { id: 'd2', variant_record_id: 'd2', difficulty: 2, is_variant: true, question: 'eased', options: [], answer_index: 0 },
+      { id: 'cb', variant_record_id: 'cb', difficulty: 1, is_variant: true, variant_type: 'concept_builder', question: 'teacher q', options: [], answer_index: 0 },
+    ]
+    const rec = makeStateRecorder()
+    await runLoadNextRemediationQuestion({
+      remediationQueue: queue,
+      remediationOriginalQ: parent,
+      remediationUsedIds: [],
+      remediationDifficultyTarget: 3,
+      remediationStreak: 0,
+      remediationTarget: 3,
+      deps: baseDeps(),
+      generateRemediationQueue: async () => [],
+      ...rec,
+    })
+    assert.equal(rec.calls.displayQuestion.at(-1).id, 'cb', 'concept-builder served first')
+  })
+
   test('queue empty + DB returns variants → loads first variant', async () => {
     const rec = makeStateRecorder()
     const parent = makeParent()

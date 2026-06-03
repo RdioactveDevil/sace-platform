@@ -581,12 +581,22 @@ export async function runLoadNextRemediationQuestion(ctx) {
     return false
   }
 
-  // "Reduce by 1, then ramp back": pick the pool question at the difficulty
-  // appropriate to the current mastery streak (eased early, original level for
-  // the final mastery question) rather than always taking the head.
-  const anchor = remediationOriginalQ?.difficulty ?? remediationDifficultyTarget ?? 3
-  const wantDiff = remediationQuestionDifficulty(anchor, remediationStreak, remediationTarget)
-  const pickIdx = pickClosestDifficulty(queue, wantDiff)
+  // Concept-builder (teacher-style scaffolding) questions are injected at the
+  // front to be served immediately, ahead of the normal difficulty curve — so
+  // they always jump the queue regardless of difficulty matching.
+  let pickIdx = queue.findIndex(
+    (q) => q?.variant_type === 'concept_builder' || q?.source === 'concept_builder',
+  )
+
+  if (pickIdx === -1) {
+    // "Reduce by 1, then ramp back": pick the pool question at the difficulty
+    // appropriate to the current mastery streak (eased early, original level for
+    // the final mastery question) rather than always taking the head.
+    const anchor = remediationOriginalQ?.difficulty ?? remediationDifficultyTarget ?? 3
+    const wantDiff = remediationQuestionDifficulty(anchor, remediationStreak, remediationTarget)
+    pickIdx = pickClosestDifficulty(queue, wantDiff)
+  }
+
   const nextVariant = queue[pickIdx]
   const rest = queue.filter((_, i) => i !== pickIdx)
   setRemediationQueue?.(rest)
