@@ -77,8 +77,9 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
     const timeout = setTimeout(() => controller.abort(), 8000)
 
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+    const subjectLabel = parentQuestion?.subject || 'SACE'
     const system = [
-      'You are a SACE Chemistry teacher generating a concept-builder question for a struggling student.',
+      `You are a ${subjectLabel} teacher generating a concept-builder question for a struggling student.`,
       'Return only a valid JSON object (not an array).',
       'The question MUST embed the key fact or hint directly in the question stem — like a teacher explaining in class.',
       'Structure: state the core concept or mechanism first, then ask the student to apply it.',
@@ -196,7 +197,7 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
             ⚡ Remediation Mode
           </span>
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>
-            {remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}
+            {remediationSource === 'generated' ? 'Generated reinforcement' : 'From question bank'}
           </span>
         </div>
         <span style={{
@@ -531,6 +532,7 @@ export default function QuizScreen({
       runEnterRemediation({
         parentQuestion,
         prefetched: variantPrefetchRef.current,
+        questions,
         deps: remediationDeps,
         setRemediationMode,
         setRemediationStreak,
@@ -547,6 +549,7 @@ export default function QuizScreen({
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
+      questions,
       generateRemediationQueue,
       setRemediationConcept,
       setRemediationMode,
@@ -915,7 +918,10 @@ export default function QuizScreen({
           setRemediationStreak(0)
           const newWrongCount = remediationWrongCount + 1
           setRemediationWrongCount(newWrongCount)
-          const newDiffTarget = Math.max(1, (remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)) - 1)
+          // Keep the difficulty anchored at the original level — selectBankVariants
+          // already prefers "same, then one lower" (e.g. 3 → 3 or 2). Deeper easing
+          // is handled by the concept-builder path at wrongCount === 2.
+          const newDiffTarget = remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)
           setRemediationDifficultyTarget(newDiffTarget)
 
           if (newWrongCount >= 5) {
@@ -967,7 +973,10 @@ export default function QuizScreen({
       // before the AI tip fetch runs. Without this, the user could click "Next Question →"
       // during the 3.5s AI timeout window and skip remediation entirely.
       const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
-      const initialDiffTarget = Math.max(1, (currentQ.difficulty ?? 3) - 1)
+      // Anchor the reinforcement pool on the difficulty the student just missed.
+      // The per-question difficulty curve ("reduce by 1, then ramp back" toward
+      // this level for the final mastery question) is applied at load time.
+      const initialDiffTarget = currentQ.difficulty ?? 3
       setRemediationMode(true)
       setRemediationStreak(0)
       setRemediationTarget(3)
@@ -990,7 +999,7 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: 'You are a SACE Chemistry tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.',
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
           }),
         })
@@ -1009,6 +1018,9 @@ export default function QuizScreen({
       remediationOriginalQ,
       remediationUsedIds,
       remediationDifficultyTarget,
+      remediationStreak,
+      remediationTarget,
+      questions,
       deps: remediationDeps,
       setRemediationQueue,
       setRemediationSource,

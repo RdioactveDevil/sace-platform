@@ -6,6 +6,8 @@ import { initObservability } from './lib/analytics'
 import { notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
+import { refreshManagedTopicsCache } from './lib/adminTopics'
+import { loadManagedCurriculaTopics } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import SubjectPicker     from './components/SubjectPicker'
@@ -582,6 +584,13 @@ function AppInner() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // Load managed curriculum topics cache on login so the student-facing quiz
+  // can look up topic codes for bank exhaustion / infinite question generation.
+  useEffect(() => {
+    if (!user?.id) return
+    refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
+  }, [user?.id])
 
   useEffect(() => {
     if (!user?.id) return

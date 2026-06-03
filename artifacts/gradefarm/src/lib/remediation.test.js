@@ -12,6 +12,9 @@ import assert from 'node:assert/strict'
 import {
   withTimeout,
   fetchRemediationVariantsSafe,
+  selectBankVariants,
+  remediationQuestionDifficulty,
+  pickClosestDifficulty,
   runEnterRemediation,
   runGenerateRemediationQueue,
   runLoadNextRemediationQuestion,
@@ -149,6 +152,99 @@ describe('fetchRemediationVariantsSafe', () => {
   })
 })
 
+// ─── selectBankVariants (bank-first tier) ──────────────────────────────────
+
+describe('selectBankVariants', () => {
+  test('returns only same topic + same subtopic questions (no off-subtopic leak)', () => {
+    const parent = makeParent({ topic: 'Differentiation', subtopic: 'Exponential functions', difficulty: 3 })
+    const bank = [
+      makeBankQuestion('exp_1', { topic: 'Differentiation', subtopic: 'Exponential functions', difficulty: 3 }),
+      makeBankQuestion('log_1', { topic: 'Differentiation', subtopic: 'Logarithmic functions', difficulty: 3 }),
+      makeBankQuestion('trig_1', { topic: 'Differentiation', subtopic: 'Trigonometric functions', difficulty: 3 }),
+    ]
+    const out = selectBankVariants(parent, bank, 3, [])
+    assert.equal(out.length, 1, 'only the same-subtopic question is eligible')
+    assert.equal(out[0].bank_question_id, 'exp_1')
+    assert.ok(out.every(v => v.subtopic === 'Exponential functions'))
+  })
+
+  test('ranks exact difficulty first, then one level lower', () => {
+    const parent = makeParent({ topic: 'T', subtopic: 'S', difficulty: 3 })
+    const bank = [
+      makeBankQuestion('d5', { topic: 'T', subtopic: 'S', difficulty: 5 }),
+      makeBankQuestion('d2', { topic: 'T', subtopic: 'S', difficulty: 2 }),
+      makeBankQuestion('d3', { topic: 'T', subtopic: 'S', difficulty: 3 }),
+    ]
+    const out = selectBankVariants(parent, bank, 3, [])
+    assert.equal(out[0].bank_question_id, 'd3', 'exact difficulty ranks first')
+    assert.equal(out[1].bank_question_id, 'd2', 'one level lower ranks second')
+    assert.equal(out[2].bank_question_id, 'd5')
+  })
+
+  test('excludes the parent and already-served questions', () => {
+    const parent = makeParent({ id: 'p', topic: 'T', subtopic: 'S', difficulty: 3 })
+    const bank = [
+      makeBankQuestion('p', { topic: 'T', subtopic: 'S', difficulty: 3 }), // same id as parent
+      makeBankQuestion('seen', { topic: 'T', subtopic: 'S', difficulty: 3 }),
+      makeBankQuestion('fresh', { topic: 'T', subtopic: 'S', difficulty: 3 }),
+    ]
+    const out = selectBankVariants(parent, bank, 3, ['bank__p__seen'])
+    assert.deepEqual(out.map(v => v.bank_question_id), ['fresh'])
+  })
+
+  test('skips variant rows and returns [] when nothing matches', () => {
+    const parent = makeParent({ topic: 'T', subtopic: 'S' })
+    const bank = [
+      makeBankQuestion('v', { topic: 'T', subtopic: 'S', is_variant: true }),
+      makeBankQuestion('other', { topic: 'Other', subtopic: 'S' }),
+    ]
+    assert.deepEqual(selectBankVariants(parent, bank, 3, []), [])
+  })
+})
+
+// ─── difficulty curve: reduce by 1, then ramp back ─────────────────────────
+
+describe('remediationQuestionDifficulty', () => {
+  test('eases by 1 for early questions, ramps to original on the final mastery question', () => {
+    // anchor 3, target 3 (need 3 correct in a row)
+    assert.equal(remediationQuestionDifficulty(3, 0, 3), 2, 'Q1 eased')
+    assert.equal(remediationQuestionDifficulty(3, 1, 3), 2, 'Q2 eased')
+    assert.equal(remediationQuestionDifficulty(3, 2, 3), 3, 'final question back to original')
+  })
+
+  test('never goes below 1', () => {
+    assert.equal(remediationQuestionDifficulty(1, 0, 3), 1)
+  })
+
+  test('struggling path (target scaled to 1) keeps the student eased, never ramps to original', () => {
+    // A target of 1 is the "struggling" bar — the student stays on the eased
+    // difficulty rather than being handed the original (hard) level.
+    assert.equal(remediationQuestionDifficulty(3, 0, 1), 2)
+  })
+
+  test('target 2 still ramps the final question back to original', () => {
+    assert.equal(remediationQuestionDifficulty(3, 0, 2), 2, 'Q1 eased')
+    assert.equal(remediationQuestionDifficulty(3, 1, 2), 3, 'final question back to original')
+  })
+})
+
+describe('pickClosestDifficulty', () => {
+  test('prefers exact difficulty', () => {
+    const q = [{ difficulty: 2 }, { difficulty: 3 }, { difficulty: 4 }]
+    assert.equal(pickClosestDifficulty(q, 3), 1)
+  })
+
+  test('prefers one level lower over one level higher', () => {
+    const q = [{ difficulty: 4 }, { difficulty: 2 }]
+    assert.equal(pickClosestDifficulty(q, 3), 1)
+  })
+
+  test('stable on ties — earliest wins (preserves queue order)', () => {
+    const q = [{ difficulty: 3 }, { difficulty: 3 }]
+    assert.equal(pickClosestDifficulty(q, 3), 0)
+  })
+})
+
 // ─── runGenerateRemediationQueue ───────────────────────────────────────────
 
 describe('runGenerateRemediationQueue', () => {
@@ -199,9 +295,10 @@ describe('runGenerateRemediationQueue', () => {
     const queue = await runGenerateRemediationQueue(ctx)
     await flushBackground(ctx)
 
-    assert.ok(queue.length >= 1, 'expected non-empty local fallback queue')
-    assert.ok(queue.every(v => v.id !== parent.id), 'local fallback never includes the parent')
-    assert.equal(rec.calls.source.at(-1), 'generated')
+    assert.ok(queue.length >= 1, 'expected non-empty bank queue')
+    assert.ok(queue.every(v => v.bank_question_id && v.bank_question_id !== parent.id), 'bank queue never includes the parent')
+    assert.ok(queue.every(v => v.subtopic === parent.subtopic), 'bank queue is strictly same-subtopic')
+    assert.equal(rec.calls.source.at(-1), 'bank')
     assert.equal(rec.calls.status.at(-1), 'activated')
   })
 
@@ -510,6 +607,68 @@ describe('runLoadNextRemediationQuestion', () => {
 
     assert.equal(ok, false, 'must signal "no question loaded" so caller exits remediation')
     assert.equal(rec.calls.status.at(-1), 'activated', 'never stuck on generating')
+  })
+
+  test('serves an eased question early and the original-difficulty question for the final mastery step', async () => {
+    const parent = makeParent({ difficulty: 3 })
+    // Pool spans the eased (2) and original (3) difficulties.
+    const pool = [
+      { id: 'd3a', variant_record_id: 'd3a', difficulty: 3, is_variant: true, question: 'hard a', options: [], answer_index: 0 },
+      { id: 'd2a', variant_record_id: 'd2a', difficulty: 2, is_variant: true, question: 'easy a', options: [], answer_index: 0 },
+    ]
+
+    // Early in the streak (streak 0, target 3) → wants the eased (difficulty-2) question.
+    const recEarly = makeStateRecorder()
+    await runLoadNextRemediationQuestion({
+      remediationQueue: pool,
+      remediationOriginalQ: parent,
+      remediationUsedIds: [],
+      remediationDifficultyTarget: 3,
+      remediationStreak: 0,
+      remediationTarget: 3,
+      deps: baseDeps(),
+      generateRemediationQueue: async () => [],
+      ...recEarly,
+    })
+    assert.equal(recEarly.calls.displayQuestion.at(-1).id, 'd2a', 'early question is eased (difficulty 2)')
+
+    // Final mastery step (streak 2, target 3) → wants the original (difficulty-3) question.
+    const recFinal = makeStateRecorder()
+    await runLoadNextRemediationQuestion({
+      remediationQueue: pool,
+      remediationOriginalQ: parent,
+      remediationUsedIds: [],
+      remediationDifficultyTarget: 3,
+      remediationStreak: 2,
+      remediationTarget: 3,
+      deps: baseDeps(),
+      generateRemediationQueue: async () => [],
+      ...recFinal,
+    })
+    assert.equal(recFinal.calls.displayQuestion.at(-1).id, 'd3a', 'final question is at the original difficulty')
+  })
+
+  test('concept-builder jumps the queue ahead of a difficulty-matched question', async () => {
+    const parent = makeParent({ difficulty: 3 })
+    // streak 0 / target 3 → difficulty curve wants the eased (difficulty-2) question,
+    // but a concept-builder is present and must be served first regardless.
+    const queue = [
+      { id: 'd2', variant_record_id: 'd2', difficulty: 2, is_variant: true, question: 'eased', options: [], answer_index: 0 },
+      { id: 'cb', variant_record_id: 'cb', difficulty: 1, is_variant: true, variant_type: 'concept_builder', question: 'teacher q', options: [], answer_index: 0 },
+    ]
+    const rec = makeStateRecorder()
+    await runLoadNextRemediationQuestion({
+      remediationQueue: queue,
+      remediationOriginalQ: parent,
+      remediationUsedIds: [],
+      remediationDifficultyTarget: 3,
+      remediationStreak: 0,
+      remediationTarget: 3,
+      deps: baseDeps(),
+      generateRemediationQueue: async () => [],
+      ...rec,
+    })
+    assert.equal(rec.calls.displayQuestion.at(-1).id, 'cb', 'concept-builder served first')
   })
 
   test('queue empty + DB returns variants → loads first variant', async () => {
