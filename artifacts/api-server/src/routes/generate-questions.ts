@@ -173,13 +173,50 @@ function extractJsonArray(text = ""): unknown[] {
 }
 
 router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
+  const { stage, subject, topicCode, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
 
   const resolvedSubject: string = subject || stage;
-  if (!resolvedSubject || !topicCode) {
-    res.status(400).json({ error: "subject (or stage) and topicCode required" });
+  // Support both a single topicCode and a topicCodes array
+  const topicCodes: string[] = topicCodesRaw
+    ? (Array.isArray(topicCodesRaw) ? topicCodesRaw : [topicCodesRaw])
+    : topicCode ? [topicCode] : [];
+
+  if (!resolvedSubject || !topicCodes.length) {
+    res.status(400).json({ error: "subject (or stage) and topicCode/topicCodes required" });
     return;
   }
+
+  // For multi-topic batches run each code in sequence and aggregate
+  if (topicCodes.length > 1) {
+    let totalInserted = 0;
+    const errors: string[] = [];
+    for (const code of topicCodes) {
+      try {
+        const singleRes = await fetch(
+          `http://localhost:${process.env.PORT || 3001}/api/generate-questions`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subject: resolvedSubject, topicCode: code, count, difficulty, autoApprove }),
+          }
+        );
+        if (singleRes.ok) {
+          const d = await singleRes.json() as { inserted?: number };
+          totalInserted += d.inserted ?? 0;
+        } else {
+          const d = await singleRes.json() as { error?: string };
+          errors.push(`${code}: ${d.error ?? singleRes.statusText}`);
+        }
+      } catch (err) {
+        errors.push(`${code}: ${(err as Error).message}`);
+      }
+    }
+    res.status(200).json({ inserted: totalInserted, topicsProcessed: topicCodes.length, errors: errors.length ? errors : undefined });
+    return;
+  }
+
+  // Single topic from here
+  const topicCode = topicCodes[0];
 
   // Normalise picker IDs to canonical curriculum names.
   const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
