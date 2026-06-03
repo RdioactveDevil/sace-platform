@@ -158,7 +158,8 @@ export default function MathText({ text = '', style = {} }) {
   if (!processed.includes('$')) return <span style={{ whiteSpace: 'pre-line', ...style }}>{processed}</span>
 
   const parts = []
-  const pattern = /(\$\$[\s\S]+?\$\$|\$(?!\d)[^$\n]+?\$)/g
+  // \$(?!\d+\s) — allow $10x but not $10 (dollar amount: digits followed by space)
+  const pattern = /(\$\$[\s\S]+?\$\$|\$(?!\d+\s)[^$\n]+?\$)/g
   let lastIndex = 0
   let match
 
