@@ -12,6 +12,7 @@ import assert from 'node:assert/strict'
 import {
   withTimeout,
   fetchRemediationVariantsSafe,
+  selectBankVariants,
   runEnterRemediation,
   runGenerateRemediationQueue,
   runLoadNextRemediationQuestion,
@@ -149,6 +150,56 @@ describe('fetchRemediationVariantsSafe', () => {
   })
 })
 
+// ─── selectBankVariants (bank-first tier) ──────────────────────────────────
+
+describe('selectBankVariants', () => {
+  test('returns only same topic + same subtopic questions (no off-subtopic leak)', () => {
+    const parent = makeParent({ topic: 'Differentiation', subtopic: 'Exponential functions', difficulty: 3 })
+    const bank = [
+      makeBankQuestion('exp_1', { topic: 'Differentiation', subtopic: 'Exponential functions', difficulty: 3 }),
+      makeBankQuestion('log_1', { topic: 'Differentiation', subtopic: 'Logarithmic functions', difficulty: 3 }),
+      makeBankQuestion('trig_1', { topic: 'Differentiation', subtopic: 'Trigonometric functions', difficulty: 3 }),
+    ]
+    const out = selectBankVariants(parent, bank, 3, [])
+    assert.equal(out.length, 1, 'only the same-subtopic question is eligible')
+    assert.equal(out[0].bank_question_id, 'exp_1')
+    assert.ok(out.every(v => v.subtopic === 'Exponential functions'))
+  })
+
+  test('ranks exact difficulty first, then one level lower', () => {
+    const parent = makeParent({ topic: 'T', subtopic: 'S', difficulty: 3 })
+    const bank = [
+      makeBankQuestion('d5', { topic: 'T', subtopic: 'S', difficulty: 5 }),
+      makeBankQuestion('d2', { topic: 'T', subtopic: 'S', difficulty: 2 }),
+      makeBankQuestion('d3', { topic: 'T', subtopic: 'S', difficulty: 3 }),
+    ]
+    const out = selectBankVariants(parent, bank, 3, [])
+    assert.equal(out[0].bank_question_id, 'd3', 'exact difficulty ranks first')
+    assert.equal(out[1].bank_question_id, 'd2', 'one level lower ranks second')
+    assert.equal(out[2].bank_question_id, 'd5')
+  })
+
+  test('excludes the parent and already-served questions', () => {
+    const parent = makeParent({ id: 'p', topic: 'T', subtopic: 'S', difficulty: 3 })
+    const bank = [
+      makeBankQuestion('p', { topic: 'T', subtopic: 'S', difficulty: 3 }), // same id as parent
+      makeBankQuestion('seen', { topic: 'T', subtopic: 'S', difficulty: 3 }),
+      makeBankQuestion('fresh', { topic: 'T', subtopic: 'S', difficulty: 3 }),
+    ]
+    const out = selectBankVariants(parent, bank, 3, ['bank__p__seen'])
+    assert.deepEqual(out.map(v => v.bank_question_id), ['fresh'])
+  })
+
+  test('skips variant rows and returns [] when nothing matches', () => {
+    const parent = makeParent({ topic: 'T', subtopic: 'S' })
+    const bank = [
+      makeBankQuestion('v', { topic: 'T', subtopic: 'S', is_variant: true }),
+      makeBankQuestion('other', { topic: 'Other', subtopic: 'S' }),
+    ]
+    assert.deepEqual(selectBankVariants(parent, bank, 3, []), [])
+  })
+})
+
 // ─── runGenerateRemediationQueue ───────────────────────────────────────────
 
 describe('runGenerateRemediationQueue', () => {
@@ -199,9 +250,10 @@ describe('runGenerateRemediationQueue', () => {
     const queue = await runGenerateRemediationQueue(ctx)
     await flushBackground(ctx)
 
-    assert.ok(queue.length >= 1, 'expected non-empty local fallback queue')
-    assert.ok(queue.every(v => v.id !== parent.id), 'local fallback never includes the parent')
-    assert.equal(rec.calls.source.at(-1), 'generated')
+    assert.ok(queue.length >= 1, 'expected non-empty bank queue')
+    assert.ok(queue.every(v => v.bank_question_id && v.bank_question_id !== parent.id), 'bank queue never includes the parent')
+    assert.ok(queue.every(v => v.subtopic === parent.subtopic), 'bank queue is strictly same-subtopic')
+    assert.equal(rec.calls.source.at(-1), 'bank')
     assert.equal(rec.calls.status.at(-1), 'activated')
   })
 

@@ -197,7 +197,7 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
             ⚡ Remediation Mode
           </span>
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>
-            {remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}
+            {remediationSource === 'generated' ? 'Generated reinforcement' : 'From question bank'}
           </span>
         </div>
         <span style={{
@@ -532,6 +532,7 @@ export default function QuizScreen({
       runEnterRemediation({
         parentQuestion,
         prefetched: variantPrefetchRef.current,
+        questions,
         deps: remediationDeps,
         setRemediationMode,
         setRemediationStreak,
@@ -548,6 +549,7 @@ export default function QuizScreen({
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
+      questions,
       generateRemediationQueue,
       setRemediationConcept,
       setRemediationMode,
@@ -916,7 +918,10 @@ export default function QuizScreen({
           setRemediationStreak(0)
           const newWrongCount = remediationWrongCount + 1
           setRemediationWrongCount(newWrongCount)
-          const newDiffTarget = Math.max(1, (remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)) - 1)
+          // Keep the difficulty anchored at the original level — selectBankVariants
+          // already prefers "same, then one lower" (e.g. 3 → 3 or 2). Deeper easing
+          // is handled by the concept-builder path at wrongCount === 2.
+          const newDiffTarget = remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)
           setRemediationDifficultyTarget(newDiffTarget)
 
           if (newWrongCount >= 5) {
@@ -968,7 +973,9 @@ export default function QuizScreen({
       // before the AI tip fetch runs. Without this, the user could click "Next Question →"
       // during the 3.5s AI timeout window and skip remediation entirely.
       const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
-      const initialDiffTarget = Math.max(1, (currentQ.difficulty ?? 3) - 1)
+      // First reinforcement question matches the SAME difficulty as the one the
+      // student just missed (selectBankVariants prefers same level, then one lower).
+      const initialDiffTarget = currentQ.difficulty ?? 3
       setRemediationMode(true)
       setRemediationStreak(0)
       setRemediationTarget(3)
@@ -1010,6 +1017,7 @@ export default function QuizScreen({
       remediationOriginalQ,
       remediationUsedIds,
       remediationDifficultyTarget,
+      questions,
       deps: remediationDeps,
       setRemediationQueue,
       setRemediationSource,

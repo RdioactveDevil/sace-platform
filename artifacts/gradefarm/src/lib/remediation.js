@@ -63,46 +63,6 @@ export function extractJsonArray(text = '') {
   }
 }
 
-export function scoreLocalCandidate(q, parentQuestion, target) {
-  let s = 0
-  if (q.concept_tag && q.concept_tag === parentQuestion.concept_tag) s += 100
-  if (q.subtopic === parentQuestion.subtopic) s += 50
-  if (q.topic === parentQuestion.topic) s += 20
-  const d = q.difficulty ?? 3
-  s -= Math.abs(d - target) * 5
-  if (d <= target) s += 10
-  s += Math.random() * 3
-  return s
-}
-
-export function createLocalFallbackVariants(parentQuestion, allQuestions = [], targetDifficulty = null) {
-  const target = targetDifficulty ?? (parentQuestion.difficulty ?? 3)
-
-  const eligible = allQuestions.filter(q =>
-    q.id !== parentQuestion.id &&
-    !q.is_variant &&
-    (q.topic === parentQuestion.topic ||
-      (q.concept_tag && q.concept_tag === parentQuestion.concept_tag))
-  )
-
-  const candidates = eligible
-    .map(q => ({ q, s: scoreLocalCandidate(q, parentQuestion, target) }))
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 5)
-    .map(x => x.q)
-
-  return candidates.map((q, index) => ({
-    ...q,
-    id: `local_fallback__${parentQuestion.id}__${Date.now()}__${index}`,
-    variant_record_id: `local_fallback__${parentQuestion.id}__${index}`,
-    variant_type: `related_${index + 1}`,
-    parent_question_id: parentQuestion.id,
-    source: 'related',
-    is_variant: true,
-    bank_question_id: q.id,
-  }))
-}
-
 export function normalizeVariantRecord(parentQuestion, variant, index = 0) {
   return {
     ...variant,
@@ -117,6 +77,62 @@ export function normalizeVariantRecord(parentQuestion, variant, index = 0) {
     source: variant.source || 'prebuilt',
     is_variant: true,
   }
+}
+
+/**
+ * BANK-FIRST remediation selector (highest priority).
+ *
+ * Returns existing question-bank rows that match the parent's EXACT topic AND
+ * subtopic, ranked by difficulty closeness: same difficulty first, then one
+ * level lower, then the rest. This is the spec'd first tier — when a student
+ * gets a difficulty-3 "Exponential functions" question wrong, they get another
+ * difficulty-3 (then -2) "Exponential functions" bank question with NO API call.
+ *
+ * Subtopic is a HARD filter: same-topic-but-different-subtopic questions are
+ * never returned (that was the bug where exponential → trig/log leaked in).
+ *
+ * Returns [] when the bank has no same-topic+subtopic match → caller escalates
+ * to stored variants, then AI generation.
+ */
+export function selectBankVariants(parentQuestion, allQuestions = [], targetDifficulty = null, excludeIds = []) {
+  if (!parentQuestion) return []
+  const target = targetDifficulty ?? (parentQuestion.difficulty ?? 3)
+  const used = new Set(excludeIds || [])
+
+  const eligible = (allQuestions || []).filter((q) => {
+    if (!q || q.is_variant) return false
+    if (q.id === parentQuestion.id) return false
+    if (q.topic !== parentQuestion.topic) return false
+    if (q.subtopic !== parentQuestion.subtopic) return false
+    // Exclude anything already served this remediation (we encode bank ids in
+    // the variant_record_id as `bank__<parentId>__<bankId>`).
+    if (used.has(q.id) || used.has(`bank__${parentQuestion.id}__${q.id}`)) return false
+    return true
+  })
+
+  const ranked = eligible
+    .map((q) => {
+      const d = q.difficulty ?? 3
+      let score
+      if (d === target) score = 100
+      else if (d === target - 1) score = 80
+      else if (d < target) score = 60 - (target - d) * 5
+      else score = 40 - (d - target) * 10 // harder than target — least preferred
+      return { q, score: score + Math.random() * 2 }
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.q)
+
+  return ranked.map((q, index) => ({
+    ...q,
+    id: `bank__${parentQuestion.id}__${q.id}`,
+    variant_record_id: `bank__${parentQuestion.id}__${q.id}`,
+    variant_type: `bank_${index + 1}`,
+    parent_question_id: parentQuestion.id,
+    source: 'bank',
+    is_variant: true,
+    bank_question_id: q.id,
+  }))
 }
 
 export async function generateRemediationVariantsViaAI(
@@ -139,6 +155,7 @@ export async function generateRemediationVariantsViaAI(
       'Return only a valid JSON array containing exactly 5 objects.',
       'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
       'Each options array must contain exactly 4 strings.',
+      'Every question MUST be on the SAME topic and SAME subtopic as the original.',
       'Keep the same underlying concept, but vary wording, values, or structure.',
       'Do not include markdown or commentary outside the JSON array.',
     ].join(' ')
@@ -150,9 +167,9 @@ export async function generateRemediationVariantsViaAI(
       `Original question: ${parentQuestion.question}`,
       `Correct answer: ${correctAnswer}`,
       `Original solution: ${parentQuestion.solution}`,
-      `Target difficulty: ${diffTarget} out of 5 — make these questions easier/more accessible than the original.`,
-      'Generate 5 targeted remediation questions that test the same concept but are not copies.',
-      'Vary wording, values, or scenario. Each question difficulty should be at or below the target.',
+      `Centre the difficulty around ${diffTarget} out of 5, but VARY it: include some at difficulty ${Math.max(1, diffTarget - 1)} and some at ${Math.min(5, diffTarget + 1)} so the student is stretched whether they get questions right or wrong.`,
+      `Generate 5 questions that all test the "${parentQuestion.subtopic}" subtopic — same topic and subtopic as the original, not copies.`,
+      'Vary wording, values, or scenario across the 5 questions.',
     ].join('\n')
 
     const res = await fetchFn('/api/chat', {
@@ -220,7 +237,9 @@ export async function runGenerateRemediationQueue(ctx) {
   } = ctx
   const { skipDbLookup = false } = options
   const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
-  const diffTarget = difficultyTarget ?? Math.max(1, (parentQuestion?.difficulty ?? 3) - 1)
+  // Anchor on the original question's difficulty (same level first); selectBankVariants
+  // prefers that, then one level lower (e.g. "3, then 2").
+  const diffTarget = difficultyTarget ?? (parentQuestion?.difficulty ?? 3)
 
   setRemediationStatus?.('generating')
 
@@ -228,6 +247,16 @@ export async function runGenerateRemediationQueue(ctx) {
   let resolvedSource = 'generated'
 
   try {
+    // ── TIER 1: question bank — same topic + subtopic, matching difficulty. No API.
+    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, existingUsedIds)
+    if (bankQueue.length) {
+      console.info(`[gradefarm] bank has ${bankQueue.length} same-subtopic question(s) — no API call needed`)
+      resolvedQueue = bankQueue.slice(0, 5)
+      resolvedSource = 'bank'
+      return resolvedQueue
+    }
+
+    // ── TIER 2: previously-generated stored variants (same concept/subtopic). No API.
     if (!skipDbLookup) {
       const { directVariants, conceptVariants } = await fetchRemediationVariantsSafe(
         deps.getRemediationVariants,
@@ -248,30 +277,10 @@ export async function runGenerateRemediationQueue(ctx) {
       }
     }
 
-    console.warn('[gradefarm] no DB variants available — falling back to local related questions')
-
-    const localFallback = createLocalFallbackVariants(parentQuestion, questions, diffTarget).map((variant, index) =>
-      normalizeVariantRecord(parentQuestion, variant, index)
-    )
-
-    const localQueue = buildRemediationQueue({
-      generatedVariants: localFallback,
-      excludeIds: existingUsedIds,
-      limit: 5,
-    }).map(v => ({ ...v, is_variant: true, source: v.source || 'related' }))
-
-    const strongLocalCount = localQueue.filter(v =>
-      ((v.concept_tag && v.concept_tag === parentQuestion.concept_tag) ||
-       v.subtopic === parentQuestion.subtopic) &&
-      (v.difficulty ?? 3) <= diffTarget + 1
-    ).length
-
-    if (strongLocalCount >= 3) {
-      console.info(`[gradefarm] local bank has ${strongLocalCount} strong matches — skipping AI generation`)
-      resolvedQueue = localQueue
-      resolvedSource = 'generated'
-      return localQueue
-    }
+    // ── TIER 3: nothing in the bank — generate via AI (same topic + subtopic,
+    // varied difficulty) and persist the results back to the bank so future
+    // remediations on this subtopic need no API call.
+    console.warn(`[gradefarm] no bank/stored questions for subtopic "${parentQuestion.subtopic}" — generating via AI`)
 
     const aiPromise = (async () => {
       try {
@@ -334,41 +343,20 @@ export async function runGenerateRemediationQueue(ctx) {
       }
     }))
 
-    // Not enough strong matches — always await AI so the student gets same-concept
-    // questions rather than unrelated local fallbacks (e.g. log questions for exponential).
-    console.warn('[gradefarm] strongLocalCount < 3 — awaiting AI generation for same-concept variants')
+    // Await AI so the student gets same-subtopic questions (never off-subtopic
+    // fallbacks). The generated questions are persisted to the bank in the
+    // background (see aiPromise) so the bank grows and API calls taper off.
     const { normalized: aiQueue } = await aiPromise
 
     if (aiQueue.length) {
-      // Append any strong local matches for variety (background, already awaited).
-      const extras = localQueue.filter(v =>
-        (v.concept_tag && v.concept_tag === parentQuestion.concept_tag) ||
-        v.subtopic === parentQuestion.subtopic
-      )
-      resolvedQueue = [...aiQueue, ...extras].slice(0, 8)
+      resolvedQueue = aiQueue
       resolvedSource = 'generated'
-      return resolvedQueue
+      return aiQueue
     }
 
-    // AI failed — use local questions as last resort (only strong matches first).
-    const strongLocal = localQueue.filter(v =>
-      (v.concept_tag && v.concept_tag === parentQuestion.concept_tag) ||
-      v.subtopic === parentQuestion.subtopic
-    )
-    if (strongLocal.length) {
-      resolvedQueue = strongLocal
-      resolvedSource = 'generated'
-      return resolvedQueue
-    }
-
-    // Final fallback: use any local question from the same topic.
-    if (localQueue.length) {
-      resolvedQueue = localQueue
-      resolvedSource = 'generated'
-      return resolvedQueue
-    }
-
-    console.warn('[gradefarm] no variants available from any source — activating with empty queue')
+    // AI produced nothing and the bank has no same-subtopic match — exit
+    // remediation gracefully rather than serving an unrelated question.
+    console.warn(`[gradefarm] no same-subtopic questions available for "${parentQuestion.subtopic}" — activating empty (remediation will exit)`)
     resolvedQueue = []
     resolvedSource = 'generated'
     return []
@@ -389,6 +377,7 @@ export async function runEnterRemediation(ctx) {
   const {
     parentQuestion,
     prefetched,           // Map | undefined
+    questions = [],
     deps,
     setRemediationMode,
     setRemediationStreak,
@@ -407,19 +396,31 @@ export async function runEnterRemediation(ctx) {
   if (!parentQuestion) return
 
   const conceptTag = parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion)
-  const diffTarget = Math.max(1, (parentQuestion.difficulty ?? 3) - 1)
+  // Anchor remediation at the SAME difficulty as the question the student missed
+  // (e.g. a difficulty-3 miss → a difficulty-3 reinforcement question first).
+  const diffTarget = parentQuestion.difficulty ?? 3
 
   setRemediationMode?.(true)
   setRemediationStreak?.(0)
   setRemediationTarget?.(3)
   setRemediationDifficultyTarget?.(diffTarget)
-  setRemediationSource?.('prebuilt')
+  setRemediationSource?.('bank')
   setRemediationConcept?.(conceptTag)
   setRemediationParentId?.(parentQuestion.id)
   setRemediationOriginalQ?.(parentQuestion)
   setRemediationUsedIds?.([])
 
   try {
+    // ── TIER 1: question bank — same topic + subtopic, matching difficulty. Instant, no API.
+    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, [])
+    if (bankQueue.length) {
+      setRemediationQueue?.(bankQueue.slice(0, 5))
+      setRemediationSource?.('bank')
+      setRemediationStatus?.('activated')
+      return
+    }
+
+    // ── TIER 2: previously-generated stored variants (prefetched while the student read the Q).
     let dbResult = prefetched && typeof prefetched.get === 'function'
       ? prefetched.get(parentQuestion.id)
       : null
@@ -439,11 +440,12 @@ export async function runEnterRemediation(ctx) {
     }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
 
     if (!queue.length) {
-      // No DB variants (or DB timed out) — go straight to local fallback + AI.
+      // ── TIER 3: nothing stored — AI generation + persist to bank.
       // skipDbLookup avoids paying the Supabase timeout twice.
       await generateRemediationQueue(parentQuestion, [], diffTarget, { skipDbLookup: true })
     } else {
       setRemediationQueue?.(queue)
+      setRemediationSource?.('prebuilt')
       setRemediationStatus?.('activated')
     }
   } catch (err) {
@@ -460,6 +462,7 @@ export async function runLoadNextRemediationQuestion(ctx) {
     remediationOriginalQ,
     remediationUsedIds = [],
     remediationDifficultyTarget,
+    questions = [],
     deps,
     setRemediationQueue,
     setRemediationSource,
@@ -471,6 +474,25 @@ export async function runLoadNextRemediationQuestion(ctx) {
 
   let queue = remediationQueue || []
 
+  // ── TIER 1: refill from the bank first (same topic + subtopic, excluding
+  // questions already served this remediation). Catches questions newly added
+  // to the in-memory bank by a prior AI generation. No API call.
+  if (!queue.length && remediationOriginalQ) {
+    const bankQueue = selectBankVariants(
+      remediationOriginalQ,
+      questions,
+      remediationDifficultyTarget ?? (remediationOriginalQ.difficulty ?? 3),
+      remediationUsedIds,
+    )
+    if (bankQueue.length) {
+      queue = bankQueue
+      setRemediationQueue?.(bankQueue)
+      setRemediationSource?.('bank')
+      setRemediationStatus?.('activated')
+    }
+  }
+
+  // ── TIER 2: stored variants.
   if (!queue.length && remediationOriginalQ) {
     const conceptTag = remediationOriginalQ.concept_tag || getQuestionConceptTag(remediationOriginalQ)
     const { directVariants, conceptVariants } = await fetchRemediationVariantsSafe(
