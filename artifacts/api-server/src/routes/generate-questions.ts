@@ -173,13 +173,13 @@ function extractJsonArray(text = ""): unknown[] {
 }
 
 router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
+  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
 
   const resolvedSubject: string = subject || stage;
   // Support both a single topicCode and a topicCodes array
   const topicCodes: string[] = topicCodesRaw
     ? (Array.isArray(topicCodesRaw) ? topicCodesRaw : [topicCodesRaw])
-    : topicCode ? [topicCode] : [];
+    : topicCodeRaw ? [topicCodeRaw] : [];
 
   if (!resolvedSubject || !topicCodes.length) {
     res.status(400).json({ error: "subject (or stage) and topicCode/topicCodes required" });
@@ -216,7 +216,7 @@ router.post("/generate-questions", async (req, res) => {
   }
 
   // Single topic from here
-  const topicCode = topicCodes[0];
+  const topicCode: string = topicCodes[0];
 
   // Normalise picker IDs to canonical curriculum names.
   const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
