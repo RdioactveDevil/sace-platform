@@ -55,6 +55,13 @@ export default function AdminTutorsTab() {
   }
   const closeDetail = () => { setSelected(null); setDetail(null) }
 
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e) => { if (e.key === 'Escape') closeDetail() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected])
+
   const filtered = useMemo(() => {
     if (!search.trim()) return tutors
     const q = search.toLowerCase()
@@ -136,8 +143,13 @@ export default function AdminTutorsTab() {
 
       {selected && (
         <>
-          <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.45)' }} />
-          <div style={panelStyle}>
+          <div onClick={closeDetail} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.45)' }} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Tutor details: ${selected.display_name || selected.email || ''}`}
+            style={panelStyle}
+          >
             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9' }}>{selected.display_name || 'Unnamed tutor'}</div>

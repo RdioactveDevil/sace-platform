@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
+import { initObservability } from './lib/analytics'
+import { notifyError } from './lib/notify'
+import ErrorBoundary from './components/ErrorBoundary'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
-import LandingPage       from './components/LandingPage'
-import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
 import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/saceTopics'
@@ -17,23 +19,29 @@ import ProfileScreen     from './components/ProfileScreen'
 import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
-import OnboardingScreen  from './components/OnboardingScreen'
-import TutorOnboardingScreen from './components/TutorOnboardingScreen'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
-import TutorSignupScreen from './components/TutorSignupScreen'
-import GetAccessScreen   from './components/GetAccessScreen'
-import TermsScreen       from './components/TermsScreen'
-import PrivacyScreen     from './components/PrivacyScreen'
 import AdminRoute        from './components/AdminRoute'
-import AdminScreen       from './components/AdminScreen'
 import TutorRoute        from './components/TutorRoute'
-import TutorScreen       from './components/TutorScreen'
-import WritingScreen     from './components/WritingScreen'
-import DiagnosticScreen  from './components/DiagnosticScreen'
-import PricingPage       from './components/PricingPage'
-import SessionRoom       from './components/SessionRoom'
-import RecurringRoomPage from './components/RecurringRoomPage'
+
+// Heavy / route-only screens are lazy-loaded so their dependencies (Excalidraw,
+// LiveKit, MathLive, the entire admin bundle, marketing pages, etc.) are split
+// out of the initial app bundle and only fetched when the route is visited.
+const LandingPage           = lazy(() => import('./components/LandingPage'))
+const AuthScreen            = lazy(() => import('./components/AuthScreen'))
+const OnboardingScreen      = lazy(() => import('./components/OnboardingScreen'))
+const TutorOnboardingScreen = lazy(() => import('./components/TutorOnboardingScreen'))
+const TutorSignupScreen     = lazy(() => import('./components/TutorSignupScreen'))
+const GetAccessScreen       = lazy(() => import('./components/GetAccessScreen'))
+const TermsScreen           = lazy(() => import('./components/TermsScreen'))
+const PrivacyScreen         = lazy(() => import('./components/PrivacyScreen'))
+const AdminScreen           = lazy(() => import('./components/AdminScreen'))
+const TutorScreen           = lazy(() => import('./components/TutorScreen'))
+const WritingScreen         = lazy(() => import('./components/WritingScreen'))
+const DiagnosticScreen      = lazy(() => import('./components/DiagnosticScreen'))
+const PricingPage           = lazy(() => import('./components/PricingPage'))
+const SessionRoom           = lazy(() => import('./components/SessionRoom'))
+const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -428,6 +436,20 @@ function mergeTutorialFromStorage(userId, prof) {
   return prof
 }
 
+function RouteFallback({ theme }) {
+  const t = THEMES[theme] || {}
+  return (
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg || '#0c1037' }}>
+      <style>{`@keyframes gf-routespin { to { transform: rotate(360deg); } }`}</style>
+      <div
+        role="status"
+        aria-label="Loading"
+        style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(241,190,67,0.18)', borderTopColor: GOLD, animation: 'gf-routespin 0.8s linear infinite' }}
+      />
+    </div>
+  )
+}
+
 function NavBlockerModal({ blocker, theme }) {
   const t = THEMES[theme]
   if (blocker.state !== 'blocked') return null
@@ -481,7 +503,9 @@ function AppInner() {
       const subs = await getSubscriptions(user.id)
       setSubscriptions(subs)
       setSubscriptionsLoaded(true)
-    } catch {}
+    } catch (e) {
+      notifyError(e, 'Could not refresh your subjects. Please try again.', { source: 'refreshSubscriptions' })
+    }
   }
 
   // Lifted Learn state — survives route changes
@@ -832,6 +856,8 @@ function AppInner() {
   return (
     <>
     <NavBlockerModal blocker={blocker} theme={theme} />
+    <ErrorBoundary label="app">
+    <Suspense fallback={<RouteFallback theme={theme} />}>
     <Routes>
       {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
@@ -1132,6 +1158,8 @@ function AppInner() {
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
     </Routes>
+    </Suspense>
+    </ErrorBoundary>
     {welcomeCelebration && (
       <GradeFarmWelcomeCelebration theme={theme} onDismiss={() => setWelcomeCelebration(false)} />
     )}
@@ -1142,5 +1170,15 @@ function AppInner() {
 const router = createBrowserRouter([{ path: '*', element: <AppInner /> }])
 
 export default function App() {
-  return <RouterProvider router={router} />
+  useEffect(() => { initObservability() }, [])
+  return (
+    <ErrorBoundary label="app">
+      <RouterProvider router={router} />
+      <Toaster
+        position="top-center"
+        theme="dark"
+        toastOptions={{ style: { fontFamily: "'Plus Jakarta Sans', sans-serif" } }}
+      />
+    </ErrorBoundary>
+  )
 }

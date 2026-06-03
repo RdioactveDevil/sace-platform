@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /$
+Allow: /pricing
+Allow: /terms
+Allow: /privacy
+# App routes are behind auth and hold no public content — keep them out of the index.
+Disallow: /home
+Disallow: /auth
+Disallow: /admin
+Disallow: /tutor
+Disallow: /quiz
+Disallow: /learn
+Disallow: /my-progress
+Disallow: /my-account
+Disallow: /study-plan
+Disallow: /history
+Disallow: /leaderboard
+Disallow: /subject-picker
+Disallow: /get-access
+Disallow: /onboarding
+Disallow: /writing
+Disallow: /session
+Disallow: /room
+Disallow: /diagnostic
+
+Sitemap: https://gradefarm.com.au/sitemap.xml
