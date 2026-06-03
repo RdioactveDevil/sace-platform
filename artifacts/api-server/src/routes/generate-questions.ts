@@ -185,8 +185,9 @@ interface GeneratedQuestion {
 }
 
 // ── Generate questions for a single topic code ─────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function generateForTopic(
-  adminDb: ReturnType<typeof createClient>,
+  adminDb: any,
   normalizedSubject: string,
   topicCode: string,
   count: number,
@@ -303,13 +304,15 @@ async function generateForTopic(
     .eq("subtopic", topicName)
     .limit(500);
 
+  const existingRows: Array<{ question: string }> = existingData || [];
+
   const existingTexts = new Set(
-    (existingData || []).map((r) => (r.question || "").trim().toLowerCase())
+    existingRows.map((r) => (r.question || "").trim().toLowerCase())
   );
 
-  const existingSamplesText = (existingData || [])
+  const existingSamplesText = existingRows
     .slice(0, 15)
-    .map((r: { question: string }, i: number) => `${i + 1}. ${(r.question || "").slice(0, 120)}`)
+    .map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 120)}`)
     .join("\n");
 
   let userParts = [
