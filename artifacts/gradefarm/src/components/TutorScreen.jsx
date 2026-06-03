@@ -229,7 +229,7 @@ function StudentsTab({ profile, theme }) {
 const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed']
 
 // ── Assignments Tab ───────────────────────────────────────────────────────────
-function AssignmentsTab({ profile, theme }) {
+function AssignmentsTab({ profile, theme, subject }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
@@ -242,14 +242,13 @@ function AssignmentsTab({ profile, theme }) {
   const [expandedBatches, setExpandedBatches] = useState(() => new Set())
   const [form, setForm]               = useState({
     type: 'Quiz',
-    subject: '',
+    subject: subject?.name || '',
     topics: [],
     due_date: '',
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
   })
-  const [liveSubjects, setLiveSubjects] = useState([])
   const [curriculumMacroGroups, setCurriculumMacroGroups] = useState([])
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
@@ -275,21 +274,22 @@ function AssignmentsTab({ profile, theme }) {
   const load = async () => {
     setLoading(true)
     try {
-      const [asgns, ros, cls, curricula] = await Promise.all([
+      const [asgns, ros, cls] = await Promise.all([
         fetchAssignmentsForTutor(profile.id),
         fetchRoster(profile.id),
         fetchTutorClasses().catch(() => []),
-        fetchLiveCurricula().catch(() => []),
       ])
       setAssignments(asgns)
       setRoster(ros)
       setClasses(cls)
-      setLiveSubjects(curricula)
-      setForm(f => ({ ...f, subject: f.subject || curricula[0]?.name || '' }))
     } catch {}
     setLoading(false)
   }
   useEffect(() => { load() }, [profile.id])
+  // Keep form.subject in sync when the active subject changes in SubjectPicker
+  useEffect(() => {
+    if (subject?.name) setForm(f => ({ ...f, subject: subject.name, topics: [] }))
+  }, [subject?.name])
 
   const toggleTopic = (topic) => {
     setForm(f => ({
@@ -351,7 +351,7 @@ function AssignmentsTab({ profile, theme }) {
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: liveSubjects[0]?.name || '', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -412,11 +412,7 @@ function AssignmentsTab({ profile, theme }) {
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject</label>
-                <select value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value, topics: [] }))} style={inputStyle}>
-                  {liveSubjects.map(s => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
-                  ))}
-                </select>
+                <div style={{ ...inputStyle, color: t.text, opacity: 0.85 }}>{form.subject || '—'}</div>
               </div>
             </div>
 
@@ -2046,7 +2042,7 @@ const TABS = [
   { id: 'diagnostic',  label: 'Diagnostic',  icon: '🧪' },
 ]
 
-export default function TutorScreen({ profile, theme }) {
+export default function TutorScreen({ profile, theme, subject }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('students')
@@ -2087,7 +2083,7 @@ export default function TutorScreen({ profile, theme }) {
         <div style={{ maxWidth: 960, width: '100%' }}>
           {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
           {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
-          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
+          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} />}
           {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
           {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
           {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
