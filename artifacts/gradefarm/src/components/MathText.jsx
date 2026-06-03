@@ -37,14 +37,31 @@ function insertLineBreaks(text) {
   return text.replace(/\s*(\(\d+\))/g, '\n$1')
 }
 
+// Unicode superscript characters → ASCII, so "x³" becomes "x^3" before wrapping.
+const SUPERSCRIPT_MAP = {
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+  '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+  '⁺': '+', '⁻': '-', 'ⁿ': 'n', 'ⁱ': 'i',
+}
+
+function convertUnicodeSuperscripts(text) {
+  return text.replace(/([0-9A-Za-z)\]])([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿⁱ]+)/g, (whole, base, sup) => {
+    const mapped = Array.from(sup).map((c) => SUPERSCRIPT_MAP[c] ?? '').join('')
+    if (!mapped) return whole
+    return `${base}^${mapped.length > 1 ? `{${mapped}}` : mapped}`
+  })
+}
+
 /**
  * Auto-detect math expressions not already wrapped in $ delimiters.
  * Handles two cases:
  *   A. Pure math strings (answer options like "e^x", "(x+2)e^x") — wrap entirely.
  *   B. Mixed prose+math (questions like "If f(x)=xe^x, what is f''(x)?") — wrap
  *      individual sub-expressions.
+ * Unicode superscripts (x², x³) are converted to caret notation first.
  */
-function autoWrapMath(text) {
+function autoWrapMath(rawText) {
+  const text = convertUnicodeSuperscripts(rawText)
   const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text)
   const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text)
   if (!hasCaret && !hasDerivative) return text
@@ -62,9 +79,10 @@ function autoWrapMath(text) {
   // Mixed text: wrap individual math sub-expressions inline.
   let result = text
 
-  // Exponent expressions: xe^x, x^2, e^{2x}, (...)^n  — base chars before ^
+  // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
+  // A base is a run of alphanumerics and/or whole parenthesised groups.
   result = result.replace(
-    /([a-zA-Z0-9)]+\^(?:\{[^}]*\}|[a-zA-Z0-9]+))/g,
+    /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
     (m) => `$${m}$`,
   )
 

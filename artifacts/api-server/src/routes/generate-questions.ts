@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
+import { normalizeMathText } from "../lib/normalize-math";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -311,7 +312,7 @@ router.post("/generate-questions", async (req, res) => {
     "  difficulty (integer 1\u20135)",
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
-    ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$  and display equations in $$...$$. Examples: $x^2 + 3x - 4$, ${latexExample}. Never use plain Unicode for equations.`] : []),
+    ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions, in the question, EVERY option, and the solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $e^x$, $f''(x)$, $(x+2)e^x$, ${latexExample}. Always write exponents with a caret inside $...$ (e.g. $x^2$, NEVER the Unicode "x²"). Always wrap derivative notation like $f'(x)$ and $f''(x)$. Never emit a bare mathematical expression outside $...$.`] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
     "Do not repeat the same scenario across questions.",
@@ -406,10 +407,10 @@ router.post("/generate-questions", async (req, res) => {
         subtopic: topicName,
         concept_tag: `${normalizedSubject}|${parentTopicName}|${topicName}`.toLowerCase(),
         difficulty: q.difficulty || 3,
-        question: q.question,
-        options: q.options,
+        question: normalizeMathText(q.question) as string,
+        options: q.options.map((o) => normalizeMathText(o) as string),
         answer_index: q.answer_index,
-        solution: q.solution || "",
+        solution: normalizeMathText(q.solution || "") as string,
         graph: q.graph || null,
         table_data: q.table_data || null,
         tip: null,
@@ -440,10 +441,10 @@ router.post("/generate-questions", async (req, res) => {
     topic_code: topicCode,
     topic: parentTopicName,
     subtopic: topicName,
-    question: q.question,
-    options: q.options,
+    question: normalizeMathText(q.question) as string,
+    options: q.options.map((o) => normalizeMathText(o) as string),
     answer_index: q.answer_index,
-    solution: q.solution || null,
+    solution: q.solution ? (normalizeMathText(q.solution) as string) : null,
     graph: q.graph || null,
     table_data: q.table_data || null,
     difficulty: q.difficulty || null,
