@@ -999,7 +999,7 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           :               <TutorRoute profile={profile}>
               <AppShell {...shellProps} writingNav={false}>
-                <TutorScreen profile={profile} theme={theme} subject={subject} />
+                <TutorScreen profile={profile} theme={theme} subject={selectedSubject} />
               </AppShell>
             </TutorRoute>
       } />
