@@ -61,7 +61,9 @@ function convertUnicodeSuperscripts(text) {
  * Unicode superscripts (x², x³) are converted to caret notation first.
  */
 function autoWrapMath(rawText) {
-  const text = convertUnicodeSuperscripts(rawText)
+  // Normalize en/em-dashes to ASCII hyphen so expressions like "x(24 – x²)/2"
+  // are recognised as pure math (en-dashes are used as minus signs in generated output).
+  const text = convertUnicodeSuperscripts(rawText).replace(/[–—]/g, '-')
   const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text)
   const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text)
   if (!hasCaret && !hasDerivative) return text

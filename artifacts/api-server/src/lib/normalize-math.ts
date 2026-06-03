@@ -48,19 +48,23 @@ function convertUnicodeSuperscripts(text: string): string {
  *   - Mixed prose+math (questions) → wrap individual sub-expressions inline.
  */
 function autoWrapMath(text: string): string {
-  const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text);
-  const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text);
+  // Normalize en/em-dashes to ASCII hyphen — the AI uses – as a minus sign in
+  // expressions like "V(x) = x(24 – x²)/2", which would otherwise fail the
+  // isMathOnly character-class check.
+  const t = text.replace(/[–—]/g, "-");
+  const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(t);
+  const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(t);
   if (!hasCaret && !hasDerivative) return text;
 
   const isMathOnly =
-    !/[?!]/.test(text) &&
-    !/\.\s/.test(text) &&
-    !/^[A-Z][a-z]/.test(text) &&
-    /^[a-zA-Z0-9\s^+\-*/()'=,.]+$/.test(text);
+    !/[?!]/.test(t) &&
+    !/\.\s/.test(t) &&
+    !/^[A-Z][a-z]/.test(t) &&
+    /^[a-zA-Z0-9\s^+\-*/()'=,.]+$/.test(t);
 
-  if (isMathOnly) return `$${text.trim()}$`;
+  if (isMathOnly) return `$${t.trim()}$`;
 
-  let result = text;
+  let result = t;
   // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
   // A base is a run of alphanumerics and/or whole parenthesised groups.
   result = result.replace(
