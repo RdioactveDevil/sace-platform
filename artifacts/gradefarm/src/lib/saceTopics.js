@@ -1,8 +1,3 @@
-import {
-  MACRO_GROUPS_Y10,
-  normalizeY10Topic,
-} from './vicMathsTopics'
-
 // ─── Stage 1 ──────────────────────────────────────────────────────────────────
 
 // Official SACE Stage 1 Chemistry topics — in curriculum order
@@ -272,9 +267,6 @@ export function getTopicConfig(stage) {
   if (stage === 'Stage 2') {
     return { macroGroups: MACRO_GROUPS_STAGE2, normFn: normalizeTopicStage2 }
   }
-  if (stage === 'Year 10') {
-    return { macroGroups: MACRO_GROUPS_Y10, normFn: normalizeY10Topic }
-  }
   return { macroGroups: MACRO_GROUPS_STAGE1, normFn: normalizeTopic }
 }
 
@@ -306,13 +298,10 @@ function curriculumGroupLabel(displayName) {
 
 /**
  * Resolves topic normalisation and macro groups for the **active subject**.
- * Only `chemistry_s1` / `chemistry_s2` use the SACE Chemistry Stage 1/2 outlines;
- * other Stage 2 subjects (e.g. Mathematical Methods) no longer inherit Chemistry topics.
+ * All curriculum-backed subjects are now dynamic (DB-loaded).
  */
 export function getTopicConfigForSubject(subject) {
   if (!subject) return getTopicConfig('Stage 1')
-  if (subject.id === 'chemistry_s1') return getTopicConfig('Stage 1')
-  if (subject.id === 'chemistry_s2') return getTopicConfig('Stage 2')
   if (subject.type === 'writing') return getTopicConfig(subject.stage)
   if (subject.id?.startsWith('curriculum_')) {
     if (Array.isArray(subject.topics) && subject.topics.length > 0) {

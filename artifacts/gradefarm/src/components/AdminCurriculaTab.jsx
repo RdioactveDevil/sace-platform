@@ -1,15 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded, deleteCurriculum } from '../lib/curriculaDb'
+import { listCurricula, createCurriculum, deleteCurriculum } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
-import { BUILT_IN_CURRICULA } from '../lib/builtInCurricula'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
-const BUILT_IN_SUBJECTS = BUILT_IN_CURRICULA.map(c => ({
-  name: c.name,
-  description: c.description,
-  generation_flags: c.generationFlags,
-  topics: c.topics,
-}))
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -51,7 +44,6 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      await seedBuiltInSubjectsIfNeeded(BUILT_IN_SUBJECTS)
       setCurricula(await listCurricula())
     } catch (e) {
       if (!silent) setError(e.message)

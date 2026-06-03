@@ -7,9 +7,8 @@ import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
-import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS } from './lib/subjects'
+import { ALL_SUBJECTS } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/saceTopics'
-import { getY7TopicConfig } from './lib/australianCurriculumTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -573,17 +572,8 @@ function AppInner() {
         if (prof) getSubscriptions(user.id).then(subs => {
           setSubscriptions(subs)
           setSubscriptionsLoaded(true)
-          // Migrate legacy Year 10 Maths variants → unified maths_y10 tile,
-          // then evict a persisted subject the user is no longer subscribed to.
-          let stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
-          if (stored && (stored.id === 'vic_maths_y10' || stored.id === 'vic_maths_y10a' || (stored.stage === 'Year 10' && stored.name === 'Mathematics (10A)'))) {
-            const unified = ALL_SUBJECTS.find(s => s.id === 'maths_y10')
-            if (unified) {
-              stored = unified
-              localStorage.setItem('gf-subject', JSON.stringify(unified))
-              setSelectedSubject(unified)
-            }
-          }
+          // Evict a persisted subject the user is no longer subscribed to.
+          const stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
           if (stored && subs.length > 0 && !subs.some(s => s.subject_name === stored.name && s.stage === stored.stage)) {
             localStorage.removeItem('gf-subject')
             setSelectedSubject(null)
@@ -1084,7 +1074,7 @@ function AppInner() {
             // names to their matching subtopics; keep direct subtopic matches as-is.
             let expandedSubtopics = nextSubtopics
             if (opts?.assignmentId && nextSubtopics.length > 0) {
-              const { normFn } = getY7TopicConfig(activeSubject?.id) ?? getTopicConfigForSubject(activeSubject)
+              const { normFn } = getTopicConfigForSubject(activeSubject)
               const allSubtopicsLower = new Map()
               activeQuestions.forEach(q => {
                 if (q.subtopic) allSubtopicsLower.set(q.subtopic.toLowerCase(), q.subtopic)

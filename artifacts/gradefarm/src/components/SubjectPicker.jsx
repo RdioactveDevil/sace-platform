@@ -1,19 +1,12 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
+import { ALL_SUBJECTS, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
 import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchAllActiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = `'Plus Jakarta Sans', sans-serif`
-
-// Built-in subject names as they appear in the curricula table (name + ' ' + stage, trimmed),
-// plus canonical `questions.subject` keys for built-in banks (e.g. "Year 7 Mathematics").
-const BUILT_IN_CURRICULUM_NAMES = new Set([
-  ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
-  ...Object.values(QUESTIONS_SUBJECT_BY_ID),
-])
 
 // Match a subscription row to a subject tile.
 // Handles both short-name subscriptions (subject_name === s.name)
@@ -22,15 +15,6 @@ function subMatchesSubject(sub, s) {
   if (sub.subject_name === s.name && (sub.stage === s.stage || !sub.stage)) return true
   if (s.curriculumName && sub.subject_name === s.curriculumName) return true
   return false
-}
-
-// Returns all canonical names for a built-in subject tile for DB lookup.
-function builtInCanonicalNames(s) {
-  const names = new Set()
-  if (QUESTIONS_SUBJECT_BY_ID[s.id]) names.add(QUESTIONS_SUBJECT_BY_ID[s.id])
-  if (s.curriculumName) names.add(s.curriculumName)
-  names.add(`${s.name} ${s.stage}`.trim())
-  return names
 }
 
 const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
@@ -55,22 +39,13 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const [hovering, setHovering] = useState(null)
   const [liveQuestionCounts, setLiveQuestionCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamicSubjects] = useState([])
-  // null = not yet loaded (show all to avoid flash); Set = DB responded
-  const [liveCurriculaNames, setLiveCurriculaNames] = useState(null)
   const t = THEMES[theme]
 
   useEffect(() => {
     fetchAllActiveCurricula()
       .then(curricula => {
-        // Track names of live/generating curricula for filtering built-in subjects
-        const liveOrGeneratingNames = new Set(
-          curricula.filter(c => c.status === 'live' || c.status === 'generating').map(c => c.name)
-        )
-        setLiveCurriculaNames(liveOrGeneratingNames)
-
-        // Custom (non-built-in) curricula: live/generating → available; draft → coming soon
+        // All DB curricula become dynamic tiles
         const dynamic = curricula
-          .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
           .map(c => ({
             id: `curriculum_${c.id}`,
             name: c.name,
@@ -83,28 +58,16 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           }))
         setDynamicSubjects(dynamic)
       })
-      .catch(() => { setLiveCurriculaNames(new Set()) })
+      .catch(() => {})
   }, [])
 
-  // Built-in subjects filtered by what the admin has kept live in the curricula table.
-  // Before DB responds (liveCurriculaNames === null) we show all to avoid a flash.
-  // Subjects with no QUESTIONS_SUBJECT_BY_ID entry and no curriculumName (e.g. writing
-  // subjects) are not expected to have a curricula row — always show them if available.
-  const builtInSubjects = liveCurriculaNames === null
-    ? ALL_SUBJECTS
-    : ALL_SUBJECTS.filter(s => {
-        if (!s.available) return true // coming-soon entries always show
-        const expectsCurriculumRow = !!(QUESTIONS_SUBJECT_BY_ID[s.id] || s.curriculumName)
-        if (!expectsCurriculumRow) return true
-        return [...builtInCanonicalNames(s)].some(n => liveCurriculaNames.has(n))
-      })
+  // Static (non-curriculum) subjects: writing subjects, coming-soon subjects, quant_y10.
+  // These never have a curricula row — always show them as-is.
+  const builtInSubjects = ALL_SUBJECTS
 
   useEffect(() => {
     let cancelled = false
     const pairs = [
-      ...builtInSubjects
-        .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
-        .map(s => [s.id, QUESTIONS_SUBJECT_BY_ID[s.id], s.stage || '']),
       ...dynamicSubjects
         .filter(s => s.available)
         .map(s => [s.id, s.name, s.stage || '']),
@@ -124,7 +87,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [dynamicSubjects, liveCurriculaNames]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dynamicSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasSubscriptions = subscriptions.length > 0
   const allSubjects = [...builtInSubjects, ...dynamicSubjects]

@@ -30,7 +30,6 @@ import {
 } from '../lib/db'
 import { getTopicConfig } from '../lib/saceTopics'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
-import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -268,11 +267,7 @@ function AssignmentsTab({ profile, theme }) {
   const [expandedTopic, setExpandedTopic] = useState(null)
   useEffect(() => {
     let cancelled = false
-    const subjectKey = form.subject === 'Chemistry Stage 1'
-      ? QUESTIONS_SUBJECT_BY_ID.chemistry_s1
-      : form.subject === 'Chemistry Stage 2'
-        ? QUESTIONS_SUBJECT_BY_ID.chemistry_s2
-        : 'Chemistry'
+    const subjectKey = form.subject || 'Chemistry Stage 1'
     getQuestions(subjectKey).then(qs => { if (!cancelled) setSubjectQuestions(qs || []) }).catch(() => {})
     return () => { cancelled = true }
   }, [form.subject])
@@ -1253,16 +1248,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
   },
   // ── Junior Secondary (Year 7–10) ───────────────────────────────────────────
   {
-    id: 'maths_y7', name: 'Mathematics',
-    yearGroups: ['junior'],
-    topics: ['Number', 'Integers & Rational Numbers', 'Fractions, Decimals & Percentages', 'Rates & Ratios', 'Financial Mathematics', 'Algebra — Expressions', 'Algebra — Linear Equations', 'Algebra — Graphs & Functions', 'Measurement — Length, Area & Volume', 'Geometry — Angles & Shapes', 'Pythagorean Theorem', 'Statistics & Data', 'Probability'],
-  },
-  {
-    id: 'english_y7', name: 'English',
-    yearGroups: ['junior'], isWriting: true,
-    topics: ['Reading Comprehension', 'Language & Vocabulary', 'Grammar & Punctuation', 'Narrative Writing', 'Persuasive Writing', 'Analytical Writing', 'Text Response', 'Media & Visual Texts', 'Speaking & Listening'],
-  },
-  {
     id: 'science_y7', name: 'Science',
     yearGroups: ['junior'],
     topics: ['Cells & Living Things', 'Body Systems', 'Ecosystems & Ecology', 'Mixtures & Substances', 'Chemical Reactions', 'Forces & Motion', 'Energy Forms & Transfers', 'Waves — Light & Sound', 'Electricity & Magnetism', 'Earth & Space', 'Geology', 'Science Inquiry Skills'],
@@ -1292,11 +1277,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
     id: 'maths_general_s1', name: 'General Mathematics',
     yearGroups: ['stage1'],
     topics: ['Investing and borrowing', 'Measurement', 'Statistical investigation', 'Applications of trigonometry', 'Linear functions and graphs', 'Exponential functions and graphs', 'Matrices and networks', 'Financial decisions'],
-  },
-  {
-    id: 'chemistry_s1', name: 'Chemistry',
-    yearGroups: ['stage1'],
-    topics: ['Properties and uses of materials', 'Atomic structure', 'Quantities of atoms', 'The periodic table', 'Types of materials', 'Bonding between atoms', 'Quantities of molecules and ions', 'Molecule polarity', 'Interactions between molecules', 'Hydrocarbons', 'Polymers', 'Miscibility and solutions', 'Solutions of ionic substances', 'Quantities in reactions', 'Energy in reactions', 'Acid–base concepts', 'Reactions of acids and bases', 'The pH scale', 'Concepts of oxidation and reduction', 'Metal reactivity', 'Electrochemistry'],
   },
   {
     id: 'biology_s1', name: 'Biology',
@@ -1340,11 +1320,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
   },
   // ── Stage 2 (Year 12) ──────────────────────────────────────────────────────
   {
-    id: 'maths_methods_s2', name: 'Mathematical Methods',
-    yearGroups: ['stage2'],
-    topics: ['Further differentiation and applications', 'Discrete random variables', 'Integral calculus', 'Logarithmic functions', 'Continuous random variables and the normal distribution', 'Sampling and confidence intervals', 'The binomial distribution', 'Linear combinations of random variables'],
-  },
-  {
     id: 'maths_specialist_s2', name: 'Specialist Mathematics',
     yearGroups: ['stage2'],
     topics: ['Mathematical induction', 'Complex numbers', 'Functions and sketching graphs', 'Vectors in three dimensions', 'Integration techniques and applications', 'Rates of change and differential equations', 'Statistical inference'],
@@ -1353,11 +1328,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
     id: 'maths_general_s2', name: 'General Mathematics',
     yearGroups: ['stage2'],
     topics: ['Modelling with linear relationships', 'Modelling with matrices', 'Statistical models', 'Financial models', 'Discrete models — networks and graph theory', 'Bivariate data', 'Modelling with trigonometry'],
-  },
-  {
-    id: 'chemistry_s2', name: 'Chemistry',
-    yearGroups: ['stage2'],
-    topics: ['Global warming and climate change', 'Photochemical smog', 'Volumetric analysis', 'Chromatography', 'Atomic spectroscopy', 'Rates of reactions', 'Equilibrium and yield', 'Optimising production', 'Introduction to organic chemistry', 'Alcohols', 'Aldehydes and ketones', 'Carbohydrates', 'Carboxylic acids', 'Amines', 'Esters', 'Amides', 'Triglycerides', 'Proteins', 'Energy resources', 'Water', 'Soil', 'Materials resources'],
   },
   {
     id: 'biology_s2', name: 'Biology',
