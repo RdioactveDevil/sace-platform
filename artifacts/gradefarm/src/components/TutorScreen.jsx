@@ -28,8 +28,7 @@ import {
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
 } from '../lib/db'
-import { getTopicConfig } from '../lib/saceTopics'
-import { fetchLiveCurricula } from '../lib/curriculaDb'
+import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -243,57 +242,50 @@ function AssignmentsTab({ profile, theme }) {
   const [expandedBatches, setExpandedBatches] = useState(() => new Set())
   const [form, setForm]               = useState({
     type: 'Quiz',
-    subject: 'Chemistry Stage 1',
+    subject: '',
     topics: [],
     due_date: '',
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
   })
+  const [liveSubjects, setLiveSubjects] = useState([])
+  const [curriculumMacroGroups, setCurriculumMacroGroups] = useState([])
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
   const [notifyStatus, setNotifyStatus] = useState(null)
 
-  // Topic list for current subject
-  const stageMap = {
-    'Chemistry Stage 1': 'Stage 1',
-    'Chemistry Stage 2': 'Stage 2',
-  }
-  const { macroGroups, normFn: topicNormFn } = getTopicConfig(stageMap[form.subject] || 'Stage 1')
-  const allTopics = macroGroups.flatMap(g => g.topics)
-
-  // Load the question bank for the chosen subject so we can offer subtopic-level chips
-  const [subjectQuestions, setSubjectQuestions] = useState([])
+  // Load topics from DB curriculum when subject changes
   const [expandedTopic, setExpandedTopic] = useState(null)
   useEffect(() => {
+    if (!form.subject) { setCurriculumMacroGroups([]); return }
     let cancelled = false
-    const subjectKey = form.subject || 'Chemistry Stage 1'
-    getQuestions(subjectKey).then(qs => { if (!cancelled) setSubjectQuestions(qs || []) }).catch(() => {})
+    loadCurriculumMacroGroups(form.subject)
+      .then(groups => { if (!cancelled) setCurriculumMacroGroups(groups || []) })
+      .catch(() => { if (!cancelled) setCurriculumMacroGroups([]) })
     return () => { cancelled = true }
   }, [form.subject])
 
-  // Build topic → subtopics map from the live question bank
-  const topicSubtopics = {}
-  subjectQuestions.forEach(q => {
-    const tNorm = (topicNormFn?.(q.topic) || q.topic || '').trim()
-    if (!tNorm || !q.subtopic) return
-    const matched = allTopics.find(t => t.toLowerCase() === tNorm.toLowerCase())
-    const key = matched || tNorm
-    if (!topicSubtopics[key]) topicSubtopics[key] = new Set()
-    topicSubtopics[key].add(q.subtopic)
-  })
+  // Two-level structure: top chips = curriculum topics, expandable = subtopics
+  const allTopics = curriculumMacroGroups.map(g => g.label)
+  const topicSubtopics = Object.fromEntries(
+    curriculumMacroGroups.map(g => [g.label, new Set(g.topics)])
+  )
 
   const load = async () => {
     setLoading(true)
     try {
-      const [asgns, ros, cls] = await Promise.all([
+      const [asgns, ros, cls, curricula] = await Promise.all([
         fetchAssignmentsForTutor(profile.id),
         fetchRoster(profile.id),
         fetchTutorClasses().catch(() => []),
+        fetchLiveCurricula().catch(() => []),
       ])
       setAssignments(asgns)
       setRoster(ros)
       setClasses(cls)
+      setLiveSubjects(curricula)
+      setForm(f => ({ ...f, subject: f.subject || curricula[0]?.name || '' }))
     } catch {}
     setLoading(false)
   }
@@ -359,7 +351,7 @@ function AssignmentsTab({ profile, theme }) {
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: 'Chemistry Stage 1', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: liveSubjects[0]?.name || '', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -421,8 +413,9 @@ function AssignmentsTab({ profile, theme }) {
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject</label>
                 <select value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value, topics: [] }))} style={inputStyle}>
-                  <option value="Chemistry Stage 1">Chemistry — Stage 1</option>
-                  <option value="Chemistry Stage 2">Chemistry — Stage 2</option>
+                  {liveSubjects.map(s => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
