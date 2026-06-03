@@ -12,6 +12,7 @@ import {
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
+import { exportRowsToCsv } from '../lib/csv'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -167,6 +168,14 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setGrantSubject('')
   }
 
+  // Close the detail slide-over on Escape for keyboard accessibility.
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e) => { if (e.key === 'Escape') closeDetail() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected])
+
   const runRole = async (id, fn) => {
     setBusyId(id)
     setRoleError('')
@@ -210,6 +219,27 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
 
   const hasFilters = search || filterSchool || filterSubject || filterTutor
 
+  const exportCsv = () => {
+    exportRowsToCsv(
+      `gradefarm-students-${new Date().toISOString().slice(0, 10)}`,
+      filtered,
+      [
+        { key: 'display_name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'school', label: 'School' },
+        { key: 'xp', label: 'XP' },
+        { key: 'streak', label: 'Streak' },
+        { key: 'best_streak', label: 'Best streak' },
+        { key: 'last_active', label: 'Last active' },
+        { key: 'subjects', label: 'Subjects', get: r => (r.subjects || []).map(s => s.subject_name).join('; ') },
+        { key: 'tutor_name', label: 'Tutor' },
+        { key: 'created_at', label: 'Joined' },
+        { key: 'onboarding_completed', label: 'Onboarded', get: r => (r.onboarding_completed ? 'yes' : 'no') },
+        { key: 'role', label: 'Role', get: r => (r.is_admin ? 'admin' : r.is_tutor ? 'tutor' : 'student') },
+      ],
+    )
+  }
+
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0', position: 'relative' }}>
 
@@ -250,6 +280,22 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
             Clear filters
           </button>
         )}
+
+        <button
+          onClick={exportCsv}
+          disabled={loading || filtered.length === 0}
+          title="Download the current list as CSV"
+          style={{
+            marginLeft: 'auto', flexShrink: 0,
+            padding: '7px 12px', borderRadius: 8, fontFamily: FONT_B,
+            border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)',
+            color: GOLD, fontSize: 12, fontWeight: 700,
+            cursor: loading || filtered.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || filtered.length === 0 ? 0.5 : 1,
+          }}
+        >
+          ↓ Export CSV
+        </button>
       </div>
 
       {error && (
@@ -348,20 +394,26 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
         <>
           <div
             onClick={closeDetail}
+            aria-hidden="true"
             style={{
               position: 'fixed', inset: 0, zIndex: 40,
               background: 'rgba(0,0,0,0.45)',
             }}
           />
-          <div style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50,
-            width: 420, maxWidth: '100vw',
-            background: '#0f172a',
-            borderLeft: '1px solid rgba(255,255,255,0.08)',
-            overflowY: 'auto',
-            fontFamily: FONT_B,
-            display: 'flex', flexDirection: 'column',
-          }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Student details: ${selected.display_name || selected.email || ''}`}
+            style={{
+              position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50,
+              width: 420, maxWidth: '100vw',
+              background: '#0f172a',
+              borderLeft: '1px solid rgba(255,255,255,0.08)',
+              overflowY: 'auto',
+              fontFamily: FONT_B,
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
             {/* Panel header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{

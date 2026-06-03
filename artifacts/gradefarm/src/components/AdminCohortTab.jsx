@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -13,32 +13,30 @@ export default function AdminCohortTab() {
   const [sortAsc, setSortAsc]   = useState(false)
   const [subjectFilter, setSubjectFilter] = useState('all')
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(async () => {
     setLoading(true)
-    ;(async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const token = session?.access_token
-        if (!token) throw new Error('Not authenticated')
-        const res = await fetch('/api/admin/cohort-stats', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body.error || `HTTP ${res.status}`)
-        }
-        const { rows: fetched } = await res.json()
-        if (!cancelled) {
-          setRows(fetched || [])
-          setLoading(false)
-        }
-      } catch (err) {
-        if (!cancelled) { setError(err.message || 'Failed to load'); setLoading(false) }
+    setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+      const res = await fetch('/api/admin/cohort-stats', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
       }
-    })()
-    return () => { cancelled = true }
+      const { rows: fetched } = await res.json()
+      setRows(fetched || [])
+    } catch (err) {
+      setError(err.message || 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => { load() }, [load])
 
   const subjects = useMemo(() => ['all', ...new Set(rows.map(r => r.subject).filter(Boolean))], [rows])
 
@@ -83,7 +81,39 @@ export default function AdminCohortTab() {
   )
 
   if (error) return (
-    <div style={{ color: '#f87171', fontFamily: FONT_B, padding: 40 }}>Error: {error}</div>
+    <div style={{ fontFamily: FONT_B }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 16 }}>Cohort Analytics</div>
+      <div style={{
+        padding: '20px 22px', borderRadius: 14,
+        background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)',
+        display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start',
+      }}>
+        <div style={{ color: '#f87171', fontSize: 14, fontWeight: 700 }}>Couldn't load cohort analytics</div>
+        <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>{error}</div>
+        <button
+          onClick={load}
+          style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: GOLD, color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+        >
+          Retry
+        </button>
+      </div>
+    </div>
+  )
+
+  if (rows.length === 0) return (
+    <div style={{ fontFamily: FONT_B }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 16 }}>Cohort Analytics</div>
+      <div style={{
+        textAlign: 'center', padding: '64px 24px',
+        border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 14, color: '#64748b',
+      }}>
+        <div style={{ fontSize: 30, marginBottom: 12 }}>📊</div>
+        <div style={{ fontSize: 15, color: '#cbd5e1', fontWeight: 700, marginBottom: 6 }}>No answer data yet</div>
+        <div style={{ fontSize: 13, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
+          Once students start answering questions, class-wide topic performance and error rates will appear here.
+        </div>
+      </div>
+    </div>
   )
 
   const totalAttempts = rows.reduce((s, r) => s + r.attempts, 0)
