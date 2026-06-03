@@ -38,19 +38,20 @@ function convertUnicodeSuperscripts(text: string): string {
 }
 
 function autoWrapMath(text: string): string {
-  const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text);
-  const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text);
+  const t = text.replace(/[–—]/g, "-");
+  const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(t);
+  const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(t);
   if (!hasCaret && !hasDerivative) return text;
 
   const isMathOnly =
-    !/[?!]/.test(text) &&
-    !/\.\s/.test(text) &&
-    !/^[A-Z][a-z]/.test(text) &&
-    /^[a-zA-Z0-9\s^+\-*/()'=,.]+$/.test(text);
+    !/[?!]/.test(t) &&
+    !/\.\s/.test(t) &&
+    !/^[A-Z][a-z]/.test(t) &&
+    /^[a-zA-Z0-9\s^+\-*/()'=,.]+$/.test(t);
 
-  if (isMathOnly) return `$${text.trim()}$`;
+  if (isMathOnly) return `$${t.trim()}$`;
 
-  let result = text;
+  let result = t;
   result = result.replace(
     /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
     (m) => `$${m}$`,
