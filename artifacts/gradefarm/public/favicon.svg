@@ -1,6 +1,6 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="180" height="180" rx="36" fill="#16192A"/>
-  <text font-family="Georgia, 'Times New Roman', serif" font-size="86" font-weight="700" y="122" text-anchor="middle">
-    <tspan x="72" fill="white">g</tspan><tspan fill="#D4A94B">f.</tspan>
-  </text>
+<svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" rx="40" fill="#0c1037"/>
+  <path transform="translate(26.929 116.478) scale(0.10591 -0.10591)" fill="#ffffff" d="M284 -111C242 -111 205 -89 184 -54L69 -137C116 -206 194 -252 284 -252C427 -252 542 -136 542 5V505H400V470C378 494 322 516 277 516C142 516 29 398 29 252C29 108 139 -11 277 -11C323 -11 378 7 400 36V-4C400 -64 349 -111 284 -111ZM291 130C226 130 173 180 173 252C173 323 226 374 291 374C357 374 406 323 406 252C406 180 357 130 291 130Z"/>
+  <path transform="translate(89.629 116.478) scale(0.10591 -0.10591)" fill="#f1be43" d="M342 752C205 752 91 652 91 512V505H22V374H91V0H233V374H332V505H233V517C233 566 276 606 342 606Z"/>
+  <path transform="translate(127.335 116.478) scale(0.10591 -0.10591)" fill="#f1be43" d="M137 140C91 140 60 106 60 63C60 22 91 -13 137 -13C184 -13 214 22 214 63C214 106 183 140 137 140Z"/>
 </svg>
