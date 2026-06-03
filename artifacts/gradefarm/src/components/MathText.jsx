@@ -38,15 +38,56 @@ function insertLineBreaks(text) {
 }
 
 /**
- * Pre-process plain text to insert $\ce{...}$ delimiters so that the
+ * Auto-detect math expressions not already wrapped in $ delimiters.
+ * Handles two cases:
+ *   A. Pure math strings (answer options like "e^x", "(x+2)e^x") — wrap entirely.
+ *   B. Mixed prose+math (questions like "If f(x)=xe^x, what is f''(x)?") — wrap
+ *      individual sub-expressions.
+ */
+function autoWrapMath(text) {
+  const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text)
+  const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text)
+  if (!hasCaret && !hasDerivative) return text
+
+  // A pure math string: no sentence punctuation, only math-compatible characters,
+  // and doesn't start with a capitalised English word (e.g. "Find").
+  const isMathOnly =
+    !/[?!]/.test(text) &&
+    !/\.\s/.test(text) &&
+    !/^[A-Z][a-z]/.test(text) &&
+    /^[a-zA-Z0-9\s^+\-*/()\'=,.]+$/.test(text)
+
+  if (isMathOnly) return `$${text.trim()}$`
+
+  // Mixed text: wrap individual math sub-expressions inline.
+  let result = text
+
+  // Exponent expressions: xe^x, x^2, e^{2x}, (...)^n  — base chars before ^
+  result = result.replace(
+    /([a-zA-Z0-9)]+\^(?:\{[^}]*\}|[a-zA-Z0-9]+))/g,
+    (m) => `$${m}$`,
+  )
+
+  // Derivative notation: f'(x), f''(x), g'(t)
+  result = result.replace(
+    /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
+    (m) => `$${m}$`,
+  )
+
+  return result
+}
+
+/**
+ * Pre-process plain text to insert LaTeX delimiters so that the
  * main KaTeX renderer can pick them up.
  *
  * Rules (applied in order):
  *   1. If the text already has $ signs → skip (it uses explicit LaTeX)
  *   2. If the text has a reaction arrow AND a chemical formula →
  *      treat the whole text as a chemical equation
- *   3. Otherwise scan for subscript-bearing formula tokens (e.g. SO2)
- *      and wrap each individually
+ *   3. Scan for subscript-bearing formula tokens (e.g. SO2) and wrap individually
+ *   4. If no $ signs were introduced by the chemical pass, auto-detect math
+ *      expressions (caret exponents, derivative notation) and wrap them
  */
 function preprocess(text) {
   if (!text || text.includes('$')) return text
@@ -58,22 +99,30 @@ function preprocess(text) {
     return `$\\ce{${toMhchem(text)}}$`
   }
 
-  if (!hasChemFormula(text)) return text
+  let result = text
 
-  // Inline formula pass: find tokens like SO2, H2SO4, CO2, NH3, Ca2+
-  // Each group: [A-Z][a-z]? (element symbol) + \d* (optional subscript)
-  // Optionally followed by charge like 2+ or 3-
-  return text.replace(
-    /(?:[A-Z][a-z]?\d*(?:\([^)]+\)\d*)?)+(?:[+-])?/g,
-    (match) => {
-      // Only wrap if the match contains a digit (subscript is present)
-      // and is longer than 1 character to avoid single letters like "I"
-      if (/\d/.test(match) && match.length > 1) {
-        return `$\\ce{${match}}$`
-      }
-      return match
-    }
-  )
+  if (hasChemFormula(text)) {
+    // Inline formula pass: find tokens like SO2, H2SO4, CO2, NH3, Ca2+
+    result = result.replace(
+      /(?:[A-Z][a-z]?\d*(?:\([^)]+\)\d*)?)+(?:[+-])?/g,
+      (match) => {
+        // Only wrap if the match contains a digit (subscript is present)
+        // and is longer than 1 character to avoid single letters like "I"
+        if (/\d/.test(match) && match.length > 1) {
+          return `$\\ce{${match}}$`
+        }
+        return match
+      },
+    )
+  }
+
+  // Auto-detect math (caret / derivative notation) only when the chemical pass
+  // did not already introduce any $ signs.
+  if (!result.includes('$')) {
+    result = autoWrapMath(result)
+  }
+
+  return result
 }
 
 /**
