@@ -973,8 +973,9 @@ export default function QuizScreen({
       // before the AI tip fetch runs. Without this, the user could click "Next Question →"
       // during the 3.5s AI timeout window and skip remediation entirely.
       const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
-      // First reinforcement question matches the SAME difficulty as the one the
-      // student just missed (selectBankVariants prefers same level, then one lower).
+      // Anchor the reinforcement pool on the difficulty the student just missed.
+      // The per-question difficulty curve ("reduce by 1, then ramp back" toward
+      // this level for the final mastery question) is applied at load time.
       const initialDiffTarget = currentQ.difficulty ?? 3
       setRemediationMode(true)
       setRemediationStreak(0)
@@ -1017,6 +1018,8 @@ export default function QuizScreen({
       remediationOriginalQ,
       remediationUsedIds,
       remediationDifficultyTarget,
+      remediationStreak,
+      remediationTarget,
       questions,
       deps: remediationDeps,
       setRemediationQueue,

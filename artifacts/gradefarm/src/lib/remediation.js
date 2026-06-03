@@ -135,6 +135,47 @@ export function selectBankVariants(parentQuestion, allQuestions = [], targetDiff
   }))
 }
 
+// Max questions held in a remediation pool. Centred on the original difficulty,
+// so the pool spans both the eased (original-1) and original levels — the
+// per-question picker then chooses the right level for the current streak.
+export const REMEDIATION_POOL_SIZE = 8
+
+/**
+ * The difficulty the NEXT reinforcement question should be, given how far the
+ * student is through their mastery streak. "Reduce by 1, then ramp back":
+ *   - earlier questions   → original difficulty − 1 (rebuild confidence)
+ *   - final mastery question (streak === target − 1) → original difficulty
+ *     (re-prove competence at the level they actually missed)
+ */
+export function remediationQuestionDifficulty(anchorDifficulty, streak = 0, target = 3) {
+  const anchor = anchorDifficulty ?? 3
+  const t = target ?? 3
+  return streak >= t - 1 ? anchor : Math.max(1, anchor - 1)
+}
+
+/**
+ * Index of the pool question whose difficulty best matches `wantDiff`.
+ * Stable: ties resolve to the earliest item (preserves queue order when
+ * difficulties are equal/unknown).
+ */
+export function pickClosestDifficulty(queue = [], wantDiff = 3) {
+  let bestIdx = 0
+  let bestScore = -Infinity
+  for (let i = 0; i < queue.length; i++) {
+    const d = queue[i]?.difficulty ?? 3
+    let score
+    if (d === wantDiff) score = 100
+    else if (d === wantDiff - 1) score = 80
+    else if (d < wantDiff) score = 60 - (wantDiff - d) * 5
+    else score = 40 - (d - wantDiff) * 10
+    if (score > bestScore) {
+      bestScore = score
+      bestIdx = i
+    }
+  }
+  return bestIdx
+}
+
 export async function generateRemediationVariantsViaAI(
   parentQuestion,
   conceptTag,
@@ -251,7 +292,7 @@ export async function runGenerateRemediationQueue(ctx) {
     const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, existingUsedIds)
     if (bankQueue.length) {
       console.info(`[gradefarm] bank has ${bankQueue.length} same-subtopic question(s) — no API call needed`)
-      resolvedQueue = bankQueue.slice(0, 5)
+      resolvedQueue = bankQueue.slice(0, REMEDIATION_POOL_SIZE)
       resolvedSource = 'bank'
       return resolvedQueue
     }
@@ -396,8 +437,10 @@ export async function runEnterRemediation(ctx) {
   if (!parentQuestion) return
 
   const conceptTag = parentQuestion.concept_tag || getQuestionConceptTag(parentQuestion)
-  // Anchor remediation at the SAME difficulty as the question the student missed
-  // (e.g. a difficulty-3 miss → a difficulty-3 reinforcement question first).
+  // Build the pool centred on the original difficulty (the level they missed) so
+  // it spans both the eased (original-1) and original levels. The per-question
+  // picker in runLoadNextRemediationQuestion then applies the "reduce by 1, then
+  // ramp back" curve based on the mastery streak.
   const diffTarget = parentQuestion.difficulty ?? 3
 
   setRemediationMode?.(true)
@@ -414,7 +457,7 @@ export async function runEnterRemediation(ctx) {
     // ── TIER 1: question bank — same topic + subtopic, matching difficulty. Instant, no API.
     const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, [])
     if (bankQueue.length) {
-      setRemediationQueue?.(bankQueue.slice(0, 5))
+      setRemediationQueue?.(bankQueue.slice(0, REMEDIATION_POOL_SIZE))
       setRemediationSource?.('bank')
       setRemediationStatus?.('activated')
       return
@@ -462,6 +505,8 @@ export async function runLoadNextRemediationQuestion(ctx) {
     remediationOriginalQ,
     remediationUsedIds = [],
     remediationDifficultyTarget,
+    remediationStreak = 0,
+    remediationTarget = 3,
     questions = [],
     deps,
     setRemediationQueue,
@@ -483,7 +528,7 @@ export async function runLoadNextRemediationQuestion(ctx) {
       questions,
       remediationDifficultyTarget ?? (remediationOriginalQ.difficulty ?? 3),
       remediationUsedIds,
-    )
+    ).slice(0, REMEDIATION_POOL_SIZE)
     if (bankQueue.length) {
       queue = bankQueue
       setRemediationQueue?.(bankQueue)
@@ -531,7 +576,14 @@ export async function runLoadNextRemediationQuestion(ctx) {
     return false
   }
 
-  const [nextVariant, ...rest] = queue
+  // "Reduce by 1, then ramp back": pick the pool question at the difficulty
+  // appropriate to the current mastery streak (eased early, original level for
+  // the final mastery question) rather than always taking the head.
+  const anchor = remediationOriginalQ?.difficulty ?? remediationDifficultyTarget ?? 3
+  const wantDiff = remediationQuestionDifficulty(anchor, remediationStreak, remediationTarget)
+  const pickIdx = pickClosestDifficulty(queue, wantDiff)
+  const nextVariant = queue[pickIdx]
+  const rest = queue.filter((_, i) => i !== pickIdx)
   setRemediationQueue?.(rest)
   setRemediationUsedIds?.(prev => [...new Set([...(prev || []), nextVariant.variant_record_id || nextVariant.id])])
   setDisplayQuestion?.({ ...nextVariant, is_variant: true })

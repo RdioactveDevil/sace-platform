@@ -13,6 +13,8 @@ import {
   withTimeout,
   fetchRemediationVariantsSafe,
   selectBankVariants,
+  remediationQuestionDifficulty,
+  pickClosestDifficulty,
   runEnterRemediation,
   runGenerateRemediationQueue,
   runLoadNextRemediationQuestion,
@@ -197,6 +199,43 @@ describe('selectBankVariants', () => {
       makeBankQuestion('other', { topic: 'Other', subtopic: 'S' }),
     ]
     assert.deepEqual(selectBankVariants(parent, bank, 3, []), [])
+  })
+})
+
+// ─── difficulty curve: reduce by 1, then ramp back ─────────────────────────
+
+describe('remediationQuestionDifficulty', () => {
+  test('eases by 1 for early questions, ramps to original on the final mastery question', () => {
+    // anchor 3, target 3 (need 3 correct in a row)
+    assert.equal(remediationQuestionDifficulty(3, 0, 3), 2, 'Q1 eased')
+    assert.equal(remediationQuestionDifficulty(3, 1, 3), 2, 'Q2 eased')
+    assert.equal(remediationQuestionDifficulty(3, 2, 3), 3, 'final question back to original')
+  })
+
+  test('never goes below 1', () => {
+    assert.equal(remediationQuestionDifficulty(1, 0, 3), 1)
+  })
+
+  test('respects a scaled-down target (e.g. struggling → target 1)', () => {
+    // target 1 means the very next correct completes mastery → original level.
+    assert.equal(remediationQuestionDifficulty(3, 0, 1), 3)
+  })
+})
+
+describe('pickClosestDifficulty', () => {
+  test('prefers exact difficulty', () => {
+    const q = [{ difficulty: 2 }, { difficulty: 3 }, { difficulty: 4 }]
+    assert.equal(pickClosestDifficulty(q, 3), 1)
+  })
+
+  test('prefers one level lower over one level higher', () => {
+    const q = [{ difficulty: 4 }, { difficulty: 2 }]
+    assert.equal(pickClosestDifficulty(q, 3), 1)
+  })
+
+  test('stable on ties — earliest wins (preserves queue order)', () => {
+    const q = [{ difficulty: 3 }, { difficulty: 3 }]
+    assert.equal(pickClosestDifficulty(q, 3), 0)
   })
 })
 
@@ -562,6 +601,45 @@ describe('runLoadNextRemediationQuestion', () => {
 
     assert.equal(ok, false, 'must signal "no question loaded" so caller exits remediation')
     assert.equal(rec.calls.status.at(-1), 'activated', 'never stuck on generating')
+  })
+
+  test('serves an eased question early and the original-difficulty question for the final mastery step', async () => {
+    const parent = makeParent({ difficulty: 3 })
+    // Pool spans the eased (2) and original (3) difficulties.
+    const pool = [
+      { id: 'd3a', variant_record_id: 'd3a', difficulty: 3, is_variant: true, question: 'hard a', options: [], answer_index: 0 },
+      { id: 'd2a', variant_record_id: 'd2a', difficulty: 2, is_variant: true, question: 'easy a', options: [], answer_index: 0 },
+    ]
+
+    // Early in the streak (streak 0, target 3) → wants the eased (difficulty-2) question.
+    const recEarly = makeStateRecorder()
+    await runLoadNextRemediationQuestion({
+      remediationQueue: pool,
+      remediationOriginalQ: parent,
+      remediationUsedIds: [],
+      remediationDifficultyTarget: 3,
+      remediationStreak: 0,
+      remediationTarget: 3,
+      deps: baseDeps(),
+      generateRemediationQueue: async () => [],
+      ...recEarly,
+    })
+    assert.equal(recEarly.calls.displayQuestion.at(-1).id, 'd2a', 'early question is eased (difficulty 2)')
+
+    // Final mastery step (streak 2, target 3) → wants the original (difficulty-3) question.
+    const recFinal = makeStateRecorder()
+    await runLoadNextRemediationQuestion({
+      remediationQueue: pool,
+      remediationOriginalQ: parent,
+      remediationUsedIds: [],
+      remediationDifficultyTarget: 3,
+      remediationStreak: 2,
+      remediationTarget: 3,
+      deps: baseDeps(),
+      generateRemediationQueue: async () => [],
+      ...recFinal,
+    })
+    assert.equal(recFinal.calls.displayQuestion.at(-1).id, 'd3a', 'final question is at the original difficulty')
   })
 
   test('queue empty + DB returns variants → loads first variant', async () => {
