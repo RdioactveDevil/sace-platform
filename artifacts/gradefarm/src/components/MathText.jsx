@@ -52,6 +52,22 @@ function convertUnicodeSuperscripts(text) {
   })
 }
 
+// Apply fn only to text segments that are outside existing $...$ / $$...$$ blocks.
+function applyOutsideMath(s, fn) {
+  const re = /\$\$[\s\S]+?\$\$|\$(?!\d+\s)[^$\n]+?\$/g
+  const parts = []
+  let last = 0
+  let m
+  re.lastIndex = 0
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) parts.push(fn(s.slice(last, m.index)))
+    parts.push(m[0])
+    last = m.index + m[0].length
+  }
+  if (last < s.length) parts.push(fn(s.slice(last)))
+  return parts.join('')
+}
+
 /**
  * Auto-detect math expressions not already wrapped in $ delimiters.
  * Handles two cases:
@@ -59,6 +75,7 @@ function convertUnicodeSuperscripts(text) {
  *   B. Mixed prose+math (questions like "If f(x)=xe^x, what is f''(x)?") — wrap
  *      individual sub-expressions.
  * Unicode superscripts (x², x³) are converted to caret notation first.
+ * (expr)/(expr) fractions are converted to \frac{expr}{expr}.
  */
 function autoWrapMath(rawText) {
   // Normalize en/em-dashes to ASCII hyphen so expressions like "x(24 – x²)/2"
@@ -66,7 +83,8 @@ function autoWrapMath(rawText) {
   const text = convertUnicodeSuperscripts(rawText).replace(/[–—]/g, '-')
   const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text)
   const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text)
-  if (!hasCaret && !hasDerivative) return text
+  const hasFraction = /\([^()]+\)\/\([^()]+\)/.test(text)
+  if (!hasCaret && !hasDerivative && !hasFraction) return text
 
   // A pure math string: no sentence punctuation, only math-compatible characters,
   // and doesn't start with a capitalised English word (e.g. "Find").
@@ -76,23 +94,37 @@ function autoWrapMath(rawText) {
     !/^[A-Z][a-z]/.test(text) &&
     /^[a-zA-Z0-9\s^+\-*/()\'=,.]+$/.test(text)
 
-  if (isMathOnly) return `$${text.trim()}$`
+  if (isMathOnly) {
+    // Convert (a)/(b) to \frac{a}{b} before wrapping the whole expression in $...$
+    const withFrac = text.replace(
+      /\(([^()]+)\)\/\(([^()]+)\)/g,
+      (m, num, den) => (/[\d^+\-]/.test(num) || /[\d^+\-]/.test(den)) ? `\\frac{${num}}{${den}}` : m,
+    )
+    return `$${withFrac.trim()}$`
+  }
 
-  // Mixed text: wrap individual math sub-expressions inline.
+  // Mixed text: convert (a)/(b) to $\frac{a}{b}$ first, then wrap remaining
+  // exponent/derivative sub-expressions only in plain-text segments.
   let result = text
 
-  // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
-  // A base is a run of alphanumerics and/or whole parenthesised groups.
   result = result.replace(
-    /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
-    (m) => `$${m}$`,
+    /\(([^()]+)\)\/\(([^()]+)\)/g,
+    (m, num, den) => (/[\d^+\-]/.test(num) || /[\d^+\-]/.test(den)) ? `$\\frac{${num}}{${den}}$` : m,
   )
 
-  // Derivative notation: f'(x), f''(x), g'(t)
-  result = result.replace(
-    /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
-    (m) => `$${m}$`,
-  )
+  result = applyOutsideMath(result, (seg) => {
+    // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
+    seg = seg.replace(
+      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
+      (m) => `$${m}$`,
+    )
+    // Derivative notation: f'(x), f''(x), g'(t)
+    seg = seg.replace(
+      /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
+      (m) => `$${m}$`,
+    )
+    return seg
+  })
 
   return result
 }

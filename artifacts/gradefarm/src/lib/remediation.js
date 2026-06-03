@@ -133,8 +133,9 @@ export async function generateRemediationVariantsViaAI(
 
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
     const diffTarget = Math.max(1, Math.min(5, targetDifficulty ?? (parentQuestion.difficulty ?? 3)))
+    const subjectLabel = parentQuestion?.subject || 'SACE'
     const system = [
-      'You are generating adaptive remediation MCQs for a SACE Chemistry student.',
+      `You are generating adaptive remediation MCQs for a ${subjectLabel} student.`,
       'Return only a valid JSON array containing exactly 5 objects.',
       'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
       'Each options array must contain exactly 4 strings.',
@@ -333,27 +334,38 @@ export async function runGenerateRemediationQueue(ctx) {
       }
     }))
 
-    const hasRelatedLocal = localQueue.length > 0
-
-    if (hasRelatedLocal) {
-      // Append AI variants to the live queue when they arrive (background).
-      trackBackground(ctx, aiPromise.then(({ normalized }) => {
-        if (normalized.length && setRemediationQueue) {
-          setRemediationQueue(prev => [...(prev || []), ...normalized])
-        }
-      }))
-      resolvedQueue = localQueue
-      resolvedSource = 'generated'
-      return localQueue
-    }
-
-    console.warn('[gradefarm] no related local variants — awaiting AI generation synchronously to seed the queue')
+    // Not enough strong matches — always await AI so the student gets same-concept
+    // questions rather than unrelated local fallbacks (e.g. log questions for exponential).
+    console.warn('[gradefarm] strongLocalCount < 3 — awaiting AI generation for same-concept variants')
     const { normalized: aiQueue } = await aiPromise
 
     if (aiQueue.length) {
-      resolvedQueue = aiQueue
+      // Append any strong local matches for variety (background, already awaited).
+      const extras = localQueue.filter(v =>
+        (v.concept_tag && v.concept_tag === parentQuestion.concept_tag) ||
+        v.subtopic === parentQuestion.subtopic
+      )
+      resolvedQueue = [...aiQueue, ...extras].slice(0, 8)
       resolvedSource = 'generated'
-      return aiQueue
+      return resolvedQueue
+    }
+
+    // AI failed — use local questions as last resort (only strong matches first).
+    const strongLocal = localQueue.filter(v =>
+      (v.concept_tag && v.concept_tag === parentQuestion.concept_tag) ||
+      v.subtopic === parentQuestion.subtopic
+    )
+    if (strongLocal.length) {
+      resolvedQueue = strongLocal
+      resolvedSource = 'generated'
+      return resolvedQueue
+    }
+
+    // Final fallback: use any local question from the same topic.
+    if (localQueue.length) {
+      resolvedQueue = localQueue
+      resolvedSource = 'generated'
+      return resolvedQueue
     }
 
     console.warn('[gradefarm] no variants available from any source — activating with empty queue')

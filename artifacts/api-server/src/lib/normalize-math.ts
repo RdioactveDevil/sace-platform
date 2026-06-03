@@ -42,10 +42,27 @@ function convertUnicodeSuperscripts(text: string): string {
   });
 }
 
+// Apply fn only to text segments outside existing $...$ / $$...$$ blocks.
+function applyOutsideMath(s: string, fn: (seg: string) => string): string {
+  const re = /\$\$[\s\S]+?\$\$|\$(?!\d+\s)[^$\n]+?\$/g;
+  const parts: string[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  re.lastIndex = 0;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) parts.push(fn(s.slice(last, m.index)));
+    parts.push(m[0]);
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) parts.push(fn(s.slice(last)));
+  return parts.join("");
+}
+
 /**
- * Wrap caret-exponent and derivative expressions in $...$.
+ * Wrap caret-exponent, derivative and fraction expressions in $...$.
  *   - Pure math strings (answer options like "e^x") → wrap entirely.
  *   - Mixed prose+math (questions) → wrap individual sub-expressions inline.
+ *   - (a)/(b) fraction notation → \frac{a}{b}.
  */
 function autoWrapMath(text: string): string {
   // Normalize en/em-dashes to ASCII hyphen — the AI uses – as a minus sign in
@@ -54,7 +71,8 @@ function autoWrapMath(text: string): string {
   const t = text.replace(/[–—]/g, "-");
   const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(t);
   const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(t);
-  if (!hasCaret && !hasDerivative) return text;
+  const hasFraction = /\([^()]+\)\/\([^()]+\)/.test(t);
+  if (!hasCaret && !hasDerivative && !hasFraction) return text;
 
   const isMathOnly =
     !/[?!]/.test(t) &&
@@ -62,20 +80,38 @@ function autoWrapMath(text: string): string {
     !/^[A-Z][a-z]/.test(t) &&
     /^[a-zA-Z0-9\s^+\-*/()'=,.]+$/.test(t);
 
-  if (isMathOnly) return `$${t.trim()}$`;
+  if (isMathOnly) {
+    // Convert (a)/(b) to \frac{a}{b} before wrapping the whole expression in $...$
+    const withFrac = t.replace(
+      /\(([^()]+)\)\/\(([^()]+)\)/g,
+      (m, num: string, den: string) =>
+        /[\d^+\-]/.test(num) || /[\d^+\-]/.test(den) ? `\\frac{${num}}{${den}}` : m,
+    );
+    return `$${withFrac.trim()}$`;
+  }
 
+  // Mixed text: convert (a)/(b) to $\frac{a}{b}$ first, then wrap remaining
+  // exponent/derivative sub-expressions only in plain-text segments.
   let result = t;
-  // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
-  // A base is a run of alphanumerics and/or whole parenthesised groups.
+
   result = result.replace(
-    /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
-    (m) => `$${m}$`,
+    /\(([^()]+)\)\/\(([^()]+)\)/g,
+    (m, num: string, den: string) =>
+      /[\d^+\-]/.test(num) || /[\d^+\-]/.test(den) ? `$\\frac{${num}}{${den}}$` : m,
   );
-  // Derivative notation: f'(x), f''(x), g'(t)
-  result = result.replace(
-    /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
-    (m) => `$${m}$`,
-  );
+
+  result = applyOutsideMath(result, (seg) => {
+    seg = seg.replace(
+      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
+      (m) => `$${m}$`,
+    );
+    seg = seg.replace(
+      /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
+      (m) => `$${m}$`,
+    );
+    return seg;
+  });
+
   return result;
 }
 

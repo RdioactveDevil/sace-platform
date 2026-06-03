@@ -77,8 +77,9 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
     const timeout = setTimeout(() => controller.abort(), 8000)
 
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+    const subjectLabel = parentQuestion?.subject || 'SACE'
     const system = [
-      'You are a SACE Chemistry teacher generating a concept-builder question for a struggling student.',
+      `You are a ${subjectLabel} teacher generating a concept-builder question for a struggling student.`,
       'Return only a valid JSON object (not an array).',
       'The question MUST embed the key fact or hint directly in the question stem — like a teacher explaining in class.',
       'Structure: state the core concept or mechanism first, then ask the student to apply it.',
@@ -990,7 +991,7 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: 'You are a SACE Chemistry tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.',
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
           }),
         })
