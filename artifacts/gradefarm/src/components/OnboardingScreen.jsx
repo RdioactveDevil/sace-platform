@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { ALL_SUBJECTS, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
+import { ALL_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -420,7 +420,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           { label: 'Year',           value: yearLevel ? `Year ${yearLevel}` : '\u2014' },
           { label: 'ATAR Target',    value: atarTarget ? `${atarTarget}+` : '\u2014' },
           { label: 'Study hrs/week', value: studyHours ? `${studyHours}h` : '\u2014' },
-          { label: 'Subjects',       value: selectedSubs.map(s => `${s.subject_name} ${s.stage}`).join(', ') || '\u2014' },
+          { label: 'Subjects',       value: selectedSubs.map(s => formatSubjectLabel({ name: s.subject_name, stage: s.stage })).join(', ') || '\u2014' },
         ].map(row => (
           <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ fontSize: 12, color: '#475569' }}>{row.label}</span>

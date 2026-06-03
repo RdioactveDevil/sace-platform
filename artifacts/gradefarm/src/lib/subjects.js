@@ -168,6 +168,19 @@ export function buildCanonicalCurriculumName(title, levelLabel) {
   return `${t} ${lv}`
 }
 
+/**
+ * Display label for a subject tile — avoids repeating the stage when it is
+ * already embedded in the curriculum name (e.g. "Chemistry Stage 2" + stage
+ * "Stage 2" should render as just "Chemistry Stage 2", not "Chemistry Stage 2
+ * Stage 2").
+ */
+export function formatSubjectLabel({ name, stage } = {}) {
+  if (!name) return ''
+  const trimmedStage = (stage || '').trim()
+  if (!trimmedStage || name.includes(trimmedStage)) return name
+  return `${name} ${trimmedStage}`
+}
+
 /** Trim stray punctuation some legacy rows use on `questions.subject`. */
 export function normalizeSubjectStorageKey(s) {
   return String(s || '').trim().replace(/[\s:;，、。]+$/u, '').trim()

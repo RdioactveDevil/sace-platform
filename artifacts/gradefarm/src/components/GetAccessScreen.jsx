@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { addSubscription, getPlatformSettings } from '../lib/db'
+import { formatSubjectLabel } from '../lib/subjects'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -133,7 +134,7 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
             boxShadow: loading ? 'none' : '0 8px 28px rgba(12,16,55,0.25)',
           }}
         >
-          {loading ? 'Unlocking…' : `Unlock ${subj.name} ${subj.stage} — Free →`}
+          {loading ? 'Unlocking…' : `Unlock ${formatSubjectLabel(subj)} — Free →`}
         </button>
 
         <p style={{ textAlign: 'center', fontSize: 11, color: '#94a3b8', marginTop: 14 }}>

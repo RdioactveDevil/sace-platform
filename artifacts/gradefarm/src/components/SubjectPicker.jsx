@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
+import { ALL_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
 import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchAllActiveCurricula } from '../lib/curriculaDb'
 
@@ -262,7 +262,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
             transition: 'all 0.2s ease',
           }}
         >
-          {selected ? `Start ${selected.name} ${selected.stage} →` : 'Select a subject above'}
+          {selected ? `Start ${formatSubjectLabel(selected)} →` : 'Select a subject above'}
         </button>
       </div>
     </div>

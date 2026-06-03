@@ -7,7 +7,7 @@ import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import LandingPage       from './components/LandingPage'
 import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
-import { ALL_SUBJECTS } from './lib/subjects'
+import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/saceTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -264,7 +264,7 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
       <div style={{ fontSize: 52 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Subject Not in Your Plan</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 360, lineHeight: 1.6, margin: 0 }}>
-        <strong style={{ color: t.text }}>{subject?.name} {subject?.stage}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
+        <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
       </p>
       <a href="mailto:hello@titaniumtutoring.com.au" style={{ padding: '12px 24px', borderRadius: 12, background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         Contact us to upgrade →
