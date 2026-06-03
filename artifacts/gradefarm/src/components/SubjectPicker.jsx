@@ -39,6 +39,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const [hovering, setHovering] = useState(null)
   const [liveQuestionCounts, setLiveQuestionCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamicSubjects] = useState([])
+  const [loadingCurricula, setLoadingCurricula] = useState(true)
   const t = THEMES[theme]
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
         setDynamicSubjects(dynamic)
       })
       .catch(() => {})
+      .finally(() => setLoadingCurricula(false))
   }, [])
 
   // Static (non-curriculum) subjects: writing subjects, coming-soon subjects, quant_y10.
@@ -197,7 +199,14 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
 
       <div style={{ width: '100%', maxWidth: 680, animation: 'fadeUp 0.5s ease' }}>
 
-        {subscribed.length > 0 && (
+        {loadingCurricula && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid #e2e5f0', borderTopColor: GOLD, animation: 'spin 0.7s linear infinite' }} />
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {!loadingCurricula && subscribed.length > 0 && (
           <>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Your Subjects</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 28 }}>
@@ -206,7 +215,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           </>
         )}
 
-        {notSubscribed.length > 0 && (
+        {!loadingCurricula && notSubscribed.length > 0 && (
           <>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Not in Your Plan</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 28 }}>
@@ -215,7 +224,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           </>
         )}
 
-        {comingSoon.length > 0 && (
+        {!loadingCurricula && comingSoon.length > 0 && (
           <>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Coming Soon</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10, marginBottom: 36, opacity: 0.55 }}>
@@ -233,7 +242,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           </>
         )}
 
-        {subscribed.length === 0 && notSubscribed.length === 0 && (
+        {!loadingCurricula && subscribed.length === 0 && notSubscribed.length === 0 && (
           <div style={{ textAlign: 'center', padding: '32px 20px', color: '#64748b', fontSize: 14 }}>
             No subjects available. Please complete onboarding to set up your subjects.
           </div>
