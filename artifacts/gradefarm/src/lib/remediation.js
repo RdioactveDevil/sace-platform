@@ -146,11 +146,16 @@ export const REMEDIATION_POOL_SIZE = 8
  *   - earlier questions   → original difficulty − 1 (rebuild confidence)
  *   - final mastery question (streak === target − 1) → original difficulty
  *     (re-prove competence at the level they actually missed)
+ *
+ * Exception: when the mastery target has been scaled down to 1 (the "struggling"
+ * path, after repeated wrong answers), the student stays on the eased difficulty.
+ * Ramping a struggling student back to the original level on their one shot would
+ * be the opposite of the support the lowered target is meant to provide.
  */
 export function remediationQuestionDifficulty(anchorDifficulty, streak = 0, target = 3) {
   const anchor = anchorDifficulty ?? 3
   const t = target ?? 3
-  return streak >= t - 1 ? anchor : Math.max(1, anchor - 1)
+  return t >= 2 && streak >= t - 1 ? anchor : Math.max(1, anchor - 1)
 }
 
 /**

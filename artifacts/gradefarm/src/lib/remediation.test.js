@@ -216,9 +216,15 @@ describe('remediationQuestionDifficulty', () => {
     assert.equal(remediationQuestionDifficulty(1, 0, 3), 1)
   })
 
-  test('respects a scaled-down target (e.g. struggling → target 1)', () => {
-    // target 1 means the very next correct completes mastery → original level.
-    assert.equal(remediationQuestionDifficulty(3, 0, 1), 3)
+  test('struggling path (target scaled to 1) keeps the student eased, never ramps to original', () => {
+    // A target of 1 is the "struggling" bar — the student stays on the eased
+    // difficulty rather than being handed the original (hard) level.
+    assert.equal(remediationQuestionDifficulty(3, 0, 1), 2)
+  })
+
+  test('target 2 still ramps the final question back to original', () => {
+    assert.equal(remediationQuestionDifficulty(3, 0, 2), 2, 'Q1 eased')
+    assert.equal(remediationQuestionDifficulty(3, 1, 2), 3, 'final question back to original')
   })
 })
 
