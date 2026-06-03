@@ -75,6 +75,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [showPasteArea, setShowPasteArea]         = useState(false)
   const [reviseDoc, setReviseDoc]     = useState(null) // { base64, mediaType, name }
   const [revising, setRevising]       = useState(false)
+  const [examContext, setExamContext] = useState('')
+  const [examContextSaving, setExamContextSaving] = useState(false)
+  const [examContextSaved, setExamContextSaved]   = useState(false)
   const pollRef = useRef(null)
 
   // Question reallocation state
@@ -99,6 +102,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         ...t,
         subtopics: t.subtopics.map(s => ({ ...s })),
       })))
+      setExamContext(detail.exam_context || '')
       if (detail.status === 'generating') {
         setGenerating(true)
         startPolling()
@@ -336,6 +340,18 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       setError(e.message)
     }
     setSaving(false)
+  }
+
+  const handleSaveExamContext = async () => {
+    setExamContextSaving(true)
+    try {
+      await updateCurriculum(curriculumId, { exam_context: examContext })
+      setExamContextSaved(true)
+      setTimeout(() => setExamContextSaved(false), 2500)
+    } catch (e) {
+      setError(e.message)
+    }
+    setExamContextSaving(false)
   }
 
   // ── Generation pipeline ───────────────────────────────────────────────────
@@ -773,6 +789,59 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           </div>
         </div>
       )}
+
+      {/* Exam context / accuracy panel */}
+      <div style={{
+        marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+        background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Exam Scope &amp; Generation Context
+          </span>
+          <span style={{ fontSize: 11, color: '#475569', marginLeft: 'auto' }}>
+            Included in all AI generation prompts for this curriculum
+          </span>
+        </div>
+        <textarea
+          value={examContext}
+          onChange={e => setExamContext(e.target.value)}
+          placeholder={
+            'Describe the exam scope, textbook references, and style constraints for this curriculum.\n\n' +
+            'Examples:\n' +
+            '• "Based on SACE Stage 2 Chemistry. Use Nelson Chemistry 3 & 4 terminology. Exam is 30 MCQs worth 40% of grade — short calculation questions, no extended problems."\n' +
+            '• "Aligned to ACARA Year 10 Mathematics. Use Cambridge Maths 10 language. Questions should follow NAPLAN-style wording — concise, no multi-step narratives."\n' +
+            '• "SACE 2024 past exam style: 1-mark MCQs only, use exact SACE descriptor language, avoid questions requiring lab equipment not on the approved list."'
+          }
+          rows={6}
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 8,
+            border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
+            color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+            resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.55,
+          }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <div style={{ fontSize: 11, color: '#475569', flex: 1 }}>
+            Paste syllabus excerpts, past-exam instructions, or textbook scope notes.
+            Claude will use these to anchor question style, terminology, and difficulty level.
+          </div>
+          {examContextSaved && <span style={{ fontSize: 12, color: '#4ade80' }}>✓ Saved</span>}
+          <button
+            onClick={handleSaveExamContext}
+            disabled={examContextSaving}
+            style={{
+              padding: '7px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(255,255,255,0.05)',
+              color: examContextSaving ? '#475569' : '#e2e8f0',
+              fontSize: 12, fontWeight: 700, cursor: examContextSaving ? 'not-allowed' : 'pointer',
+              fontFamily: FONT_B, flexShrink: 0,
+            }}
+          >
+            {examContextSaving ? 'Saving…' : 'Save Context'}
+          </button>
+        </div>
+      </div>
 
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 

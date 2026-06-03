@@ -45,7 +45,7 @@ export async function listCurricula() {
 export async function getCurriculumDetail(id) {
   const { data: curriculum, error: cErr } = await supabase
     .from('curricula')
-    .select('id, name, level_label, subject_description, status, created_at')
+    .select('id, name, level_label, subject_description, status, created_at, exam_context')
     .eq('id', id)
     .single()
   if (cErr) throw cErr
@@ -102,7 +102,7 @@ export async function createCurriculum({ name, subject_description, topics, leve
  * @param {string} id
  * @param {{ name?: string, subject_description?: string, level_label?: string, topics?: Array }} updates
  */
-export async function updateCurriculum(id, { name, subject_description, level_label, generation_flags, topics } = {}) {
+export async function updateCurriculum(id, { name, subject_description, level_label, generation_flags, exam_context, topics } = {}) {
   const { data: cur, error: curErr } = await supabase
     .from('curricula')
     .select('name, level_label')
@@ -138,6 +138,7 @@ export async function updateCurriculum(id, { name, subject_description, level_la
   if (subject_description !== undefined) patch.subject_description = subject_description
   if (level_label !== undefined) patch.level_label = level_label
   if (generation_flags !== undefined) patch.generation_flags = generation_flags || {}
+  if (exam_context !== undefined) patch.exam_context = exam_context ?? null
 
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('curricula').update(patch).eq('id', id)

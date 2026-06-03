@@ -172,51 +172,58 @@ function extractJsonArray(text = ""): unknown[] {
   }
 }
 
-router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
+// ── Shared question type ───────────────────────────────────────────────────────
+interface GeneratedQuestion {
+  subtopic?: string;
+  question: string;
+  options: string[];
+  answer_index: number;
+  solution?: string;
+  difficulty?: number;
+  graph?: Record<string, unknown> | null;
+  table_data?: Record<string, unknown> | null;
+}
 
-  const resolvedSubject: string = subject || stage;
-  if (!resolvedSubject || !topicCode) {
-    res.status(400).json({ error: "subject (or stage) and topicCode required" });
-    return;
-  }
-
-  // Normalise picker IDs to canonical curriculum names.
-  const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
-
-  // All topics use T{n}.{m} format from the managed DB curriculum cache.
+// ── Generate questions for a single topic code ─────────────────────────────────
+async function generateForTopic(
+  adminDb: ReturnType<typeof createClient>,
+  normalizedSubject: string,
+  topicCode: string,
+  count: number,
+  difficulty: string,
+  contextNotes: string,
+  examContext: string,
+  flags: Record<string, boolean>,
+): Promise<{ questions: GeneratedQuestion[]; error?: string }> {
   const managedMatch = topicCode.match(/^T(\d+)\.(\d+)$/);
   if (!managedMatch) {
-    res.status(400).json({ error: `Unsupported topic code: ${topicCode}. Please select a topic from the Admin panel (topic codes must be in T{n}.{m} format).` });
-    return;
+    return { questions: [], error: `Unsupported topic code: ${topicCode}. Must be T{n}.{m} format.` };
   }
 
   const topicIdx    = parseInt(managedMatch[1]) - 1;
   const subtopicIdx = parseInt(managedMatch[2]) - 1;
-  const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
 
   const { data: currRow } = await adminDb
     .from("curricula").select("id").eq("name", normalizedSubject).maybeSingle();
   if (!currRow?.id) {
-    res.status(400).json({ error: `Curriculum not found: ${normalizedSubject}` });
-    return;
+    return { questions: [], error: `Curriculum not found: ${normalizedSubject}` };
   }
+
   const { data: tRows } = await adminDb
     .from("curriculum_topics").select("id, name").eq("curriculum_id", currRow.id).order("order_index");
   const tRow = (tRows ?? [])[topicIdx];
   if (!tRow) {
-    res.status(400).json({ error: `Topic T${topicIdx + 1} not found in ${normalizedSubject}` });
-    return;
+    return { questions: [], error: `Topic T${topicIdx + 1} not found in ${normalizedSubject}` };
   }
+
   const { data: sRows } = await adminDb
     .from("curriculum_subtopics").select("name").eq("topic_id", tRow.id).order("order_index");
   const sRow = (sRows ?? [])[subtopicIdx];
   if (!sRow) {
-    res.status(400).json({ error: `Subtopic ${topicCode} not found in ${normalizedSubject}` });
-    return;
+    return { questions: [], error: `Subtopic ${topicCode} not found in ${normalizedSubject}` };
   }
 
-  const topicName      = sRow.name;
+  const topicName       = sRow.name;
   const parentTopicName = tRow.name;
   const curriculumLabel = normalizedSubject;
   const learningObjective = LEARNING_OBJECTIVES[topicName] || topicName;
@@ -231,13 +238,9 @@ router.post("/generate-questions", async (req, res) => {
           ? "All questions must be difficulty 4\u20135 out of 5 (challenging). The student has been answering recent questions correctly and is ready for harder material."
           : `Questions should be around difficulty ${Math.round(numDiff)} out of 5. You may vary between ${Math.max(1, Math.round(numDiff) - 1)} and ${Math.min(5, Math.round(numDiff) + 1)}.`;
 
-  // Fetch generation_flags from DB (controls LaTeX, graph, table usage in prompts).
-  const { data: _curriculumRow } = await adminDb
-    .from("curricula").select("generation_flags").eq("name", normalizedSubject).maybeSingle();
-  const flags: Record<string, boolean> = (_curriculumRow?.generation_flags as Record<string, boolean>) ?? {};
   const flagGraphs = !!flags.graphs;
   const flagTables = !!flags.tables;
-  const flagLatex  = flags.latex !== false; // default true
+  const flagLatex  = flags.latex !== false;
 
   const latexExample = flagGraphs
     ? "$\\frac{d}{dx}f(x)$, $$\\int_0^1 f(x)\\,dx$$"
@@ -258,7 +261,7 @@ router.post("/generate-questions", async (req, res) => {
     `    Do NOT include table_data for questions that can be answered from text or equations alone.`,
   ];
 
-  const system = [
+  const systemParts = [
     `You are generating multiple-choice questions for ${curriculumLabel} students.`,
     `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
     `Do NOT draw on knowledge that falls outside the scope of ${curriculumLabel}.`,
@@ -279,19 +282,20 @@ router.post("/generate-questions", async (req, res) => {
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
     "Do not repeat the same scenario across questions.",
     difficultyInstruction,
-  ].join("\n");
+  ];
 
-  let user = [
-    `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
-    "",
-    "Curriculum learning requirements for this topic:",
-    learningObjective,
-    "",
-    "All questions must directly assess one or more of these specific learning requirements.",
-    "Use the exact concepts, terminology and scope listed above \u2014 nothing broader.",
-  ].join("\n");
+  // Inject exam/scope context if set on this curriculum
+  if (examContext?.trim()) {
+    systemParts.push(
+      "",
+      "EXAM SCOPE AND ACCURACY CONTEXT (treat as authoritative for question style, scope, and terminology):",
+      examContext.trim(),
+    );
+  }
 
-  // Pre-fetch existing questions to avoid duplicates and steer Claude away from them.
+  const system = systemParts.join("\n");
+
+  // Pre-fetch existing questions to avoid duplicates
   const { data: existingData } = await adminDb
     .from("questions")
     .select("question")
@@ -305,12 +309,37 @@ router.post("/generate-questions", async (req, res) => {
 
   const existingSamplesText = (existingData || [])
     .slice(0, 15)
-    .map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 120)}`)
+    .map((r: { question: string }, i: number) => `${i + 1}. ${(r.question || "").slice(0, 120)}`)
     .join("\n");
 
+  let userParts = [
+    `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
+    "",
+    "Curriculum learning requirements for this topic:",
+    learningObjective,
+    "",
+    "All questions must directly assess one or more of these specific learning requirements.",
+    "Use the exact concepts, terminology and scope listed above \u2014 nothing broader.",
+  ];
+
   if (existingSamplesText) {
-    user += `\n\nCRITICAL \u2014 your questions must be ENTIRELY DIFFERENT from these already-existing questions (different scenarios, numbers, concepts, and phrasing):\n${existingSamplesText}`;
+    userParts = userParts.concat([
+      "",
+      `CRITICAL \u2014 your questions must be ENTIRELY DIFFERENT from these already-existing questions (different scenarios, numbers, concepts, and phrasing):`,
+      existingSamplesText,
+    ]);
   }
+
+  // Per-request context notes (overrides or supplements exam context for this batch)
+  if (contextNotes?.trim()) {
+    userParts = userParts.concat([
+      "",
+      "ADDITIONAL CONTEXT FOR THIS GENERATION BATCH:",
+      contextNotes.trim(),
+    ]);
+  }
+
+  const user = userParts.join("\n");
 
   const anthropicBaseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const anthropicApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
@@ -333,93 +362,179 @@ router.post("/generate-questions", async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "Failed to reach Claude API");
-    res.status(500).json({ error: "Failed to reach Claude API", detail: (err as Error).message });
-    return;
+    return { questions: [], error: `Failed to reach Claude API: ${(err as Error).message}` };
   }
 
   if (!claudeResponse.ok) {
     const errText = await claudeResponse.text();
-    res.status(500).json({ error: "Claude API error", detail: errText });
-    return;
+    return { questions: [], error: `Claude API error: ${errText}` };
   }
 
   const claudeData = await claudeResponse.json() as { content?: { text: string }[] };
   const rawText = claudeData?.content?.[0]?.text || "";
-  const questions = extractJsonArray(rawText) as Array<{
-    subtopic?: string; question: string; options: string[];
-    answer_index: number; solution?: string; difficulty?: number;
-    graph?: Record<string, unknown> | null;
-    table_data?: Record<string, unknown> | null;
-  }>;
+  const questions = extractJsonArray(rawText) as GeneratedQuestion[];
 
-  if (!questions.length) {
-    res.status(200).json({ inserted: 0, message: "No questions generated" });
+  return {
+    questions: questions.map(q => ({
+      ...q,
+      _topicName: topicName,
+      _parentTopicName: parentTopicName,
+      _topicCode: topicCode,
+      _existingTexts: existingTexts,
+    } as GeneratedQuestion & { _topicName: string; _parentTopicName: string; _topicCode: string; _existingTexts: Set<string> })),
+  };
+}
+
+router.post("/generate-questions", async (req, res) => {
+  // Accept either a single topicCode or an array topicCodes
+  const {
+    stage,
+    subject,
+    topicCode,
+    topicCodes,
+    count = 10,
+    difficulty = "mixed",
+    autoApprove = false,
+    contextNotes = "",
+  } = req.body;
+
+  const resolvedSubject: string = subject || stage;
+  const resolvedTopicCodes: string[] = topicCodes?.length
+    ? topicCodes
+    : topicCode
+      ? [topicCode]
+      : [];
+
+  if (!resolvedSubject || resolvedTopicCodes.length === 0) {
+    res.status(400).json({ error: "subject (or stage) and topicCode (or topicCodes array) required" });
     return;
   }
 
-  // ── autoApprove: insert directly into the live questions table ────────────────
-  if (autoApprove) {
-    const now = new Date().toISOString();
-    const allRows = questions
-      .filter((q) => q.question)
-      .map((q) => ({
-        id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        subject: normalizedSubject,
-        topic: parentTopicName,
-        subtopic: topicName,
-        concept_tag: `${normalizedSubject}|${parentTopicName}|${topicName}`.toLowerCase(),
-        difficulty: q.difficulty || 3,
-        question: q.question,
-        options: q.options,
-        answer_index: q.answer_index,
-        solution: q.solution || "",
-        graph: q.graph || null,
-        table_data: q.table_data || null,
-        tip: null,
-        created_at: now,
-      }));
+  // Normalise picker IDs to canonical curriculum names.
+  const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
 
-    const newRows = allRows.filter(
-      (r) => !existingTexts.has(r.question.trim().toLowerCase())
+  const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+
+  // Fetch generation_flags and exam_context from curricula table once
+  const { data: curriculumRow } = await adminDb
+    .from("curricula")
+    .select("generation_flags, exam_context")
+    .eq("name", normalizedSubject)
+    .maybeSingle();
+
+  const flags: Record<string, boolean> = (curriculumRow?.generation_flags as Record<string, boolean>) ?? {};
+  const examContext: string = (curriculumRow?.exam_context as string) ?? "";
+
+  // Generate for all selected topic codes (sequentially to avoid rate limiting)
+  const allInsertedDrafts: unknown[] = [];
+  const allInsertedLive: unknown[] = [];
+  const errors: string[] = [];
+  let totalInserted = 0;
+
+  for (const code of resolvedTopicCodes) {
+    const { questions, error: genError } = await generateForTopic(
+      adminDb,
+      normalizedSubject,
+      code,
+      count,
+      difficulty,
+      contextNotes,
+      examContext,
+      flags,
     );
 
-    let insertedCount = 0;
-    if (newRows.length > 0) {
-      const { data: insertedData } = await adminDb
-        .from("questions")
-        .insert(newRows)
-        .select("id");
-      insertedCount = (insertedData || []).length;
+    if (genError) {
+      errors.push(`${code}: ${genError}`);
+      continue;
     }
 
-    res.status(200).json({ inserted: insertedCount, questions: newRows });
+    if (!questions.length) continue;
+
+    // Pull out internal metadata fields added during generation
+    const enriched = questions as Array<GeneratedQuestion & {
+      _topicName: string;
+      _parentTopicName: string;
+      _topicCode: string;
+      _existingTexts: Set<string>;
+    }>;
+
+    if (autoApprove) {
+      const now = new Date().toISOString();
+      const allRows = enriched
+        .filter(q => q.question)
+        .map(q => ({
+          id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          subject: normalizedSubject,
+          topic: q._parentTopicName,
+          subtopic: q._topicName,
+          concept_tag: `${normalizedSubject}|${q._parentTopicName}|${q._topicName}`.toLowerCase(),
+          difficulty: q.difficulty || 3,
+          question: q.question,
+          options: q.options,
+          answer_index: q.answer_index,
+          solution: q.solution || "",
+          graph: q.graph || null,
+          table_data: q.table_data || null,
+          tip: null,
+          created_at: now,
+        }));
+
+      const newRows = allRows.filter(
+        r => !enriched.find(q => q._topicName === r.subtopic)
+          ?._existingTexts?.has(r.question.trim().toLowerCase())
+      );
+
+      if (newRows.length > 0) {
+        const { data: insertedData } = await adminDb
+          .from("questions")
+          .insert(newRows)
+          .select("id");
+        totalInserted += (insertedData || []).length;
+        allInsertedLive.push(...(insertedData || []));
+      }
+    } else {
+      // Insert into draft queue
+      const rows = enriched
+        .filter(q => q.question)
+        .map(q => ({
+          source: "ai_generated",
+          subject: normalizedSubject,
+          topic_code: q._topicCode,
+          topic: q._parentTopicName,
+          subtopic: q._topicName,
+          question: q.question,
+          options: q.options,
+          answer_index: q.answer_index,
+          solution: q.solution || null,
+          graph: q.graph || null,
+          table_data: q.table_data || null,
+          difficulty: q.difficulty || null,
+          status: "pending",
+        }));
+
+      if (rows.length > 0) {
+        const { error: insertErr } = await adminDb.from("draft_questions").insert(rows);
+        if (insertErr) {
+          errors.push(`${code}: ${insertErr.message}`);
+        } else {
+          totalInserted += rows.length;
+          allInsertedDrafts.push(...rows);
+        }
+      }
+    }
+  }
+
+  if (errors.length > 0 && totalInserted === 0) {
+    res.status(500).json({ error: errors.join("; ") });
     return;
   }
 
-  // ── Default: insert into draft queue for admin review ─────────────────────────
-  const rows = questions.map((q) => ({
-    source: "ai_generated",
-    subject: normalizedSubject,
-    topic_code: topicCode,
-    topic: parentTopicName,
-    subtopic: topicName,
-    question: q.question,
-    options: q.options,
-    answer_index: q.answer_index,
-    solution: q.solution || null,
-    graph: q.graph || null,
-    table_data: q.table_data || null,
-    difficulty: q.difficulty || null,
-    status: "pending",
-  }));
-
-  const { error } = await adminDb.from("draft_questions").insert(rows);
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
-  res.status(200).json({ inserted: rows.length });
+  res.status(200).json({
+    inserted: totalInserted,
+    topicsProcessed: resolvedTopicCodes.length - errors.length,
+    errors: errors.length > 0 ? errors : undefined,
+    ...(autoApprove ? { questions: allInsertedLive } : {}),
+  });
 });
 
 export default router;
