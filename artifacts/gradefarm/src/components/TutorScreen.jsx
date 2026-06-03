@@ -28,9 +28,7 @@ import {
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
 } from '../lib/db'
-import { getTopicConfig } from '../lib/saceTopics'
-import { fetchLiveCurricula } from '../lib/curriculaDb'
-import { QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -231,7 +229,7 @@ function StudentsTab({ profile, theme }) {
 const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed']
 
 // ── Assignments Tab ───────────────────────────────────────────────────────────
-function AssignmentsTab({ profile, theme }) {
+function AssignmentsTab({ profile, theme, subject }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
@@ -244,49 +242,34 @@ function AssignmentsTab({ profile, theme }) {
   const [expandedBatches, setExpandedBatches] = useState(() => new Set())
   const [form, setForm]               = useState({
     type: 'Quiz',
-    subject: 'Chemistry Stage 1',
+    subject: subject?.name || '',
     topics: [],
     due_date: '',
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
   })
+  const [curriculumMacroGroups, setCurriculumMacroGroups] = useState([])
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
   const [notifyStatus, setNotifyStatus] = useState(null)
 
-  // Topic list for current subject
-  const stageMap = {
-    'Chemistry Stage 1': 'Stage 1',
-    'Chemistry Stage 2': 'Stage 2',
-  }
-  const { macroGroups, normFn: topicNormFn } = getTopicConfig(stageMap[form.subject] || 'Stage 1')
-  const allTopics = macroGroups.flatMap(g => g.topics)
-
-  // Load the question bank for the chosen subject so we can offer subtopic-level chips
-  const [subjectQuestions, setSubjectQuestions] = useState([])
+  // Load topics from DB curriculum when subject changes
   const [expandedTopic, setExpandedTopic] = useState(null)
   useEffect(() => {
+    if (!form.subject) { setCurriculumMacroGroups([]); return }
     let cancelled = false
-    const subjectKey = form.subject === 'Chemistry Stage 1'
-      ? QUESTIONS_SUBJECT_BY_ID.chemistry_s1
-      : form.subject === 'Chemistry Stage 2'
-        ? QUESTIONS_SUBJECT_BY_ID.chemistry_s2
-        : 'Chemistry'
-    getQuestions(subjectKey).then(qs => { if (!cancelled) setSubjectQuestions(qs || []) }).catch(() => {})
+    loadCurriculumMacroGroups(form.subject)
+      .then(groups => { if (!cancelled) setCurriculumMacroGroups(groups || []) })
+      .catch(() => { if (!cancelled) setCurriculumMacroGroups([]) })
     return () => { cancelled = true }
   }, [form.subject])
 
-  // Build topic → subtopics map from the live question bank
-  const topicSubtopics = {}
-  subjectQuestions.forEach(q => {
-    const tNorm = (topicNormFn?.(q.topic) || q.topic || '').trim()
-    if (!tNorm || !q.subtopic) return
-    const matched = allTopics.find(t => t.toLowerCase() === tNorm.toLowerCase())
-    const key = matched || tNorm
-    if (!topicSubtopics[key]) topicSubtopics[key] = new Set()
-    topicSubtopics[key].add(q.subtopic)
-  })
+  // Two-level structure: top chips = curriculum topics, expandable = subtopics
+  const allTopics = curriculumMacroGroups.map(g => g.label)
+  const topicSubtopics = Object.fromEntries(
+    curriculumMacroGroups.map(g => [g.label, new Set(g.topics)])
+  )
 
   const load = async () => {
     setLoading(true)
@@ -303,6 +286,10 @@ function AssignmentsTab({ profile, theme }) {
     setLoading(false)
   }
   useEffect(() => { load() }, [profile.id])
+  // Keep form.subject in sync when the active subject changes in SubjectPicker
+  useEffect(() => {
+    if (subject?.name) setForm(f => ({ ...f, subject: subject.name, topics: [] }))
+  }, [subject?.name])
 
   const toggleTopic = (topic) => {
     setForm(f => ({
@@ -364,7 +351,7 @@ function AssignmentsTab({ profile, theme }) {
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: 'Chemistry Stage 1', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -425,10 +412,7 @@ function AssignmentsTab({ profile, theme }) {
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject</label>
-                <select value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value, topics: [] }))} style={inputStyle}>
-                  <option value="Chemistry Stage 1">Chemistry — Stage 1</option>
-                  <option value="Chemistry Stage 2">Chemistry — Stage 2</option>
-                </select>
+                <div style={{ ...inputStyle, color: t.text, opacity: 0.85 }}>{form.subject || '—'}</div>
               </div>
             </div>
 
@@ -1253,16 +1237,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
   },
   // ── Junior Secondary (Year 7–10) ───────────────────────────────────────────
   {
-    id: 'maths_y7', name: 'Mathematics',
-    yearGroups: ['junior'],
-    topics: ['Number', 'Integers & Rational Numbers', 'Fractions, Decimals & Percentages', 'Rates & Ratios', 'Financial Mathematics', 'Algebra — Expressions', 'Algebra — Linear Equations', 'Algebra — Graphs & Functions', 'Measurement — Length, Area & Volume', 'Geometry — Angles & Shapes', 'Pythagorean Theorem', 'Statistics & Data', 'Probability'],
-  },
-  {
-    id: 'english_y7', name: 'English',
-    yearGroups: ['junior'], isWriting: true,
-    topics: ['Reading Comprehension', 'Language & Vocabulary', 'Grammar & Punctuation', 'Narrative Writing', 'Persuasive Writing', 'Analytical Writing', 'Text Response', 'Media & Visual Texts', 'Speaking & Listening'],
-  },
-  {
     id: 'science_y7', name: 'Science',
     yearGroups: ['junior'],
     topics: ['Cells & Living Things', 'Body Systems', 'Ecosystems & Ecology', 'Mixtures & Substances', 'Chemical Reactions', 'Forces & Motion', 'Energy Forms & Transfers', 'Waves — Light & Sound', 'Electricity & Magnetism', 'Earth & Space', 'Geology', 'Science Inquiry Skills'],
@@ -1292,11 +1266,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
     id: 'maths_general_s1', name: 'General Mathematics',
     yearGroups: ['stage1'],
     topics: ['Investing and borrowing', 'Measurement', 'Statistical investigation', 'Applications of trigonometry', 'Linear functions and graphs', 'Exponential functions and graphs', 'Matrices and networks', 'Financial decisions'],
-  },
-  {
-    id: 'chemistry_s1', name: 'Chemistry',
-    yearGroups: ['stage1'],
-    topics: ['Properties and uses of materials', 'Atomic structure', 'Quantities of atoms', 'The periodic table', 'Types of materials', 'Bonding between atoms', 'Quantities of molecules and ions', 'Molecule polarity', 'Interactions between molecules', 'Hydrocarbons', 'Polymers', 'Miscibility and solutions', 'Solutions of ionic substances', 'Quantities in reactions', 'Energy in reactions', 'Acid–base concepts', 'Reactions of acids and bases', 'The pH scale', 'Concepts of oxidation and reduction', 'Metal reactivity', 'Electrochemistry'],
   },
   {
     id: 'biology_s1', name: 'Biology',
@@ -1340,11 +1309,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
   },
   // ── Stage 2 (Year 12) ──────────────────────────────────────────────────────
   {
-    id: 'maths_methods_s2', name: 'Mathematical Methods',
-    yearGroups: ['stage2'],
-    topics: ['Further differentiation and applications', 'Discrete random variables', 'Integral calculus', 'Logarithmic functions', 'Continuous random variables and the normal distribution', 'Sampling and confidence intervals', 'The binomial distribution', 'Linear combinations of random variables'],
-  },
-  {
     id: 'maths_specialist_s2', name: 'Specialist Mathematics',
     yearGroups: ['stage2'],
     topics: ['Mathematical induction', 'Complex numbers', 'Functions and sketching graphs', 'Vectors in three dimensions', 'Integration techniques and applications', 'Rates of change and differential equations', 'Statistical inference'],
@@ -1353,11 +1317,6 @@ const ALL_DIAGNOSTIC_SUBJECTS = [
     id: 'maths_general_s2', name: 'General Mathematics',
     yearGroups: ['stage2'],
     topics: ['Modelling with linear relationships', 'Modelling with matrices', 'Statistical models', 'Financial models', 'Discrete models — networks and graph theory', 'Bivariate data', 'Modelling with trigonometry'],
-  },
-  {
-    id: 'chemistry_s2', name: 'Chemistry',
-    yearGroups: ['stage2'],
-    topics: ['Global warming and climate change', 'Photochemical smog', 'Volumetric analysis', 'Chromatography', 'Atomic spectroscopy', 'Rates of reactions', 'Equilibrium and yield', 'Optimising production', 'Introduction to organic chemistry', 'Alcohols', 'Aldehydes and ketones', 'Carbohydrates', 'Carboxylic acids', 'Amines', 'Esters', 'Amides', 'Triglycerides', 'Proteins', 'Energy resources', 'Water', 'Soil', 'Materials resources'],
   },
   {
     id: 'biology_s2', name: 'Biology',
@@ -2083,7 +2042,7 @@ const TABS = [
   { id: 'diagnostic',  label: 'Diagnostic',  icon: '🧪' },
 ]
 
-export default function TutorScreen({ profile, theme }) {
+export default function TutorScreen({ profile, theme, subject }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('students')
@@ -2124,7 +2083,7 @@ export default function TutorScreen({ profile, theme }) {
         <div style={{ maxWidth: 960, width: '100%' }}>
           {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
           {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
-          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} />}
+          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} />}
           {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
           {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
           {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}

@@ -1,77 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded, deleteCurriculum } from '../lib/curriculaDb'
+import { listCurricula, createCurriculum, deleteCurriculum } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
-import { S1_TOPICS, S2_TOPICS, Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS, Y10_MATHS_TOPICS } from '../lib/adminTopics'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
-// Group a flat topic array into sections by the prefix of each code.
-// Chemistry uses "1.1" → section "1"; Maths/English use "N1" → section "N".
-function groupIntoSections(topics, sectionNames) {
-  const groups = {}
-  const order = []
-  for (const t of topics) {
-    const key = t.code.includes('.') ? t.code.split('.')[0] : t.code.replace(/\d+$/, '')
-    if (!groups[key]) { groups[key] = []; order.push(key) }
-    groups[key].push(t)
-  }
-  return order.map(key => ({
-    name: sectionNames[key] || `Section ${key}`,
-    subtopics: groups[key].map(t => ({ name: t.name })),
-  }))
-}
-
-const BUILT_IN_SUBJECTS = [
-  {
-    name: 'Chemistry Stage 1',
-    description: 'SACE Chemistry Stage 1 — Australian curriculum covering properties of matter, atomic structure, molecular materials, solutions, acid-base and redox chemistry.',
-    generation_flags: { graphs: false, tables: false, latex: true },
-    topics: groupIntoSections(S1_TOPICS, {
-      1: 'Properties and Atomic Structure',
-      2: 'Types of Materials',
-      3: 'Molecular Materials',
-      4: 'Solutions',
-      5: 'Acid–Base Chemistry',
-      6: 'Redox Chemistry',
-    }),
-  },
-  {
-    name: 'Chemistry Stage 2',
-    description: 'SACE Chemistry Stage 2 — covering environmental chemistry, rates and equilibrium, organic chemistry, and sustainability.',
-    generation_flags: { graphs: false, tables: false, latex: true },
-    topics: groupIntoSections(S2_TOPICS, {
-      1: 'Environmental Chemistry and Analysis',
-      2: 'Rates and Equilibrium',
-      3: 'Organic Chemistry',
-      4: 'Sustainability',
-    }),
-  },
-  {
-    name: 'Year 7 Mathematics',
-    description: 'Australian Curriculum v9 — Year 7 Mathematics covering Number, Algebra, Measurement, Space, Statistics and Probability.',
-    generation_flags: { graphs: true, tables: true, latex: true },
-    topics: groupIntoSections(Y7_MATHS_TOPICS, {
-      N: 'Number', A: 'Algebra', M: 'Measurement', SP: 'Space', ST: 'Statistics', P: 'Probability',
-    }),
-  },
-  {
-    name: 'Year 7 English',
-    description: 'Australian Curriculum v9 — Year 7 English covering Language, Literature and Literacy strands.',
-    generation_flags: { graphs: false, tables: false, latex: false },
-    topics: groupIntoSections(Y7_ENGLISH_TOPICS, {
-      L: 'Language', LT: 'Literature', LC: 'Literacy',
-    }),
-  },
-  {
-    name: 'Year 10 Mathematics',
-    description: 'Australian Curriculum — Year 10 and 10A Mathematics covering Number, Algebra, Measurement, Geometry, Statistics, Probability and extension topics.',
-    generation_flags: { graphs: true, tables: true, latex: true },
-    topics: groupIntoSections(Y10_MATHS_TOPICS, {
-      N: 'Number', A: 'Algebra', M: 'Measurement', SP: 'Geometry', ST: 'Statistics', P: 'Probability',
-      XN: 'Year 10A — Number', XA: 'Year 10A — Algebra', XM: 'Year 10A — Measurement',
-      XSP: 'Year 10A — Geometry', XST: 'Year 10A — Statistics', XP: 'Year 10A — Probability',
-    }),
-  },
-]
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -113,7 +44,6 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      await seedBuiltInSubjectsIfNeeded(BUILT_IN_SUBJECTS)
       setCurricula(await listCurricula())
     } catch (e) {
       if (!silent) setError(e.message)

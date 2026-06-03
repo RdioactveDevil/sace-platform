@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { adminApiPost } from '../lib/adminApi'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { supabase } from '../lib/supabase'
 
@@ -22,21 +21,8 @@ export default function AdminUploadScreen() {
   useEffect(() => {
     fetchLiveCurricula()
       .then(curricula => {
-        const liveNames = new Set(curricula.map(c => c.name))
-        // Built-in subjects that still exist in the DB
-        const builtIn = ALL_SUBJECTS
-          .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
-          .filter(s => {
-            const names = [QUESTIONS_SUBJECT_BY_ID[s.id], s.curriculumName, `${s.name} ${s.stage}`.trim()].filter(Boolean)
-            return names.some(n => liveNames.has(n))
-          })
-          .map(s => ({ value: QUESTIONS_SUBJECT_BY_ID[s.id], label: QUESTIONS_SUBJECT_BY_ID[s.id] }))
-        // Dynamic curricula not in built-ins
-        const builtInQKeys = new Set(builtIn.map(o => o.value))
-        const dynamic = curricula
-          .filter(c => !builtInQKeys.has(c.name))
-          .map(c => ({ value: c.name, label: c.name }))
-        const opts = [...builtIn, ...dynamic]
+        // All live curricula from DB are available for upload
+        const opts = curricula.map(c => ({ value: c.name, label: c.name }))
         setStageOptions(opts)
         if (opts.length > 0) setStage(opts[0].value)
       })
