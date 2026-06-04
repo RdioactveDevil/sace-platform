@@ -57,7 +57,9 @@ function autoWrapMath(text: string): string {
   const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(t);
   const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(t);
   const hasFraction = /\([^()]+\)\/\([^()]+\)/.test(t);
-  if (!hasCaret && !hasDerivative && !hasFraction) return text;
+  // e.g. "log(3x + 2y)", "sin(θ)", "sqrt(n)" — negative lookbehind avoids "catalog"
+  const hasMathFunc = /(?<![a-zA-Z])(?:log|ln|sin|cos|tan|cot|sec|csc|exp|sqrt)\s*\([^)]*[a-zA-Z][^)]*\)/.test(t);
+  if (!hasCaret && !hasDerivative && !hasFraction && !hasMathFunc) return text;
 
   const isMathOnly =
     !/[?!]/.test(t) &&
@@ -87,6 +89,10 @@ function autoWrapMath(text: string): string {
     );
     seg = seg.replace(
       /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
+      (m) => `$${m}$`,
+    );
+    seg = seg.replace(
+      /(?<![a-zA-Z])(?:log|ln|sin|cos|tan|cot|sec|csc|exp|sqrt)\s*\([^)]*[a-zA-Z][^)]*\)/g,
       (m) => `$${m}$`,
     );
     return seg;
