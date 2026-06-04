@@ -608,14 +608,14 @@ export default function QuizScreen({
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
 
-    // Derive subject + topic from the most-recently-answered main question.
+    // Derive subject + subtopic from the most-recently-answered main question.
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
     const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
-    const subject   = lastQ?.subject
-    const topicName = lastQ?.topic
-    if (!subject || !topicName) return
+    const subject     = lastQ?.subject
+    const subtopicName = lastQ?.subtopic
+    if (!subject || !subtopicName) return
 
-    const topicCode = getTopicCodeByName(subject, topicName)
+    const topicCode = getTopicCodeByName(subject, subtopicName)
     if (!topicCode) return
 
     generatingMoreRef.current = true
@@ -673,14 +673,14 @@ export default function QuizScreen({
 
     if (remaining > 3) return   // still plenty — don't prefetch yet
 
-    // Derive subject + topic from the most-recently-answered main question.
+    // Derive subject + subtopic from the most-recently-answered main question.
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
     const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
-    const subject   = lastQ?.subject
-    const topicName = lastQ?.topic
-    if (!subject || !topicName) return
+    const subject      = lastQ?.subject
+    const subtopicName = lastQ?.subtopic
+    if (!subject || !subtopicName) return
 
-    const topicCode = getTopicCodeByName(subject, topicName)
+    const topicCode = getTopicCodeByName(subject, subtopicName)
     if (!topicCode) return
 
     backgroundPrefetchAttempted.current = true
