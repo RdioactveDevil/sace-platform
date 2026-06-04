@@ -635,6 +635,9 @@ export default function QuizScreen({
         if (!newQs.length) { setFinished(true); return }
         if (typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(newQs)
         setDisplayQuestion(newQs[0])
+        // Reset guards so the cycle can repeat when these questions run out.
+        bankExhaustionAttempted.current = false
+        backgroundPrefetchAttempted.current = false
         // Background top-up: generate 10 more while the user answers the 3.
         fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff)
           .then(moreQs => {
@@ -689,6 +692,8 @@ export default function QuizScreen({
         if (newQs.length && typeof onBankQuestionsAdded === 'function') {
           onBankQuestionsAdded(newQs)
         }
+        // Reset so the prefetch can fire again when these questions run low.
+        backgroundPrefetchAttempted.current = false
       })
       .catch(() => {
         // Silent failure — exhaustion handler will retry when the bank runs dry.
