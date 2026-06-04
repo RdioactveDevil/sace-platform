@@ -393,6 +393,16 @@ export async function flagQuestion(userId, questionId, flagType) {
   if (error) throw error
 }
 
+export async function reportQuestion(questionId) {
+  const res = await fetch('/api/report-question', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ questionId }),
+  })
+  if (!res.ok) throw new Error(`Report failed (${res.status})`)
+  return res.json()
+}
+
 export async function getUserFlags(userId, questionIds) {
   if (!questionIds.length) return {}
   const { data, error } = await supabase
