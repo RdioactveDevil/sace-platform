@@ -77,7 +77,7 @@ If no option is correct or the question is fundamentally flawed:
   });
 
   if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
-  const body = await resp.json();
+  const body = await resp.json() as any;
   const text: string = (body.content?.[0]?.text ?? "").trim();
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`Non-JSON AI response: ${text.slice(0, 200)}`);
@@ -171,7 +171,7 @@ async function resolveReport(reportId: string, questionId: string) {
     }
   } catch (err) {
     logger.error({ err, reportId, questionId }, "[report-question] AI verification failed");
-    await adminDb.from("question_reports").update({ ai_status: "error" }).eq("id", reportId).catch(() => {});
+    await adminDb.from("question_reports").update({ ai_status: "error" }).eq("id", reportId);
   }
 }
 
