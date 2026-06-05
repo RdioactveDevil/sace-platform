@@ -152,3 +152,10 @@ export async function bulkScanQuestions({ subject, limit = 50 } = {}) {
     body: JSON.stringify({ subject, limit }),
   })
 }
+
+export async function retryPendingReports({ limit = 20 } = {}) {
+  return adminAuthFetch('/api/retry-pending-reports', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  })
+}
