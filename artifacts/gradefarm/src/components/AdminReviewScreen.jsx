@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion, fetchQuestionReports, bulkScanQuestions } from '../lib/adminDb'
+import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion, fetchQuestionReports, bulkScanQuestions, retryPendingReports } from '../lib/adminDb'
 import { getVariantCountsByConceptTags } from '../lib/db'
 import { getTopicsBySubject } from '../lib/adminTopics'
 import MathText from './MathText'
@@ -47,6 +47,9 @@ export default function AdminReviewScreen({ profile }) {
   const [scanning,       setScanning]       = useState(false)
   const [scanResult,     setScanResult]     = useState(null)
   const [scanError,      setScanError]      = useState(null)
+  const [retrying,       setRetrying]       = useState(false)
+  const [retryResult,    setRetryResult]    = useState(null)
+  const [retryError,     setRetryError]     = useState(null)
   // null  = counts not yet loaded / unavailable (hide badge rather than show false 0)
   // {}    = loaded but no variants found for any draft
   // {...} = loaded with real per-conceptTag counts
@@ -129,6 +132,21 @@ export default function AdminReviewScreen({ profile }) {
     }
   }
 
+  const handleRetryPending = async () => {
+    if (retrying) return
+    setRetrying(true)
+    setRetryResult(null)
+    setRetryError(null)
+    try {
+      const result = await retryPendingReports({ limit: 20 })
+      setRetryResult(result)
+      setTimeout(() => loadReports(), 1500)
+    } catch (e) {
+      setRetryError(e.message || 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   useEffect(() => {
     setActionError(null)
@@ -358,6 +376,16 @@ export default function AdminReviewScreen({ profile }) {
                   color: '#0c1037',
                 }}
               >{scanning ? 'Scanning…' : '⚡ Bulk Scan'}</button>
+              <button
+                onClick={handleRetryPending}
+                disabled={retrying}
+                style={{
+                  padding: '5px 14px', borderRadius: 8, fontSize: 12, fontWeight: 800,
+                  fontFamily: FONT_B, cursor: retrying ? 'not-allowed' : 'pointer',
+                  border: 'none', background: retrying ? 'rgba(241,190,67,0.3)' : 'rgba(241,190,67,0.15)',
+                  color: retrying ? 'rgba(241,190,67,0.5)' : GOLD,
+                }}
+              >{retrying ? 'Retrying…' : '↺ Retry Stuck'}</button>
             </div>
           </div>
 
@@ -370,6 +398,16 @@ export default function AdminReviewScreen({ profile }) {
           {scanError && (
             <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: '#f87171', fontSize: 13, fontFamily: FONT_B }}>
               {scanError}
+            </div>
+          )}
+          {retryResult && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', color: GOLD, fontSize: 13, fontFamily: FONT_B }}>
+              {retryResult.retried === 0 ? (retryResult.message || 'No stuck reports found.') : `Retried ${retryResult.retried} stuck report${retryResult.retried !== 1 ? 's' : ''}.`}
+            </div>
+          )}
+          {retryError && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: '#f87171', fontSize: 13, fontFamily: FONT_B }}>
+              {retryError}
             </div>
           )}
 

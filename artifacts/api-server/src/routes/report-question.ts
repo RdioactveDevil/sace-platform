@@ -252,6 +252,36 @@ router.post("/bulk-scan-questions", async (req, res) => {
   res.status(200).json({ ok: true, queued: reports?.length ?? 0 });
 });
 
+// ── POST /api/retry-pending-reports (admin only) ─────────────────────────────
+
+router.post("/retry-pending-reports", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const { adminDb } = ctx;
+
+  const { limit = 20 } = req.body as { limit?: number };
+
+  const { data: stuck } = await adminDb
+    .from("question_reports")
+    .select("id, question_id")
+    .in("ai_status", ["pending", "error"])
+    .limit(Math.min(Number(limit), 50));
+
+  if (!stuck?.length) {
+    res.status(200).json({ ok: true, retried: 0, message: "No stuck reports found" });
+    return;
+  }
+
+  // Reset to pending so resolveReport picks them up cleanly
+  for (const r of stuck) {
+    await adminDb.from("question_reports").update({ ai_status: "pending" }).eq("id", r.id);
+    await resolveReport(r.id, r.question_id);
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  res.status(200).json({ ok: true, retried: stuck.length });
+});
+
 // ── GET /api/question-reports (admin only) ────────────────────────────────────
 
 router.get("/question-reports", async (req, res) => {
