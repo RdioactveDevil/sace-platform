@@ -528,6 +528,7 @@ export default function QuizScreen({
       runGenerateRemediationQueue({
         parentQuestion,
         existingUsedIds,
+        sessionAnsweredIds: sessionAnswered,
         difficultyTarget,
         options,
         questions,
@@ -539,7 +540,7 @@ export default function QuizScreen({
         onBankQuestionsAdded,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [questions, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
+    [questions, sessionAnswered, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
   )
 
   const enterRemediation = useCallback(
@@ -915,6 +916,10 @@ export default function QuizScreen({
             },
           }
         })
+        // Prevent the underlying bank question from appearing again as a main quiz
+        // question this session — critical in 'all' mode (consolidation) where the
+        // only repeat guard is sessionAnswered.
+        setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
       }
 
       if (isCorrect) {

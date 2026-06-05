@@ -271,6 +271,7 @@ export async function runGenerateRemediationQueue(ctx) {
   const {
     parentQuestion,
     existingUsedIds = [],
+    sessionAnsweredIds = [],
     difficultyTarget = null,
     options = {},
     questions = [],
@@ -292,9 +293,14 @@ export async function runGenerateRemediationQueue(ctx) {
   let resolvedQueue = []
   let resolvedSource = 'generated'
 
+  // Combine both exclude lists so already-answered main-quiz questions are never
+  // offered as remediation variants (prevents the same question appearing twice in
+  // one session, particularly in 'all'/consolidation mode).
+  const allExcludeIds = [...new Set([...existingUsedIds, ...sessionAnsweredIds])]
+
   try {
     // ── TIER 1: question bank — same topic + subtopic, matching difficulty. No API.
-    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, existingUsedIds)
+    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, allExcludeIds)
     if (bankQueue.length) {
       console.info(`[gradefarm] bank has ${bankQueue.length} same-subtopic question(s) — no API call needed`)
       resolvedQueue = bankQueue.slice(0, REMEDIATION_POOL_SIZE)
