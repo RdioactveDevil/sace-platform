@@ -3,6 +3,7 @@ import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 import { getY7ShortLabel } from '../lib/australianCurriculumTopics'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
+import MathText from './MathText'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -509,17 +510,22 @@ export default function LearnScreen({
     setLoading(false)
   }
 
-  const formatText = (text) => text.split('\n').map((line, i, arr) => (
-    <span key={i}>
-      {line.split(/\*\*(.*?)\*\*/g).map((part, j) =>
-        j % 2 === 1 ? <strong key={j} style={{ color: t.text, fontWeight: 700 }}>{part}</strong> : part
-      )}
-      {i < arr.length - 1 && <br />}
-    </span>
-  ))
+  const renderRichText = (text) => {
+    const parts = text.split(/\*\*(.*?)\*\*/g)
+    if (parts.length === 1) return <MathText text={text} />
+    return (
+      <span style={{ whiteSpace: 'pre-line' }}>
+        {parts.map((part, j) =>
+          j % 2 === 1
+            ? <strong key={j} style={{ fontWeight: 700 }}><MathText text={part} /></strong>
+            : <MathText key={j} text={part} />
+        )}
+      </span>
+    )
+  }
 
   const renderMessageBody = (msg) => {
-    if (typeof msg.content === 'string') return formatText(msg.content)
+    if (typeof msg.content === 'string') return renderRichText(msg.content)
     if (!Array.isArray(msg.content)) return null
     const imageBlocks = msg.content.filter(b => b && b.type === 'image' && b.source?.data)
     const textBlocks  = msg.content.filter(b => b && b.type === 'text' && typeof b.text === 'string')
@@ -544,7 +550,7 @@ export default function LearnScreen({
             })}
           </div>
         )}
-        {combinedText && formatText(combinedText)}
+        {combinedText && renderRichText(combinedText)}
       </>
     )
   }
