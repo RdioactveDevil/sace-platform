@@ -51,7 +51,7 @@ Options:
 ${optText}
 Currently marked correct: Option ${labels[q.answer_index]} — ${options[q.answer_index]}
 
-Work out the correct answer step by step, then respond with ONLY valid JSON (no other text):
+Work out the correct answer step by step, then respond with ONLY a single JSON object (no other text, no markdown, no LaTeX — plain ASCII only in the explanation):
 
 If the marked answer is correct:
 {"verdict":"correct","correct_index":null,"explanation":"one sentence"}
@@ -82,9 +82,17 @@ If no option is correct or the question is fundamentally flawed:
   if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
   const body = await resp.json() as any;
   const text: string = (body.content?.[0]?.text ?? "").trim();
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error(`Non-JSON AI response: ${text.slice(0, 200)}`);
-  return JSON.parse(match[0]) as Verdict;
+  // Depth-count braces to find the actual JSON object boundaries, avoiding
+  // false matches on LaTeX expressions like \sec^{2} that contain {}.
+  const start = text.indexOf("{");
+  if (start === -1) throw new Error(`No JSON in AI response: ${text.slice(0, 200)}`);
+  let depth = 0, end = -1;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") { if (--depth === 0) { end = i; break; } }
+  }
+  if (end === -1) throw new Error(`Unclosed JSON in AI response: ${text.slice(0, 200)}`);
+  return JSON.parse(text.slice(start, end + 1)) as Verdict;
 }
 
 async function getTopicCode(
