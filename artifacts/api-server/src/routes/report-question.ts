@@ -62,8 +62,11 @@ If a different option is correct (use 0-based index):
 If no option is correct or the question is fundamentally flawed:
 {"verdict":"wrong_question","correct_index":null,"explanation":"one sentence"}`;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
   const resp = await fetch(`${baseUrl}/v1/messages`, {
     method: "POST",
+    signal: controller.signal,
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
@@ -74,7 +77,7 @@ If no option is correct or the question is fundamentally flawed:
       max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
     }),
-  });
+  }).finally(() => clearTimeout(timeout));
 
   if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
   const body = await resp.json() as any;
@@ -199,8 +202,9 @@ router.post("/report-question", async (req, res) => {
     return;
   }
 
+  // Await before responding so Vercel doesn't freeze the container mid-verification
+  await resolveReport(report.id, questionId);
   res.status(200).json({ ok: true, reportId: report.id });
-  setImmediate(() => resolveReport(report.id, questionId));
 });
 
 // ── POST /api/bulk-scan-questions (admin only) ────────────────────────────────
@@ -231,14 +235,13 @@ router.post("/bulk-scan-questions", async (req, res) => {
   const { data: reports, error } = await adminDb.from("question_reports").insert(rows).select("id, question_id");
   if (error) { res.status(500).json({ error: error.message }); return; }
 
+  // Run sequentially before responding — Vercel can't freeze mid-loop this way.
+  // The client shows a spinner until done; bulk scan is an admin-only operation.
+  for (const r of (reports || [])) {
+    await resolveReport(r.id, r.question_id);
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
   res.status(200).json({ ok: true, queued: reports?.length ?? 0 });
-
-  setImmediate(async () => {
-    for (const r of (reports || [])) {
-      await resolveReport(r.id, r.question_id);
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-  });
 });
 
 // ── GET /api/question-reports (admin only) ────────────────────────────────────
