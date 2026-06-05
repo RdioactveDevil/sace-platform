@@ -940,7 +940,7 @@ export default function LearnScreen({
             </div>
           )}
 
-          {fromContext && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
+          {(contextSubtopic || topic) && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
             <div style={{
               padding: '10px 28px',
               background: t.purpleBg,
@@ -948,7 +948,7 @@ export default function LearnScreen({
               flexShrink: 0,
             }}>
               <button
-                onClick={() => onConsolidate(contextSubtopic)}
+                onClick={() => onConsolidate(contextSubtopic || topic)}
                 style={{
                   width: '100%',
                   padding: '11px 16px',
@@ -967,7 +967,7 @@ export default function LearnScreen({
                 }}
               >
                 <span>Consolidate — practice this topic</span>
-                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({contextSubtopic})</span>
+                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({contextSubtopic || topic})</span>
               </button>
             </div>
           )}
