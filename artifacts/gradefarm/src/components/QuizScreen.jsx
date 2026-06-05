@@ -18,6 +18,7 @@ import {
   fetchAndPersistMoreQuestions,
   incrementQuestionVariantUsage,
   flagQuestion,
+  reportQuestion,
   flagTopicForStudyPlan,
   completeAssignment,
 } from '../lib/db'
@@ -353,6 +354,8 @@ export default function QuizScreen({
   const backgroundPrefetchAttempted = useRef(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
+  const [reporting, setReporting] = useState(false)
+  const [reportedIds, setReportedIds] = useState(new Set())
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
   const [assignmentsCompleted, setAssignmentsCompleted] = useState([])
@@ -430,6 +433,18 @@ export default function QuizScreen({
       })
     } catch {}
     setFlagging(null)
+  }
+
+  const handleReport = async () => {
+    if (!currentQ || reporting) return
+    const qid = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
+    if (reportedIds.has(qid)) return
+    setReporting(true)
+    try {
+      await reportQuestion(qid)
+      setReportedIds(prev => new Set([...prev, qid]))
+    } catch {}
+    setReporting(false)
   }
 
   const setDisplayQuestion = useCallback((q) => {
@@ -1655,6 +1670,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
+                    const alreadyReported = reportedIds.has(qid)
                     return (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
@@ -1675,6 +1691,18 @@ export default function QuizScreen({
                               >{saving ? '…' : active ? `✓ ${tag}` : tag}</button>
                             )
                           })}
+                          <button
+                            onClick={handleReport}
+                            disabled={reporting || alreadyReported}
+                            style={{
+                              padding: '4px 9px', borderRadius: 6, fontSize: 11,
+                              cursor: reporting || alreadyReported ? 'default' : 'pointer',
+                              fontFamily: FONT_B, transition: 'all 0.15s',
+                              border: `1px solid ${alreadyReported ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.25)'}`,
+                              background: alreadyReported ? 'rgba(239,68,68,0.1)' : 'transparent',
+                              color: alreadyReported ? '#f87171' : reporting ? t.textMuted : 'rgba(239,68,68,0.7)',
+                            }}
+                          >{reporting ? '…' : alreadyReported ? '✓ Reported' : 'Wrong answer'}</button>
                         </div>
                       </div>
                     )
@@ -1716,6 +1744,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
+                    const alreadyReported = reportedIds.has(qid)
                     return (
                       <div>
                         <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
@@ -1741,6 +1770,20 @@ export default function QuizScreen({
                               </button>
                             )
                           })}
+                          <button
+                            onClick={handleReport}
+                            disabled={reporting || alreadyReported}
+                            style={{
+                              padding: '5px 10px', borderRadius: 7, fontSize: 12,
+                              cursor: reporting || alreadyReported ? 'default' : 'pointer',
+                              fontFamily: FONT_B, transition: 'all 0.15s',
+                              border: `1px solid ${alreadyReported ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.25)'}`,
+                              background: alreadyReported ? 'rgba(239,68,68,0.1)' : 'transparent',
+                              color: alreadyReported ? '#f87171' : reporting ? t.textMuted : 'rgba(239,68,68,0.7)',
+                            }}
+                          >
+                            {reporting ? '…' : alreadyReported ? '✓ Reported' : 'Wrong answer'}
+                          </button>
                         </div>
                       </div>
                     )

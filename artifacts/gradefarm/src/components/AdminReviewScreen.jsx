@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion } from '../lib/adminDb'
+import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion, fetchQuestionReports, bulkScanQuestions } from '../lib/adminDb'
 import { getVariantCountsByConceptTags } from '../lib/db'
 import { getTopicsBySubject } from '../lib/adminTopics'
 import MathText from './MathText'
@@ -27,6 +27,9 @@ function StatusBadge({ status }) {
 }
 
 export default function AdminReviewScreen({ profile }) {
+  const [activeTab,      setActiveTab]      = useState('drafts')
+
+  // ── Drafts tab state ─────────────────────────────────────────────────────────
   const [drafts,         setDrafts]         = useState([])
   const [loading,        setLoading]        = useState(true)
   const [filterStatus,   setFilterStatus]   = useState('pending')
@@ -36,6 +39,14 @@ export default function AdminReviewScreen({ profile }) {
   const [checked,        setChecked]        = useState(new Set())
   const [actionError,    setActionError]    = useState(null)
   const [actionOk,       setActionOk]       = useState(null)
+
+  // ── Reports tab state ────────────────────────────────────────────────────────
+  const [reports,        setReports]        = useState([])
+  const [loadingReports, setLoadingReports] = useState(false)
+  const [reportFilter,   setReportFilter]   = useState('all')
+  const [scanning,       setScanning]       = useState(false)
+  const [scanResult,     setScanResult]     = useState(null)
+  const [scanError,      setScanError]      = useState(null)
   // null  = counts not yet loaded / unavailable (hide badge rather than show false 0)
   // {}    = loaded but no variants found for any draft
   // {...} = loaded with real per-conceptTag counts
@@ -87,6 +98,37 @@ export default function AdminReviewScreen({ profile }) {
   }, [filterStatus])
 
   useEffect(() => { load() }, [load])
+
+  const loadReports = useCallback(async () => {
+    setLoadingReports(true)
+    try {
+      const data = await fetchQuestionReports(reportFilter)
+      setReports(data)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingReports(false)
+    }
+  }, [reportFilter])
+
+  useEffect(() => { if (activeTab === 'reports') loadReports() }, [activeTab, loadReports])
+
+  const handleBulkScan = async () => {
+    if (scanning) return
+    setScanning(true)
+    setScanResult(null)
+    setScanError(null)
+    try {
+      const result = await bulkScanQuestions({ limit: 100 })
+      setScanResult(result)
+      setTimeout(() => loadReports(), 1500)
+    } catch (e) {
+      setScanError(e.message || 'Scan failed')
+    } finally {
+      setScanning(false)
+    }
+  }
+
 
   useEffect(() => {
     setActionError(null)
@@ -246,8 +288,136 @@ export default function AdminReviewScreen({ profile }) {
     boxSizing: 'border-box',
   }
 
+  const AI_STATUS_COLORS = {
+    pending:     { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: GOLD },
+    processing:  { bg: 'rgba(99,102,241,0.1)',   border: 'rgba(99,102,241,0.3)',   color: '#a5b4fc' },
+    dismissed:   { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  color: 'rgba(255,255,255,0.35)' },
+    fixed_index: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: '#4ade80' },
+    regenerated: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: '#4ade80' },
+    deleted:     { bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)',   color: '#f87171' },
+    error:       { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: '#f87171' },
+  }
+
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Top-level tab switcher */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {[['drafts', 'Review Queue'], ['reports', 'AI Reports']].map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+              fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.15s',
+              border: `1px solid ${activeTab === tab ? GOLD : 'rgba(255,255,255,0.12)'}`,
+              background: activeTab === tab ? 'rgba(241,190,67,0.08)' : 'transparent',
+              color: activeTab === tab ? GOLD : 'rgba(255,255,255,0.4)',
+            }}
+          >{label}</button>
+        ))}
+      </div>
+
+      {activeTab === 'reports' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <h2 style={{ color: '#fff', margin: 0 }}>
+              AI Reports
+              {!loadingReports && <span style={{ marginLeft: 8, fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>({reports.length})</span>}
+            </h2>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {['all', 'pending', 'processing', 'fixed_index', 'regenerated', 'dismissed', 'error'].map(s => (
+                <button
+                  key={s}
+                  onClick={() => setReportFilter(s)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
+                    fontFamily: FONT_B, cursor: 'pointer',
+                    border: `1px solid ${reportFilter === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                    background: reportFilter === s ? 'rgba(241,190,67,0.08)' : 'transparent',
+                    color: reportFilter === s ? GOLD : 'rgba(255,255,255,0.35)',
+                  }}
+                >{s}</button>
+              ))}
+              <button
+                onClick={loadReports}
+                disabled={loadingReports}
+                style={{
+                  padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
+                  fontFamily: FONT_B, cursor: loadingReports ? 'default' : 'pointer',
+                  border: '1px solid rgba(255,255,255,0.12)', background: 'transparent',
+                  color: 'rgba(255,255,255,0.4)',
+                }}
+              >{loadingReports ? '…' : '↻ Refresh'}</button>
+              <button
+                onClick={handleBulkScan}
+                disabled={scanning}
+                style={{
+                  padding: '5px 14px', borderRadius: 8, fontSize: 12, fontWeight: 800,
+                  fontFamily: FONT_B, cursor: scanning ? 'not-allowed' : 'pointer',
+                  border: 'none', background: scanning ? 'rgba(239,68,68,0.4)' : '#f87171',
+                  color: '#0c1037',
+                }}
+              >{scanning ? 'Scanning…' : '⚡ Bulk Scan'}</button>
+            </div>
+          </div>
+
+          {scanResult && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', color: '#4ade80', fontSize: 13, fontFamily: FONT_B }}>
+              Queued {scanResult.queued} question{scanResult.queued !== 1 ? 's' : ''} for AI review.
+              {scanResult.message ? ` ${scanResult.message}` : ''}
+            </div>
+          )}
+          {scanError && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: '#f87171', fontSize: 13, fontFamily: FONT_B }}>
+              {scanError}
+            </div>
+          )}
+
+          {loadingReports ? (
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading…</div>
+          ) : reports.length === 0 ? (
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
+              No reports{reportFilter !== 'all' ? ` with status "${reportFilter}"` : ''}.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {reports.map(r => {
+                const q = r.questions
+                const sc = AI_STATUS_COLORS[r.ai_status] || AI_STATUS_COLORS.pending
+                return (
+                  <div key={r.id} style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: q ? 6 : 0 }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}>
+                        {r.ai_status}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {q?.question || r.question_id}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+                        {new Date(r.reported_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {r.resolution_note && (
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4, paddingLeft: 4 }}>
+                        {r.resolution_note}
+                        {r.ai_verdict?.explanation ? ` — ${r.ai_verdict.explanation}` : ''}
+                      </div>
+                    )}
+                    {q && (
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 4 }}>
+                        {[q.subject, q.topic, q.subtopic].filter(Boolean).join(' · ')}
+                        {q.difficulty ? ` · D${q.difficulty}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'drafts' && <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
       {/* Left: table */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
@@ -576,6 +746,7 @@ export default function AdminReviewScreen({ profile }) {
           </div>
         </div>
       )}
+      </div>}
     </div>
   )
 }
