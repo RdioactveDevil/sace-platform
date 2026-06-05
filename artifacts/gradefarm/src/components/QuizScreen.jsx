@@ -438,7 +438,7 @@ export default function QuizScreen({
   const handleReport = async () => {
     if (!currentQ || reporting) return
     const qid = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
-    if (reportedIds.has(qid)) return
+    if (!qid || reportedIds.has(qid)) return
     setReporting(true)
     try {
       await reportQuestion(qid)
@@ -1670,7 +1670,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
-                    const alreadyReported = reportedIds.has(qid)
+                    const alreadyReported = !!qid && reportedIds.has(qid)
                     return (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
@@ -1744,7 +1744,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
-                    const alreadyReported = reportedIds.has(qid)
+                    const alreadyReported = !!qid && reportedIds.has(qid)
                     return (
                       <div>
                         <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
