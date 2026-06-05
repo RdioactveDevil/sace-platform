@@ -170,8 +170,13 @@ async function resolveReport(reportId: string, questionId: string) {
       }).eq("id", reportId);
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     logger.error({ err, reportId, questionId }, "[report-question] AI verification failed");
-    await adminDb.from("question_reports").update({ ai_status: "error" }).eq("id", reportId);
+    await adminDb.from("question_reports").update({
+      ai_status: "error",
+      resolution_note: msg,
+      resolved_at: new Date().toISOString(),
+    }).eq("id", reportId);
   }
 }
 
@@ -244,17 +249,34 @@ router.get("/question-reports", async (req, res) => {
   const { adminDb } = ctx;
 
   const status = (req.query.status as string) || "all";
-  let query = (adminDb as any)
+  let query = adminDb
     .from("question_reports")
-    .select("*, questions(id, subject, topic, subtopic, question, options, answer_index, difficulty)")
+    .select("*")
     .order("reported_at", { ascending: false })
     .limit(200);
 
-  if (status !== "all") query = query.eq("ai_status", status);
+  if (status !== "all") query = (query as any).eq("ai_status", status);
 
-  const { data, error } = await query;
+  const { data: reports, error } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.status(200).json({ reports: data || [] });
+
+  // Fetch related questions separately (no FK defined, can't use embedded select)
+  const questionIds = [...new Set((reports || []).map((r: any) => r.question_id).filter(Boolean))];
+  let questionsMap: Record<string, any> = {};
+  if (questionIds.length) {
+    const { data: qs } = await adminDb
+      .from("questions")
+      .select("id, subject, topic, subtopic, question, options, answer_index, difficulty")
+      .in("id", questionIds);
+    (qs || []).forEach((q: any) => { questionsMap[q.id] = q; });
+  }
+
+  const enriched = (reports || []).map((r: any) => ({
+    ...r,
+    questions: questionsMap[r.question_id] ?? null,
+  }));
+
+  res.status(200).json({ reports: enriched });
 });
 
 export default router;
