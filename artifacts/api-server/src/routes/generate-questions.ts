@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
@@ -173,51 +173,21 @@ function extractJsonArray(text = ""): unknown[] {
   }
 }
 
-router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
+type GenResult = { status: number; body: Record<string, unknown> };
 
-  const resolvedSubject: string = subject || stage;
-  // Support both a single topicCode and a topicCodes array
-  const topicCodes: string[] = topicCodesRaw
-    ? (Array.isArray(topicCodesRaw) ? topicCodesRaw : [topicCodesRaw])
-    : topicCodeRaw ? [topicCodeRaw] : [];
-
-  if (!resolvedSubject || !topicCodes.length) {
-    res.status(400).json({ error: "subject (or stage) and topicCode/topicCodes required" });
-    return;
-  }
-
-  // For multi-topic batches run each code in sequence and aggregate
-  if (topicCodes.length > 1) {
-    let totalInserted = 0;
-    const errors: string[] = [];
-    for (const code of topicCodes) {
-      try {
-        const singleRes = await fetch(
-          `http://localhost:${process.env.PORT || 3001}/api/generate-questions`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject: resolvedSubject, topicCode: code, count, difficulty, autoApprove }),
-          }
-        );
-        if (singleRes.ok) {
-          const d = await singleRes.json() as { inserted?: number };
-          totalInserted += d.inserted ?? 0;
-        } else {
-          const d = await singleRes.json() as { error?: string };
-          errors.push(`${code}: ${d.error ?? singleRes.statusText}`);
-        }
-      } catch (err) {
-        errors.push(`${code}: ${(err as Error).message}`);
-      }
-    }
-    res.status(200).json({ inserted: totalInserted, topicsProcessed: topicCodes.length, errors: errors.length ? errors : undefined });
-    return;
-  }
-
-  // Single topic from here
-  const topicCode: string = topicCodes[0];
+// Generate questions for a single subtopic. Returns an HTTP-style status/body
+// so callers can either forward it directly (single-topic request) or inspect
+// it when aggregating a batch (multi-topic request) — all in-process, with no
+// self-referential HTTP calls.
+async function generateForTopic(opts: {
+  adminDb: SupabaseClient;
+  resolvedSubject: string;
+  topicCode: string;
+  count: number;
+  difficulty: string | number;
+  autoApprove: boolean;
+}): Promise<GenResult> {
+  const { adminDb, resolvedSubject, topicCode, count, difficulty, autoApprove } = opts;
 
   // Normalise picker IDs to canonical curriculum names.
   const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
@@ -225,33 +195,28 @@ router.post("/generate-questions", async (req, res) => {
   // All topics use T{n}.{m} format from the managed DB curriculum cache.
   const managedMatch = topicCode.match(/^T(\d+)\.(\d+)$/);
   if (!managedMatch) {
-    res.status(400).json({ error: `Unsupported topic code: ${topicCode}. Please select a topic from the Admin panel (topic codes must be in T{n}.{m} format).` });
-    return;
+    return { status: 400, body: { error: `Unsupported topic code: ${topicCode}. Please select a topic from the Admin panel (topic codes must be in T{n}.{m} format).` } };
   }
 
   const topicIdx    = parseInt(managedMatch[1]) - 1;
   const subtopicIdx = parseInt(managedMatch[2]) - 1;
-  const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
 
   const { data: currRow } = await adminDb
     .from("curricula").select("id").eq("name", normalizedSubject).maybeSingle();
   if (!currRow?.id) {
-    res.status(400).json({ error: `Curriculum not found: ${normalizedSubject}` });
-    return;
+    return { status: 400, body: { error: `Curriculum not found: ${normalizedSubject}` } };
   }
   const { data: tRows } = await adminDb
     .from("curriculum_topics").select("id, name").eq("curriculum_id", currRow.id).order("order_index");
   const tRow = (tRows ?? [])[topicIdx];
   if (!tRow) {
-    res.status(400).json({ error: `Topic T${topicIdx + 1} not found in ${normalizedSubject}` });
-    return;
+    return { status: 400, body: { error: `Topic T${topicIdx + 1} not found in ${normalizedSubject}` } };
   }
   const { data: sRows } = await adminDb
     .from("curriculum_subtopics").select("name").eq("topic_id", tRow.id).order("order_index");
   const sRow = (sRows ?? [])[subtopicIdx];
   if (!sRow) {
-    res.status(400).json({ error: `Subtopic ${topicCode} not found in ${normalizedSubject}` });
-    return;
+    return { status: 400, body: { error: `Subtopic ${topicCode} not found in ${normalizedSubject}` } };
   }
 
   const topicName      = sRow.name;
@@ -371,14 +336,12 @@ router.post("/generate-questions", async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "Failed to reach Claude API");
-    res.status(500).json({ error: "Failed to reach Claude API", detail: (err as Error).message });
-    return;
+    return { status: 500, body: { error: "Failed to reach Claude API", detail: (err as Error).message } };
   }
 
   if (!claudeResponse.ok) {
     const errText = await claudeResponse.text();
-    res.status(500).json({ error: "Claude API error", detail: errText });
-    return;
+    return { status: 500, body: { error: "Claude API error", detail: errText } };
   }
 
   const claudeData = await claudeResponse.json() as { content?: { text: string }[] };
@@ -391,8 +354,7 @@ router.post("/generate-questions", async (req, res) => {
   }>;
 
   if (!questions.length) {
-    res.status(200).json({ inserted: 0, message: "No questions generated" });
-    return;
+    return { status: 200, body: { inserted: 0, message: "No questions generated" } };
   }
 
   // ── autoApprove: insert directly into the live questions table ────────────────
@@ -430,8 +392,7 @@ router.post("/generate-questions", async (req, res) => {
       insertedCount = (insertedData || []).length;
     }
 
-    res.status(200).json({ inserted: insertedCount, questions: newRows });
-    return;
+    return { status: 200, body: { inserted: insertedCount, questions: newRows } };
   }
 
   // ── Default: insert into draft queue for admin review ─────────────────────────
@@ -453,11 +414,64 @@ router.post("/generate-questions", async (req, res) => {
 
   const { error } = await adminDb.from("draft_questions").insert(rows);
   if (error) {
-    res.status(500).json({ error: error.message });
+    return { status: 500, body: { error: error.message } };
+  }
+
+  return { status: 200, body: { inserted: rows.length } };
+}
+
+router.post("/generate-questions", async (req, res) => {
+  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
+
+  const resolvedSubject: string = subject || stage;
+  // Support both a single topicCode and a topicCodes array
+  const topicCodes: string[] = topicCodesRaw
+    ? (Array.isArray(topicCodesRaw) ? topicCodesRaw : [topicCodesRaw])
+    : topicCodeRaw ? [topicCodeRaw] : [];
+
+  if (!resolvedSubject || !topicCodes.length) {
+    res.status(400).json({ error: "subject (or stage) and topicCode/topicCodes required" });
     return;
   }
 
-  res.status(200).json({ inserted: rows.length });
+  const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+
+  // For multi-topic batches run each code in sequence (in-process) and aggregate.
+  // We call generateForTopic directly rather than issuing a self-referential HTTP
+  // request per subtopic — the latter caused intermittent "fetch failed" errors
+  // on large batches (long-lived sockets reset, localhost not always routable).
+  if (topicCodes.length > 1) {
+    let totalInserted = 0;
+    const errors: string[] = [];
+    for (const code of topicCodes) {
+      try {
+        const { status, body } = await generateForTopic({
+          adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove,
+        });
+        if (status === 200) {
+          totalInserted += (body.inserted as number) ?? 0;
+        } else {
+          errors.push(`${code}: ${(body.error as string) ?? `status ${status}`}`);
+        }
+      } catch (err) {
+        logger.error({ err, code }, "Subtopic generation failed");
+        errors.push(`${code}: ${(err as Error).message}`);
+      }
+    }
+    res.status(200).json({ inserted: totalInserted, topicsProcessed: topicCodes.length, errors: errors.length ? errors : undefined });
+    return;
+  }
+
+  // Single topic
+  try {
+    const { status, body } = await generateForTopic({
+      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove,
+    });
+    res.status(status).json(body);
+  } catch (err) {
+    logger.error({ err, topicCode: topicCodes[0] }, "Subtopic generation failed");
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 export default router;
