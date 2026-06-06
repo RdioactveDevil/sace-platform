@@ -436,28 +436,40 @@ router.post("/generate-questions", async (req, res) => {
 
   const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
 
-  // For multi-topic batches run each code in sequence (in-process) and aggregate.
-  // We call generateForTopic directly rather than issuing a self-referential HTTP
-  // request per subtopic — the latter caused intermittent "fetch failed" errors
-  // on large batches (long-lived sockets reset, localhost not always routable).
+  // For multi-topic batches process codes in-process with bounded concurrency
+  // and aggregate. We call generateForTopic directly rather than issuing a
+  // self-referential HTTP request per subtopic — the latter caused intermittent
+  // "fetch failed" errors (localhost not routable on serverless). Running a few
+  // subtopics in parallel keeps wall-clock under the function's maxDuration
+  // without inflating token usage (still one Claude call per subtopic). The
+  // pool is kept small to avoid tripping Claude rate limits.
   if (topicCodes.length > 1) {
+    const CONCURRENCY = Math.min(4, topicCodes.length);
     let totalInserted = 0;
     const errors: string[] = [];
-    for (const code of topicCodes) {
-      try {
-        const { status, body } = await generateForTopic({
-          adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove,
-        });
-        if (status === 200) {
-          totalInserted += (body.inserted as number) ?? 0;
-        } else {
-          errors.push(`${code}: ${(body.error as string) ?? `status ${status}`}`);
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < topicCodes.length) {
+        const code = topicCodes[cursor++];
+        try {
+          const { status, body } = await generateForTopic({
+            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove,
+          });
+          if (status === 200) {
+            totalInserted += (body.inserted as number) ?? 0;
+          } else {
+            errors.push(`${code}: ${(body.error as string) ?? `status ${status}`}`);
+          }
+        } catch (err) {
+          logger.error({ err, code }, "Subtopic generation failed");
+          errors.push(`${code}: ${(err as Error).message}`);
         }
-      } catch (err) {
-        logger.error({ err, code }, "Subtopic generation failed");
-        errors.push(`${code}: ${(err as Error).message}`);
       }
-    }
+    };
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
     res.status(200).json({ inserted: totalInserted, topicsProcessed: topicCodes.length, errors: errors.length ? errors : undefined });
     return;
   }
