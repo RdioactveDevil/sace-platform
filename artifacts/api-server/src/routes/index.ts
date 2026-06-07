@@ -12,6 +12,7 @@ import sessionsRouter from "./sessions";
 import seriesRouter from "./series";
 import subjectStatsRouter from "./subject-stats";
 import reportQuestionRouter from "./report-question";
+import resourcesRouter from "./resources";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(sessionsRouter);
 router.use(seriesRouter);
 router.use(subjectStatsRouter);
 router.use(reportQuestionRouter);
+router.use(resourcesRouter);
 
 export default router;

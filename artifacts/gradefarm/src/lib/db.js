@@ -981,6 +981,58 @@ export async function fetchTutorStudentWritingAttempts(studentId) {
   return json.attempts || []
 }
 
+// ── TUTOR RESOURCES (notes / files / recordings / links) ──────────────────────
+
+const MAX_RESOURCE_BYTES = 100 * 1024 * 1024 // 100 MB
+
+/** Upload a class file to the tutor-resources bucket and return its storage path.
+ *  Files live under <tutorId>/<timestamp>_<name> to satisfy the storage policy.
+ */
+export async function uploadTutorResourceFile(tutorId, file) {
+  if (file.size > MAX_RESOURCE_BYTES) {
+    throw new Error(`File too large (${Math.round((file.size / (1024 * 1024)) * 10) / 10} MB). Max 100 MB.`)
+  }
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${tutorId}/${Date.now()}_${safeName}`
+  const { error } = await supabase.storage
+    .from('tutor-resources')
+    .upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+  if (error) throw new Error(`Upload failed: ${error.message}`)
+  return { storagePath, fileName: file.name, fileSize: file.size, mimeType: file.type || null }
+}
+
+/** Create a tutor resource (file or link). Server validates targets + emails. */
+export async function createTutorResource(payload) {
+  const json = await tutorFetch('/api/tutor/resources', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return json
+}
+
+/** List the calling tutor's resources, enriched with class/student names. */
+export async function fetchTutorResources() {
+  const json = await tutorFetch('/api/tutor/resources')
+  return json.resources || []
+}
+
+/** Delete a tutor resource (also removes the stored file). */
+export async function deleteTutorResource(resourceId) {
+  await tutorFetch(`/api/tutor/resources/${encodeURIComponent(resourceId)}`, { method: 'DELETE' })
+}
+
+/** Resolve a fresh signed download URL (or external link) for a resource. */
+export async function getTutorResourceDownloadUrl(resourceId) {
+  const json = await tutorFetch(`/api/resources/${encodeURIComponent(resourceId)}/download`)
+  return json.url
+}
+
+/** List resources shared with the calling student (includes signed URLs). */
+export async function fetchStudentResources() {
+  const json = await tutorFetch('/api/resources/student')
+  return json.resources || []
+}
+
 /**
  * Fetch a student's full progress summary for a tutor's view.
  * Returns: xp, streak, accuracy, totalAttempts, topicBreakdown[], assignments[], recentActivity[]
