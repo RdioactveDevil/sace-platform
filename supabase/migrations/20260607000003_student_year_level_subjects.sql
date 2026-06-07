@@ -1,18 +1,21 @@
 -- ============================================================================
--- Students tab redesign — year level + tutor-scoped tutored subjects/stages
+-- Students tab redesign — tutor year-level override + tutored-subject selection
 -- ============================================================================
--- A student's school Year level (e.g. "Year 11") is distinct from the SACE
--- Stage of a subject (e.g. "Stage 2 Mathematical Methods"): a Year 11 student
--- can take a Stage 2 subject. A tutor only ever sees the subject(s) they
--- personally tutor a given student in, so those are stored per (tutor, student)
--- rather than derived from the student's own subscriptions.
+-- A student's Year level is collected at onboarding (profiles.year_level) and a
+-- student's subjects/stages at onboarding too (user_subscriptions). This
+-- migration only adds the tutor-relationship layer on top:
+--   • an OPTIONAL year-level override the tutor can set per student, and
+--   • the tutor's SELECTION of which of the student's subjects they tutor
+--     (so a tutor only sees the subject(s) they actually tutor).
+-- Neither duplicates onboarding data — they reference/override it.
 -- ============================================================================
 
--- Year level lives on the roster link so the tutor sets/owns it.
+-- Optional tutor override; falls back to profiles.year_level when null.
 alter table public.tutor_students
   add column if not exists year_level text;
 
--- One row per (tutor, student, subject, stage) the tutor tutors them in.
+-- The tutor's selection — one row per (tutor, student, subject, stage) they tutor.
+-- Populated by picking from the student's own onboarding subscriptions.
 create table if not exists public.tutor_student_subjects (
   id           uuid primary key default gen_random_uuid(),
   tutor_id     uuid not null references public.profiles (id) on delete cascade,

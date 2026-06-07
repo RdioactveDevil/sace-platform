@@ -118,10 +118,12 @@ export default function StudentsTab({ profile, theme }) {
   // Enriched per-student model
   const students = useMemo(() => roster.map(r => {
     const d = details[r.student_id] || {}
-    const subjects = d.subjects || []
+    const subjects = d.tutored || []                         // subjects this tutor tutors
     const stages = [...new Set(subjects.map(s => s.stage).filter(Boolean))]
     const cls = classesByStudent[r.student_id] || []
     const tasks = tasksByStudent[r.student_id] || { pending: 0, overdue: 0 }
+    // Effective year level: tutor override, else the student's onboarding value.
+    const effYear = d.override_year_level || (d.profile_year_level != null ? `Year ${d.profile_year_level}` : '')
     return {
       id: r.student_id,
       name: r.profiles?.display_name || 'Unknown',
@@ -129,7 +131,10 @@ export default function StudentsTab({ profile, theme }) {
       xp: r.profiles?.xp ?? 0,
       streak: r.profiles?.streak ?? 0,
       invited_at: r.invited_at,
-      year_level: d.year_level || '',
+      year_level: effYear,
+      overrideYear: d.override_year_level || '',
+      profileYear: d.profile_year_level ?? null,
+      subscriptions: d.subscriptions || [],
       subjects,
       stages,
       classes: cls,
@@ -374,37 +379,44 @@ export default function StudentsTab({ profile, theme }) {
   )
 }
 
-// ── Inline editor: year level + tutored subjects ───────────────────────────────
+// ── Inline editor: year-level override + pick which subjects you tutor ──────────
 function StudentEditor({ student, theme, onChange }) {
   const t = THEMES[theme]
-  const [year, setYear] = useState(student.year_level || '')
+  const [year, setYear] = useState(student.overrideYear || '')
   const [savingYear, setSavingYear] = useState(false)
-  const [subjects, setSubjects] = useState(student.subjects || [])
-  const [subjName, setSubjName] = useState('')
-  const [subjStage, setSubjStage] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [tutored, setTutored] = useState(student.subjects || [])  // [{id, subject_name, stage}]
+  const [busyKey, setBusyKey] = useState(null)
 
   const ctrl = { padding: '8px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
+  const subKey = (subject_name, stage) => `${subject_name}::${stage || ''}`
+  const tutoredByKey = useMemo(() => {
+    const m = {}
+    for (const s of tutored) m[subKey(s.subject_name, s.stage)] = s
+    return m
+  }, [tutored])
+
+  const firstName = student.name.split(' ')[0]
 
   const saveYear = async (val) => {
     setYear(val); setSavingYear(true)
     try { await setStudentYearLevel(student.id, val) } catch {}
     setSavingYear(false); onChange()
   }
-  const addSubj = async () => {
-    if (!subjName.trim()) return
-    setBusy(true)
+
+  const toggleSubject = async (sub) => {
+    const key = subKey(sub.subject_name, sub.stage)
+    setBusyKey(key)
     try {
-      const s = await addStudentSubject(student.id, subjName.trim(), subjStage || null)
-      if (s) setSubjects(prev => [...prev.filter(p => p.id !== s.id), s])
-      setSubjName(''); setSubjStage('')
+      const existing = tutoredByKey[key]
+      if (existing) {
+        setTutored(prev => prev.filter(p => p.id !== existing.id))
+        await removeStudentSubject(student.id, existing.id)
+      } else {
+        const s = await addStudentSubject(student.id, sub.subject_name, sub.stage || null)
+        if (s) setTutored(prev => [...prev.filter(p => p.id !== s.id), s])
+      }
     } catch {}
-    setBusy(false); onChange()
-  }
-  const removeSubj = async (id) => {
-    setSubjects(prev => prev.filter(p => p.id !== id))
-    try { await removeStudentSubject(student.id, id) } catch {}
-    onChange()
+    setBusyKey(null); onChange()
   }
 
   return (
@@ -412,31 +424,38 @@ function StudentEditor({ student, theme, onChange }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Year level</span>
         <select value={year} onChange={e => saveYear(e.target.value)} style={ctrl}>
-          <option value="">— not set —</option>
-          {YEAR_LEVELS.map(y => <option key={y} value={y}>{y}</option>)}
+          <option value="">{student.profileYear != null ? `From onboarding: Year ${student.profileYear}` : '— not set —'}</option>
+          {YEAR_LEVELS.map(y => <option key={y} value={y}>{y}{student.profileYear != null && `Year ${student.profileYear}` === y ? ' (onboarding)' : ''}</option>)}
         </select>
+        {year && <button onClick={() => saveYear('')} style={{ ...ctrl, cursor: 'pointer', fontSize: 12, color: t.textMuted }}>Reset to onboarding</button>}
         {savingYear && <span style={{ fontSize: 12, color: t.textMuted }}>Saving…</span>}
       </div>
 
       <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Subjects you tutor</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
-          {subjects.length === 0 && <span style={{ fontSize: 13, color: t.textFaint }}>None yet — add the subject &amp; stage you tutor {student.name.split(' ')[0]} in.</span>}
-          {subjects.map(s => (
-            <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 8, background: 'rgba(241,190,67,0.14)', color: GOLD }}>
-              {s.subject_name}{s.stage ? ` · ${s.stage}` : ''}
-              <button onClick={() => removeSubj(s.id)} style={{ border: 'none', background: 'none', color: GOLD, cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-            </span>
-          ))}
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+          Subjects you tutor {firstName} in
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input value={subjName} onChange={e => setSubjName(e.target.value)} placeholder="Subject (e.g. Mathematical Methods)" style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
-          <select value={subjStage} onChange={e => setSubjStage(e.target.value)} style={ctrl}>
-            <option value="">No stage</option>
-            {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <button onClick={addSubj} disabled={busy || !subjName.trim()} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: busy || !subjName.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: busy || !subjName.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: busy || !subjName.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>+ Add</button>
-        </div>
+        {student.subscriptions.length === 0 ? (
+          <span style={{ fontSize: 13, color: t.textFaint }}>{firstName} hasn't picked any subjects at onboarding yet — nothing to select.</span>
+        ) : (
+          <>
+            <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 8 }}>Tick the subject(s) from {firstName}'s enrolled subjects that you tutor them in.</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {student.subscriptions.map(sub => {
+                const key = subKey(sub.subject_name, sub.stage)
+                const on = !!tutoredByKey[key]
+                return (
+                  <button key={key} onClick={() => toggleSubject(sub)} disabled={busyKey === key}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, padding: '7px 12px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B,
+                      border: `1px solid ${on ? GOLD : t.border}`, background: on ? 'rgba(241,190,67,0.14)' : 'transparent', color: on ? GOLD : t.textSub }}>
+                    <span>{on ? '✓' : '+'}</span>
+                    {sub.subject_name}{sub.stage ? ` · ${sub.stage}` : ''}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
