@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
+import StudentsTab from './StudentsTab'
+import OverviewTab from './OverviewTab'
 import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
@@ -28,6 +30,8 @@ import {
   createDiagnosticAssessment,
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
+  fetchTutorResources,
+  fetchTutoringSessions,
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
@@ -59,8 +63,9 @@ function statusColor(s) {
   return GOLD
 }
 
-// ── Students Tab ──────────────────────────────────────────────────────────────
-function StudentsTab({ profile, theme }) {
+// ── (legacy Students Tab — superseded by ./StudentsTab.jsx; kept out of the tree) ──
+// eslint-disable-next-line no-unused-vars
+function _LegacyStudentsTab({ profile, theme }) {
   const t = THEMES[theme]
   const [roster, setRoster]       = useState([])
   const [emails, setEmails]       = useState({})
@@ -2033,65 +2038,251 @@ function DiagnosticTab({ profile, theme }) {
 
 const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam Style' }
 
-// ── Main TutorScreen ──────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'students',    label: 'Students',    icon: '👥' },
-  { id: 'classes',     label: 'Classes',     icon: '🏫' },
-  { id: 'assignments', label: 'Assignments', icon: '📋' },
-  { id: 'sessions',    label: 'Sessions',    icon: '📹' },
-  { id: 'resources',   label: 'Resources',   icon: '📁' },
-  { id: 'progress',    label: 'Progress',    icon: '📊' },
-  { id: 'diagnostic',  label: 'Diagnostic',  icon: '🧪' },
+// ── Main TutorScreen — sidebar shell ───────────────────────────────────────────
+const NAV_GROUPS = [
+  { label: 'Main', items: [
+    { id: 'overview',    label: 'Overview',    icon: '▩' },
+    { id: 'students',    label: 'Students',    icon: '👥' },
+    { id: 'classes',     label: 'Classes',     icon: '🏫' },
+  ]},
+  { label: 'Teaching', items: [
+    { id: 'assignments', label: 'Assignments', icon: '📋' },
+    { id: 'sessions',    label: 'Sessions',    icon: '📹' },
+    { id: 'resources',   label: 'Resources',   icon: '📁' },
+  ]},
+  { label: 'Insights', items: [
+    { id: 'progress',    label: 'Progress',    icon: '📊' },
+    { id: 'diagnostic',  label: 'Diagnostic',  icon: '🧪' },
+  ]},
 ]
+const SECTION_META = {
+  overview:    { title: 'Overview',    sub: "Welcome back — here's what needs you today." },
+  students:    { title: 'Students',    sub: 'Your roster, performance & open tasks at a glance.' },
+  classes:     { title: 'Classes',     sub: 'Group students for assignments & sessions.' },
+  assignments: { title: 'Assignments', sub: 'Create, batch-assign and track work.' },
+  sessions:    { title: 'Sessions',    sub: 'Live video lessons — one-off & recurring.' },
+  resources:   { title: 'Resources',   sub: 'Notes, files & class recordings.' },
+  progress:    { title: 'Progress',    sub: 'Per-student analytics & reports.' },
+  diagnostic:  { title: 'Diagnostic',  sub: 'AI-built diagnostic assessments.' },
+}
 
 export default function TutorScreen({ profile, theme, subject }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('students')
+  const [activeTab, setActiveTab] = useState('overview')
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileNav, setMobileNav] = useState(false)
 
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, color: t.text, minHeight: 0 }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
+  // Shell-level data — powers Overview, the global search and sidebar badges.
+  const [roster, setRoster] = useState([])
+  const [classes, setClasses] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [resources, setResources] = useState([])
+  const [sessions, setSessions] = useState([])
 
-      {/* Tab nav — fixed header, matches sidebar dark surface */}
-      <div style={{ display: 'flex', gap: 2, padding: '0 24px', borderBottom: `1px solid ${t.border}`, background: t.bgNav, flexShrink: 0 }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '14px 20px',
-              borderRadius: 0,
-              border: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: FONT_B,
-              color: activeTab === tab.id ? GOLD : t.textMuted,
-              background: 'transparent',
-              borderBottom: activeTab === tab.id ? `2px solid ${GOLD}` : '2px solid transparent',
-              transition: 'color 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={e => { if (activeTab !== tab.id) e.currentTarget.style.color = t.text }}
-            onMouseLeave={e => { if (activeTab !== tab.id) e.currentTarget.style.color = t.textMuted }}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      fetchRoster(profile.id).catch(() => []),
+      fetchTutorClasses().catch(() => []),
+      fetchAssignmentsForTutor(profile.id).catch(() => []),
+      fetchTutorResources().catch(() => []),
+      fetchTutoringSessions({ limit: 50 }).catch(() => []),
+    ]).then(([r, c, a, res, s]) => {
+      if (cancelled) return
+      setRoster(r); setClasses(c); setAssignments(a); setResources(res); setSessions(s || [])
+    })
+    return () => { cancelled = true }
+  }, [profile.id])
+
+  const overdueCount = useMemo(
+    () => assignments.filter(a => !a.completed_at && a.due_date && new Date(a.due_date).setHours(23,59,59,999) < Date.now()).length,
+    [assignments],
+  )
+  const badges = { students: roster.length || null, assignments: overdueCount || null }
+
+  const go = (id) => { setActiveTab(id); setMobileNav(false) }
+
+  const SIDEBAR_W = collapsed ? 74 : 248
+  const meta = SECTION_META[activeTab] || { title: '', sub: '' }
+
+  const sidebar = (
+    <aside style={{
+      width: SIDEBAR_W, flexShrink: 0, background: t.bgNav, borderRight: `1px solid ${t.border}`,
+      display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 14px' }}>
+        <span style={{ fontFamily: FONT_D, fontSize: 22, fontWeight: 900, color: GOLD, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+          {collapsed ? 'g.' : <>gradefarm<span style={{ color: theme === 'dark' ? '#fff' : '#fff' }}>.</span></>}
+        </span>
       </div>
-
-      {/* Tab content — scrollable, full width with a generous max-width cap */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 48px' }}>
-        <div style={{ maxWidth: 960, width: '100%' }}>
-          {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
-          {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
-          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} />}
-          {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
-          {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
-          {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
-          {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+        {NAV_GROUPS.map(group => (
+          <div key={group.label} style={{ marginTop: 12 }}>
+            {!collapsed && (
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.textFaint, padding: '6px 10px' }}>{group.label}</div>
+            )}
+            {group.items.map(item => {
+              const active = activeTab === item.id
+              const badge = badges[item.id]
+              return (
+                <button key={item.id} onClick={() => go(item.id)} title={collapsed ? item.label : undefined}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                    padding: '10px 12px', borderRadius: 10, margin: '2px 0', cursor: 'pointer',
+                    fontFamily: FONT_B, fontSize: 14, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
+                    color: active ? GOLD : t.textSub,
+                    background: active ? 'rgba(241,190,67,0.12)' : 'transparent',
+                    border: `1px solid ${active ? 'rgba(241,190,67,0.25)' : 'transparent'}`,
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = t.bgHover }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ width: 20, textAlign: 'center', fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
+                  {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
+                  {!collapsed && badge != null && (
+                    <span style={{ background: item.id === 'assignments' ? t.danger : t.bgHover, color: item.id === 'assignments' ? '#fff' : t.textSub, fontSize: 11, fontWeight: 800, borderRadius: 20, padding: '1px 7px' }}>{badge}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </nav>
+      <div style={{ padding: 12, borderTop: `1px solid ${t.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+            {(profile.display_name || '?')[0].toUpperCase()}
+          </div>
+          {!collapsed && (
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
+              <div style={{ fontSize: 11, color: t.textMuted }}>Tutor</div>
+            </div>
+          )}
         </div>
       </div>
+    </aside>
+  )
+
+  return (
+    <div style={{ flex: 1, display: 'flex', background: t.bg, fontFamily: FONT_B, color: t.text, minHeight: 0 }}>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
+        @media (max-width: 860px){ .tutor-desktop-sidebar{ display:none !important; } }
+        @media (min-width: 861px){ .tutor-mobile-only{ display:none !important; } }`}</style>
+
+      {/* Desktop sidebar */}
+      <div className="tutor-desktop-sidebar" style={{ display: 'flex', height: '100vh', position: 'sticky', top: 0 }}>{sidebar}</div>
+
+      {/* Mobile drawer */}
+      {mobileNav && (
+        <div className="tutor-mobile-only" style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex' }}>
+          <div style={{ height: '100%' }}>{sidebar}</div>
+          <div onClick={() => setMobileNav(false)} style={{ flex: 1, background: 'rgba(0,0,0,0.5)' }} />
+        </div>
+      )}
+
+      {/* Main column */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        {/* Top bar */}
+        <header style={{
+          position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14,
+          padding: '12px 24px', borderBottom: `1px solid ${t.border}`,
+          background: theme === 'dark' ? 'rgba(38,42,64,0.85)' : 'rgba(248,249,255,0.85)', backdropFilter: 'blur(8px)',
+        }}>
+          <button onClick={() => { window.innerWidth <= 860 ? setMobileNav(v => !v) : setCollapsed(v => !v) }}
+            style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>☰</button>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 800, color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.sub}</div>
+          </div>
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
+          </div>
+        </header>
+
+        {/* Section content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
+          <div style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+            {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
+            {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
+            {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
+            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} />}
+            {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
+            {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
+            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
+            {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Global search (students · classes · resources · assignments) ───────────────
+function GlobalSearch({ theme, roster, classes, resources, assignments, onNavigate }) {
+  const t = THEMES[theme]
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+
+  useEffect(() => {
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  const results = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return []
+    const out = []
+    for (const r of roster) {
+      const name = r.profiles?.display_name || ''
+      if (name.toLowerCase().includes(term)) out.push({ kind: 'Student', icon: '👤', label: name, to: 'students' })
+    }
+    for (const c of classes) {
+      if ((c.name || '').toLowerCase().includes(term)) out.push({ kind: 'Class', icon: '🏫', label: c.name, to: 'classes' })
+    }
+    for (const r of resources) {
+      if ((r.title || '').toLowerCase().includes(term)) out.push({ kind: 'Resource', icon: '📁', label: r.title, to: 'resources' })
+    }
+    for (const a of assignments) {
+      const lbl = `${a.type} — ${(a.topics || []).join(', ') || a.subject}`
+      if (lbl.toLowerCase().includes(term)) out.push({ kind: 'Assignment', icon: '📋', label: lbl, to: 'assignments' })
+    }
+    return out.slice(0, 12)
+  }, [q, roster, classes, resources, assignments])
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', width: 'min(320px, 46vw)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.bgInput, border: `1px solid ${open ? GOLD : t.border}`, borderRadius: 10, padding: '8px 12px' }}>
+        <span style={{ color: t.textMuted, fontSize: 13 }}>🔎</span>
+        <input
+          value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search students, classes, resources…"
+          style={{ border: 'none', background: 'transparent', outline: 'none', color: t.text, fontFamily: FONT_B, fontSize: 13, width: '100%' }}
+        />
+      </div>
+      {open && q.trim() && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto' }}>
+          {results.length === 0 ? (
+            <div style={{ padding: '14px 16px', fontSize: 13, color: t.textMuted }}>No matches for “{q.trim()}”.</div>
+          ) : results.map((r, i) => (
+            <button key={i} onClick={() => { onNavigate(r.to); setOpen(false); setQ('') }}
+              style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: `1px solid ${t.border}`, background: 'transparent', cursor: 'pointer', fontFamily: FONT_B }}
+              onMouseEnter={e => e.currentTarget.style.background = t.bgHover}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <span style={{ fontSize: 16 }}>{r.icon}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: t.textMuted, letterSpacing: '0.05em' }}>{r.kind}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

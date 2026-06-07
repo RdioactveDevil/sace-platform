@@ -996,6 +996,38 @@ export async function fetchTutorStudentWritingAttempts(studentId) {
   return json.attempts || []
 }
 
+// ── Roster details: year level + tutor-scoped tutored subjects ────────────────
+
+/** { byStudent: { [id]: { year_level, subjects:[{id,subject_name,stage}] } } } */
+export async function fetchRosterDetails() {
+  const json = await tutorFetch('/api/tutor/roster-details')
+  return json.byStudent || {}
+}
+
+/** Set a roster student's Year level. */
+export async function setStudentYearLevel(studentId, yearLevel) {
+  return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/details`, {
+    method: 'PATCH',
+    body: JSON.stringify({ year_level: yearLevel }),
+  })
+}
+
+/** Add a subject + stage the tutor tutors this student in. */
+export async function addStudentSubject(studentId, subjectName, stage) {
+  const json = await tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/subjects`, {
+    method: 'POST',
+    body: JSON.stringify({ subject_name: subjectName, stage }),
+  })
+  return json.subject
+}
+
+/** Remove a tutored subject by its id. */
+export async function removeStudentSubject(studentId, subjectId) {
+  await tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/subjects/${encodeURIComponent(subjectId)}`, {
+    method: 'DELETE',
+  })
+}
+
 // ── TUTOR RESOURCES (notes / files / recordings / links) ──────────────────────
 
 const MAX_RESOURCE_BYTES = 5 * 1024 * 1024 * 1024  // 5 GB (resumable uploads)
