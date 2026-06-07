@@ -130,7 +130,7 @@ function _LegacyStudentsTab({ profile, theme }) {
     }
   }
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -385,7 +385,7 @@ function AssignmentsTab({ profile, theme, subject }) {
     return true
   })
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
@@ -745,7 +745,7 @@ function ProgressTab({ profile, theme }) {
       .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
   }, [selectedStudentId, profile.id])
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1057,7 +1057,7 @@ function ClassesTab({ profile, theme }) {
     } catch {}
   }
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (

@@ -24,33 +24,33 @@ function fmtDateTime(iso) {
   })
 }
 
-function statusColor(status) {
-  if (status === 'active')    return { bg: '#1e3a2f', text: '#4ade80' }
-  if (status === 'completed') return { bg: '#1e2a3a', text: '#60a5fa' }
-  if (status === 'cancelled') return { bg: '#2a1a1a', text: '#f87171' }
-  return { bg: '#2a2a1a', text: GOLD }
+function statusColor(status, t) {
+  if (status === 'active')    return { bg: t.successBg, text: t.success }
+  if (status === 'completed') return { bg: t.blueBg, text: t.blue }
+  if (status === 'cancelled') return { bg: t.dangerBg, text: t.danger }
+  return { bg: 'rgba(241,190,67,0.14)', text: GOLD }
 }
 
-function StatusBadge({ status }) {
-  const { bg, text } = statusColor(status)
+function StatusBadge({ status, t }) {
+  const { bg, text } = statusColor(status, t)
   return (
-    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', fontFamily: FONT_B }}>
+    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: FONT_B }}>
       {status}
     </span>
   )
 }
 
 /** Recording status pill — reflects LiveKit Egress state for a session. */
-function RecordingBadge({ session }) {
+function RecordingBadge({ session, t }) {
   const rs = session.recording_status
   let label, bg, text
-  if (rs === 'recording')      { label = '🔴 Recording';        bg = '#2a1a1a'; text = '#f87171' }
-  else if (rs === 'ready')     { label = '🎬 Recorded';         bg = '#1e2a3a'; text = '#60a5fa' }
-  else if (rs === 'failed')    { label = '⚠ Recording failed';  bg = '#2a2320'; text = '#fbbf24' }
-  else if (session.record_session) { label = '● Will record';   bg = '#2a2a1a'; text = GOLD }
+  if (rs === 'recording')          { label = '🔴 Recording';       bg = t.dangerBg;  text = t.danger }
+  else if (rs === 'ready')         { label = '🎬 Recorded';        bg = t.blueBg;    text = t.blue }
+  else if (rs === 'failed')        { label = '⚠ Recording failed'; bg = t.dangerBg;  text = t.danger }
+  else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = GOLD }
   else return null
   return (
-    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, fontFamily: FONT_B }}>
+    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B }}>
       {label}
     </span>
   )
@@ -431,8 +431,8 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
 
   return (
     <div style={{
-      background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 12,
-      padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20,
+      background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard,
+      padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 20,
       flexWrap: 'wrap',
     }}>
       <div style={{ flex: 1, minWidth: 200 }}>
@@ -440,8 +440,8 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
           <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>
             {session.title || 'Tutoring Session'}
           </span>
-          <StatusBadge status={session.status} />
-          <RecordingBadge session={session} />
+          <StatusBadge status={session.status} t={t} />
+          <RecordingBadge session={session} t={t} />
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <span>
@@ -507,7 +507,7 @@ function SeriesCard({ series, theme, onCancel }) {
   }
 
   return (
-    <div style={{ background: t.bgNav, border: `1px solid ${GOLD}33`, borderRadius: 12, padding: '20px 24px' }}>
+    <div style={{ background: t.bgCard, border: `1px solid ${GOLD}33`, borderRadius: 16, boxShadow: t.shadowCard, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
@@ -632,29 +632,19 @@ export default function SessionsTab({ profile, theme }) {
     <div style={{ fontFamily: FONT_B, color: t.text }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>📹 Video Sessions</h2>
-          <p style={{ margin: 0, color: t.textMuted, fontSize: 14 }}>
-            Schedule live video calls with your students.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{ background: GOLD, color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '11px 20px', fontSize: 14, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer' }}
-        >
-          + Schedule Session
-        </button>
-      </div>
-
-      {/* View toggle: Sessions vs Recurring */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      {/* Toolbar: view toggle + primary action (page title lives in the shell top bar) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         <button style={tabBtn('sessions', 'Sessions')} onClick={() => setView('sessions')}>
           Sessions {sessions.length > 0 && `(${sessions.length})`}
         </button>
         <button style={tabBtn('recurring', 'Recurring')} onClick={() => setView('recurring')}>
           🔁 Recurring {seriesList.length > 0 && `(${seriesList.length})`}
+        </button>
+        <button
+          onClick={() => setShowModal(true)}
+          style={{ marginLeft: 'auto', background: `linear-gradient(135deg,${GOLD},#f9d87a)`, color: '#0c1037', border: 'none', borderRadius: 9, padding: '10px 18px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer' }}
+        >
+          + Schedule session
         </button>
       </div>
 
