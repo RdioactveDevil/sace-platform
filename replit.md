@@ -37,6 +37,15 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - `SUPABASE_SERVICE_KEY` — for admin operations (question generation, PDF extraction)
 - `RESEND_API_KEY` — for sending tutor→student email notifications (resend.com)
 - Note: Resend Replit integration was dismissed by user; API key stored directly as a secret instead
+- `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` — live video sessions (LiveKit)
+- Session auto-recording (LiveKit Egress → tutor-resources bucket) also needs:
+  - `SUPABASE_S3_ACCESS_KEY_ID` / `SUPABASE_S3_SECRET_ACCESS_KEY` / `SUPABASE_S3_REGION` — Supabase Storage S3 access keys (Supabase dashboard → Storage → S3 connection)
+  - `SUPABASE_S3_ENDPOINT` — optional; defaults to `<project>.supabase.co/storage/v1/s3`
+  - LiveKit dashboard → Webhooks → point at `https://<app>/api/livekit/webhook` (the API verifies the signature with LIVEKIT_API_SECRET)
+
+### Tutor Resources & Session Recordings
+- **Resources tab** (`/tutor` → 📁 Resources): tutors upload notes/worksheets/slides/PDFs/images to the private `tutor-resources` Supabase Storage bucket, or paste external links (recordings on Zoom/Drive/Loom/YouTube). Each resource targets a single student, a class, or the whole roster, with optional Resend email notification. Students see a "Class Resources" card on Home (`fetchStudentResources`).
+- **Auto-recording**: toggling "Record this session" on a one-off session sets `tutoring_sessions.record_session`. On the LiveKit `room_started` webhook the API starts a Room Composite Egress (MP4 → tutor-resources bucket); on `egress_ended` it publishes a `tutor_resources` row of type `recording` shared with the session's audience. Recordings of multi-GB video are best done this way (or via links) rather than direct uploads, which are capped at 100 MB.
 
 ### Custom Assets
 - `artifacts/gradefarm/public/SIFONN_PRO.otf` — custom Sifonn Pro font used for the brand logo

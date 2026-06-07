@@ -13,6 +13,7 @@ import seriesRouter from "./series";
 import subjectStatsRouter from "./subject-stats";
 import reportQuestionRouter from "./report-question";
 import resourcesRouter from "./resources";
+import livekitRouter from "./livekit";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(seriesRouter);
 router.use(subjectStatsRouter);
 router.use(reportQuestionRouter);
 router.use(resourcesRouter);
+router.use(livekitRouter);
 
 export default router;

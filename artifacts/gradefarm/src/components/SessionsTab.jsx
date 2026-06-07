@@ -58,6 +58,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   const [duration, setDuration] = useState(60)
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
+  const [recordSession, setRecordSession] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [createdLink, setCreatedLink] = useState(null)
@@ -113,6 +114,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           duration_minutes: duration,
           title: title || undefined,
           notes: notes || undefined,
+          record_session: recordSession,
         })
         onCreated({ session })
         const link = session.join_link || `${window.location.origin}/session/${session.id}`
@@ -353,6 +355,23 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             <label style={labelStyle}>Notes for {isGroup ? 'students' : 'student'}</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
+
+          {/* Record toggle — one-off sessions only */}
+          {!isRecurring && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔴 Record this session</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Saved to Resources automatically when the class ends</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecordSession(r => !r)}
+                style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, background: recordSession ? GOLD : t.border, position: 'relative', transition: 'background 0.2s' }}
+              >
+                <span style={{ position: 'absolute', top: 3, left: recordSession ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+              </button>
+            </div>
+          )}
 
           {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
 

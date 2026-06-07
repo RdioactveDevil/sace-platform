@@ -1,7 +1,16 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+import {
+  AccessToken,
+  RoomServiceClient,
+  EgressClient,
+  EncodedFileOutput,
+  EncodedFileType,
+  S3Upload,
+} from "livekit-server-sdk";
 import { Resend } from "resend";
+
+export const RECORDING_BUCKET = "tutor-resources";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -37,6 +46,81 @@ function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   if (!key) return null;
   return new Resend(key);
+}
+
+/** S3-compatible storage config for LiveKit Egress (defaults to Supabase Storage's S3 gateway). */
+function getEgressS3Config() {
+  const accessKey = process.env.SUPABASE_S3_ACCESS_KEY_ID;
+  const secret = process.env.SUPABASE_S3_SECRET_ACCESS_KEY;
+  const region = process.env.SUPABASE_S3_REGION;
+  // Supabase exposes an S3 gateway at <project>.supabase.co/storage/v1/s3
+  const endpoint = process.env.SUPABASE_S3_ENDPOINT || `${SUPABASE_URL}/storage/v1/s3`;
+  return { accessKey, secret, region, endpoint };
+}
+
+/** Whether session recording can run (LiveKit + S3 destination both configured). */
+function recordingEnabled(): boolean {
+  const { apiKey, apiSecret } = getLiveKitConfig();
+  const { accessKey, secret, region } = getEgressS3Config();
+  return !!(apiKey && apiSecret && accessKey && secret && region);
+}
+
+/**
+ * Start a Room Composite Egress that writes an MP4 into the tutor-resources
+ * bucket. Returns the egress id + the storage key the file will land at, or
+ * null if recording is not configured / fails to start.
+ */
+export async function startSessionRecording(
+  roomName: string,
+  tutorId: string,
+  sessionId: string,
+): Promise<{ egressId: string; storagePath: string } | null> {
+  const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
+  const { accessKey, secret, region, endpoint } = getEgressS3Config();
+  if (!apiKey || !apiSecret || !accessKey || !secret || !region) return null;
+
+  // Egress connects to LiveKit's HTTPS API, not the wss endpoint.
+  const httpUrl = wsUrl.replace(/^ws/, "http");
+  const egressClient = new EgressClient(httpUrl, apiKey, apiSecret);
+
+  const storagePath = `${tutorId}/recordings/${sessionId}-${Date.now()}.mp4`;
+  const output = new EncodedFileOutput({
+    fileType: EncodedFileType.MP4,
+    filepath: storagePath,
+    disableManifest: true,
+    output: {
+      case: "s3",
+      value: new S3Upload({
+        accessKey,
+        secret,
+        region,
+        endpoint,
+        bucket: RECORDING_BUCKET,
+        forcePathStyle: true,
+      }),
+    },
+  });
+
+  try {
+    const info = await egressClient.startRoomCompositeEgress(roomName, output);
+    if (!info?.egressId) return null;
+    return { egressId: info.egressId, storagePath };
+  } catch {
+    return null;
+  }
+}
+
+/** Stop an in-progress egress. Best-effort. */
+async function stopSessionRecording(egressId: string): Promise<void> {
+  const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
+  if (!apiKey || !apiSecret) return;
+  const httpUrl = wsUrl.replace(/^ws/, "http");
+  const egressClient = new EgressClient(httpUrl, apiKey, apiSecret);
+  try {
+    await egressClient.stopEgress(egressId);
+  } catch {
+    // Already stopped / not found — ignore.
+  }
 }
 
 function escapeHtml(str: string): string {
@@ -194,6 +278,7 @@ router.post("/sessions", async (req: Request, res: Response) => {
     duration_minutes = 60,
     title,
     notes,
+    record_session = false,
   } = req.body as {
     session_type?: "individual" | "group";
     student_id?: string;
@@ -203,6 +288,7 @@ router.post("/sessions", async (req: Request, res: Response) => {
     duration_minutes?: number;
     title?: string;
     notes?: string;
+    record_session?: boolean;
   };
 
   if (!scheduled_at) {
@@ -278,6 +364,7 @@ router.post("/sessions", async (req: Request, res: Response) => {
       title: title ?? null,
       notes: notes ?? null,
       status: "scheduled",
+      record_session: !!record_session,
     })
     .select()
     .single();
@@ -540,7 +627,7 @@ router.post("/sessions/:id/end", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { data: session, error } = await ctx.admin
     .from("tutoring_sessions")
-    .select("tutor_id, livekit_room_name, status")
+    .select("tutor_id, livekit_room_name, status, recording_egress_id, recording_status")
     .eq("id", id)
     .single();
 
@@ -552,6 +639,11 @@ router.post("/sessions/:id/end", async (req: Request, res: Response) => {
   if (session.tutor_id !== ctx.userId) {
     res.status(403).json({ error: "Only the tutor can end a session" });
     return;
+  }
+
+  // Stop any in-progress recording so the file finalizes and uploads.
+  if (session.recording_egress_id && session.recording_status === "recording") {
+    await stopSessionRecording(session.recording_egress_id);
   }
 
   const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
