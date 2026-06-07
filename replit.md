@@ -37,6 +37,16 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - `SUPABASE_SERVICE_KEY` — for admin operations (question generation, PDF extraction)
 - `RESEND_API_KEY` — for sending tutor→student email notifications (resend.com)
 - Note: Resend Replit integration was dismissed by user; API key stored directly as a secret instead
+- `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` — live video sessions (LiveKit)
+- Session auto-recording (LiveKit Egress → tutor-resources bucket) also needs:
+  - `SUPABASE_S3_ACCESS_KEY_ID` / `SUPABASE_S3_SECRET_ACCESS_KEY` / `SUPABASE_S3_REGION` — Supabase Storage S3 access keys (Supabase dashboard → Storage → S3 connection)
+  - `SUPABASE_S3_ENDPOINT` — optional; defaults to `<project>.supabase.co/storage/v1/s3`
+  - LiveKit dashboard → Webhooks → point at `https://<app>/api/livekit/webhook` (the API verifies the signature with LIVEKIT_API_SECRET)
+
+### Tutor Resources & Session Recordings
+- **Resources tab** (`/tutor` → 📁 Resources): tutors upload notes/worksheets/slides/PDFs/images/video to the private `tutor-resources` Supabase Storage bucket, or paste external links (recordings on Zoom/Drive/Loom/YouTube). Each resource targets a single student, a class, or the whole roster, with optional Resend email notification. Students see a "Class Resources" card on Home (`fetchStudentResources`).
+- **Large uploads**: files ≤6 MB use a standard upload; larger files (up to 5 GB) switch to resumable TUS uploads (`tus-js-client` → Supabase `/storage/v1/upload/resumable`) with a live progress bar. The bucket `file_size_limit` is 5 GB.
+- **Auto-recording**: toggling "Record this session" sets `record_session` on the one-off session (or on the series + every generated occurrence). On the LiveKit `room_started` webhook the API picks the active/nearest occurrence for that room and starts a Room Composite Egress (MP4 → tutor-resources bucket); on `egress_ended` it publishes a `tutor_resources` row of type `recording` shared with the session's audience. Recurring series reuse one room, so the webhook selects the right occurrence per run. Recording status surfaces as a badge on the session card (Will record / Recording / Recorded / Failed).
 
 ### Custom Assets
 - `artifacts/gradefarm/public/SIFONN_PRO.otf` — custom Sifonn Pro font used for the brand logo

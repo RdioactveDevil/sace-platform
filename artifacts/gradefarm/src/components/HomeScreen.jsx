@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
-import { getAssessments, fetchAssignmentsForStudent } from '../lib/db'
+import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/saceTopics'
 import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
@@ -26,11 +26,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [examDuration, setExamDuration] = useState(45)
   const [assessments, setAssessments] = useState([])
   const [assignments, setAssignments] = useState([])
+  const [resources, setResources] = useState([])
 
   useEffect(() => {
     let cancelled = false
     getAssessments(profile.id).then(rows => { if (!cancelled) setAssessments(rows) }).catch(() => {})
     fetchAssignmentsForStudent(profile.id).then(rows => { if (!cancelled) setAssignments(rows) }).catch(() => {})
+    fetchStudentResources().then(rows => { if (!cancelled) setResources(rows) }).catch(() => {})
     return () => { cancelled = true }
   }, [profile.id, assignmentsVersion])
 
@@ -339,6 +341,40 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
         {assignments.length > 5 && (
           <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{assignments.length - 5} more tasks</div>
+        )}
+      </div>
+    )
+  }
+
+  const RESOURCE_ICONS = { notes: '📝', worksheet: '📄', recording: '🎥', slides: '📊', resource: '📁', link: '🔗' }
+  const ClassResourcesCard = () => {
+    if (resources.length === 0) return null
+    return (
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2 }}>📁 Class Resources</div>
+        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Notes, files & recordings from your tutor</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {resources.slice(0, 6).map(r => (
+            <a
+              key={r.id}
+              href={r.download_url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}`, textDecoration: 'none' }}
+            >
+              <div style={{ fontSize: 18, flexShrink: 0 }}>{RESOURCE_ICONS[r.type] || '📁'}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.tutor_name}{r.kind === 'link' ? ' · link' : ''}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, flexShrink: 0 }}>{r.kind === 'link' ? 'Open' : 'Download'}</div>
+            </a>
+          ))}
+        </div>
+        {resources.length > 6 && (
+          <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{resources.length - 6} more</div>
         )}
       </div>
     )
@@ -763,6 +799,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
           <div className="hs-mobile-cards">
             <AssignedTasksCard />
+            <ClassResourcesCard />
             <ExamCountdownCard />
             <MissionsCard />
             <PriorityCard />
@@ -773,6 +810,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
         <div className="hs-right">
           <AssignedTasksCard />
+          <ClassResourcesCard />
           <ExamCountdownCard />
           <MissionsCard />
           <PriorityCard />
