@@ -75,20 +75,45 @@ router.post(
   },
 );
 
+interface OccurrenceRow {
+  id: string;
+  tutor_id: string;
+  status: string | null;
+  scheduled_at: string | null;
+  recording_status: string | null;
+}
+
 async function handleRoomStarted(admin: SupabaseClient, roomName: string): Promise<void> {
-  const { data: session } = await admin
+  // A one-off session has a unique room; a recurring series reuses one room
+  // across all of its occurrences. Select the occurrences that still want
+  // recording and pick the one actually happening now.
+  const { data: candidates } = await admin
     .from("tutoring_sessions")
-    .select("id, tutor_id, record_session, recording_status, livekit_room_name")
+    .select("id, tutor_id, status, scheduled_at, recording_status")
     .eq("livekit_room_name", roomName)
-    .maybeSingle<Pick<SessionRow, "id" | "tutor_id" | "record_session" | "recording_status" | "livekit_room_name">>();
+    .eq("record_session", true)
+    .is("recording_status", null)
+    .returns<OccurrenceRow[]>();
 
-  if (!session || !session.record_session) return;
-  // Already recording or finished — don't start a second egress.
-  if (session.recording_status === "recording" || session.recording_status === "ready") return;
+  if (!candidates || candidates.length === 0) return;
 
-  const started = await startSessionRecording(roomName, session.tutor_id, session.id);
+  // Prefer the occurrence the token endpoint marked active; else the one whose
+  // scheduled time is nearest to now.
+  const now = Date.now();
+  const target =
+    candidates.find((s) => s.status === "active") ??
+    candidates
+      .slice()
+      .sort(
+        (a, b) =>
+          Math.abs(new Date(a.scheduled_at ?? 0).getTime() - now) -
+          Math.abs(new Date(b.scheduled_at ?? 0).getTime() - now),
+      )[0];
+  if (!target) return;
+
+  const started = await startSessionRecording(roomName, target.tutor_id, target.id);
   if (!started) {
-    await admin.from("tutoring_sessions").update({ recording_status: "failed" }).eq("id", session.id);
+    await admin.from("tutoring_sessions").update({ recording_status: "failed" }).eq("id", target.id);
     return;
   }
   await admin
@@ -98,7 +123,7 @@ async function handleRoomStarted(admin: SupabaseClient, roomName: string): Promi
       recording_storage_path: started.storagePath,
       recording_status: "recording",
     })
-    .eq("id", session.id);
+    .eq("id", target.id);
 }
 
 interface EgressInfoLike {

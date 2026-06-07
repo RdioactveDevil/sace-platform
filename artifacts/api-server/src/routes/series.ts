@@ -124,6 +124,7 @@ router.post("/series", async (req: Request, res: Response) => {
     notes,
     starts_at,
     ends_at,
+    record_session = false,
   } = req.body as {
     session_type?: "individual" | "group";
     student_id?: string;
@@ -138,6 +139,7 @@ router.post("/series", async (req: Request, res: Response) => {
     notes?: string;
     starts_at: string;
     ends_at?: string;
+    record_session?: boolean;
   };
 
   if (!recurrence_type || day_of_week === undefined || !time_of_day || !starts_at) {
@@ -195,6 +197,7 @@ router.post("/series", async (req: Request, res: Response) => {
     starts_at,
     ends_at: ends_at ?? null,
     status: "active",
+    record_session: !!record_session,
   }).select().single();
 
   if (seriesErr || !series) {
@@ -232,6 +235,7 @@ router.post("/series", async (req: Request, res: Response) => {
       notes: notes ?? null,
       status: "scheduled",
       series_id: series.id,
+      record_session: !!record_session,
     }));
 
     const { data: insertedSessions } = await ctx.admin
@@ -425,6 +429,7 @@ router.post("/series/:id/extend", async (req: Request, res: Response) => {
     notes: series.notes ?? null,
     status: "scheduled",
     series_id: id,
+    record_session: !!series.record_session,
   }));
 
   const { data: inserted } = await ctx.admin

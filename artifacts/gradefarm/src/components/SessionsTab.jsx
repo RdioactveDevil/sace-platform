@@ -40,6 +40,22 @@ function StatusBadge({ status }) {
   )
 }
 
+/** Recording status pill — reflects LiveKit Egress state for a session. */
+function RecordingBadge({ session }) {
+  const rs = session.recording_status
+  let label, bg, text
+  if (rs === 'recording')      { label = '🔴 Recording';        bg = '#2a1a1a'; text = '#f87171' }
+  else if (rs === 'ready')     { label = '🎬 Recorded';         bg = '#1e2a3a'; text = '#60a5fa' }
+  else if (rs === 'failed')    { label = '⚠ Recording failed';  bg = '#2a2320'; text = '#fbbf24' }
+  else if (session.record_session) { label = '● Will record';   bg = '#2a2a1a'; text = GOLD }
+  else return null
+  return (
+    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, fontFamily: FONT_B }}>
+      {label}
+    </span>
+  )
+}
+
 // ── Schedule Session Modal ────────────────────────────────────────────────────
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -356,22 +372,24 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
 
-          {/* Record toggle — one-off sessions only */}
-          {!isRecurring && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔴 Record this session</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Saved to Resources automatically when the class ends</div>
+          {/* Record toggle — works for one-off sessions and recurring series */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔴 Record {isRecurring ? 'these sessions' : 'this session'}</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
+                {isRecurring
+                  ? 'Every session in the series is saved to Resources automatically'
+                  : 'Saved to Resources automatically when the class ends'}
               </div>
-              <button
-                type="button"
-                onClick={() => setRecordSession(r => !r)}
-                style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, background: recordSession ? GOLD : t.border, position: 'relative', transition: 'background 0.2s' }}
-              >
-                <span style={{ position: 'absolute', top: 3, left: recordSession ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
-              </button>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setRecordSession(r => !r)}
+              style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, background: recordSession ? GOLD : t.border, position: 'relative', transition: 'background 0.2s' }}
+            >
+              <span style={{ position: 'absolute', top: 3, left: recordSession ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+            </button>
+          </div>
 
           {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
 
@@ -423,6 +441,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
             {session.title || 'Tutoring Session'}
           </span>
           <StatusBadge status={session.status} />
+          <RecordingBadge session={session} />
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <span>
@@ -503,6 +522,7 @@ function SeriesCard({ series, theme, onCancel }) {
             {series.participant_count > 0 && (
               <span>{series.session_type === 'group' ? '👥' : '👤'} {series.participant_names.join(', ')}</span>
             )}
+            {series.record_session && <span style={{ color: GOLD, fontWeight: 600 }}>🔴 Auto-records</span>}
           </div>
           {/* Permanent link */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '8px 12px' }}>

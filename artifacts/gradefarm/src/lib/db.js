@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase, SUPABASE_URL } from './supabase'
 import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 
@@ -983,21 +983,60 @@ export async function fetchTutorStudentWritingAttempts(studentId) {
 
 // ── TUTOR RESOURCES (notes / files / recordings / links) ──────────────────────
 
-const MAX_RESOURCE_BYTES = 100 * 1024 * 1024 // 100 MB
+const MAX_RESOURCE_BYTES = 5 * 1024 * 1024 * 1024  // 5 GB (resumable uploads)
+const RESUMABLE_THRESHOLD = 6 * 1024 * 1024        // switch to TUS above ~6 MB
+const RESOURCE_BUCKET = 'tutor-resources'
+
+/** Resumable (TUS) upload to Supabase Storage — survives flaky connections and
+ *  large files. Reports progress 0–100 via onProgress.
+ */
+async function uploadResumable(bucket, objectName, file, contentType, onProgress) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const { Upload } = await import('tus-js-client')
+
+  await new Promise((resolve, reject) => {
+    const upload = new Upload(file, {
+      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      retryDelays: [0, 1000, 3000, 5000, 10000],
+      headers: { authorization: `Bearer ${token}`, 'x-upsert': 'false' },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      chunkSize: 6 * 1024 * 1024, // Supabase requires exactly 6 MB chunks
+      metadata: { bucketName: bucket, objectName, contentType, cacheControl: '3600' },
+      onError: (err) => reject(new Error(`Upload failed: ${err.message || err}`)),
+      onProgress: (sent, total) => { if (onProgress && total) onProgress(Math.round((sent / total) * 100)) },
+      onSuccess: () => resolve(),
+    })
+    upload.findPreviousUploads().then((prev) => {
+      if (prev.length) upload.resumeFromPreviousUpload(prev[0])
+      upload.start()
+    }).catch(() => upload.start())
+  })
+}
 
 /** Upload a class file to the tutor-resources bucket and return its storage path.
  *  Files live under <tutorId>/<timestamp>_<name> to satisfy the storage policy.
+ *  Large files use resumable uploads; onProgress(0–100) reports upload progress.
  */
-export async function uploadTutorResourceFile(tutorId, file) {
+export async function uploadTutorResourceFile(tutorId, file, onProgress) {
   if (file.size > MAX_RESOURCE_BYTES) {
-    throw new Error(`File too large (${Math.round((file.size / (1024 * 1024)) * 10) / 10} MB). Max 100 MB.`)
+    throw new Error(`File too large (${Math.round((file.size / (1024 * 1024 * 1024)) * 10) / 10} GB). Max 5 GB.`)
   }
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const storagePath = `${tutorId}/${Date.now()}_${safeName}`
-  const { error } = await supabase.storage
-    .from('tutor-resources')
-    .upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false })
-  if (error) throw new Error(`Upload failed: ${error.message}`)
+  const contentType = file.type || 'application/octet-stream'
+
+  if (file.size > RESUMABLE_THRESHOLD) {
+    await uploadResumable(RESOURCE_BUCKET, storagePath, file, contentType, onProgress)
+  } else {
+    const { error } = await supabase.storage
+      .from(RESOURCE_BUCKET)
+      .upload(storagePath, file, { contentType, upsert: false })
+    if (error) throw new Error(`Upload failed: ${error.message}`)
+    if (onProgress) onProgress(100)
+  }
   return { storagePath, fileName: file.name, fileSize: file.size, mimeType: file.type || null }
 }
 
@@ -1303,7 +1342,7 @@ export async function cancelTutoringSession(id) {
 export async function createSessionSeries({
   session_type = 'individual', student_id, student_ids, class_id,
   recurrence_type, day_of_week, time_of_day, timezone = 'Australia/Adelaide',
-  duration_minutes = 60, title, notes, starts_at, ends_at,
+  duration_minutes = 60, title, notes, starts_at, ends_at, record_session = false,
 }) {
   const session = await getSession()
   const token = session?.access_token
@@ -1314,7 +1353,7 @@ export async function createSessionSeries({
     body: JSON.stringify({
       session_type, student_id, student_ids, class_id,
       recurrence_type, day_of_week, time_of_day, timezone,
-      duration_minutes, title, notes, starts_at, ends_at,
+      duration_minutes, title, notes, starts_at, ends_at, record_session,
     }),
   })
   const json = await res.json().catch(() => ({}))

@@ -45,6 +45,7 @@ export default function ResourcesTab({ profile, theme }) {
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [saving, setSaving]       = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
   const [formError, setFormError] = useState('')
   const [status, setStatus]       = useState(null)
   const [deletingId, setDeletingId] = useState(null)
@@ -114,7 +115,8 @@ export default function ResourcesTab({ profile, theme }) {
       }
 
       if (form.source === 'file') {
-        const up = await uploadTutorResourceFile(profile.id, form.file)
+        setUploadProgress(0)
+        const up = await uploadTutorResourceFile(profile.id, form.file, setUploadProgress)
         payload.storage_path = up.storagePath
         payload.file_name = up.fileName
         payload.file_size = up.fileSize
@@ -137,6 +139,7 @@ export default function ResourcesTab({ profile, theme }) {
     } catch (err) {
       setFormError(err.message || 'Failed to save resource.')
     }
+    setUploadProgress(null)
     setSaving(false)
   }
 
@@ -209,7 +212,7 @@ export default function ResourcesTab({ profile, theme }) {
               </div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>
                 {form.source === 'file'
-                  ? 'Notes, worksheets, slides, PDFs, images — up to 100 MB.'
+                  ? 'Notes, worksheets, slides, PDFs, images or video — up to 5 GB (large files upload resumably).'
                   : 'Best for recordings — paste a Zoom, Google Drive, Loom or YouTube link.'}
               </div>
             </div>
@@ -293,8 +296,17 @@ export default function ResourcesTab({ profile, theme }) {
 
             {formError && <div style={{ marginBottom: 12, fontSize: 12, color: '#f87171' }}>{formError}</div>}
 
+            {saving && form.source === 'file' && uploadProgress !== null && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ height: 8, borderRadius: 5, background: t.border, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${uploadProgress}%`, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, borderRadius: 5, transition: 'width 0.2s' }} />
+                </div>
+                <div style={{ fontSize: 11, color: t.textMuted, marginTop: 5 }}>Uploading… {uploadProgress}%</div>
+              </div>
+            )}
+
             <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
-              {saving ? (form.source === 'file' ? 'Uploading…' : 'Saving…') : 'Share Resource'}
+              {saving ? (form.source === 'file' ? (uploadProgress !== null && uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Finishing…') : 'Saving…') : 'Share Resource'}
             </button>
           </form>
         </div>
