@@ -5,6 +5,8 @@ import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { expandCurriculumRenameSources } from "../lib/subject-aliases";
 import { normalizeMathText } from "../lib/normalize-math";
+import { extractJsonArray } from "../lib/json-latex";
+import { filterVerifiedQuestions } from "../lib/verify-question";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -371,21 +373,30 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   const claudeData = await claudeRes.json() as { content?: { text: string }[] };
   const rawText = claudeData?.content?.[0]?.text || "";
 
-  let questions: Array<{ question: string; options: string[]; answer_index: number; solution?: string; difficulty?: number }> = [];
-  try {
-    const parsed = JSON.parse(rawText);
-    questions = Array.isArray(parsed) ? parsed : [];
-  } catch {
-    const start = rawText.indexOf("[");
-    const end = rawText.lastIndexOf("]");
-    if (start !== -1 && end > start) {
-      try { questions = JSON.parse(rawText.slice(start, end + 1)); } catch {}
-    }
-  }
+  let questions = extractJsonArray(rawText) as Array<{
+    question: string; options: string[]; answer_index: number; solution?: string; difficulty?: number;
+  }>;
 
   if (!questions.length) {
     await admin.from("curriculum_subtopics").update({ gen_status: "failed" }).eq("id", subtopicId);
     res.status(200).json({ inserted: 0, message: "No questions parsed" });
+    return;
+  }
+
+  // Verify answer keys before publishing to the live bank: drop unsalvageable
+  // questions and fix any mislabelled answer_index.
+  const verify = await filterVerifiedQuestions(questions, { context: { subtopicId } });
+  if (verify.dropped || verify.fixed || verify.errored) {
+    logger.info(
+      { subtopicId, generated: questions.length, kept: verify.kept.length,
+        dropped: verify.dropped, fixed: verify.fixed, errored: verify.errored },
+      "[curriculum-generate] answer-key verification adjusted the batch",
+    );
+  }
+  questions = verify.kept;
+  if (!questions.length) {
+    await admin.from("curriculum_subtopics").update({ gen_status: "done", questions_generated: 0 }).eq("id", subtopicId);
+    res.status(200).json({ inserted: 0, message: "No questions passed verification" });
     return;
   }
 
