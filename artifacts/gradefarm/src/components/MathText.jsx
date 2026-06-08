@@ -1,6 +1,7 @@
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'katex/contrib/mhchem/mhchem.js' // enables \ce{} for chemical equations
+import { tokenizeMath, applyOutsideMath } from '../lib/tokenizeMath.js'
 
 /**
  * Renders text that may contain:
@@ -50,22 +51,6 @@ function convertUnicodeSuperscripts(text) {
     if (!mapped) return whole
     return `${base}^${mapped.length > 1 ? `{${mapped}}` : mapped}`
   })
-}
-
-// Apply fn only to text segments that are outside existing $...$ / $$...$$ blocks.
-function applyOutsideMath(s, fn) {
-  const re = /\$\$[\s\S]+?\$\$|\$(?!\d+\s)[^$\n]+?\$/g
-  const parts = []
-  let last = 0
-  let m
-  re.lastIndex = 0
-  while ((m = re.exec(s)) !== null) {
-    if (m.index > last) parts.push(fn(s.slice(last, m.index)))
-    parts.push(m[0])
-    last = m.index + m[0].length
-  }
-  if (last < s.length) parts.push(fn(s.slice(last)))
-  return parts.join('')
 }
 
 /**
@@ -187,28 +172,12 @@ export default function MathText({ text = '', style = {} }) {
   const withBreaks = insertLineBreaks(text)
   const processed = preprocess(withBreaks)
 
-  if (!processed.includes('$')) return <span style={{ whiteSpace: 'pre-line', ...style }}>{processed}</span>
+  // Single source of truth for delimiter pairing (see lib/tokenizeMath.js):
+  // pairs $...$ / $$...$$ left-to-right so prose and math can never desync.
+  const parts = tokenizeMath(processed)
 
-  const parts = []
-  // \$(?!\d+\s) — allow $10x but not $10 (dollar amount: digits followed by space)
-  const pattern = /(\$\$[\s\S]+?\$\$|\$(?!\d+\s)[^$\n]+?\$)/g
-  let lastIndex = 0
-  let match
-
-  pattern.lastIndex = 0
-  while ((match = pattern.exec(processed)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', content: processed.slice(lastIndex, match.index) })
-    }
-    const raw = match[0]
-    const isDisplay = raw.startsWith('$$')
-    const latex = isDisplay ? raw.slice(2, -2) : raw.slice(1, -1)
-    parts.push({ type: 'math', content: latex, display: isDisplay })
-    lastIndex = match.index + raw.length
-  }
-
-  if (lastIndex < processed.length) {
-    parts.push({ type: 'text', content: processed.slice(lastIndex) })
+  if (!parts.some(p => p.type === 'math')) {
+    return <span style={{ whiteSpace: 'pre-line', ...style }}>{processed}</span>
   }
 
   // Use a block container when any part is display math so we avoid the

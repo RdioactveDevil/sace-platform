@@ -5,6 +5,7 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'mathlive'
 import 'mathlive/fonts.css'
+import { tokenizeMath } from '../lib/tokenizeMath.js'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -25,28 +26,15 @@ function renderMath(text, displayMode = false) {
 
 function MathText({ children }) {
   if (!children) return null
-  const str = String(children)
-  const parts = []
-  const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g
-  let lastIndex = 0, m
-  while ((m = re.exec(str)) !== null) {
-    if (m.index > lastIndex) parts.push({ type: 'text', value: str.slice(lastIndex, m.index) })
-    const raw = m[0]
-    if (raw.startsWith('$$')) {
-      parts.push({ type: 'display', value: raw.slice(2, -2) })
-    } else {
-      parts.push({ type: 'inline', value: raw.slice(1, -1) })
-    }
-    lastIndex = m.index + raw.length
-  }
-  if (lastIndex < str.length) parts.push({ type: 'text', value: str.slice(lastIndex) })
+  // Shared deterministic delimiter pairing (see lib/tokenizeMath.js).
+  const parts = tokenizeMath(String(children))
 
   return (
     <span>
       {parts.map((p, i) => {
-        if (p.type === 'text') return <span key={i}>{p.value}</span>
-        const html = renderMath(p.value, p.type === 'display')
-        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} style={p.type === 'display' ? { display: 'block', textAlign: 'center', margin: '8px 0' } : undefined} />
+        if (p.type === 'text') return <span key={i}>{p.content}</span>
+        const html = renderMath(p.content, p.display)
+        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} style={p.display ? { display: 'block', textAlign: 'center', margin: '8px 0' } : undefined} />
       })}
     </span>
   )
