@@ -33,7 +33,7 @@ export async function listCurricula() {
       topic_count: topics.length,
       subtopic_count: subtopics.length,
       questions_generated: subtopics.reduce((sum, s) => sum + (s.questions_generated || 0), 0),
-      questions_total: subtopics.length * 25,
+      questions_total: subtopics.length * 5,
     }
   })
 }

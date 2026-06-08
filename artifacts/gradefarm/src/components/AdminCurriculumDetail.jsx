@@ -342,7 +342,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
   const handleApproveAndGenerate = async () => {
     const subtopicCount = topics.flatMap(t => t.subtopics).length
-    if (!window.confirm(`Generate 25 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
+    if (!window.confirm(`Generate 5 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
     if (!(curriculum.level_label || '').trim()) {
       setError('Select a Stage / year level before generating questions.')
       return
@@ -380,9 +380,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             subjectName: freshDetail.name,
             topicName: sub.topicName,
             subtopicName: sub.name,
-            count: 25,
+            count: 5,
           })
-          setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 25 } : p))
+          setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 5 } : p))
         } catch {
           setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
         }
@@ -403,9 +403,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         subjectName: curriculum.name,
         topicName: sub.topicName,
         subtopicName: sub.name,
-        count: 25,
+        count: 5,
       })
-      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 25 } : p))
+      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 5 } : p))
     } catch {
       setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
     }

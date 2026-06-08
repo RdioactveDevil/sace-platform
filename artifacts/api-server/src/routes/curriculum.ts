@@ -283,7 +283,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     subjectName,
     topicName,
     subtopicName,
-    count = 25,
+    count = 5,
   } = req.body || {};
 
   if (!subtopicId || !subjectName || !topicName || !subtopicName) {
