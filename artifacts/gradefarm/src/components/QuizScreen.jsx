@@ -437,12 +437,17 @@ export default function QuizScreen({
 
   const handleReport = async () => {
     if (!currentQ || reporting) return
-    const qid = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
-    if (!qid || reportedIds.has(qid)) return
+    // Track the "reported" indicator per concrete question instance so it never
+    // bleeds onto a different (e.g. "next similar") question. Variants aren't in
+    // the bank, so the backend verifies their parent row instead.
+    const reportKey = currentQ.id
+    if (!reportKey || reportedIds.has(reportKey)) return
+    const backendId = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
+    if (!backendId) return
     setReporting(true)
     try {
-      await reportQuestion(qid)
-      setReportedIds(prev => new Set([...prev, qid]))
+      await reportQuestion(backendId)
+      setReportedIds(prev => new Set([...prev, reportKey]))
     } catch {}
     setReporting(false)
   }
@@ -1675,7 +1680,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
-                    const alreadyReported = !!qid && reportedIds.has(qid)
+                    const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
                     return (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
@@ -1749,7 +1754,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
-                    const alreadyReported = !!qid && reportedIds.has(qid)
+                    const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
                     return (
                       <div>
                         <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>

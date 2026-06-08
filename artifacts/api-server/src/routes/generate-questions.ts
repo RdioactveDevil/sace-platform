@@ -3,6 +3,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
+import { filterVerifiedQuestions } from "../lib/verify-question";
+import { extractJsonArray } from "../lib/json-latex";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -156,22 +158,6 @@ const LEARNING_OBJECTIVES: Record<string, string> = {
   "Counting techniques \u2014 permutations and combinations": "VC2M10AP01: apply the multiplication principle for counting ordered arrangements; calculate permutations nPr = n!/(n\u2212r)! for selecting and arranging r objects from n; calculate combinations nCr = n!/[r!(n\u2212r)!] for selecting r objects from n where order does not matter; solve probability problems using counting techniques; apply to card games, committee selection and code-making",
   "Probability distributions \u2014 discrete random variables": "VC2M10AP02: define a discrete random variable X and its probability distribution P(X=x); verify that probabilities sum to 1; calculate E(X)=\u03a3x\u00b7P(X=x) (expected value) and Var(X)=\u03a3(x\u2212\u03bc)\u00b2P(X=x); apply to decision-making and games of chance; compare theoretical expected values with experimental results from simulations",
 };
-
-function extractJsonArray(text = ""): unknown[] {
-  try {
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {}
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end <= start) return [];
-  try {
-    const parsed = JSON.parse(text.slice(start, end + 1));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 type GenResult = { status: number; body: Record<string, unknown> };
 
@@ -357,10 +343,25 @@ async function generateForTopic(opts: {
     return { status: 200, body: { inserted: 0, message: "No questions generated" } };
   }
 
+  // ── Verify answer keys BEFORE anything enters the bank ────────────────────────
+  // Fact-check each generated question: drop unsalvageable ones and fix any
+  // mislabelled answer_index so a wrong answer key can't reach students.
+  const { kept: verifiedQuestions, dropped, fixed, errored } =
+    await filterVerifiedQuestions(questions, { context: { topicCode } });
+  if (dropped || fixed || errored) {
+    logger.info(
+      { topicCode, generated: questions.length, kept: verifiedQuestions.length, dropped, fixed, errored },
+      "[generate-questions] answer-key verification adjusted the batch",
+    );
+  }
+  if (!verifiedQuestions.length) {
+    return { status: 200, body: { inserted: 0, message: "No questions passed verification" } };
+  }
+
   // ── autoApprove: insert directly into the live questions table ────────────────
   if (autoApprove) {
     const now = new Date().toISOString();
-    const allRows = questions
+    const allRows = verifiedQuestions
       .filter((q) => q.question)
       .map((q) => ({
         id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -396,7 +397,7 @@ async function generateForTopic(opts: {
   }
 
   // ── Default: insert into draft queue for admin review ─────────────────────────
-  const rows = questions.map((q) => ({
+  const rows = verifiedQuestions.map((q) => ({
     source: "ai_generated",
     subject: normalizedSubject,
     topic_code: topicCode,

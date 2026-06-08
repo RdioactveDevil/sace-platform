@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { verifyQuestionPayload, type Verdict } from "../lib/verify-question";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -26,73 +26,13 @@ async function requireAdmin(req: any, res: any) {
 
 // ── AI verification ───────────────────────────────────────────────────────────
 
-type Verdict = {
-  verdict: "correct" | "wrong_answer" | "wrong_question";
-  correct_index: number | null;
-  explanation: string;
-};
-
 async function verifyQuestion(questionId: string): Promise<Verdict> {
   const adminDb = getAdmin();
   const { data: q } = await adminDb.from("questions").select("*").eq("id", questionId).single();
   if (!q) throw new Error(`Question ${questionId} not found`);
 
   const options: string[] = typeof q.options === "string" ? JSON.parse(q.options) : (q.options || []);
-  const labels = ["A", "B", "C", "D"];
-  const optText = options.map((o, i) => `${labels[i]}: ${o}`).join("\n");
-
-  const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
-  const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
-
-  const prompt = `You are a strict mathematical fact-checker reviewing a multiple-choice exam question.
-
-Question: ${q.question}
-Options:
-${optText}
-Currently marked correct: Option ${labels[q.answer_index]} — ${options[q.answer_index]}
-
-Work out the correct answer step by step, then respond with ONLY a single JSON object (no other text, no markdown, no LaTeX — plain ASCII only in the explanation):
-
-If the marked answer is correct:
-{"verdict":"correct","correct_index":null,"explanation":"one sentence"}
-
-If a different option is correct (use 0-based index):
-{"verdict":"wrong_answer","correct_index":2,"explanation":"one sentence showing working"}
-
-If no option is correct or the question is fundamentally flawed:
-{"verdict":"wrong_question","correct_index":null,"explanation":"one sentence"}`;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  const resp = await fetch(`${baseUrl}/v1/messages`, {
-    method: "POST",
-    signal: controller.signal,
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: CLAUDE_MODEL,
-      max_tokens: 512,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  }).finally(() => clearTimeout(timeout));
-
-  if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
-  const body = await resp.json() as any;
-  const text: string = (body.content?.[0]?.text ?? "").trim();
-  // Depth-count braces to find the actual JSON object boundaries, avoiding
-  // false matches on LaTeX expressions like \sec^{2} that contain {}.
-  const start = text.indexOf("{");
-  if (start === -1) throw new Error(`No JSON in AI response: ${text.slice(0, 200)}`);
-  let depth = 0, end = -1;
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === "{") depth++;
-    else if (text[i] === "}") { if (--depth === 0) { end = i; break; } }
-  }
-  if (end === -1) throw new Error(`Unclosed JSON in AI response: ${text.slice(0, 200)}`);
-  return JSON.parse(text.slice(start, end + 1)) as Verdict;
+  return verifyQuestionPayload({ question: q.question, options, answer_index: q.answer_index });
 }
 
 async function getTopicCode(
