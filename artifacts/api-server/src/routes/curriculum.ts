@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { expandCurriculumRenameSources } from "../lib/subject-aliases";
+import { normalizeMathText } from "../lib/normalize-math";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -325,9 +326,9 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "Use appropriate terminology and scope for this level of study.",
   ].join("\n");
 
-  // Pre-fetch existing questions to avoid duplicates
+  // Pre-fetch existing live questions to avoid duplicates
   const { data: existing } = await admin
-    .from("draft_questions")
+    .from("questions")
     .select("question")
     .eq("subject", subjectName)
     .eq("topic", topicName)
@@ -388,20 +389,26 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     return;
   }
 
+  // "Approve and Generate" publishes straight to the live questions bank so
+  // generated questions are immediately playable (no separate review step).
+  const now = new Date().toISOString();
   const rows = questions
     .filter((q) => q.question && !existingSet.has(q.question.trim().toLowerCase()))
     .map((q) => ({
-      source: "ai_generated",
+      id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       subject: subjectName,
       topic: topicName,
-      topic_code: null,
       subtopic: subtopicName,
-      question: q.question,
-      options: q.options,
+      concept_tag: `${subjectName}|${topicName}|${subtopicName}`.toLowerCase(),
+      difficulty: q.difficulty || 3,
+      question: normalizeMathText(q.question) as string,
+      options: q.options.map((o) => normalizeMathText(o) as string),
       answer_index: q.answer_index,
-      solution: q.solution || null,
-      difficulty: q.difficulty || null,
-      status: "pending",
+      solution: normalizeMathText(q.solution || "") as string,
+      graph: null,
+      table_data: null,
+      tip: null,
+      created_at: now,
     }));
 
   if (rows.length === 0) {
@@ -410,7 +417,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     return;
   }
 
-  const { error } = await admin.from("draft_questions").insert(rows);
+  const { error } = await admin.from("questions").insert(rows);
   if (error) {
     await admin.from("curriculum_subtopics").update({ gen_status: "failed" }).eq("id", subtopicId);
     res.status(500).json({ error: error.message });
