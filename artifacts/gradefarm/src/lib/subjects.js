@@ -108,6 +108,19 @@ export const ALL_SUBJECTS = [
   },
 ]
 
+/**
+ * Built-in tiles still rendered client-side regardless of the DB.
+ *
+ * Only the Writing feature qualifies: it is a pure client experience with no
+ * `curricula` / `questions` row, and its stages (e.g. "Year 5–6") are not valid
+ * COHORT_LEVEL_OPTIONS, so it cannot be created or removed from the admin
+ * Curricula tab. Every other subject — academic question-bank subjects such as
+ * Quantitative Reasoning, Biology, Physics, and English — now comes ONLY from
+ * the DB, so the admin console is the single source of truth: deleting one in
+ * the Curricula tab removes it from the Subject Picker and onboarding.
+ */
+export const CLIENT_ONLY_SUBJECTS = ALL_SUBJECTS.filter(s => s.type === 'writing')
+
 /** Admin curriculum wizard + detail: SACE stages and Australian year levels. */
 export const COHORT_LEVEL_OPTIONS = [
   'Stage 1',

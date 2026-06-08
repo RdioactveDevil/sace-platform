@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { ALL_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
+import { CLIENT_ONLY_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
 import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchAllActiveCurricula } from '../lib/curriculaDb'
 
@@ -63,9 +63,10 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
       .finally(() => setLoadingCurricula(false))
   }, [])
 
-  // Static (non-curriculum) subjects: writing subjects, coming-soon subjects, quant_y10.
-  // These never have a curricula row — always show them as-is.
-  const builtInSubjects = ALL_SUBJECTS
+  // Client-only built-ins (the Writing feature). All academic / question-bank
+  // subjects come from the DB above, so admin is the single source of truth and
+  // deleting a curriculum removes its tile here.
+  const builtInSubjects = CLIENT_ONLY_SUBJECTS
 
   useEffect(() => {
     let cancelled = false
