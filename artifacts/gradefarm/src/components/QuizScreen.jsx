@@ -36,6 +36,7 @@ import {
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
+import QuizToolsDock from './QuizToolsDock'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -1803,6 +1804,7 @@ export default function QuizScreen({
             </div>
           )}
         </div>
+      <QuizToolsDock theme={theme} />
       </div>
   )
 }
