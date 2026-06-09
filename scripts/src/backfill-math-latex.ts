@@ -100,10 +100,21 @@ function autoWrapMath(text: string): string {
   return result;
 }
 
+// Heal JSON-escape corruption: a model emitting single-backslash `\frac` inside
+// JSON gets parsed with `\f` read as a form feed (U+000C), leaving an invisible
+// control char + "rac" (renders as "rac{1}{2}"); `\b` (backspace, U+0008) hits
+// \beta/\binom. Those control chars never legitimately appear in question text,
+// so restore the backslash. \n/\r/\t are NOT reversed (legitimate whitespace).
+function healLatexControlChars(text: string): string {
+  if (text.indexOf("\u000c") === -1 && text.indexOf("\u0008") === -1) return text;
+  return text.replace(/\u000c/g, "\\f").replace(/\u0008/g, "\\b");
+}
+
 function normalizeMathText(input: unknown): unknown {
   if (typeof input !== "string" || !input) return input;
-  if (input.includes("$")) return input;
-  return autoWrapMath(convertUnicodeSuperscripts(input));
+  const healed = healLatexControlChars(input);
+  if (healed.includes("$")) return healed;
+  return autoWrapMath(convertUnicodeSuperscripts(healed));
 }
 // ──────────────────────────────────────────────────────────────────────────────
 

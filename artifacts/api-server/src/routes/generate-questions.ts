@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
+import { repairLatexJson } from "../lib/repair-latex-json";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -158,15 +159,18 @@ const LEARNING_OBJECTIVES: Record<string, string> = {
 };
 
 function extractJsonArray(text = ""): unknown[] {
+  // Repair unescaped LaTeX backslashes (e.g. a model emitting `\frac` instead
+  // of `\\frac`) before parsing — otherwise `\f` is read as a form feed and
+  // `\frac{1}{2}` silently renders as "rac{1}{2}". See lib/repair-latex-json.
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(repairLatexJson(text));
     return Array.isArray(parsed) ? parsed : [];
   } catch {}
   const start = text.indexOf("[");
   const end = text.lastIndexOf("]");
   if (start === -1 || end <= start) return [];
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const parsed = JSON.parse(repairLatexJson(text.slice(start, end + 1)));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];

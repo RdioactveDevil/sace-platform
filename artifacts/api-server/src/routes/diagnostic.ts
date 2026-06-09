@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { repairLatexJson } from "../lib/repair-latex-json";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -136,22 +137,24 @@ async function callClaude(system: string, user: string, maxTokens = 4000, prefil
   return prefill ? prefill + text : text;
 }
 
+// Repairs unescaped LaTeX backslashes before each parse attempt so `\frac`
+// survives instead of `\f` being read as a form feed. See lib/repair-latex-json.
 function extractJson(text: string): unknown {
-  try { return JSON.parse(text); } catch { /* continue */ }
+  try { return JSON.parse(repairLatexJson(text)); } catch { /* continue */ }
   // Strip markdown fences
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) {
-    try { return JSON.parse(fenced[1].trim()); } catch { /* continue */ }
+    try { return JSON.parse(repairLatexJson(fenced[1].trim())); } catch { /* continue */ }
   }
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch { /* continue */ }
+    try { return JSON.parse(repairLatexJson(text.slice(start, end + 1))); } catch { /* continue */ }
   }
   const arrStart = text.indexOf("[");
   const arrEnd = text.lastIndexOf("]");
   if (arrStart !== -1 && arrEnd > arrStart) {
-    try { return JSON.parse(text.slice(arrStart, arrEnd + 1)); } catch { /* continue */ }
+    try { return JSON.parse(repairLatexJson(text.slice(arrStart, arrEnd + 1))); } catch { /* continue */ }
   }
   return null;
 }

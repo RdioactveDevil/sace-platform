@@ -2,21 +2,25 @@ import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
+import { repairLatexJson } from "../lib/repair-latex-json";
 
 const router = Router();
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 
 function extractJsonArray(text = ""): unknown[] {
+  // Repair unescaped LaTeX backslashes before parsing (see lib/repair-latex-json):
+  // a model emitting `\frac` instead of `\\frac` would otherwise be parsed with
+  // `\f` as a form feed, corrupting the maths to "rac{1}{2}".
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(repairLatexJson(text));
     return Array.isArray(parsed) ? parsed : [];
   } catch {}
   const start = text.indexOf("[");
   const end = text.lastIndexOf("]");
   if (start === -1 || end <= start) return [];
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const parsed = JSON.parse(repairLatexJson(text.slice(start, end + 1)));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];

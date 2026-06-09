@@ -5,6 +5,7 @@ import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { expandCurriculumRenameSources } from "../lib/subject-aliases";
 import { normalizeMathText } from "../lib/normalize-math";
+import { repairLatexJson } from "../lib/repair-latex-json";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -15,12 +16,14 @@ function getAdmin() {
   return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
 
+// Repairs unescaped LaTeX backslashes before parsing so `\frac` etc. survive
+// the parse instead of `\f` being read as a form feed. See lib/repair-latex-json.
 function extractJson(text: string): unknown {
-  try { return JSON.parse(text); } catch {}
+  try { return JSON.parse(repairLatexJson(text)); } catch {}
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end <= start) return null;
-  try { return JSON.parse(text.slice(start, end + 1)); } catch { return null; }
+  try { return JSON.parse(repairLatexJson(text.slice(start, end + 1))); } catch { return null; }
 }
 
 function conceptTag(subject: string, topic: string, subtopic: string): string {
@@ -373,13 +376,13 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 
   let questions: Array<{ question: string; options: string[]; answer_index: number; solution?: string; difficulty?: number }> = [];
   try {
-    const parsed = JSON.parse(rawText);
+    const parsed = JSON.parse(repairLatexJson(rawText));
     questions = Array.isArray(parsed) ? parsed : [];
   } catch {
     const start = rawText.indexOf("[");
     const end = rawText.lastIndexOf("]");
     if (start !== -1 && end > start) {
-      try { questions = JSON.parse(rawText.slice(start, end + 1)); } catch {}
+      try { questions = JSON.parse(repairLatexJson(rawText.slice(start, end + 1))); } catch {}
     }
   }
 

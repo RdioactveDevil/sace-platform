@@ -122,13 +122,35 @@ function autoWrapMath(text: string): string {
 }
 
 /**
+ * Heal JSON-escape corruption from single-backslash LaTeX.
+ *
+ * When a model emits `\frac` (single backslash) inside a JSON string and that
+ * JSON is parsed naively, `\f` is read as a form feed (U+000C), leaving an
+ * invisible control char followed by "rac" — which renders as "rac{1}{2}".
+ * The same trap turns `\beta`/`\binom` into backspace (U+0008) + rest.
+ *
+ * Form feed and backspace never legitimately occur in question text, so their
+ * presence unambiguously marks a lost `\f`/`\b`; restore the backslash. (The
+ * other JSON whitespace escapes — `\n`, `\r`, `\t` — are NOT reversed because
+ * they have legitimate uses.) The parse-time fix lives in repair-latex-json.ts;
+ * this heals data that was already stored corrupted.
+ */
+function healLatexControlChars(text: string): string {
+  // U+000C form feed (a lost \f) and U+0008 backspace (a lost \b). Restore the
+  // backslash so the LaTeX command is whole again.
+  if (text.indexOf("\u000c") === -1 && text.indexOf("\u0008") === -1) return text;
+  return text.replace(/\u000c/g, "\\f").replace(/\u0008/g, "\\b");
+}
+
+/**
  * Normalise a single string. Returns the input unchanged when it already
  * contains a `$` (assumed to be intentional LaTeX) or contains no maths.
  */
 export function normalizeMathText(input: unknown): unknown {
   if (typeof input !== "string" || !input) return input;
-  if (input.includes("$")) return input; // already explicitly delimited
-  const withCarets = convertUnicodeSuperscripts(input);
+  const healed = healLatexControlChars(input);
+  if (healed.includes("$")) return healed; // already explicitly delimited
+  const withCarets = convertUnicodeSuperscripts(healed);
   return autoWrapMath(withCarets);
 }
 
