@@ -25,6 +25,8 @@ export const QUESTION_TYPES = {
   numeric:      { label: 'Numeric answer',   needsCheckButton: true },
   short_text:   { label: 'Short answer',     needsCheckButton: true },
   order:        { label: 'Put in order',     needsCheckButton: true },
+  hotspot:      { label: 'Click the region', needsCheckButton: true },
+  image_label:  { label: 'Label the diagram', needsCheckButton: true },
 }
 
 export function getQuestionType(question) {
@@ -76,6 +78,14 @@ export function responseIsComplete(question, response) {
       return typeof response === 'string' && response.trim().length > 0
     case 'order':
       return Array.isArray(response) && response.length === (question.items?.length || 0)
+    case 'hotspot':
+      return Number.isInteger(response) && response >= 0
+    case 'image_label': {
+      const markers = question.markers || []
+      return Array.isArray(response)
+        && response.length === markers.length
+        && response.every((x) => x != null && x !== '')
+    }
     default:
       return false
   }
@@ -110,6 +120,17 @@ export function gradeResponse(question, response) {
     case 'order':
       return arraysEqualOrdered(response, question.items || [])
 
+    case 'hotspot': {
+      const hs = question.hotspots || []
+      return Number.isInteger(response) && response >= 0 && response < hs.length && !!hs[response].correct
+    }
+
+    case 'image_label': {
+      const markers = question.markers || []
+      if (!Array.isArray(response) || response.length !== markers.length) return false
+      return markers.every((m, i) => response[i] === m.answer)
+    }
+
     default:
       return false
   }
@@ -139,6 +160,12 @@ export function describeCorrectAnswer(question) {
     case 'order':
       return (question.items || []).join(' → ')
 
+    case 'hotspot':
+      return (question.hotspots || []).find((h) => h.correct)?.label ?? ''
+
+    case 'image_label':
+      return (question.markers || []).map((m, i) => `${i + 1} → ${m.answer}`).join(', ')
+
     default:
       return ''
   }
@@ -153,6 +180,8 @@ export function emptyResponse(question) {
     case 'numeric':      return ''
     case 'short_text':   return ''
     case 'order':        return []
+    case 'image_label':  return (question.markers || []).map(() => null)
+    case 'hotspot':
     case 'mcq':
     default:             return null
   }

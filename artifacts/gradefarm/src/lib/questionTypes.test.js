@@ -105,6 +105,53 @@ describe('order', () => {
   })
 })
 
+describe('hotspot', () => {
+  const q = {
+    question_type: 'hotspot',
+    hotspots: [
+      { label: 'Nucleus', x: 40, y: 40, w: 20, h: 20, correct: true },
+      { label: 'Membrane', x: 0, y: 0, w: 10, h: 10, correct: false },
+    ],
+  }
+  test('correct only when the chosen region is the correct one', () => {
+    assert.equal(gradeResponse(q, 0), true)
+    assert.equal(gradeResponse(q, 1), false)
+  })
+  test('out-of-range / missing is incorrect and incomplete', () => {
+    assert.equal(gradeResponse(q, 5), false)
+    assert.equal(responseIsComplete(q, null), false)
+    assert.equal(responseIsComplete(q, 1), true)
+  })
+  test('describes the correct region label', () => {
+    assert.equal(describeCorrectAnswer(q), 'Nucleus')
+  })
+})
+
+describe('image_label', () => {
+  const q = {
+    question_type: 'image_label',
+    markers: [
+      { x: 20, y: 30, answer: 'Anode' },
+      { x: 70, y: 30, answer: 'Cathode' },
+    ],
+    labels: ['Anode', 'Cathode', 'Electrolyte'],
+  }
+  test('correct only when every marker has its right label', () => {
+    assert.equal(gradeResponse(q, ['Anode', 'Cathode']), true)
+    assert.equal(gradeResponse(q, ['Cathode', 'Anode']), false)
+  })
+  test('completeness requires every marker assigned', () => {
+    assert.equal(responseIsComplete(q, ['Anode', null]), false)
+    assert.equal(responseIsComplete(q, ['Anode', 'Cathode']), true)
+  })
+  test('empty response is a null slot per marker', () => {
+    assert.deepEqual(emptyResponse(q), [null, null])
+  })
+  test('describes correct labelling', () => {
+    assert.equal(describeCorrectAnswer(q), '1 → Anode, 2 → Cathode')
+  })
+})
+
 describe('emptyResponse', () => {
   test('returns the right empty shape per type', () => {
     assert.deepEqual(emptyResponse({ question_type: 'multi_select' }), [])

@@ -184,6 +184,72 @@ function arrowBtn(t, disabled) {
   }
 }
 
+// ── Hotspot — click the correct region of an image ───────────────────────────
+function Hotspot({ question, response, onChange, showAns, theme }) {
+  const t = THEMES[theme]
+  const hs = question.hotspots || []
+  return (
+    <div>
+      <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', border: `1px solid ${t.border}`, background: t.bgSubtle }}>
+        <img src={question.image_url} alt="Question diagram" style={{ display: 'block', width: '100%' }} />
+        {hs.map((h, i) => {
+          const picked = response === i
+          let border = `2px dashed ${t.borderAccent}`, bg = 'transparent'
+          if (showAns) {
+            if (h.correct) { border = `2px solid ${t.success}`; bg = `${t.success}33` }
+            else if (picked) { border = `2px solid ${t.danger}`; bg = `${t.danger}33` }
+            else { border = `2px dashed ${t.border}` }
+          } else if (picked) { border = `2px solid ${GOLD}`; bg = t.accentGlow }
+          return (
+            <button key={i} onClick={() => { if (!showAns) onChange(i) }}
+              title={showAns ? h.label : 'Click to select this region'}
+              style={{ position: 'absolute', left: `${h.x}%`, top: `${h.y}%`, width: `${h.w}%`, height: `${h.h}%`, border, background: bg, borderRadius: 8, cursor: showAns ? 'default' : 'pointer', padding: 0 }} />
+          )
+        })}
+      </div>
+      {!showAns && <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>Click the correct region on the image.</div>}
+    </div>
+  )
+}
+
+// ── Image labelling — assign each label to its numbered marker ────────────────
+function ImageLabel({ question, response, onChange, showAns, theme }) {
+  const t = THEMES[theme]
+  const markers = question.markers || []
+  const labels = question.labels || []
+  const resp = Array.isArray(response) && response.length === markers.length ? response : markers.map(() => null)
+  const setAt = (i, v) => { const next = [...resp]; next[i] = v || null; onChange(next) }
+  return (
+    <div>
+      <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', border: `1px solid ${t.border}`, background: t.bgSubtle }}>
+        <img src={question.image_url} alt="Question diagram" style={{ display: 'block', width: '100%' }} />
+        {markers.map((m, i) => (
+          <span key={i} style={{ position: 'absolute', left: `${m.x}%`, top: `${m.y}%`, transform: 'translate(-50%,-50%)', width: 24, height: 24, borderRadius: '50%', background: GOLD, color: NAVY, fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.45)', border: '2px solid #fff' }}>{i + 1}</span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+        {markers.map((m, i) => {
+          const correct = showAns && resp[i] === m.answer
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Bullet t={t} bg={t.accentGlow} color={GOLD}>{i + 1}</Bullet>
+              <select value={resp[i] || ''} disabled={showAns} onChange={e => setAt(i, e.target.value)}
+                style={{ flex: 1, padding: '10px 12px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, cursor: showAns ? 'default' : 'pointer',
+                  border: `1px solid ${showAns ? (correct ? t.success + '55' : t.danger + '55') : t.border}`,
+                  background: showAns ? (correct ? t.successBg : t.dangerBg) : t.bgSubtle,
+                  color: showAns ? (correct ? t.success : t.danger) : t.text }}>
+                <option value="">Choose a label…</option>
+                {labels.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+              {showAns && !correct && <span style={{ fontSize: 11, color: t.success, whiteSpace: 'nowrap', fontWeight: 700 }}>✓ {m.answer}</span>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /**
  * QuestionRenderer — renders the input UI for any non-mcq question type and
  * owns the Check button. The parent passes the controlled `response` + onChange
@@ -208,6 +274,8 @@ export default function QuestionRenderer({ question, response, onChange, showAns
       {type === 'numeric' && <Numeric question={question} response={response} onChange={onChange} showAns={showAns} onSubmit={submit} canSubmit={canSubmit} theme={theme} />}
       {type === 'short_text' && <ShortText question={question} response={response} onChange={onChange} showAns={showAns} onSubmit={submit} canSubmit={canSubmit} theme={theme} />}
       {type === 'order' && <OrderList question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
+      {type === 'hotspot' && <Hotspot question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
+      {type === 'image_label' && <ImageLabel question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
 
       {showAns && (type === 'numeric' || type === 'short_text') && (
         <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 10, background: t.successBg, border: `1px solid ${t.success}44`, fontSize: 13, color: t.success, fontWeight: 700 }}>

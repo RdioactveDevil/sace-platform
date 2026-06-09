@@ -13,6 +13,26 @@ const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
+const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+
+// Inline SVG "images" so the image-based formats work offline in the Lab.
+const CELL_SVG = svgUri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 240'>
+  <rect width='400' height='240' fill='#0f1430'/>
+  <ellipse cx='200' cy='120' rx='170' ry='100' fill='#1e2a52' stroke='#4f8ef7' stroke-width='4'/>
+  <circle cx='200' cy='120' r='45' fill='#f1be43'/>
+  <circle cx='200' cy='120' r='14' fill='#b8860b'/>
+  <circle cx='120' cy='75' r='10' fill='#34d399'/>
+  <circle cx='285' cy='165' r='10' fill='#34d399'/>
+</svg>`)
+
+const TRIANGLE_SVG = svgUri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 240'>
+  <rect width='400' height='240' fill='#0f1430'/>
+  <polygon points='60,200 340,200 60,40' fill='#1e2a52' stroke='#f1be43' stroke-width='3'/>
+  <rect x='60' y='184' width='16' height='16' fill='none' stroke='#94a3b8' stroke-width='2'/>
+  <path d='M 305 200 A 35 35 0 0 1 326 172' fill='none' stroke='#34d399' stroke-width='3'/>
+  <text x='300' y='188' fill='#34d399' font-size='18' font-family='sans-serif'>θ</text>
+</svg>`)
+
 // Sample questions showcasing every supported format. These are local demo data
 // only — they prove the multi-format engine end to end without touching the DB.
 const SAMPLES = [
@@ -97,6 +117,37 @@ const SAMPLES = [
     items: ['Prophase', 'Metaphase', 'Anaphase', 'Telophase'],
     difficulty: 2,
     solution: 'Mitosis proceeds Prophase → Metaphase → Anaphase → Telophase (mnemonic: "PMAT").',
+  },
+  {
+    id: 'demo-hotspot',
+    label: 'Click the region',
+    question_type: 'hotspot',
+    subject: 'Biology', topic: 'Cell Structure', subtopic: 'Organelles',
+    question: 'Click on the nucleus of the cell shown below.',
+    image_url: CELL_SVG,
+    hotspots: [
+      { label: 'Nucleus', x: 38, y: 31, w: 24, h: 38, correct: true },
+      { label: 'Cell membrane', x: 2, y: 6, w: 22, h: 26, correct: false },
+      { label: 'Cytoplasm', x: 64, y: 55, w: 24, h: 32, correct: false },
+    ],
+    difficulty: 1,
+    solution: 'The nucleus is the large central organelle (shown in gold) that contains the cell’s genetic material.',
+  },
+  {
+    id: 'demo-label',
+    label: 'Label the diagram',
+    question_type: 'image_label',
+    subject: 'Mathematics', topic: 'Trigonometry', subtopic: 'Right-angled triangles',
+    question: 'Relative to the marked angle θ, label each side of the right-angled triangle.',
+    image_url: TRIANGLE_SVG,
+    markers: [
+      { x: 15, y: 50, answer: 'Opposite' },
+      { x: 50, y: 90, answer: 'Adjacent' },
+      { x: 52, y: 45, answer: 'Hypotenuse' },
+    ],
+    labels: ['Opposite', 'Adjacent', 'Hypotenuse', 'Right angle'],
+    difficulty: 2,
+    solution: 'The hypotenuse is opposite the right angle. Relative to θ, the "opposite" side faces θ and the "adjacent" side is next to it.',
   },
 ]
 
