@@ -44,6 +44,7 @@ const DiagnosticScreen      = lazy(() => import('./components/DiagnosticScreen')
 const PricingPage           = lazy(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
+const EssayMarkerScreen     = lazy(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazy(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
@@ -881,6 +882,9 @@ function AppInner() {
 
       {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
       <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} />} />
+
+      {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
+      <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
