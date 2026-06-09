@@ -1554,7 +1554,7 @@ export default function QuizScreen({
               {currentQ.table_data && (
                 <TableView table={currentQ.table_data} theme={theme} />
               )}
-              {currentQ.image_url && (
+              {currentQ.image_url && getQuestionType(currentQ) !== 'hotspot' && getQuestionType(currentQ) !== 'image_label' && (
                 <img
                   src={currentQ.image_url}
                   alt="Question diagram"

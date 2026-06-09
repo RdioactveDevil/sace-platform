@@ -7,7 +7,7 @@ import ExamSimulator from './ExamSimulator'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
-export default function ExamModeScreen({ theme = 'dark', questions = [] }) {
+export default function ExamModeScreen({ theme = 'dark', questions = [], onExit }) {
   const t = THEMES[theme]
   const [paper, setPaper] = useState(null)
 
@@ -20,6 +20,9 @@ export default function ExamModeScreen({ theme = 'dark', questions = [] }) {
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, padding: '40px 20px 80px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        {onExit && (
+          <button onClick={onExit} style={{ marginBottom: 14, padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>← Back</button>
+        )}
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: '#f1be43', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
             ⏱ Exam Mode

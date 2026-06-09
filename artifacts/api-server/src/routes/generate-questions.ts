@@ -162,9 +162,9 @@ const LEARNING_OBJECTIVES: Record<string, string> = {
 type GenResult = { status: number; body: Record<string, unknown> };
 
 // Question formats the generator understands. 'mcq' is the legacy default.
-const ALLOWED_QUESTION_TYPES = ["mcq", "multi_select", "numeric", "short_text", "order"];
+export const ALLOWED_QUESTION_TYPES = ["mcq", "multi_select", "numeric", "short_text", "order", "hotspot", "image_label"];
 
-type GeneratedQuestion = {
+export type GeneratedQuestion = {
   subtopic?: string;
   question: string;
   options?: string[];
@@ -181,11 +181,15 @@ type GeneratedQuestion = {
   accept?: string[];
   items?: string[];
   case_sensitive?: boolean;
+  hotspots?: unknown[];
+  markers?: unknown[];
+  labels?: string[];
+  image_url?: string | null;
 };
 
 // Build the type-specific DB columns for a generated question. Column names
 // match the questions/draft_questions schema (and the frontend fields).
-function typeColumns(q: GeneratedQuestion): Record<string, unknown> {
+export function typeColumns(q: GeneratedQuestion): Record<string, unknown> {
   const qt = q.question_type && ALLOWED_QUESTION_TYPES.includes(q.question_type) ? q.question_type : "mcq";
   const cols: Record<string, unknown> = {
     question_type: qt,
@@ -196,6 +200,9 @@ function typeColumns(q: GeneratedQuestion): Record<string, unknown> {
     accept: null,
     items: null,
     case_sensitive: null,
+    hotspots: null,
+    markers: null,
+    labels: null,
   };
   if (qt === "multi_select") {
     cols.answer_indices = Array.isArray(q.answer_indices) ? q.answer_indices : [];
@@ -209,12 +216,17 @@ function typeColumns(q: GeneratedQuestion): Record<string, unknown> {
     cols.case_sensitive = !!q.case_sensitive;
   } else if (qt === "order") {
     cols.items = Array.isArray(q.items) ? q.items.map((it) => normalizeMathText(it) as string) : [];
+  } else if (qt === "hotspot") {
+    cols.hotspots = Array.isArray(q.hotspots) ? q.hotspots : [];
+  } else if (qt === "image_label") {
+    cols.markers = Array.isArray(q.markers) ? q.markers : [];
+    cols.labels = Array.isArray(q.labels) ? q.labels.map((l) => normalizeMathText(l) as string) : [];
   }
   return cols;
 }
 
 // Options/answer_index are MCQ-only; non-MCQ rows store null for both.
-function mcqColumns(q: GeneratedQuestion): { options: string[] | null; answer_index: number | null } {
+export function mcqColumns(q: GeneratedQuestion): { options: string[] | null; answer_index: number | null } {
   const isMcqLike = (!q.question_type || q.question_type === "mcq" || q.question_type === "multi_select") && Array.isArray(q.options);
   return {
     options: isMcqLike ? q.options!.map((o) => normalizeMathText(o) as string) : null,

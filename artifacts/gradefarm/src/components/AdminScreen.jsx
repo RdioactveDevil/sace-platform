@@ -3,6 +3,7 @@ import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import AdminOverviewTab          from './AdminOverviewTab'
 import AdminUploadScreen         from './AdminUploadScreen'
 import AdminGenerateScreen       from './AdminGenerateScreen'
+import AdminVisionScreen         from './AdminVisionScreen'
 import AdminReviewScreen         from './AdminReviewScreen'
 import AdminUsersTab             from './AdminUsersTab'
 import AdminStudentsTab          from './AdminStudentsTab'
@@ -81,6 +82,7 @@ function buildGroups({ studentCount, pendingApps, reviewCount }) {
       items: [
         { label: 'Curricula',        path: '/admin/curricula', icon: 'book' },
         { label: 'Generate',         path: '/admin/generate',  icon: 'sparkles' },
+        { label: 'From Image',       path: '/admin/vision',    icon: 'sparkles' },
         { label: 'Upload PDF',       path: '/admin/upload',    icon: 'upload' },
         { label: 'Review Queue',     path: '/admin/review',    icon: 'check', attention: reviewCount },
         { label: 'Preview Question', path: '/admin/preview',   icon: 'eye' },
@@ -287,6 +289,7 @@ export default function AdminScreen({ profile }) {
             <Route path="applications" element={<AdminTutorApplicationsTab />} />
             <Route path="upload"       element={<AdminUploadScreen />} />
             <Route path="generate"     element={<AdminGenerateScreen />} />
+            <Route path="vision"       element={<AdminVisionScreen />} />
             <Route path="review"       element={<AdminReviewScreen profile={profile} />} />
             <Route path="preview"      element={<AdminQuestionPreviewTab />} />
             <Route path="settings"     element={<AdminSettingsTab />} />

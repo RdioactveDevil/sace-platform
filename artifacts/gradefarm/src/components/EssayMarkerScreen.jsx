@@ -39,7 +39,7 @@ function ScoreBar({ t, name, score, comment }) {
   )
 }
 
-export default function EssayMarkerScreen({ theme = 'dark' }) {
+export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
   const t = THEMES[theme]
   const [typeId, setTypeId] = useState('persuasive')
   const [prompt, setPrompt] = useState('')
@@ -113,6 +113,9 @@ export default function EssayMarkerScreen({ theme = 'dark' }) {
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, padding: '36px 20px 80px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
+        {onExit && (
+          <button onClick={onExit} style={{ marginBottom: 14, padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>← Back</button>
+        )}
         <div style={{ textAlign: 'center', marginBottom: 26 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: GOLD, fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
             ✍️ AI Essay Marker
