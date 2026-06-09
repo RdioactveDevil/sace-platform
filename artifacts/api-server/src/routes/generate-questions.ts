@@ -161,6 +161,67 @@ const LEARNING_OBJECTIVES: Record<string, string> = {
 
 type GenResult = { status: number; body: Record<string, unknown> };
 
+// Question formats the generator understands. 'mcq' is the legacy default.
+const ALLOWED_QUESTION_TYPES = ["mcq", "multi_select", "numeric", "short_text", "order"];
+
+type GeneratedQuestion = {
+  subtopic?: string;
+  question: string;
+  options?: string[];
+  answer_index?: number;
+  solution?: string | null;
+  difficulty?: number;
+  graph?: Record<string, unknown> | null;
+  table_data?: Record<string, unknown> | null;
+  question_type?: string;
+  answer_indices?: number[];
+  answer?: number | string;
+  tolerance?: number;
+  unit?: string;
+  accept?: string[];
+  items?: string[];
+  case_sensitive?: boolean;
+};
+
+// Build the type-specific DB columns for a generated question. Column names
+// match the questions/draft_questions schema (and the frontend fields).
+function typeColumns(q: GeneratedQuestion): Record<string, unknown> {
+  const qt = q.question_type && ALLOWED_QUESTION_TYPES.includes(q.question_type) ? q.question_type : "mcq";
+  const cols: Record<string, unknown> = {
+    question_type: qt,
+    answer_indices: null,
+    answer: null,
+    tolerance: null,
+    unit: null,
+    accept: null,
+    items: null,
+    case_sensitive: null,
+  };
+  if (qt === "multi_select") {
+    cols.answer_indices = Array.isArray(q.answer_indices) ? q.answer_indices : [];
+  } else if (qt === "numeric") {
+    const n = typeof q.answer === "number" ? q.answer : parseFloat(String(q.answer));
+    cols.answer = Number.isFinite(n) ? n : null;
+    cols.tolerance = Number.isFinite(Number(q.tolerance)) ? Number(q.tolerance) : 0;
+    cols.unit = q.unit ? (normalizeMathText(q.unit) as string) : null;
+  } else if (qt === "short_text") {
+    cols.accept = Array.isArray(q.accept) ? q.accept.map((a) => normalizeMathText(a) as string) : [];
+    cols.case_sensitive = !!q.case_sensitive;
+  } else if (qt === "order") {
+    cols.items = Array.isArray(q.items) ? q.items.map((it) => normalizeMathText(it) as string) : [];
+  }
+  return cols;
+}
+
+// Options/answer_index are MCQ-only; non-MCQ rows store null for both.
+function mcqColumns(q: GeneratedQuestion): { options: string[] | null; answer_index: number | null } {
+  const isMcqLike = (!q.question_type || q.question_type === "mcq" || q.question_type === "multi_select") && Array.isArray(q.options);
+  return {
+    options: isMcqLike ? q.options!.map((o) => normalizeMathText(o) as string) : null,
+    answer_index: typeof q.answer_index === "number" ? q.answer_index : null,
+  };
+}
+
 // Generate questions for a single subtopic. Returns an HTTP-style status/body
 // so callers can either forward it directly (single-topic request) or inspect
 // it when aggregating a batch (multi-topic request) — all in-process, with no
@@ -172,8 +233,15 @@ async function generateForTopic(opts: {
   count: number;
   difficulty: string | number;
   autoApprove: boolean;
+  questionTypes?: string[];
 }): Promise<GenResult> {
   const { adminDb, resolvedSubject, topicCode, count, difficulty, autoApprove } = opts;
+  // Which formats Claude may use. Defaults to MCQ-only so existing flows are
+  // completely unchanged. Any unknown type is ignored.
+  const requestedTypes = (Array.isArray(opts.questionTypes) ? opts.questionTypes : ["mcq"])
+    .filter((tp) => ALLOWED_QUESTION_TYPES.includes(tp));
+  const extraTypes = requestedTypes.filter((tp) => tp !== "mcq");
+  const allowMulti = extraTypes.length > 0;
 
   // Normalise picker IDs to canonical curriculum names.
   const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
@@ -247,20 +315,41 @@ async function generateForTopic(opts: {
     `    Do NOT include table_data for questions that can be answered from text or equations alone.`,
   ];
 
+  // Per-type schema instructions, emitted only when richer formats are requested.
+  const TYPE_NOTE: Record<string, string> = {
+    multi_select: `  multi_select: options (4\u20136 strings) and answer_indices (array of the 0-based indices that are ALL correct \u2014 use 2 or more). Phrase the stem as "Select all that apply".`,
+    numeric: `  numeric: answer (the correct number, no units in this field), tolerance (acceptable absolute error as a number, e.g. 0.1; use 0 for exact), and unit (string, or "" if unitless). Do NOT include options or answer_index.`,
+    short_text: `  short_text: accept (array of acceptable answer strings \u2014 include common equivalent forms/spellings) and case_sensitive (boolean; only true when case matters, e.g. chemical formulae). Keep answers short (a word, term, or formula). Do NOT include options or answer_index.`,
+    order: `  order: items (array of 3\u20136 strings written in the CORRECT order \u2014 the app shuffles them for the student). Do NOT include options or answer_index.`,
+  };
+  const TYPE_INSTRUCTIONS = [
+    `You may use a MIX of question formats. Add a "question_type" key to EVERY object. Allowed types: ${requestedTypes.join(", ")}.`,
+    `Choose whichever format best tests each concept, but keep roughly half as "mcq". Do not force a format where it doesn't fit.`,
+    `Type-specific keys (every object ALSO needs question, solution, subtopic, difficulty):`,
+    `  mcq: options (array of exactly 4 strings) and answer_index (integer 0\u20133).`,
+    ...extraTypes.map((tp) => TYPE_NOTE[tp]).filter(Boolean),
+  ];
+
   const system = [
-    `You are generating multiple-choice questions for ${curriculumLabel} students.`,
+    allowMulti
+      ? `You are generating exam-style practice questions in a VARIETY of formats for ${curriculumLabel} students.`
+      : `You are generating multiple-choice questions for ${curriculumLabel} students.`,
     `CRITICAL CONSTRAINT: All questions must be strictly based on the ${curriculumLabel} curriculum.`,
     `Do NOT draw on knowledge that falls outside the scope of ${curriculumLabel}.`,
     `Every question must be directly answerable using only what a ${curriculumLabel} student is expected to know.`,
     "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
     `Generate exactly ${count} questions.`,
-    "Each object must have these exact keys:",
-    "  question (string)",
-    "  options (array of exactly 4 strings)",
-    "  answer_index (integer 0\u20133)",
-    "  solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
-    "  subtopic (short free-text label for the specific concept tested)",
-    "  difficulty (integer 1\u20135)",
+    ...(allowMulti
+      ? TYPE_INSTRUCTIONS
+      : [
+          "Each object must have these exact keys:",
+          "  question (string)",
+          "  options (array of exactly 4 strings)",
+          "  answer_index (integer 0\u20133)",
+        ]),
+    "solution (string \u2014 explain why the answer is correct using curriculum language, 2\u20134 sentences)",
+    "subtopic (short free-text label for the specific concept tested)",
+    "difficulty (integer 1\u20135)",
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
     ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions, in the question, EVERY option, and the solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $e^x$, $f''(x)$, $(x+2)e^x$, ${latexExample}. Always write exponents with a caret inside $...$ (e.g. $x^2$, NEVER the Unicode "x²"). Always wrap derivative notation like $f'(x)$ and $f''(x)$. Always use \\frac{numerator}{denominator} for fractions — NEVER (a)/(b) slash notation (e.g. write $\\frac{x^2-4}{x-1}$, NOT $(x^2-4)/(x-1)$). Never emit a bare mathematical expression outside $...$.`] : []),
@@ -271,7 +360,7 @@ async function generateForTopic(opts: {
   ].join("\n");
 
   let user = [
-    `Generate ${count} MCQs for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
+    `Generate ${count} ${allowMulti ? "questions" : "MCQs"} for the ${curriculumLabel} topic: ${topicName} (${topicCode}).`,
     "",
     "Curriculum learning requirements for this topic:",
     learningObjective,
@@ -332,12 +421,7 @@ async function generateForTopic(opts: {
 
   const claudeData = await claudeResponse.json() as { content?: { text: string }[] };
   const rawText = claudeData?.content?.[0]?.text || "";
-  const questions = extractJsonArray(rawText) as Array<{
-    subtopic?: string; question: string; options: string[];
-    answer_index: number; solution?: string; difficulty?: number;
-    graph?: Record<string, unknown> | null;
-    table_data?: Record<string, unknown> | null;
-  }>;
+  const questions = extractJsonArray(rawText) as GeneratedQuestion[];
 
   if (!questions.length) {
     return { status: 200, body: { inserted: 0, message: "No questions generated" } };
@@ -371,8 +455,8 @@ async function generateForTopic(opts: {
         concept_tag: `${normalizedSubject}|${parentTopicName}|${topicName}`.toLowerCase(),
         difficulty: q.difficulty || 3,
         question: normalizeMathText(q.question) as string,
-        options: q.options.map((o) => normalizeMathText(o) as string),
-        answer_index: q.answer_index,
+        ...mcqColumns(q),
+        ...typeColumns(q),
         solution: normalizeMathText(q.solution || "") as string,
         graph: q.graph || null,
         table_data: q.table_data || null,
@@ -404,8 +488,8 @@ async function generateForTopic(opts: {
     topic: parentTopicName,
     subtopic: topicName,
     question: normalizeMathText(q.question) as string,
-    options: q.options.map((o) => normalizeMathText(o) as string),
-    answer_index: q.answer_index,
+    ...mcqColumns(q),
+    ...typeColumns(q),
     solution: q.solution ? (normalizeMathText(q.solution) as string) : null,
     graph: q.graph || null,
     table_data: q.table_data || null,
@@ -422,7 +506,7 @@ async function generateForTopic(opts: {
 }
 
 router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false } = req.body;
+  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes } = req.body;
 
   const resolvedSubject: string = subject || stage;
   // Support both a single topicCode and a topicCodes array
@@ -455,7 +539,7 @@ router.post("/generate-questions", async (req, res) => {
         const code = topicCodes[cursor++];
         try {
           const { status, body } = await generateForTopic({
-            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove,
+            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes,
           });
           if (status === 200) {
             totalInserted += (body.inserted as number) ?? 0;
@@ -478,7 +562,7 @@ router.post("/generate-questions", async (req, res) => {
   // Single topic
   try {
     const { status, body } = await generateForTopic({
-      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove,
+      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes,
     });
     res.status(status).json(body);
   } catch (err) {

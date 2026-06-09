@@ -36,6 +36,7 @@ export default function AdminGenerateScreen() {
   const [selectedCodes,   setSelectedCodes]   = useState(new Set())
   const [count,           setCount]           = useState(10)
   const [difficulty,      setDifficulty]      = useState('mixed')
+  const [extraTypes,      setExtraTypes]      = useState(new Set()) // formats beyond plain MCQ
   const [loading,         setLoading]         = useState(false)
   const [elapsed,         setElapsed]         = useState(0)
   const [result,          setResult]          = useState(null)
@@ -123,9 +124,13 @@ export default function AdminGenerateScreen() {
       const isBuiltIn = builtInSubjects.some(s => s.id === subject)
       const topicCodes = Array.from(selectedCodes)
 
+      // Only send questionTypes when the admin opted into richer formats, so
+      // the default request stays byte-identical to the MCQ-only flow.
+      const questionTypes = extraTypes.size ? ['mcq', ...Array.from(extraTypes)] : undefined
+
       const payload = (isBuiltIn || isManaged)
-        ? { subject, topicCodes, count, difficulty }
-        : { stage: subject, topicCodes, count, difficulty }
+        ? { subject, topicCodes, count, difficulty, ...(questionTypes ? { questionTypes } : {}) }
+        : { stage: subject, topicCodes, count, difficulty, ...(questionTypes ? { questionTypes } : {}) }
 
       const data = await adminApiPost('/api/generate-questions', payload)
       setResult(data)
@@ -289,6 +294,45 @@ export default function AdminGenerateScreen() {
             <option key={d.value} value={d.value}>{d.label}</option>
           ))}
         </select>
+      </div>
+
+      {/* Question formats — opt into types beyond plain multiple choice */}
+      <div style={{ marginBottom: 24 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Question formats</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: 'rgba(241,190,67,0.16)', border: '1px solid rgba(241,190,67,0.4)', color: GOLD }}>
+            Multiple choice ✓
+          </span>
+          {[
+            { id: 'multi_select', label: 'Multiple select' },
+            { id: 'numeric',      label: 'Numeric answer' },
+            { id: 'short_text',   label: 'Short answer' },
+            { id: 'order',        label: 'Put in order' },
+          ].map(tp => {
+            const on = extraTypes.has(tp.id)
+            return (
+              <button
+                key={tp.id}
+                onClick={() => setExtraTypes(prev => {
+                  const next = new Set(prev)
+                  next.has(tp.id) ? next.delete(tp.id) : next.add(tp.id)
+                  return next
+                })}
+                style={{
+                  padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
+                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                  color: on ? GOLD : 'rgba(255,255,255,0.6)',
+                }}
+              >{on ? `${tp.label} ✓` : tp.label}</button>
+            )
+          })}
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: FONT_B }}>
+          {extraTypes.size
+            ? 'Claude will mix these formats with multiple choice. (~half stay MCQ.)'
+            : 'Multiple choice only. Enable extra formats to generate a varied mix.'}
+        </div>
       </div>
 
       <button
