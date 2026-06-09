@@ -884,7 +884,7 @@ function AppInner() {
       <Route path="/question-lab" element={<QuestionLabScreen theme={theme} onExit={() => navigate('/home')} />} />
 
       {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
-      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} onExit={() => navigate('/home')} />} />
+      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} profile={profile} onExit={() => navigate('/home')} />} />
 
       {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
       <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />

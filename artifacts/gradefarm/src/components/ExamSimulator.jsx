@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { getQuestionType, gradeResponse, describeCorrectAnswer, emptyResponse } from '../lib/questionTypes'
 import { gradePaper, formatClock, countQuestions } from '../lib/examEngine'
+import { predictScore, readiness, percentileLabel } from '../lib/examScore'
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
@@ -83,7 +84,7 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
   )
 }
 
-export default function ExamSimulator({ paper, theme = 'dark', onExit }) {
+export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, onResult }) {
   const t = THEMES[theme]
   const [phase, setPhase] = useState('intro')   // intro | running | results | review
   const [secIdx, setSecIdx] = useState(0)
@@ -93,6 +94,21 @@ export default function ExamSimulator({ paper, theme = 'dark', onExit }) {
   const [timeLeft, setTimeLeft] = useState(paper.sections[0]?.durationSec ?? 0)
   const [secTimes, setSecTimes] = useState({})
   const [reviewIdx, setReviewIdx] = useState(0)
+  const [insights, setInsights] = useState(null) // { band, ready, stats, loading }
+
+  // When the paper finishes, compute the predicted band and fetch the track
+  // percentile (saving the attempt happens inside onResult).
+  useEffect(() => {
+    if (phase !== 'results') return
+    const r = gradePaper(paper, answers, secTimes)
+    setInsights({ band: predictScore(trackId, r.percent), ready: readiness(r.percent), stats: null, loading: !!onResult })
+    if (onResult) {
+      Promise.resolve(onResult({ ...r, trackId, title: paper.title }))
+        .then((stats) => setInsights((prev) => ({ ...(prev || {}), stats, loading: false })))
+        .catch(() => setInsights((prev) => ({ ...(prev || {}), loading: false })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
 
   const section = paper.sections[secIdx]
 
@@ -188,6 +204,35 @@ export default function ExamSimulator({ paper, theme = 'dark', onExit }) {
               )
             })}
           </div>
+          {insights && (
+            <div style={{ background: t.bgCard, border: `1px solid ${t.borderAccent}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Predicted performance</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ textAlign: 'center', minWidth: 110 }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: GOLD, fontFamily: FONT_D }}>{insights.band.label}</div>
+                  <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>{insights.band.sublabel}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 800, background: insights.ready.color + '22', border: `1px solid ${insights.ready.color}55`, color: insights.ready.color, marginBottom: 8 }}>
+                    {insights.ready.label}
+                  </span>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
+                    {insights.loading
+                      ? 'Ranking your attempt…'
+                      : insights.stats
+                        ? percentileLabel(insights.stats.percentile, insights.stats.attempts)
+                        : 'Indicative score based on this attempt.'}
+                  </div>
+                  {insights.stats && insights.stats.attempts >= 5 && (
+                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Track average: {insights.stats.average}% · {insights.stats.attempts} attempts</div>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginTop: 12, lineHeight: 1.5 }}>
+                Indicative only — based on this practice paper, not an official result.
+              </div>
+            </div>
+          )}
           <button onClick={() => { setReviewIdx(0); setPhase('review') }} style={primaryBtn}>Review answers →</button>
           <button onClick={onExit} style={{ ...ghostBtn(t), marginTop: 10 }}>Back to exams</button>
         </div>

@@ -1,21 +1,49 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { EXAM_TRACKS } from '../lib/examTracks'
 import { buildPaper, countQuestions, formatClock } from '../lib/examEngine'
+import { saveExamAttempt, fetchExamPercentile, fetchMyExamAttempts } from '../lib/db'
 import ExamSimulator from './ExamSimulator'
+
+const GOLD = '#f1be43'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
-export default function ExamModeScreen({ theme = 'dark', questions = [], onExit }) {
+export default function ExamModeScreen({ theme = 'dark', questions = [], profile, onExit }) {
   const t = THEMES[theme]
   const [paper, setPaper] = useState(null)
+  const [activeTrack, setActiveTrack] = useState(null)
+  const [recent, setRecent] = useState([])
 
-  if (paper) {
-    return <ExamSimulator paper={paper} theme={theme} onExit={() => setPaper(null)} />
+  // Load the student's recent attempts for the history strip (refreshes when
+  // returning to the landing after finishing a paper).
+  useEffect(() => {
+    if (paper || !profile?.id) return
+    let alive = true
+    fetchMyExamAttempts(profile.id, 5).then((rows) => { if (alive) setRecent(rows) }).catch(() => {})
+    return () => { alive = false }
+  }, [paper, profile?.id])
+
+  // Persist the finished attempt (best-effort) and return the track percentile.
+  const handleResult = async (result) => {
+    try { if (profile?.id) await saveExamAttempt(profile.id, result) } catch { /* non-blocking */ }
+    try { return await fetchExamPercentile(result.trackId, result.percent) } catch { return null }
   }
 
-  const start = (track) => setPaper(buildPaper(track, questions))
+  if (paper) {
+    return (
+      <ExamSimulator
+        paper={paper}
+        trackId={activeTrack?.id}
+        theme={theme}
+        onResult={handleResult}
+        onExit={() => { setPaper(null); setActiveTrack(null) }}
+      />
+    )
+  }
+
+  const start = (track) => { setActiveTrack(track); setPaper(buildPaper(track, questions)) }
 
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, padding: '40px 20px 80px' }}>
@@ -61,6 +89,26 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], onExit 
             )
           })}
         </div>
+
+        {recent.length > 0 && (
+          <div style={{ marginTop: 26, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px' }}>
+            <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Your recent attempts</div>
+            {recent.map((a) => {
+              const title = a.title || (EXAM_TRACKS.find((x) => x.id === a.track_id)?.title) || a.track_id
+              const c = a.percent >= 70 ? t.success : a.percent >= 40 ? GOLD : t.danger
+              const when = new Date(a.created_at).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })
+              return (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: `1px solid ${t.border}` }}>
+                  <span style={{ fontSize: 13, color: t.text, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, color: t.textFaint }}>{when}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: c }}>{a.percent}%</span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <div style={{ marginTop: 22, fontSize: 12, color: t.textFaint, textAlign: 'center', lineHeight: 1.6 }}>
           Preview tracks run a short sample paper to demonstrate the format. Full-length UCAT, GAMSAT and selective-entry content is being built out.
