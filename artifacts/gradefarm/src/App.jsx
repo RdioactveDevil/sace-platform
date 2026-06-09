@@ -43,6 +43,7 @@ const WritingScreen         = lazy(() => import('./components/WritingScreen'))
 const DiagnosticScreen      = lazy(() => import('./components/DiagnosticScreen'))
 const PricingPage           = lazy(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
+const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
 const SessionRoom           = lazy(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
@@ -877,6 +878,9 @@ function AppInner() {
 
       {/* Question Lab — public preview of the multi-format question engine */}
       <Route path="/question-lab" element={<QuestionLabScreen theme={theme} />} />
+
+      {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
+      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
