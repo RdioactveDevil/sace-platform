@@ -12,10 +12,12 @@ values (
 )
 on conflict (id) do nothing;
 
+drop policy if exists "Public can read question images" on storage.objects;
 create policy "Public can read question images" on storage.objects
   for select to public
   using (bucket_id = 'question-images');
 
+drop policy if exists "Admins can upload question images" on storage.objects;
 create policy "Admins can upload question images" on storage.objects
   for insert to authenticated
   with check (

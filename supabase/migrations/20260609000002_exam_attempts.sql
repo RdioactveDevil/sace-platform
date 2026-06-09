@@ -18,10 +18,12 @@ create index if not exists exam_attempts_track_idx on exam_attempts (track_id);
 alter table exam_attempts enable row level security;
 
 -- Students can read and create their own attempts.
+drop policy if exists "Users read own exam attempts" on exam_attempts;
 create policy "Users read own exam attempts" on exam_attempts
   for select to authenticated
   using (user_id = auth.uid());
 
+drop policy if exists "Users insert own exam attempts" on exam_attempts;
 create policy "Users insert own exam attempts" on exam_attempts
   for insert to authenticated
   with check (user_id = auth.uid());
