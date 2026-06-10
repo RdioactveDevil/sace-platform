@@ -6,8 +6,10 @@ name: Backfill — verify & repair questions
 # Requires two repository secrets (Settings → Secrets and variables → Actions):
 #   SUPABASE_SERVICE_KEY        — Supabase service_role key
 #   ANTHROPIC_API_KEY           — Anthropic API key
-# Optional repository variable:
+# Optional repository variables (Settings → Secrets and variables → Actions → Variables):
 #   AI_VERIFY_MODEL             — overrides the verifier model (default claude-sonnet-4-6)
+#   API_BASE_URL                — deployed app URL used to regenerate flawed questions
+#                                 (default https://www.gradefarm.com.au)
 
 on:
   workflow_dispatch:
@@ -27,8 +29,12 @@ on:
         description: "Max rows to process (blank = all)"
         type: string
         default: ""
+      regenerate_flawed:
+        description: "Replace flawed questions with fresh verified ones (apply mode only)"
+        type: boolean
+        default: false
       delete_flawed:
-        description: "Also DELETE questions flagged unfixable (apply mode only)"
+        description: "Instead DELETE flawed questions (apply mode; ignored if regenerate is on)"
         type: boolean
         default: false
       concurrency:
@@ -66,10 +72,12 @@ jobs:
           SUBJECT: ${{ inputs.subject }}
           LIMIT: ${{ inputs.limit }}
           DELETE_FLAWED: ${{ inputs.delete_flawed }}
+          REGENERATE_FLAWED: ${{ inputs.regenerate_flawed }}
           CONCURRENCY: ${{ inputs.concurrency }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AI_VERIFY_MODEL: ${{ vars.AI_VERIFY_MODEL }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
@@ -84,6 +92,7 @@ jobs:
           case "$MODE" in
             apply*) ARGS+=("--apply") ;;
           esac
+          if [ "$REGENERATE_FLAWED" = "true" ]; then ARGS+=("--regenerate-flawed"); fi
           if [ "$DELETE_FLAWED" = "true" ]; then ARGS+=("--delete-flawed"); fi
           if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
           if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
