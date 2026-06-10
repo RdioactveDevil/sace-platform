@@ -10,6 +10,9 @@ import {
   adminRejectTutor,
   adminSetStudentActive,
   adminDeleteStudent,
+  adminGetStudentSubscriptions,
+  adminGrantSubscription,
+  adminRevokeSubscription,
   downloadWritingReportPdf,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
@@ -119,13 +122,8 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setSubsLoading(true)
     setSubsError('')
     try {
-      const { data, error } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-      if (error) throw error
-      setSubscriptions(data || [])
+      const subs = await adminGetStudentSubscriptions(userId)
+      setSubscriptions(subs)
     } catch (e) {
       setSubsError(e.message)
     }
@@ -687,11 +685,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   try {
                     const cur = liveCurricula.find(c => c.id === grantSubject)
                     if (!cur) throw new Error('Subject not found')
-                    const { error } = await supabase.from('user_subscriptions').upsert(
-                      { user_id: selected.id, subject_name: cur.name, stage: cur.level_label || '', active: true, beta: true },
-                      { onConflict: 'user_id,subject_name,stage' }
-                    )
-                    if (error) throw error
+                    await adminGrantSubscription(selected.id, cur.name, cur.level_label || '')
                     setGrantSubject('')
                     await loadSubscriptions(selected.id)
                   } catch (e) {
@@ -703,8 +697,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   if (!window.confirm('Remove this subscription?')) return
                   setSubsError('')
                   try {
-                    const { error } = await supabase.from('user_subscriptions').delete().eq('id', subId)
-                    if (error) throw error
+                    await adminRevokeSubscription(selected.id, subId)
                     await loadSubscriptions(selected.id)
                   } catch (e) {
                     setSubsError(e.message)

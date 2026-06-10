@@ -117,6 +117,25 @@ export async function adminDeleteStudent(studentId) {
   })
 }
 
+export async function adminGetStudentSubscriptions(studentId) {
+  const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions`)
+  return json.subscriptions || []
+}
+
+export async function adminGrantSubscription(studentId, subjectName, stage) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions`, {
+    method: 'POST',
+    body: JSON.stringify({ subject_name: subjectName, stage: stage || '' }),
+  })
+}
+
+export async function adminRevokeSubscription(studentId, subId) {
+  return adminFetch(
+    `/api/admin/students/${encodeURIComponent(studentId)}/subscriptions/${encodeURIComponent(subId)}`,
+    { method: 'DELETE' },
+  )
+}
+
 export async function adminGetStudentAssignments(studentId) {
   const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/assignments`)
   return json.assignments || []

@@ -722,6 +722,73 @@ router.get("/admin/tutors/:id", async (req, res) => {
   }
 });
 
+// GET /admin/students/:id/subscriptions — list active subscriptions for a student (bypasses RLS)
+router.get("/admin/students/:id/subscriptions", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { id } = req.params;
+
+    const { data, error } = await admin
+      .from("user_subscriptions")
+      .select("id, user_id, subject_name, stage, active, beta, created_at")
+      .eq("user_id", id)
+      .eq("active", true);
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ subscriptions: data || [] });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// POST /admin/students/:id/subscriptions — grant a subject subscription to a student.
+// Body: { subject_name: string, stage?: string }
+router.post("/admin/students/:id/subscriptions", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { id } = req.params;
+    const { subject_name, stage } = req.body || {};
+
+    if (!subject_name) return res.status(400).json({ error: "subject_name is required" });
+
+    const { error } = await admin
+      .from("user_subscriptions")
+      .upsert(
+        { user_id: id, subject_name, stage: stage || "", active: true, beta: true },
+        { onConflict: "user_id,subject_name,stage" },
+      );
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// DELETE /admin/students/:id/subscriptions/:subId — revoke a subject subscription.
+router.delete("/admin/students/:id/subscriptions/:subId", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { subId } = req.params;
+
+    const { error } = await admin
+      .from("user_subscriptions")
+      .delete()
+      .eq("id", subId);
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
 // GET /admin/students/:id/assignments — full assignment history for one student
 router.get("/admin/students/:id/assignments", async (req, res) => {
   try {
