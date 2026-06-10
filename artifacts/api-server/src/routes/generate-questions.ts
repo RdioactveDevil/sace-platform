@@ -173,6 +173,7 @@ export type GeneratedQuestion = {
   difficulty?: number;
   graph?: Record<string, unknown> | null;
   table_data?: Record<string, unknown> | null;
+  diagram?: { svg?: string; caption?: string } | null;
   question_type?: string;
   answer_indices?: number[];
   answer?: number | string;
@@ -246,6 +247,7 @@ async function generateForTopic(opts: {
   difficulty: string | number;
   autoApprove: boolean;
   questionTypes?: string[];
+  includeDiagrams?: boolean;
 }): Promise<GenResult> {
   const { adminDb, resolvedSubject, topicCode, count, difficulty, autoApprove } = opts;
   // Which formats Claude may use. Defaults to MCQ-only so existing flows are
@@ -254,6 +256,7 @@ async function generateForTopic(opts: {
     .filter((tp) => ALLOWED_QUESTION_TYPES.includes(tp));
   const extraTypes = requestedTypes.filter((tp) => tp !== "mcq");
   const allowMulti = extraTypes.length > 0;
+  const includeDiagrams = !!opts.includeDiagrams;
 
   // Normalise picker IDs to canonical curriculum names.
   const normalizedSubject = resolvedSubject === "maths_y10" ? "Year 10 Mathematics" : resolvedSubject;
@@ -320,6 +323,14 @@ async function generateForTopic(opts: {
     `    Do NOT include graph for purely algebraic or numeric questions.`,
   ];
 
+  const DIAGRAM_INSTRUCTIONS = [
+    `  diagram (optional — include ONLY when a labelled figure genuinely helps the question, e.g. a circuit, cell, geometry figure, apparatus, force/energy diagram, or a simple bar/line chart. If not needed, omit the key or set to null.)`,
+    `    diagram schema: { "svg": "<svg ...>...</svg>", "caption": "<short caption>" }`,
+    `    The svg MUST be a complete, self-contained SVG with a viewBox (e.g. viewBox='0 0 320 180'). Use ONLY single quotes for every attribute so the JSON stays valid. No <script>, no external images, no <foreignObject>.`,
+    `    Keep it clean and legible: a dark background (#0f1430) with light strokes (#cbd5e1), gold highlights (#f1be43) and readable sans-serif <text> labels works well. Label the key parts the question refers to.`,
+    `    Do NOT include a diagram for questions answerable from text alone.`,
+  ];
+
   const TABLE_INSTRUCTIONS = [
     `  table_data (optional \u2014 include ONLY when the question requires a data table to be answered. If not needed, omit the key entirely or set to null.)`,
     `    table_data schema: { "headers": ["col1", "col2", ...], "rows": [[val, val, ...], ...], "caption": "<optional string>" }`,
@@ -364,6 +375,7 @@ async function generateForTopic(opts: {
     "difficulty (integer 1\u20135)",
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
+    ...(includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
     ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions, in the question, EVERY option, and the solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $e^x$, $f''(x)$, $(x+2)e^x$, ${latexExample}. Always write exponents with a caret inside $...$ (e.g. $x^2$, NEVER the Unicode "x²"). Always wrap derivative notation like $f'(x)$ and $f''(x)$. Always use \\frac{numerator}{denominator} for fractions — NEVER (a)/(b) slash notation (e.g. write $\\frac{x^2-4}{x-1}$, NOT $(x^2-4)/(x-1)$). Never emit a bare mathematical expression outside $...$.`] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
@@ -472,6 +484,7 @@ async function generateForTopic(opts: {
         solution: normalizeMathText(q.solution || "") as string,
         graph: q.graph || null,
         table_data: q.table_data || null,
+        diagram: q.diagram || null,
         tip: null,
         created_at: now,
       }));
@@ -505,6 +518,7 @@ async function generateForTopic(opts: {
     solution: q.solution ? (normalizeMathText(q.solution) as string) : null,
     graph: q.graph || null,
     table_data: q.table_data || null,
+    diagram: q.diagram || null,
     difficulty: q.difficulty || null,
     status: "pending",
   }));
@@ -518,7 +532,7 @@ async function generateForTopic(opts: {
 }
 
 router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes } = req.body;
+  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams } = req.body;
 
   const resolvedSubject: string = subject || stage;
   // Support both a single topicCode and a topicCodes array
@@ -551,7 +565,7 @@ router.post("/generate-questions", async (req, res) => {
         const code = topicCodes[cursor++];
         try {
           const { status, body } = await generateForTopic({
-            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes,
+            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes, includeDiagrams,
           });
           if (status === 200) {
             totalInserted += (body.inserted as number) ?? 0;
@@ -574,7 +588,7 @@ router.post("/generate-questions", async (req, res) => {
   // Single topic
   try {
     const { status, body } = await generateForTopic({
-      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes,
+      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes, includeDiagrams,
     });
     res.status(status).json(body);
   } catch (err) {

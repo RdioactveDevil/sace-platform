@@ -6,6 +6,7 @@ import { predictScore, readiness, percentileLabel } from '../lib/examScore'
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
+import DiagramView from './DiagramView'
 import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock from './QuizToolsDock'
 
@@ -53,6 +54,7 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
     <div>
       {q.graph && <GraphView graph={q.graph} theme={theme} />}
       {q.table_data && <TableView table={q.table_data} theme={theme} />}
+      {q.diagram && <DiagramView diagram={q.diagram} theme={theme} />}
       {q.image_url && type === 'mcq' && (
         <img src={q.image_url} alt="Question diagram" style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }} />
       )}

@@ -37,6 +37,7 @@ export default function AdminGenerateScreen() {
   const [count,           setCount]           = useState(10)
   const [difficulty,      setDifficulty]      = useState('mixed')
   const [extraTypes,      setExtraTypes]      = useState(new Set()) // formats beyond plain MCQ
+  const [includeDiagrams, setIncludeDiagrams] = useState(false)
   const [loading,         setLoading]         = useState(false)
   const [elapsed,         setElapsed]         = useState(0)
   const [result,          setResult]          = useState(null)
@@ -128,9 +129,13 @@ export default function AdminGenerateScreen() {
       // the default request stays byte-identical to the MCQ-only flow.
       const questionTypes = extraTypes.size ? ['mcq', ...Array.from(extraTypes)] : undefined
 
+      const extras = {
+        ...(questionTypes ? { questionTypes } : {}),
+        ...(includeDiagrams ? { includeDiagrams: true } : {}),
+      }
       const payload = (isBuiltIn || isManaged)
-        ? { subject, topicCodes, count, difficulty, ...(questionTypes ? { questionTypes } : {}) }
-        : { stage: subject, topicCodes, count, difficulty, ...(questionTypes ? { questionTypes } : {}) }
+        ? { subject, topicCodes, count, difficulty, ...extras }
+        : { stage: subject, topicCodes, count, difficulty, ...extras }
 
       const data = await adminApiPost('/api/generate-questions', payload)
       setResult(data)
@@ -333,6 +338,18 @@ export default function AdminGenerateScreen() {
             ? 'Claude will mix these formats with multiple choice. (~half stay MCQ.)'
             : 'Multiple choice only. Enable extra formats to generate a varied mix.'}
         </div>
+        <button
+          onClick={() => setIncludeDiagrams(v => !v)}
+          style={{
+            marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
+            background: includeDiagrams ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${includeDiagrams ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
+            color: includeDiagrams ? GOLD : 'rgba(255,255,255,0.6)',
+          }}
+        >
+          <span style={{ fontSize: 15 }}>{includeDiagrams ? '☑' : '☐'}</span>
+          Auto-draw diagrams (AI vector figures — no upload)
+        </button>
       </div>
 
       <button
