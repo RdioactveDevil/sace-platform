@@ -63,6 +63,12 @@ const ANTHROPIC_BASE =
 const VERIFY_MODEL = process.env.AI_VERIFY_MODEL || "claude-sonnet-4-6";
 const VERIFY = !!ANTHROPIC_KEY;
 
+// Retry transient Anthropic failures (rate limits / overload / timeouts) so a
+// full-bank run doesn't shed thousands of questions to 429s.
+const MAX_RETRIES = 6;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
+
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false },
 });
@@ -130,30 +136,51 @@ If a DIFFERENT option matches your computed answer (use the 0-based index of tha
 If your computed answer matches NO option, or the question is fundamentally flawed/ambiguous:
 {"verdict":"wrong_question","correct_index":null,"explanation":"one sentence"}`;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-  let resp: Response;
-  try {
-    resp = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: VERIFY_MODEL,
-        max_tokens: 800,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timeout);
+  let lastErr: Error = new Error("verification failed");
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 40_000);
+    let resp: Response | null = null;
+    try {
+      resp = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: VERIFY_MODEL,
+          max_tokens: 800,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      if (resp.ok) {
+        const body = (await resp.json()) as any;
+        return parseVerdict((body.content?.[0]?.text ?? "").trim());
+      }
+    } catch (err) {
+      lastErr = err as Error; // network error / timeout abort — retryable
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (resp?.ok) throw lastErr; // 2xx but body/JSON parse failed — not transient
+    const status = resp?.status;
+    if (status !== undefined) {
+      if (!RETRYABLE_STATUS.has(status)) throw new Error(`Anthropic API ${status}`);
+      lastErr = new Error(`Anthropic API ${status}`);
+    }
+    if (attempt === MAX_RETRIES) break;
+
+    const retryAfter = resp ? Number(resp.headers.get("retry-after")) : NaN;
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(1000 * 2 ** attempt, 30_000);
+    await sleep(wait + Math.random() * 500);
   }
-  if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
-  const body = (await resp.json()) as any;
-  return parseVerdict((body.content?.[0]?.text ?? "").trim());
+  throw lastErr;
 }
 
 // ─── row processing ───────────────────────────────────────────────────────────

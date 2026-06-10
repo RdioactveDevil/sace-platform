@@ -31,6 +31,10 @@ on:
         description: "Also DELETE questions flagged unfixable (apply mode only)"
         type: boolean
         default: false
+      concurrency:
+        description: "Parallel verify calls (blank = 4; lower it if you hit rate limits)"
+        type: string
+        default: ""
 
 # Never let two backfills run against the database at once.
 concurrency:
@@ -62,6 +66,7 @@ jobs:
           SUBJECT: ${{ inputs.subject }}
           LIMIT: ${{ inputs.limit }}
           DELETE_FLAWED: ${{ inputs.delete_flawed }}
+          CONCURRENCY: ${{ inputs.concurrency }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AI_VERIFY_MODEL: ${{ vars.AI_VERIFY_MODEL }}
@@ -82,5 +87,6 @@ jobs:
           if [ "$DELETE_FLAWED" = "true" ]; then ARGS+=("--delete-flawed"); fi
           if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
           if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
+          if [ -n "${CONCURRENCY// /}" ]; then ARGS+=("--concurrency" "$CONCURRENCY"); fi
           echo "Running backfill with args: ${ARGS[*]:-<dry run, all rows>}"
           pnpm --filter @workspace/scripts run backfill:verify-repair -- "${ARGS[@]}"
