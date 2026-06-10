@@ -102,7 +102,12 @@ type Verdict = {
 const LABELS = ["A", "B", "C", "D", "E", "F"];
 
 function parseVerdict(text: string): Verdict {
-  const start = text.indexOf("{");
+  // Anchor on the verdict object's opening brace rather than the first "{" in
+  // the text — the model's step-by-step reasoning often contains stray braces
+  // (LaTeX like \frac{a}{b}, set notation) that otherwise get parsed instead.
+  const keyIdx = text.lastIndexOf('"verdict"');
+  const anchored = keyIdx === -1 ? -1 : text.lastIndexOf("{", keyIdx);
+  const start = anchored !== -1 ? anchored : text.indexOf("{");
   if (start === -1) throw new Error(`No JSON in AI response: ${text.slice(0, 200)}`);
   let depth = 0, end = -1;
   for (let i = start; i < text.length; i++) {
@@ -152,7 +157,7 @@ If your computed answer matches NO option, or the question is fundamentally flaw
         },
         body: JSON.stringify({
           model: VERIFY_MODEL,
-          max_tokens: 800,
+          max_tokens: 2000,
           messages: [{ role: "user", content: prompt }],
         }),
       });
