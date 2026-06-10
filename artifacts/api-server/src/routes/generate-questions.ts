@@ -319,6 +319,7 @@ async function generateForTopic(opts: {
     `  graph (optional \u2014 include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
     `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
     `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4".`,
+    `    Always write expr in terms of x for the horizontal axis, even when the question phrases the function with another letter (e.g. for N(t)=1200*(1/3)**(t/5) the expr is "1200 * (1/3)**(x/5)").`,
     `    Include graph for questions about: identifying graph features (vertex, intercepts, turning points), reading values off a graph, matching an equation to a graph, or describing transformations shown visually.`,
     `    Do NOT include graph for purely algebraic or numeric questions.`,
   ];

@@ -1,19 +1,5 @@
 import { useMemo } from 'react'
-
-// Safe expression evaluator — only exposes Math.* to the expression string.
-function makeEvalFn(expr) {
-  try {
-    // Replace ^ with ** for exponentiation
-    const safe = expr.replace(/\^/g, '**')
-    // eslint-disable-next-line no-new-func
-    return new Function(
-      'x',
-      `"use strict"; const {abs,acos,asin,atan,atan2,ceil,cos,exp,floor,log,max,min,pow,round,sign,sin,sqrt,tan,PI,E} = Math; return (${safe});`
-    )
-  } catch {
-    return null
-  }
-}
+import { makeEvalFn } from '../lib/graphExpr'
 
 const COLORS = ['#4f8ef7', '#f15b5b', '#3cba74', '#f5a623', '#9b59b6']
 
