@@ -102,6 +102,21 @@ export async function adminGetStudentStats(studentId) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/stats`)
 }
 
+// Soft-delete: active:false deactivates (blocks sign-in, keeps data), active:true reactivates.
+export async function adminSetStudentActive(studentId, active) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/deactivate`, {
+    method: 'POST',
+    body: JSON.stringify({ active: !!active }),
+  })
+}
+
+// Hard-delete: permanently removes the account and all data tied to it.
+export async function adminDeleteStudent(studentId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function adminGetStudentAssignments(studentId) {
   const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/assignments`)
   return json.assignments || []

@@ -275,6 +275,24 @@ router.get("/admin/students", async (req, res) => {
       subsRows.push(...((subChunk || []) as SubRow[]));
     }
 
+    // Deactivation state (soft-deleted accounts). Guarded so a DB that hasn't run the
+    // deactivated_at migration yet still returns the student list.
+    const deactivatedByUser: Record<string, string | null> = {};
+    for (let i = 0; i < allIds.length; i += IN_BATCH) {
+      const chunk = allIds.slice(i, i + IN_BATCH);
+      const { data: deChunk, error: deErr } = await admin
+        .from("profiles")
+        .select("id, deactivated_at")
+        .in("id", chunk);
+      if (deErr) {
+        warnings.push(`deactivation state unavailable: ${deErr.message}`);
+        break;
+      }
+      (deChunk || []).forEach((r: { id: string; deactivated_at: string | null }) => {
+        deactivatedByUser[r.id] = r.deactivated_at ?? null;
+      });
+    }
+
     const tutorRows = (tutorStudentsData || []) as TutorStudentRow[];
 
     // Resolve tutor display names
@@ -330,6 +348,7 @@ router.get("/admin/students", async (req, res) => {
           is_tutor: !!(p?.is_tutor),
           tutor_application_status: p?.tutor_application_status ?? "none",
           created_at: u.created_at,
+          deactivated_at: deactivatedByUser[u.id] ?? null,
           subjects: subsByUser[u.id] || [],
           tutor_name: tut?.name ?? null,
           tutor_id: tut?.id ?? null,
@@ -343,6 +362,81 @@ router.get("/admin/students", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
+  }
+});
+
+// POST /admin/students/:id/deactivate — soft-delete (deactivate) or reactivate an account.
+// Body: { active: boolean } — active:false deactivates, active:true reactivates.
+// Deactivating blocks sign-in (auth ban) and stamps deactivated_at, but keeps all data.
+router.post("/admin/students/:id/deactivate", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const { id } = req.params;
+    const deactivate = req.body?.active === false;
+
+    if (id === callerUserId) {
+      return res.status(400).json({ error: "You can't deactivate your own account" });
+    }
+
+    const { data: target, error: tErr } = await admin
+      .from("profiles")
+      .select("id, is_admin")
+      .eq("id", id)
+      .single();
+    if (tErr || !target) return res.status(404).json({ error: "Student not found" });
+    if (target.is_admin) return res.status(400).json({ error: "Cannot deactivate an admin account" });
+
+    // Block / restore sign-in at the auth layer (ban ~100 years, or lift the ban).
+    const { error: banErr } = await admin.auth.admin.updateUserById(id, {
+      ban_duration: deactivate ? "876000h" : "none",
+    } as { ban_duration: string });
+    if (banErr) return res.status(500).json({ error: banErr.message });
+
+    // Stamp the profile so the state is visible in the admin list. Tolerate a DB that
+    // hasn't run the deactivated_at migration yet (the auth ban already took effect).
+    const { error: updErr } = await admin
+      .from("profiles")
+      .update({ deactivated_at: deactivate ? new Date().toISOString() : null })
+      .eq("id", id);
+    if (updErr && !/deactivated_at/i.test(updErr.message)) {
+      return res.status(500).json({ error: updErr.message });
+    }
+
+    return res.json({ ok: true, active: !deactivate });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// DELETE /admin/students/:id — permanently delete an account and all data tied to it.
+// Deleting the auth user cascades to profiles and every row that references profiles(id).
+router.delete("/admin/students/:id", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const { id } = req.params;
+
+    if (id === callerUserId) {
+      return res.status(400).json({ error: "You can't delete your own account" });
+    }
+
+    const { data: target, error: tErr } = await admin
+      .from("profiles")
+      .select("id, is_admin")
+      .eq("id", id)
+      .single();
+    if (tErr || !target) return res.status(404).json({ error: "Student not found" });
+    if (target.is_admin) return res.status(400).json({ error: "Cannot delete an admin account" });
+
+    const { error: delErr } = await admin.auth.admin.deleteUser(id);
+    if (delErr) return res.status(500).json({ error: delErr.message });
+
+    return res.json({ ok: true, deleted: id });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
   }
 });
 
