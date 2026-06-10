@@ -1,0 +1,106 @@
+name: Ingest past paper
+
+# Manually triggered (Actions tab → this workflow → "Run workflow").
+# Extracts questions from a past-paper PDF and attaches each question's original
+# figure (cropped from the page) to it, then inserts into the live bank.
+#
+# Requires repository secrets:
+#   SUPABASE_SERVICE_KEY — Supabase service_role key
+#   ANTHROPIC_API_KEY    — Anthropic API key
+# Optional repository variable:
+#   INGEST_MODEL         — overrides the extraction model (default claude-sonnet-4-6)
+#
+# Provide the PDF via either a public URL or a path in the admin-uploads bucket.
+# Run in dry-run first to see how many questions/figures were found.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pdf_url:
+        description: "Public URL of the past-paper PDF (or use storage_path)"
+        type: string
+        default: ""
+      storage_path:
+        description: "Path in the admin-uploads bucket (alternative to pdf_url)"
+        type: string
+        default: ""
+      subject:
+        description: "Subject (exact bank name, e.g. 'Chemistry Stage 1')"
+        type: string
+        required: true
+      topic:
+        description: "Topic name"
+        type: string
+        required: true
+      subtopic:
+        description: "Subtopic name (optional; defaults to topic)"
+        type: string
+        default: ""
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (report only, no writes)"
+          - "apply (insert into the live bank)"
+        default: "dry-run (report only, no writes)"
+      limit:
+        description: "Max questions to ingest (blank = all)"
+        type: string
+        default: ""
+
+concurrency:
+  group: ingest-past-paper
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ingest
+        env:
+          PDF_URL: ${{ inputs.pdf_url }}
+          STORAGE_PATH: ${{ inputs.storage_path }}
+          SUBJECT: ${{ inputs.subject }}
+          TOPIC: ${{ inputs.topic }}
+          SUBTOPIC: ${{ inputs.subtopic }}
+          MODE: ${{ inputs.mode }}
+          LIMIT: ${{ inputs.limit }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INGEST_MODEL: ${{ vars.INGEST_MODEL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "::error::SUPABASE_SERVICE_KEY secret is not set."
+            exit 1
+          fi
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set."
+            exit 1
+          fi
+          ARGS=()
+          if [ -n "${PDF_URL// /}" ]; then ARGS+=("--pdf-url" "$PDF_URL"); fi
+          if [ -n "${STORAGE_PATH// /}" ]; then ARGS+=("--storage-path" "$STORAGE_PATH"); fi
+          ARGS+=("--subject" "$SUBJECT" "--topic" "$TOPIC")
+          if [ -n "${SUBTOPIC// /}" ]; then ARGS+=("--subtopic" "$SUBTOPIC"); fi
+          if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
+          case "$MODE" in
+            apply*) ARGS+=("--apply") ;;
+          esac
+          echo "Running ingest with args: ${ARGS[*]}"
+          pnpm --filter @workspace/scripts run ingest:past-paper -- "${ARGS[@]}"
