@@ -8,6 +8,8 @@ import {
   adminSetAdmin,
   adminApproveTutor,
   adminRejectTutor,
+  adminSetStudentActive,
+  adminDeleteStudent,
   downloadWritingReportPdf,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
@@ -69,6 +71,8 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [curriculaLoading, setCurriculaLoading] = useState(false)
   const [grantSubject, setGrantSubject]         = useState('')
   const [grantBusy, setGrantBusy]               = useState(false)
+  const [accountBusy, setAccountBusy]           = useState(false)
+  const [accountError, setAccountError]         = useState('')
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -134,6 +138,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setDetailAssignments(null)
     setWritingAttempts(null)
     setRoleError('')
+    setAccountError('')
     setStatsLoading(true)
     setAssignmentsLoading(true)
     setWritingLoading(true)
@@ -192,6 +197,51 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
       setRoleError(e.message)
     }
     setBusyId(null)
+  }
+
+  // Deactivate (soft-delete, reversible) or reactivate the selected account.
+  const handleToggleActive = async () => {
+    if (!selected) return
+    const deactivating = !selected.deactivated_at
+    const name = selected.display_name || selected.email
+    const msg = deactivating
+      ? `Deactivate ${name}?\n\nThey'll be signed out and blocked from logging in until you reactivate them. All their data is kept.`
+      : `Reactivate ${name}?\n\nThey'll be able to log in again.`
+    if (!window.confirm(msg)) return
+    setAccountBusy(true)
+    setAccountError('')
+    try {
+      await adminSetStudentActive(selected.id, !deactivating)
+      const json = await adminListStudents()
+      const list = json.students || []
+      setStudents(list)
+      onCountLoad?.(list.length)
+      setSelected(list.find(s => s.id === selected.id) ?? null)
+    } catch (e) {
+      setAccountError(e.message)
+    }
+    setAccountBusy(false)
+  }
+
+  // Permanently delete the selected account and all data tied to it.
+  const handleDelete = async () => {
+    if (!selected) return
+    const name = selected.display_name || selected.email
+    if (!window.confirm(`Permanently delete ${name}?\n\nThis removes their account and ALL their data — progress, sessions, subscriptions and assignments. This cannot be undone.`)) return
+    if (!window.confirm('Are you absolutely sure? This is irreversible.')) return
+    setAccountBusy(true)
+    setAccountError('')
+    try {
+      await adminDeleteStudent(selected.id)
+      const json = await adminListStudents()
+      const list = json.students || []
+      setStudents(list)
+      onCountLoad?.(list.length)
+      closeDetail()
+    } catch (e) {
+      setAccountError(e.message)
+      setAccountBusy(false)
+    }
   }
 
   // Derive filter options from loaded students
@@ -338,6 +388,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   <td style={td}>
                     <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{u.display_name || '—'}</div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{u.email}</div>
+                    {u.deactivated_at && (
+                      <div style={{ fontSize: 10, color: '#f87171', marginTop: 2 }}>Deactivated</div>
+                    )}
                     {!u.onboarding_completed && (
                       <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 2 }}>Onboarding incomplete</div>
                     )}
@@ -449,6 +502,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 <Row label="Joined"      value={fmtDate(selected.created_at)} />
                 <Row label="Last active" value={fmtDate(selected.last_active)} />
                 <Row label="Onboarding"  value={selected.onboarding_completed ? '✓ Complete' : '⚠ Incomplete'} valueColor={selected.onboarding_completed ? '#4ade80' : '#f59e0b'} />
+                {selected.deactivated_at && (
+                  <Row label="Status" value="Deactivated" valueColor="#f87171" />
+                )}
               </Section>
 
               {/* XP / Streak stats */}
@@ -701,6 +757,34 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 </div>
               </Section>
 
+              {/* Account management — deactivate (reversible) or delete (permanent) */}
+              <Section title="Account">
+                {accountError && (
+                  <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{accountError}</div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Btn
+                      onClick={handleToggleActive}
+                      disabled={accountBusy || selected.id === profile?.id}
+                      title={selected.id === profile?.id ? "You can't deactivate your own account" : ''}
+                    >
+                      {accountBusy ? '…' : selected.deactivated_at ? 'Reactivate Account' : 'Deactivate Account'}
+                    </Btn>
+                    <DangerBtn
+                      onClick={handleDelete}
+                      disabled={accountBusy || selected.id === profile?.id}
+                      title={selected.id === profile?.id ? "You can't delete your own account" : ''}
+                    >
+                      Delete Account
+                    </DangerBtn>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                    Deactivating blocks sign-in but keeps all data — reversible. Deleting permanently removes the account and every record tied to it.
+                  </div>
+                </div>
+              </Section>
+
             </div>
           </div>
         </>
@@ -859,6 +943,26 @@ function Btn({ children, onClick, disabled, variant, title }) {
         border: '1px solid ' + (isPrimary ? '#f1be4399' : 'rgba(255,255,255,0.12)'),
         background: isPrimary ? '#f1be4322' : 'rgba(255,255,255,0.04)',
         color: isPrimary ? '#f1be43' : '#e2e8f0',
+        fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        fontFamily: FONT_B,
+        whiteSpace: 'nowrap',
+      }}
+    >{children}</button>
+  )
+}
+
+function DangerBtn({ children, onClick, disabled, title }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        padding: '7px 12px', borderRadius: 7,
+        border: '1px solid rgba(248,113,113,0.5)',
+        background: 'rgba(248,113,113,0.12)',
+        color: '#f87171',
         fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         fontFamily: FONT_B,
