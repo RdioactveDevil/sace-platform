@@ -4,6 +4,7 @@ import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
+import DiagramView from './DiagramView'
 import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock from './QuizToolsDock'
 
@@ -75,6 +76,22 @@ const SAMPLES = [
     answer_index: 2,
     difficulty: 3,
     solution: 'Doubling [A] from 0.1 to 0.2 quadruples the rate (×4 = 2²), so the reaction is second order in [A].',
+  },
+  {
+    id: 'demo-diagram',
+    label: 'AI diagram',
+    question_type: 'mcq',
+    subject: 'Physics', topic: 'Electricity', subtopic: 'Series circuits',
+    question: 'In the series circuit shown, what is the total resistance?',
+    diagram: {
+      caption: 'A 4 Ω and 8 Ω resistor in series with a 12 V cell',
+      svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 160'><rect width='320' height='160' fill='#0f1430'/><path d='M40 110 H40 V50 H120' stroke='#cbd5e1' stroke-width='2' fill='none'/><rect x='120' y='40' width='50' height='20' fill='none' stroke='#f1be43' stroke-width='2'/><text x='145' y='34' fill='#f9d87a' font-size='12' text-anchor='middle' font-family='sans-serif'>4Ω</text><path d='M170 50 H200' stroke='#cbd5e1' stroke-width='2'/><rect x='200' y='40' width='50' height='20' fill='none' stroke='#f1be43' stroke-width='2'/><text x='225' y='34' fill='#f9d87a' font-size='12' text-anchor='middle' font-family='sans-serif'>8Ω</text><path d='M250 50 H280 V110 H40' stroke='#cbd5e1' stroke-width='2' fill='none'/><line x1='40' y1='95' x2='40' y2='65' stroke='#34d399' stroke-width='2'/><line x1='34' y1='88' x2='46' y2='88' stroke='#34d399' stroke-width='4'/><line x1='37' y1='72' x2='43' y2='72' stroke='#34d399' stroke-width='2'/><text x='18' y='84' fill='#34d399' font-size='11' font-family='sans-serif'>12V</text></svg>",
+    },
+    options: ['4 Ω', '8 Ω', '12 Ω', '32 Ω'],
+    answer_index: 2,
+    difficulty: 2,
+    solution: 'In series, resistances add: $R_{total} = 4 + 8 = 12\\ \\Omega$.',
+    tip: 'Series resistances add directly; parallel ones do not.',
   },
   {
     id: 'demo-numeric',
@@ -203,6 +220,7 @@ export default function QuestionLabScreen({ theme = 'dark', onExit }) {
         <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: 28, boxShadow: t.shadowCard }}>
           {q.graph && <GraphView graph={q.graph} theme={theme} />}
           {q.table_data && <TableView table={q.table_data} theme={theme} />}
+          {q.diagram && <DiagramView diagram={q.diagram} theme={theme} />}
           <div style={{ fontSize: 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
             <MathText text={q.question} />
           </div>

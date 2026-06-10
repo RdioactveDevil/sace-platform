@@ -36,6 +36,7 @@ import {
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
+import DiagramView from './DiagramView'
 import QuizToolsDock from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
@@ -1553,6 +1554,9 @@ export default function QuizScreen({
               )}
               {currentQ.table_data && (
                 <TableView table={currentQ.table_data} theme={theme} />
+              )}
+              {currentQ.diagram && (
+                <DiagramView diagram={currentQ.diagram} theme={theme} />
               )}
               {currentQ.image_url && getQuestionType(currentQ) !== 'hotspot' && getQuestionType(currentQ) !== 'image_label' && (
                 <img
