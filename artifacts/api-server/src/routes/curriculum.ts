@@ -29,6 +29,61 @@ function conceptTag(subject: string, topic: string, subtopic: string): string {
   return `${subject}|${topic}|${subtopic || topic}`.toLowerCase();
 }
 
+/**
+ * Rename `user_subscriptions.subject_name` from `oldSubject` to `newSubject` without
+ * tripping the `unique (user_id, subject_name, stage)` constraint.
+ *
+ * A blanket UPDATE would fail when a user already has a row at the target name + stage —
+ * which happens routinely here because alias expansion renames several source spellings
+ * to the same target (e.g. "Stage 1 Chemistry (Stage 1)" and "Chemistry (Stage 1) Stage 1"
+ * both collapse to "Chemistry (Stage 1)"), or when the user was already subscribed under
+ * the new name. For each affected row we update in place when the target is free, otherwise
+ * we drop the now-redundant old row, carrying its `active` flag onto the surviving one.
+ */
+async function renameUserSubscriptionsSafely(
+  admin: SupabaseClient,
+  oldSubject: string,
+  newSubject: string,
+): Promise<void> {
+  const { data: rows, error } = await admin
+    .from("user_subscriptions")
+    .select("id, user_id, stage, active")
+    .eq("subject_name", oldSubject);
+  if (error) throw new Error(error.message);
+  if (!rows?.length) return;
+
+  for (const row of rows as { id: string; user_id: string; stage: string; active: boolean | null }[]) {
+    const { data: existing, error: exErr } = await admin
+      .from("user_subscriptions")
+      .select("id, active")
+      .eq("user_id", row.user_id)
+      .eq("subject_name", newSubject)
+      .eq("stage", row.stage)
+      .maybeSingle();
+    if (exErr) throw new Error(exErr.message);
+
+    if (!existing) {
+      const { error: upErr } = await admin
+        .from("user_subscriptions")
+        .update({ subject_name: newSubject })
+        .eq("id", row.id);
+      if (upErr) throw new Error(upErr.message);
+      continue;
+    }
+
+    // Target already exists → keep it (preserving an active flag from either side) and drop the duplicate.
+    if (row.active && !existing.active) {
+      const { error: actErr } = await admin
+        .from("user_subscriptions")
+        .update({ active: true })
+        .eq("id", existing.id);
+      if (actErr) throw new Error(actErr.message);
+    }
+    const { error: delErr } = await admin.from("user_subscriptions").delete().eq("id", row.id);
+    if (delErr) throw new Error(delErr.message);
+  }
+}
+
 async function cascadeSingleSubjectRename(
   admin: SupabaseClient,
   oldSubject: string,
@@ -77,11 +132,7 @@ async function cascadeSingleSubjectRename(
   const { error: spErr } = await admin.from("study_plan_items").update({ subject: newSubject }).eq("subject", oldSubject);
   if (spErr) throw new Error(spErr.message);
 
-  const { error: usErr } = await admin
-    .from("user_subscriptions")
-    .update({ subject_name: newSubject })
-    .eq("subject_name", oldSubject);
-  if (usErr) throw new Error(usErr.message);
+  await renameUserSubscriptionsSafely(admin, oldSubject, newSubject);
 
   const { error: asErr } = await admin.from("assignments").update({ subject: newSubject }).eq("subject", oldSubject);
   if (asErr) throw new Error(asErr.message);
