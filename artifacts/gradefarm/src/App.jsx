@@ -42,6 +42,9 @@ const TutorScreen           = lazy(() => import('./components/TutorScreen'))
 const WritingScreen         = lazy(() => import('./components/WritingScreen'))
 const DiagnosticScreen      = lazy(() => import('./components/DiagnosticScreen'))
 const PricingPage           = lazy(() => import('./components/PricingPage'))
+const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
+const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
+const EssayMarkerScreen     = lazy(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazy(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
@@ -53,6 +56,9 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const NAV_ITEMS = [
   { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
   { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
+  { icon: 'list-check',  label: 'Exam Mode',     id: 'exam',        path: '/exam'          },
+  { icon: 'pen',         label: 'Essay Marker',  id: 'essay',       path: '/essay-lab'     },
+  { icon: 'learn',       label: 'Question Lab',  id: 'qlab',        path: '/question-lab'  },
   { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
   { icon: 'leaderboard', label: 'Leaderboard',   id: 'leaderboard', path: '/leaderboard'   },
   { icon: 'study',       label: 'Study Plan',    id: 'study',       path: '/study-plan'    },
@@ -873,6 +879,15 @@ function AppInner() {
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
+
+      {/* Question Lab — public preview of the multi-format question engine */}
+      <Route path="/question-lab" element={<QuestionLabScreen theme={theme} onExit={() => navigate('/home')} />} />
+
+      {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
+      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} profile={profile} onExit={() => navigate('/home')} />} />
+
+      {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
+      <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />

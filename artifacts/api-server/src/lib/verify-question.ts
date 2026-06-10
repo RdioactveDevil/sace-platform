@@ -117,8 +117,10 @@ export async function verifyQuestionPayload(q: {
 
 export type VerifiableQuestion = {
   question: string;
-  options: string[];
-  answer_index: number;
+  // Optional because non-MCQ types (numeric, short_text, order) carry no
+  // options/answer_index. The worker's guard skips verification for those.
+  options?: string[];
+  answer_index?: number;
   solution?: string | null;
 };
 

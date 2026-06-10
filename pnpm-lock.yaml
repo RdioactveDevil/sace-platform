@@ -899,10 +899,16 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.105.1
         version: 2.105.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.20.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.18.0
       tsx:
         specifier: 'catalog:'
         version: 4.21.0

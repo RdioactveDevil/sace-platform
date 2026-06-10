@@ -1454,3 +1454,41 @@ export async function getRoomToken(roomName) {
   if (!res.ok) throw new Error(json.error || 'Failed to get room token.')
   return json // { token, wsUrl, roomName, title, is_series }
 }
+
+// ── Exam simulator attempts + percentile analytics ──────────────────────────
+export async function saveExamAttempt(userId, attempt) {
+  if (!userId) return null
+  const row = {
+    user_id: userId,
+    track_id: attempt.trackId,
+    title: attempt.title || null,
+    total_correct: attempt.totalCorrect ?? 0,
+    total_questions: attempt.totalQuestions ?? 0,
+    percent: attempt.percent ?? 0,
+    per_section: attempt.perSection ?? null,
+  }
+  const { data, error } = await supabase.from('exam_attempts').insert(row).select('id').maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// Aggregate percentile for a track via the SECURITY DEFINER RPC (no other
+// users' rows are exposed — only the aggregate comparison).
+export async function fetchExamPercentile(trackId, percent) {
+  const { data, error } = await supabase.rpc('exam_track_percentile', { p_track_id: trackId, p_percent: percent })
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  return row ? { attempts: Number(row.attempts) || 0, average: Number(row.average) || 0, percentile: row.percentile == null ? null : Number(row.percentile) } : null
+}
+
+export async function fetchMyExamAttempts(userId, limit = 10) {
+  if (!userId) return []
+  const { data, error } = await supabase
+    .from('exam_attempts')
+    .select('id, track_id, title, percent, total_correct, total_questions, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}

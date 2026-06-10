@@ -6,13 +6,16 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill:verify-repair": "tsx ./src/backfill-verify-repair.ts",
+    "migrate": "tsx ./src/apply-migrations.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.11.10",
     "tsx": "catalog:"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.105.1"
+    "@supabase/supabase-js": "^2.105.1",
+    "pg": "^8.13.1"
   }
 }

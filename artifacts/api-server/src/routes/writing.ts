@@ -112,16 +112,71 @@ const PERSUASIVE_CRITERIA = [
   "Control of language (grammar, spelling, punctuation)",
 ];
 
+// GAMSAT Section 2, Task A — argumentative/expository response to a theme.
+const GAMSAT_A_CRITERIA = [
+  "Response to theme & clarity of thesis",
+  "Quality and development of ideas (depth of thought)",
+  "Structure & coherence",
+  "Use of evidence, examples & reasoning",
+  "Control and sophistication of language",
+];
+
+// GAMSAT Section 2, Task B — reflective/creative response to a theme.
+const GAMSAT_B_CRITERIA = [
+  "Engagement with the theme",
+  "Depth, insight & originality of ideas",
+  "Structure & development",
+  "Voice, tone & emotional resonance",
+  "Control and sophistication of language",
+];
+
+type EssayConfig = {
+  criteria: string[];
+  who: (yearRange: string) => string;
+  standards: string;
+  scaleNote?: string;
+};
+
+const ESSAY_CONFIG: Record<string, EssayConfig> = {
+  narrative: {
+    criteria: NARRATIVE_CRITERIA,
+    who: (yr) => `narrative writing from a ${yr} student`,
+    standards: "Australian national writing assessments (NAPLAN-style) and selective/scholarship writing tasks (ACER / Edutest style)",
+  },
+  persuasive: {
+    criteria: PERSUASIVE_CRITERIA,
+    who: (yr) => `persuasive writing from a ${yr} student`,
+    standards: "Australian national writing assessments (NAPLAN-style) and selective/scholarship writing tasks (ACER / Edutest style)",
+  },
+  gamsat_argument: {
+    criteria: GAMSAT_A_CRITERIA,
+    who: () => "a GAMSAT Section 2 Task A essay (argumentative/expository response to a theme) written by an adult sitting the graduate medical admissions test",
+    standards: "ACER GAMSAT Section 2 expectations — assessors reward quality of thought, command of language, and effective structure over factual recall",
+    scaleNote: "In overallImpression, also give an indicative GAMSAT Section 2 band out of 100 (≈56 is average, 62 is solid, 70+ is strong) and frame the writer as an adult candidate.",
+  },
+  gamsat_reflective: {
+    criteria: GAMSAT_B_CRITERIA,
+    who: () => "a GAMSAT Section 2 Task B essay (reflective/creative response to a theme) written by an adult sitting the graduate medical admissions test",
+    standards: "ACER GAMSAT Section 2 expectations — assessors reward depth of reflection, originality, emotional resonance and command of language",
+    scaleNote: "In overallImpression, also give an indicative GAMSAT Section 2 band out of 100 (≈56 is average, 62 is solid, 70+ is strong) and frame the writer as an adult candidate.",
+  },
+};
+
+function isGamsat(essayType: string): boolean {
+  return essayType === "gamsat_argument" || essayType === "gamsat_reflective";
+}
+
 function buildFeedbackSystem(essayType: string, yearRange: string): string {
-  const isPersuasive = essayType === "persuasive";
-  const criteriaList = (isPersuasive ? PERSUASIVE_CRITERIA : NARRATIVE_CRITERIA).map((c) => `    - ${c}`).join("\n");
+  const cfg = ESSAY_CONFIG[essayType] ?? ESSAY_CONFIG.narrative;
+  const criteriaList = cfg.criteria.map((c) => `    - ${c}`).join("\n");
 
   return [
-    `You assess ${isPersuasive ? "persuasive" : "narrative"} writing from a ${yearRange} student.`,
+    `You assess ${cfg.who(yearRange)}.`,
     "",
-    "Score using the same broad expectations as Australian national writing assessments (NAPLAN-style) and selective/scholarship writing tasks (ACER / Edutest style):",
-    "- overallScore: integer from 1 (minimal) to 10 (strong control; sophisticated for year level).",
-    "- For each criterion below, assign score 1–10 and a one-sentence justification tied to the student's actual writing.",
+    `Score using the same broad expectations as ${cfg.standards}:`,
+    "- overallScore: integer from 1 (minimal) to 10 (strong control; sophisticated for the level).",
+    "- For each criterion below, assign score 1–10 and a one-sentence justification tied to the writer's actual writing.",
+    ...(cfg.scaleNote ? ["", cfg.scaleNote] : []),
     "",
     "Criteria (use these exact names in criteriaScores[].name):",
     criteriaList,
@@ -134,7 +189,7 @@ function buildFeedbackSystem(essayType: string, yearRange: string): string {
     "  improvements: array of strings (3–5 actionable items)",
     "",
     "The criteriaScores array must include every criterion listed above, in that order.",
-    "Be honest and specific. Reference the student's actual wording in annotations when possible.",
+    "Be honest and specific. Reference the writer's actual wording in annotations when possible.",
     "No markdown, no commentary outside the JSON.",
   ].join("\n");
 }
@@ -155,7 +210,20 @@ router.post("/writing/prompt", async (req, res) => {
   let rawText: string;
 
   try {
-    if (essayType === "narrative") {
+    if (isGamsat(essayType)) {
+      const taskB = essayType === "gamsat_reflective";
+      const system = [
+        `You are generating a GAMSAT Section 2 ${taskB ? "Task B (reflective/creative)" : "Task A (argumentative/socio-cultural)"} stimulus for an adult sitting the graduate medical admissions test.`,
+        "The stimulus is a set of FOUR short quotations that all explore a single common theme, exactly like the real GAMSAT.",
+        taskB
+          ? "Choose a personal, emotional or social theme (e.g. memory, fear, belonging, change)."
+          : "Choose a socio-cultural or ideas-based theme (e.g. power, progress, freedom, truth).",
+        "Return ONLY a valid JSON object with a single key:",
+        "  prompt: string — a one-line theme label, then the four quotations each on its own line prefixed with a dash and followed by an attribution. Finish with a one-line instruction to write a considered piece in response to the theme.",
+        "No markdown, no commentary outside the JSON.",
+      ].join("\n");
+      rawText = await callClaude(system, `Generate a GAMSAT Section 2 ${taskB ? "Task B" : "Task A"} quotation stimulus.`);
+    } else if (essayType === "narrative") {
       const system = [
         `You are generating creative writing prompts for ${yearRange} students.`,
         "Return ONLY a valid JSON object with these keys:",

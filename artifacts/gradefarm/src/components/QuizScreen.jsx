@@ -36,6 +36,9 @@ import {
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
+import QuizToolsDock from './QuizToolsDock'
+import QuestionRenderer from './questions/QuestionRenderer'
+import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -1042,6 +1045,70 @@ export default function QuizScreen({
     }
   }
 
+  // Outcome handler for non-MCQ question types (numeric, multi-select, short
+  // text, ordering). The renderer grades the response and calls this with the
+  // result. Mirrors the main-question path of handleAnswer; remediation is
+  // MCQ-specific so new types skip it for now (they still record + earn XP).
+  const handleSubmitResponse = async (response, isCorrect) => {
+    if (showAns || !currentQ) return
+    const xpEarned = calcXP(isCorrect, currentQ.difficulty, streak)
+    const newStreak = isCorrect ? streak + 1 : 0
+    const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
+
+    setSelected(response)
+    setShowAns(true)
+    setCorrect(isCorrect)
+    setEarnedXP(xpEarned)
+    setStreak(newStreak)
+    setSessionXP(s => s + xpEarned)
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: false }])
+
+    if (isCorrect) {
+      setFloatXP(xpEarned)
+      setTimeout(() => setFloatXP(null), 1400)
+    }
+
+    try {
+      const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
+      setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
+    } catch {}
+
+    setStruggleMap(prev => {
+      const old = prev[currentQ.id] ?? { attempts: 0, wrong: 0 }
+      return {
+        ...prev,
+        [currentQ.id]: {
+          ...old,
+          attempts: old.attempts + 1,
+          wrong: old.wrong + (isCorrect ? 0 : 1),
+          last_seen: new Date().toISOString(),
+        },
+      }
+    })
+
+    try { await recordAnswer(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs) } catch {}
+
+    if (!isCorrect) {
+      setLoadingTip(true)
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_tokens: 200,
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
+            messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect answer: ${describeCorrectAnswer(currentQ)}\nStudent answered: ${JSON.stringify(response)}\nSolution: ${currentQ.solution}` }],
+          }),
+        })
+        const d = await res.json()
+        setAiTip(d.content?.[0]?.text || '')
+      } catch {
+        setAiTip('')
+      }
+      setLoadingTip(false)
+    }
+  }
+
   const loadNextRemediationQuestion = async () =>
     runLoadNextRemediationQuestion({
       remediationQueue,
@@ -1487,7 +1554,7 @@ export default function QuizScreen({
               {currentQ.table_data && (
                 <TableView table={currentQ.table_data} theme={theme} />
               )}
-              {currentQ.image_url && (
+              {currentQ.image_url && getQuestionType(currentQ) !== 'hotspot' && getQuestionType(currentQ) !== 'image_label' && (
                 <img
                   src={currentQ.image_url}
                   alt="Question diagram"
@@ -1497,6 +1564,7 @@ export default function QuizScreen({
               <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
                 <MathText text={currentQ.question} />
               </div>
+              {getQuestionType(currentQ) === 'mcq' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {currentQ.options.map((opt, i) => {
                   const isCorrectOpt = i === currentQ.answer_index
@@ -1561,6 +1629,16 @@ export default function QuizScreen({
                   )
                 })}
               </div>
+              ) : (
+                <QuestionRenderer
+                  question={currentQ}
+                  response={selected}
+                  onChange={setSelected}
+                  showAns={showAns}
+                  onSubmit={handleSubmitResponse}
+                  theme={theme}
+                />
+              )}
             </div>
 
               {showAns && (
@@ -1803,6 +1881,7 @@ export default function QuizScreen({
             </div>
           )}
         </div>
+      <QuizToolsDock theme={theme} />
       </div>
   )
 }
