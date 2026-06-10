@@ -164,22 +164,19 @@ export default function ResourcesTab({ profile, theme }) {
     return '👥 Entire roster'
   }
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
-  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ ...card, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>📁 Class Resources</div>
-          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Share post-class notes, worksheets, slides and recording links with your students.</div>
-        </div>
+      {/* Toolbar — page title lives in the shell top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
-          {showForm ? '✕ Cancel' : '+ Add Resource'}
+          {showForm ? '✕ Cancel' : '+ Add resource'}
         </button>
       </div>
 
