@@ -18,6 +18,10 @@ export type Verdict = {
 
 const LABELS = ["A", "B", "C", "D", "E", "F"];
 
+// Retry transient Anthropic failures (rate limits / overload / timeouts).
+const MAX_RETRIES = 5;
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
+
 function buildPrompt(q: { question: string; options: string[]; answer_index: number }): string {
   const optText = q.options.map((o, i) => `${LABELS[i] ?? i}: ${o}`).join("\n");
   const markedLabel = LABELS[q.answer_index] ?? String(q.answer_index);
@@ -64,32 +68,51 @@ export async function verifyQuestionPayload(q: {
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  let resp: Response;
-  try {
-    resp = await fetch(`${baseUrl}/v1/messages`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: CLAUDE_VERIFY_MODEL,
-        max_tokens: 700,
-        messages: [{ role: "user", content: buildPrompt(q) }],
-      }),
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  let lastErr: Error = new Error("verification failed");
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    let resp: Response | null = null;
+    try {
+      resp = await fetch(`${baseUrl}/v1/messages`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: CLAUDE_VERIFY_MODEL,
+          max_tokens: 700,
+          messages: [{ role: "user", content: buildPrompt(q) }],
+        }),
+      });
+      if (resp.ok) {
+        const body = await resp.json() as any;
+        return parseVerdict((body.content?.[0]?.text ?? "").trim());
+      }
+    } catch (err) {
+      lastErr = err as Error; // network error / timeout abort — retryable
+    } finally {
+      clearTimeout(timeout);
+    }
 
-  if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
-  const body = await resp.json() as any;
-  const text: string = (body.content?.[0]?.text ?? "").trim();
-  return parseVerdict(text);
+    if (resp?.ok) throw lastErr; // 2xx but body/JSON parse failed — not transient
+    const status = resp?.status;
+    if (status !== undefined) {
+      if (!RETRYABLE_STATUS.has(status)) throw new Error(`Anthropic API ${status}`);
+      lastErr = new Error(`Anthropic API ${status}`);
+    }
+    if (attempt === MAX_RETRIES) break;
+
+    const retryAfter = resp ? Number(resp.headers.get("retry-after")) : NaN;
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(1000 * 2 ** attempt, 30_000);
+    await new Promise((r) => setTimeout(r, wait + Math.random() * 500));
+  }
+  throw lastErr;
 }
 
 export type VerifiableQuestion = {
