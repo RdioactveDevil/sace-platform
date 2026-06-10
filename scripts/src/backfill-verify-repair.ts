@@ -47,9 +47,12 @@ const SERVICE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 const APPLY = args.includes("--apply");
 const DELETE_FLAWED = args.includes("--delete-flawed");
+const REGENERATE_FLAWED = args.includes("--regenerate-flawed");
 const SUBJECT = argValue("--subject");
 const LIMIT = Number(argValue("--limit") || "0") || 0; // 0 = no limit
 const CONCURRENCY = Math.max(1, Number(argValue("--concurrency") || "4") || 4);
+// Deployed API base used to generate verified replacements for flawed questions.
+const API_BASE_URL = (argValue("--api-base") || process.env.API_BASE_URL || "https://www.gradefarm.com.au").replace(/\/$/, "");
 
 if (!SERVICE_KEY) {
   console.error("ERROR: set SUPABASE_SERVICE_KEY env var or pass --key <value>");
@@ -188,6 +191,64 @@ If your computed answer matches NO option, or the question is fundamentally flaw
   throw lastErr;
 }
 
+// ─── flawed-question regeneration ─────────────────────────────────────────────
+// Resolve a subtopic to its T{topic}.{subtopic} code (mirrors getTopicCode in
+// api-server/src/routes/report-question.ts), cached so repeated subtopics are cheap.
+const topicCodeCache = new Map<string, string | null>();
+async function resolveTopicCode(subject: string, subtopic: string): Promise<string | null> {
+  const cacheKey = `${subject}|||${subtopic}`;
+  if (topicCodeCache.has(cacheKey)) return topicCodeCache.get(cacheKey)!;
+  let result: string | null = null;
+  const { data: curr } = await supabase.from("curricula").select("id").eq("name", subject).maybeSingle();
+  if (curr?.id) {
+    const { data: topics } = await supabase
+      .from("curriculum_topics").select("id").eq("curriculum_id", curr.id).order("order_index");
+    for (let ti = 0; ti < (topics?.length ?? 0) && !result; ti++) {
+      const { data: subs } = await supabase
+        .from("curriculum_subtopics").select("name").eq("topic_id", topics![ti].id).order("order_index");
+      const si = (subs ?? []).findIndex(
+        (s: any) => (s.name || "").toLowerCase().trim() === subtopic.toLowerCase().trim(),
+      );
+      if (si >= 0) result = `T${ti + 1}.${si + 1}`;
+    }
+  }
+  topicCodeCache.set(cacheKey, result);
+  return result;
+}
+
+// Generate ONE verified replacement via the deployed generate-questions endpoint
+// (which now runs the same answer-key gate). Returns true once a row is inserted.
+async function regenerateReplacement(subject: string, topicCode: string, difficulty: unknown): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const resp = await fetch(`${API_BASE_URL}/api/generate-questions`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          topicCode,
+          count: 1,
+          difficulty: typeof difficulty === "number" ? difficulty : "mixed",
+          autoApprove: true,
+        }),
+      });
+      if (resp.ok) {
+        const body = (await resp.json()) as any;
+        if ((body.inserted ?? 0) >= 1) return true;
+      }
+    } catch {
+      /* network/timeout — retry */
+    } finally {
+      clearTimeout(timeout);
+    }
+    await sleep(2000 * (attempt + 1));
+  }
+  return false;
+}
+
 // ─── row processing ───────────────────────────────────────────────────────────
 type Row = {
   id: string;
@@ -196,11 +257,14 @@ type Row = {
   solution?: string | null;
   tip?: string | null;
   answer_index?: number | null;
+  subject?: string | null;
+  subtopic?: string | null;
+  difficulty?: number | null;
 };
 
 const PAGE = 1000;
 
-const stats = { scanned: 0, textRepaired: 0, indexFixed: 0, flawed: 0, deleted: 0, verifyErrors: 0, updated: 0 };
+const stats = { scanned: 0, textRepaired: 0, indexFixed: 0, flawed: 0, deleted: 0, regenerated: 0, regenFailed: 0, verifyErrors: 0, updated: 0 };
 
 async function processRow(row: Row): Promise<void> {
   const patch: Record<string, unknown> = {};
@@ -241,6 +305,31 @@ async function processRow(row: Row): Promise<void> {
         console.log(`  [${row.id}] answer_index ${ai} → ${verdict.correct_index}: ${verdict.explanation}`);
       } else if (verdict.verdict === "wrong_question") {
         stats.flawed++;
+
+        // Preferred: replace the flawed question with a fresh, verified one.
+        // Generate the replacement FIRST and only delete the original once a
+        // replacement is confirmed inserted, so we never lose a slot.
+        if (APPLY && REGENERATE_FLAWED) {
+          const code = row.subject && row.subtopic
+            ? await resolveTopicCode(row.subject, row.subtopic)
+            : null;
+          if (!code) {
+            console.log(`  [${row.id}] FLAWED: ${verdict.explanation} (no topic code — left in place)`);
+            return;
+          }
+          const ok = await regenerateReplacement(row.subject!, code, row.difficulty);
+          if (ok) {
+            const { error } = await supabase.from("questions").delete().eq("id", row.id);
+            if (error) { console.error(`    ✗ delete ${row.id}: ${error.message}`); return; }
+            stats.regenerated++;
+            console.log(`  [${row.id}] FLAWED → replaced with verified question (${code}): ${verdict.explanation}`);
+          } else {
+            stats.regenFailed++;
+            console.log(`  [${row.id}] FLAWED: regeneration failed — left in place`);
+          }
+          return;
+        }
+
         console.log(`  [${row.id}] FLAWED: ${verdict.explanation}${DELETE_FLAWED ? " (deleting)" : " (left in place)"}`);
         if (APPLY && DELETE_FLAWED) {
           const { error } = await supabase.from("questions").delete().eq("id", row.id);
@@ -281,6 +370,7 @@ async function main() {
   console.log(
     `Connecting to ${SUPABASE_URL} — ${APPLY ? "APPLY (writing)" : "DRY RUN"}; ` +
       `verification ${VERIFY ? `ON (${VERIFY_MODEL})` : "OFF (no API key — text repair only)"}` +
+      (REGENERATE_FLAWED ? `; regenerate-flawed via ${API_BASE_URL}` : "") +
       (SUBJECT ? `; subject="${SUBJECT}"` : "") + (LIMIT ? `; limit=${LIMIT}` : ""),
   );
 
@@ -289,7 +379,7 @@ async function main() {
     if (LIMIT && stats.scanned >= LIMIT) break;
     let query = supabase
       .from("questions")
-      .select("id, question, options, solution, tip, answer_index")
+      .select("id, question, options, solution, tip, answer_index, subject, subtopic, difficulty")
       .order("created_at", { ascending: true })
       .range(from, from + PAGE - 1);
     if (SUBJECT) query = (query as any).eq("subject", SUBJECT);
@@ -311,7 +401,10 @@ async function main() {
   console.log(`  scanned:        ${stats.scanned}`);
   console.log(`  text repaired:  ${stats.textRepaired}`);
   console.log(`  answer fixed:   ${stats.indexFixed}`);
-  console.log(`  flawed found:   ${stats.flawed}${DELETE_FLAWED ? `` : " (not deleted — re-run with --delete-flawed)"}`);
+  const flawedNote = REGENERATE_FLAWED ? "" : DELETE_FLAWED ? "" : " (left in place — use --regenerate-flawed or --delete-flawed)";
+  console.log(`  flawed found:   ${stats.flawed}${flawedNote}`);
+  console.log(`  regenerated:    ${stats.regenerated}`);
+  console.log(`  regen failed:   ${stats.regenFailed}`);
   console.log(`  deleted:        ${stats.deleted}`);
   console.log(`  verify errors:  ${stats.verifyErrors}`);
   console.log(`  rows written:   ${APPLY ? stats.updated : 0}${APPLY ? "" : " (dry run — re-run with --apply to write)"}`);
