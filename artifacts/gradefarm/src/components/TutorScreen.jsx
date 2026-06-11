@@ -1540,7 +1540,7 @@ function DiagnosticTab({ profile, theme }) {
     setSaveError('')
   }
 
-  const card = { background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18, boxShadow: t.shadowCard }
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
   const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
@@ -2103,24 +2103,35 @@ export default function TutorScreen({ profile, theme, subject }) {
 
   const go = (id) => { setActiveTab(id); setMobileNav(false) }
 
-  const SIDEBAR_W = collapsed ? 74 : 248
+  const SIDEBAR_W = collapsed ? 74 : 224
   const meta = SECTION_META[activeTab] || { title: '', sub: '' }
 
+  // The tutor sidebar sits beside the main app sidebar, which keeps a dark navy
+  // surface in both themes — so colours here are fixed white-alpha (matching
+  // SidebarContent in App.jsx) rather than theme tokens, which go dark-on-dark
+  // in light mode.
   const sidebar = (
     <aside style={{
-      width: SIDEBAR_W, flexShrink: 0, background: t.bgNav, borderRight: `1px solid ${t.border}`,
+      width: SIDEBAR_W, flexShrink: 0,
+      background: 'linear-gradient(180deg, #0b1030 0%, #080d28 100%)',
+      borderRight: '1px solid rgba(255,255,255,0.07)',
       display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 14px' }}>
-        <span style={{ fontFamily: FONT_D, fontSize: 22, fontWeight: 900, color: GOLD, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
-          {collapsed ? 'g.' : <>gradefarm<span style={{ color: theme === 'dark' ? '#fff' : '#fff' }}>.</span></>}
-        </span>
+      <div style={{ padding: collapsed ? '20px 0 10px' : '20px 20px 10px', textAlign: collapsed ? 'center' : 'left' }}>
+        {collapsed ? (
+          <span style={{ fontSize: 17 }}>🎓</span>
+        ) : (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: GOLD, whiteSpace: 'nowrap' }}>🎓 Tutor Portal</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.32)', marginTop: 4, whiteSpace: 'nowrap' }}>Teaching tools & insights</div>
+          </>
+        )}
       </div>
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
         {NAV_GROUPS.map(group => (
           <div key={group.label} style={{ marginTop: 12 }}>
             {!collapsed && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.textFaint, padding: '6px 10px' }}>{group.label}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.30)', padding: '6px 10px' }}>{group.label}</div>
             )}
             {group.items.map(item => {
               const active = activeTab === item.id
@@ -2130,18 +2141,19 @@ export default function TutorScreen({ profile, theme, subject }) {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
                     padding: '10px 12px', borderRadius: 10, margin: '2px 0', cursor: 'pointer',
-                    fontFamily: FONT_B, fontSize: 14, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
-                    color: active ? GOLD : t.textSub,
+                    fontFamily: FONT_B, fontSize: 13.5, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
+                    color: active ? GOLD : 'rgba(255,255,255,0.62)',
                     background: active ? 'rgba(241,190,67,0.12)' : 'transparent',
                     border: `1px solid ${active ? 'rgba(241,190,67,0.25)' : 'transparent'}`,
+                    transition: 'color 0.15s, background 0.15s',
                   }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = t.bgHover }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#f1f5f9' } }}
+                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.62)' } }}
                 >
-                  <span style={{ width: 20, textAlign: 'center', fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
+                  <span style={{ width: 20, textAlign: 'center', fontSize: 15, flexShrink: 0 }}>{item.icon}</span>
                   {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
                   {!collapsed && badge != null && (
-                    <span style={{ background: item.id === 'assignments' ? t.danger : t.bgHover, color: item.id === 'assignments' ? '#fff' : t.textSub, fontSize: 11, fontWeight: 800, borderRadius: 20, padding: '1px 7px' }}>{badge}</span>
+                    <span style={{ background: item.id === 'assignments' ? '#ef4444' : 'rgba(255,255,255,0.10)', color: item.id === 'assignments' ? '#fff' : 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 800, borderRadius: 20, padding: '1px 7px' }}>{badge}</span>
                   )}
                 </button>
               )
@@ -2149,15 +2161,15 @@ export default function TutorScreen({ profile, theme, subject }) {
           </div>
         ))}
       </nav>
-      <div style={{ padding: 12, borderTop: `1px solid ${t.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }}>
+      <div style={{ padding: 12, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start' }}>
           <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
             {(profile.display_name || '?')[0].toUpperCase()}
           </div>
           {!collapsed && (
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>Tutor</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Tutor</div>
             </div>
           )}
         </div>

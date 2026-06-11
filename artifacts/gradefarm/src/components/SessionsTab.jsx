@@ -145,7 +145,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: `1px solid ${t.border}`, background: t.bgNav,
+    border: `1px solid ${t.border}`, background: t.bgInput,
     color: t.text, fontFamily: FONT_B, fontSize: 14, boxSizing: 'border-box',
   }
   const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B }
@@ -153,7 +153,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   const typeBtn = (type, label, icon) => ({
     flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
     fontFamily: FONT_B, fontSize: 14, fontWeight: 600,
-    background: sessionType === type ? GOLD : t.bgNav,
+    background: sessionType === type ? GOLD : t.bgSubtle,
     color: sessionType === type ? '#1a1a2e' : t.textMuted,
   })
 
@@ -166,7 +166,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           <p style={{ margin: '0 0 24px', fontSize: 14, color: t.textMuted }}>
             Share this link with anyone you want in the session.
           </p>
-          <div style={{ background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ background: t.bgSubtle, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ flex: 1, fontSize: 13, color: t.text, wordBreak: 'break-all', textAlign: 'left', fontFamily: 'monospace' }}>
               {createdLink}
             </span>
@@ -208,7 +208,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           </div>
 
           {/* Recurring toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgSubtle, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔁 Recurring session</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Same link every week — students bookmark it once</div>
@@ -231,7 +231,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 
           {/* Recurring settings */}
           {isRecurring && (
-            <div style={{ background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: t.bgSubtle, border: `1px solid ${t.border}`, borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Repeats</label>
@@ -297,7 +297,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                 <label style={labelStyle}>
                   Invite students <span style={{ fontWeight: 400, opacity: 0.6 }}>{classId ? '(optional extras on top of class)' : '(optional)'}</span>
                 </label>
-                <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, maxHeight: 180, overflowY: 'auto', background: t.bgNav }}>
+                <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, maxHeight: 180, overflowY: 'auto', background: t.bgInput }}>
                   {roster.length === 0 ? (
                     <p style={{ padding: 12, color: t.textMuted, fontSize: 13, margin: 0 }}>No students on your roster yet.</p>
                   ) : roster.map(s => {
@@ -307,7 +307,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                       <label key={s.student_id} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
                         cursor: 'pointer', borderBottom: `1px solid ${t.border}`,
-                        background: checked ? (t.bg === '#ffffff' ? '#fdf8e8' : '#2a2a1a') : 'transparent',
+                        background: checked ? t.accentGlow : 'transparent',
                       }}>
                         <input
                           type="checkbox"
@@ -373,7 +373,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           </div>
 
           {/* Record toggle — works for one-off sessions and recurring series */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgSubtle, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔴 Record {isRecurring ? 'these sessions' : 'this session'}</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
@@ -461,7 +461,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button
           onClick={handleCopyLink}
-          style={{ background: copied ? '#1e3a2f' : t.bgNav, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
+          style={{ background: copied ? '#1e3a2f' : t.bgSubtle, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
           title="Copy meeting link"
         >
           {copied ? '✓' : '🔗'}
@@ -531,7 +531,7 @@ function SeriesCard({ series, theme, onCancel }) {
             </span>
             <button
               onClick={handleCopy}
-              style={{ background: copied ? '#1e3a2f' : t.bgNav, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+              style={{ background: copied ? '#1e3a2f' : t.bgSubtle, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>
@@ -618,13 +618,13 @@ export default function SessionsTab({ profile, theme }) {
 
   const tabBtn = (id, label) => ({
     padding: '9px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 600,
-    background: view === id ? GOLD : t.bgNav,
+    background: view === id ? GOLD : t.bgSubtle,
     color: view === id ? '#1a1a2e' : t.textMuted,
   })
 
   const filterStyle = (id) => ({
     padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 600,
-    background: filter === id ? GOLD : t.bgNav,
+    background: filter === id ? GOLD : t.bgSubtle,
     color: filter === id ? '#1a1a2e' : t.textMuted,
   })
 

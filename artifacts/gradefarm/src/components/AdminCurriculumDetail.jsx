@@ -325,6 +325,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       await updateCurriculum(curriculumId, {
         name: curriculum.name,
         level_label: curriculum.level_label ?? '',
+        exam_context: curriculum.exam_context ?? '',
         topics,
       })
       refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
@@ -352,6 +353,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       await updateCurriculum(curriculumId, {
         name: curriculum.name,
         level_label: curriculum.level_label ?? '',
+        exam_context: curriculum.exam_context ?? '',
         topics,
       })
       refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
@@ -688,6 +690,37 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           </div>
         )
       })()}
+
+      {/* Exam scope & generation context */}
+      {!generating && (
+        <div style={{
+          marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)',
+        }}>
+          <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+            Exam Scope & Generation Context
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
+            Notes about the real exam, injected into every question-generation prompt for this curriculum — structure ("30 MCQs, 1 mark each"), textbook terminology, scope limits. Saved with the draft.
+          </div>
+          <textarea
+            value={curriculum.exam_context || ''}
+            onChange={e => setCurriculum(prev => ({ ...prev, exam_context: e.target.value }))}
+            maxLength={3000}
+            rows={4}
+            placeholder={'e.g. "SACE Stage 2 exam: 30 multiple-choice questions worth 1 mark each, 90 minutes. Use Nelson Chemistry 3 & 4 terminology. Calculators permitted — include calculation-based questions."'}
+            style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
+              color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+              resize: 'vertical', boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ fontSize: 11, color: '#475569', textAlign: 'right', marginTop: 4 }}>
+            {(curriculum.exam_context || '').length}/3000
+          </div>
+        </div>
+      )}
 
       {/* AI revise panel */}
       {!generating && (

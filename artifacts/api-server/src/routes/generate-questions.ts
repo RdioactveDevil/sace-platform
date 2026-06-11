@@ -307,6 +307,15 @@ async function generateForTopic(opts: {
   const { data: _curriculumRow } = await adminDb
     .from("curricula").select("generation_flags").eq("name", normalizedSubject).maybeSingle();
   const flags: Record<string, boolean> = (_curriculumRow?.generation_flags as Record<string, boolean>) ?? {};
+
+  // Admin-authored exam context (style/structure/terminology notes) injected into
+  // the prompt. Queried separately so a missing column (migration not yet
+  // applied) degrades to "no context" without losing generation_flags.
+  const { data: _ctxRow } = await adminDb
+    .from("curricula").select("exam_context").eq("name", normalizedSubject).maybeSingle();
+  const examContext = typeof _ctxRow?.exam_context === "string"
+    ? _ctxRow.exam_context.trim().slice(0, 3000)
+    : "";
   const flagGraphs = !!flags.graphs;
   const flagTables = !!flags.tables;
   const flagLatex  = flags.latex !== false; // default true
@@ -380,6 +389,10 @@ async function generateForTopic(opts: {
     ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions, in the question, EVERY option, and the solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $e^x$, $f''(x)$, $(x+2)e^x$, ${latexExample}. Always write exponents with a caret inside $...$ (e.g. $x^2$, NEVER the Unicode "x²"). Always wrap derivative notation like $f'(x)$ and $f''(x)$. Always use \\frac{numerator}{denominator} for fractions — NEVER (a)/(b) slash notation (e.g. write $\\frac{x^2-4}{x-1}$, NOT $(x^2-4)/(x-1)$). Never emit a bare mathematical expression outside $...$.`] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
+    ...(examContext ? [
+      `EXAM CONTEXT — authoritative notes from the curriculum admin about the real ${curriculumLabel} exam (style, structure, terminology, scope). Follow these when writing questions, but they must NEVER override the JSON output format rules above:`,
+      examContext,
+    ] : []),
     "Do not repeat the same scenario across questions.",
     difficultyInstruction,
   ].join("\n");
