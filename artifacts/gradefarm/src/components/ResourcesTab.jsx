@@ -167,6 +167,7 @@ export default function ResourcesTab({ profile, theme }) {
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
     : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }
 
@@ -190,7 +191,7 @@ export default function ResourcesTab({ profile, theme }) {
 
       {showForm && (
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Add Resource</div>
+          <div style={{ fontSize: 13, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text, marginBottom: 16 }}>Add Resource</div>
           <form onSubmit={handleSubmit}>
             {/* Source toggle */}
             <div style={{ marginBottom: 14 }}>
@@ -312,9 +313,9 @@ export default function ResourcesTab({ profile, theme }) {
       )}
 
       <div style={card}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Shared Resources</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>{resources.length} resource{resources.length !== 1 ? 's' : ''}</div>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${divider}` }}>
+          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>Shared Resources</div>
+          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{resources.length} resource{resources.length !== 1 ? 's' : ''}</div>
         </div>
         {loading ? (
           <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
@@ -325,7 +326,7 @@ export default function ResourcesTab({ profile, theme }) {
             {resources.map(r => {
               const meta = TYPE_META[r.type] || TYPE_META.resource
               return (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 20px', borderBottom: `1px solid ${t.border}` }}>
+                <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 20px', borderBottom: `1px solid ${divider}` }}>
                   <div style={{ fontSize: 22, flexShrink: 0, lineHeight: 1.2 }}>{meta.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>

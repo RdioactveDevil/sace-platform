@@ -218,6 +218,7 @@ export default function StudentsTab({ profile, theme }) {
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
     : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
   const ctrl = { padding: '8px 11px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
   const chipStyle = (active) => ({ padding: '7px 13px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.14)' : t.bgCard, color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 600, cursor: 'pointer', fontFamily: FONT_B })
   const tag = (text, color, key) => (
@@ -228,7 +229,7 @@ export default function StudentsTab({ profile, theme }) {
 
   const renderRow = (s) => (
     <Fragment key={s.id}>
-      <tr style={{ borderBottom: `1px solid ${t.border}` }}
+      <tr style={{ borderBottom: `1px solid ${divider}` }}
         onMouseEnter={e => e.currentTarget.style.background = t.bgHover}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
         <td style={{ padding: '12px 16px' }}>

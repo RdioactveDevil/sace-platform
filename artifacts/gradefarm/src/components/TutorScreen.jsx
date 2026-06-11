@@ -559,9 +559,9 @@ function AssignmentsTab({ profile, theme, subject }) {
       )}
 
       <div style={card}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}` }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>All Assignments</div>
+            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>All Assignments</div>
             <div style={{ fontSize: 12, color: t.textMuted }}>
               {filteredAssignments.length !== assignments.length
                 ? `${filteredAssignments.length} of ${assignments.length} shown`
@@ -627,7 +627,7 @@ function AssignmentsTab({ profile, theme, subject }) {
               const status = assignmentStatus(a)
               const sc = statusColor(status)
               return (
-                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? (theme === 'dark' ? 'rgba(255,255,255,0.015)' : 'rgba(12,16,55,0.02)') : 'transparent' }}>
+                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? (theme === 'dark' ? 'rgba(255,255,255,0.015)' : 'rgba(12,16,55,0.02)') : 'transparent' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                       {!indent && <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{a.type}</span>}
@@ -751,6 +751,9 @@ function ProgressTab({ profile, theme }) {
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
     : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
+  const cardSecHdr = { padding: '14px 20px', borderBottom: `1px solid ${divider}` }
+  const secTitle = { fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -781,25 +784,25 @@ function ProgressTab({ profile, theme }) {
               { label: 'Streak', val: `${progress.streak ?? 0} days 🔥`, color: GOLD },
               { label: 'Accuracy', val: `${progress.accuracy ?? 0}%`, color: progress.accuracy >= 70 ? '#4ade80' : progress.accuracy >= 40 ? GOLD : '#f87171' },
               { label: 'Questions Done', val: progress.totalAttempts ?? 0, color: t.text },
-            ].map(s => (
-              <div key={s.label} style={{ ...card, padding: '16px 18px', textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: s.color, marginBottom: 4 }}>{s.val}</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>{s.label}</div>
+            ].map((s, i) => (
+              <div key={s.label} className={`td-fadein td-fadein-${i + 1}`} style={{ ...card, padding: '16px 18px', textAlign: 'center' }}>
+                <div style={{ fontSize: 26, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '-0.5px', lineHeight: 1, color: s.color, marginBottom: 8 }}>{s.val}</div>
+                <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</div>
               </div>
             ))}
           </div>
 
           {progress.topicBreakdown && progress.topicBreakdown.length > 0 && (
             <div style={card}>
-              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Topic Accuracy</div>
+              <div style={cardSecHdr}>
+                <div style={secTitle}>Topic Accuracy</div>
               </div>
               <div>
                 {progress.topicBreakdown.map(tb => {
                   const acc = tb.attempts > 0 ? Math.round(((tb.attempts - tb.wrong) / tb.attempts) * 100) : null
                   const color = acc == null ? t.textMuted : acc >= 70 ? '#4ade80' : acc >= 40 ? GOLD : '#f87171'
                   return (
-                    <div key={tb.topic} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 20px', borderBottom: `1px solid ${t.border}` }}>
+                    <div key={tb.topic} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 20px', borderBottom: `1px solid ${divider}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tb.topic}</div>
                         <div style={{ fontSize: 11, color: t.textMuted }}>{tb.attempts} attempt{tb.attempts !== 1 ? 's' : ''}</div>
@@ -816,15 +819,15 @@ function ProgressTab({ profile, theme }) {
 
           {progress.assignments && progress.assignments.length > 0 && (
             <div style={card}>
-              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Assignments</div>
+              <div style={cardSecHdr}>
+                <div style={secTitle}>Assignments</div>
               </div>
               <div>
                 {progress.assignments.map(a => {
                   const status = assignmentStatus(a)
                   const sc = statusColor(status)
                   return (
-                    <div key={a.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div key={a.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', gap: 14 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} — {(a.topics || []).join(', ') || a.subject}</div>
                         <div style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}{a.completed_at ? ` · Completed ${fmtDate(a.completed_at)}` : ''}</div>
@@ -839,13 +842,13 @@ function ProgressTab({ profile, theme }) {
 
           {progress.recentActivity && progress.recentActivity.length > 0 && (
             <div style={card}>
-              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Recent Activity</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>Last 10 sessions</div>
+              <div style={cardSecHdr}>
+                <div style={secTitle}>Recent Activity</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Last 10 sessions</div>
               </div>
               <div>
                 {progress.recentActivity.map((r, i) => (
-                  <div key={i} style={{ padding: '10px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div key={i} style={{ padding: '10px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.correct ? '#4ade80' : '#f87171', flexShrink: 0 }} />
                     <div style={{ flex: 1, fontSize: 13, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.question_id ? 'Question answered' : 'Session'}
@@ -859,9 +862,9 @@ function ProgressTab({ profile, theme }) {
 
           {progress.offTopicAttempts && progress.offTopicAttempts.length > 0 && (
             <div style={card}>
-              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${divider}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Off-Topic Questions</div>
+                  <div style={secTitle}>Off-Topic Questions</div>
                   <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontWeight: 700 }}>
                     {progress.offTopicAttempts.reduce((s, r) => s + r.count, 0)} total
                   </span>
@@ -870,7 +873,7 @@ function ProgressTab({ profile, theme }) {
               </div>
               <div>
                 {progress.offTopicAttempts.map((r, i) => (
-                  <div key={i} style={{ padding: '10px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div key={i} style={{ padding: '10px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.topic}</div>
                       <div style={{ fontSize: 11, color: t.textMuted }}>{r.subject}{r.last_attempt ? ` · Last ${fmtDate(r.last_attempt)}` : ''}</div>
@@ -886,9 +889,9 @@ function ProgressTab({ profile, theme }) {
           )}
 
           <div style={card}>
-            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>English writing</div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>Practice submissions (scores from AI rubric)</div>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${divider}` }}>
+              <div style={secTitle}>English writing</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Practice submissions (scores from AI rubric)</div>
             </div>
             {writingLoading ? (
               <div style={{ padding: 24, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading writing…</div>
@@ -901,7 +904,7 @@ function ProgressTab({ profile, theme }) {
                   const label = `${w.essay_type || ''} · ${(w.mode || '').replace(/_/g, ' ')}`
                   const stName = roster.find(r => r.student_id === selectedStudentId)?.profiles?.display_name
                   return (
-                    <div key={w.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}` }}>
+                    <div key={w.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${divider}` }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, color: t.text, textTransform: 'capitalize' }}>{label}</div>
@@ -1111,9 +1114,9 @@ function ClassesTab({ profile, theme }) {
       )}
 
       <div style={card}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>My Classes</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>{classes.length} class{classes.length !== 1 ? 'es' : ''}</div>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}` }}>
+          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>My Classes</div>
+          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{classes.length} class{classes.length !== 1 ? 'es' : ''}</div>
         </div>
         {loading ? (
           <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
@@ -1127,7 +1130,7 @@ function ClassesTab({ profile, theme }) {
               const memberRows = (cls.members || []).map(m => ({ ...m, profile: rosterById[m.student_id] || null }))
               const availableToAdd = roster.filter(r => !cls.members.some(m => m.student_id === r.student_id))
               return (
-                <div key={cls.id} style={{ borderBottom: `1px solid ${t.border}` }}>
+                <div key={cls.id} style={{ borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px' }}>
                     <div style={{ width: 8, height: 36, borderRadius: 4, background: accent, flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1552,7 +1555,7 @@ function DiagnosticTab({ profile, theme }) {
     : { background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
-  const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
+  const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
 
   // Difficulty totals for preview
   const easyMarks = questions.filter(q => q.difficulty === 'easy').reduce((s, q) => s + q.marks, 0)
@@ -1584,8 +1587,8 @@ function DiagnosticTab({ profile, theme }) {
           <div style={card}>
             <div style={sectionHdr}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Generate Diagnostic Assessment</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
+                <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>Generate Diagnostic Assessment</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
               </div>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -2306,13 +2309,13 @@ function GlobalSearch({ theme, roster, classes, resources, assignments, onNaviga
         />
       </div>
       {open && q.trim() && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto' }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: theme === 'dark' ? 'rgba(7,9,30,0.96)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : t.border}`, borderRadius: 12, boxShadow: theme === 'dark' ? '0 8px 32px rgba(0,0,0,0.6)' : t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto', backdropFilter: 'blur(12px)' }}>
           {results.length === 0 ? (
             <div style={{ padding: '14px 16px', fontSize: 13, color: t.textMuted }}>No matches for “{q.trim()}”.</div>
           ) : results.map((r, i) => (
             <button key={i} onClick={() => { onNavigate(r.to); setOpen(false); setQ('') }}
-              style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: `1px solid ${t.border}`, background: 'transparent', cursor: 'pointer', fontFamily: FONT_B }}
-              onMouseEnter={e => e.currentTarget.style.background = t.bgHover}
+              style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, background: 'transparent', cursor: 'pointer', fontFamily: FONT_B }}
+              onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgHover}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <span style={{ fontSize: 16 }}>{r.icon}</span>
               <span style={{ flex: 1, minWidth: 0 }}>

@@ -78,8 +78,9 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
     : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
-  const cardH = { padding: '15px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }
-  const h3 = { fontSize: 14, fontWeight: 800, color: t.text }
+  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
+  const cardH = { padding: '15px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }
+  const h3 = { fontSize: 13, fontWeight: 400, color: t.text, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em' }
   const link = { color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none', fontFamily: FONT_B }
   const avatar = (name, c) => (
     <div style={{ width: 36, height: 36, borderRadius: '50%', background: c || `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0, fontSize: 14 }}>
@@ -104,23 +105,23 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }}>
-        {kpis.map(k => (
-          <div key={k.l} style={{ ...card, padding: '18px 20px', borderColor: k.danger ? 'rgba(248,113,113,0.3)' : t.border, position: 'relative', overflow: 'hidden' }}>
-            <span style={{ position: 'absolute', right: 14, top: 14, fontSize: 20, opacity: 0.5 }}>{k.icon}</span>
-            <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: k.danger ? t.danger : t.text }}>{k.v}</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 7, fontWeight: 600 }}>{k.l}</div>
-            <div style={{ fontSize: 11, marginTop: 8, fontWeight: 700, color: k.danger ? t.danger : k.accent || t.textMuted }}>{k.sub}</div>
+        {kpis.map((k, i) => (
+          <div key={k.l} className={`td-fadein td-fadein-${i + 1}`} style={{ ...card, padding: '18px 20px', borderColor: k.danger ? 'rgba(248,113,113,0.3)' : (theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border), position: 'relative', overflow: 'hidden' }}>
+            <span style={{ position: 'absolute', right: 14, top: 14, fontSize: 20, opacity: 0.35 }}>{k.icon}</span>
+            <div style={{ fontSize: 32, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '-0.5px', lineHeight: 1, color: k.danger ? t.danger : GOLD }}>{k.v}</div>
+            <div style={{ fontSize: 11, color: t.textMuted, marginTop: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{k.l}</div>
+            <div style={{ fontSize: 11, marginTop: 6, fontWeight: 600, color: k.danger ? t.danger : k.accent || t.textMuted }}>{k.sub}</div>
           </div>
         ))}
       </div>
 
       {/* Quick actions */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-        {actions.map(a => (
-          <button key={a.t} onClick={() => onNavigate(a.to)}
-            style={{ display: 'flex', alignItems: 'center', gap: 11, ...card, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', fontFamily: FONT_B, color: t.text }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = t.border }}>
+        {actions.map((a, i) => (
+          <button key={a.t} className={`td-fadein td-fadein-${i + 1}`} onClick={() => onNavigate(a.to)}
+            style={{ display: 'flex', alignItems: 'center', gap: 11, ...card, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', fontFamily: FONT_B, color: t.text, transition: 'border-color 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.45)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border }}>
             <span style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(241,190,67,0.14)', color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{a.icon}</span>
             <span><span style={{ display: 'block', fontSize: 13, fontWeight: 800 }}>{a.t}</span><span style={{ fontSize: 11, color: t.textMuted }}>{a.d}</span></span>
           </button>
@@ -138,7 +139,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
             {needsAttention.length === 0 ? (
               <div style={{ padding: 28, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>🎉 Nobody's behind — no overdue tasks.</div>
             ) : needsAttention.map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 20px', borderBottom: `1px solid ${t.border}` }}>
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 20px', borderBottom: `1px solid ${divider}` }}>
                 {avatar(s.name)}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{s.name}</div>
@@ -160,7 +161,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
             ) : (
               <div style={{ padding: '6px 20px' }}>
                 {recent.map((r, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: i < recent.length - 1 ? `1px solid ${t.border}` : 'none' }}>
+                  <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: i < recent.length - 1 ? `1px solid ${divider}` : 'none' }}>
                     <span style={{ fontSize: 16 }}>{r.icon}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, color: t.text }}>{r.text}</div>
@@ -180,7 +181,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
             {upcoming.length === 0 ? (
               <div style={{ padding: 28, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No upcoming sessions.</div>
             ) : upcoming.map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px', borderBottom: `1px solid ${t.border}` }}>
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px', borderBottom: `1px solid ${divider}` }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || 'Tutoring Session'}</div>
                   <div style={{ fontSize: 12, color: t.textMuted }}>{fmtTime(s.scheduled_at)} · {s.other_party_name || 'Student'}</div>
@@ -201,7 +202,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
               const icon = { notes: '📝', worksheet: '📄', recording: '🎥', slides: '📊', resource: '📁', link: '🔗' }[r.type] || '📁'
               const target = r.student_name ? `👤 ${r.student_name}` : r.class_name ? `🏫 ${r.class_name}` : '👥 Roster'
               return (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', borderBottom: `1px solid ${t.border}` }}>
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', borderBottom: `1px solid ${divider}` }}>
                   <span style={{ fontSize: 20 }}>{icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>

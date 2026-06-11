@@ -3,56 +3,31 @@
   to   { opacity: 1; transform: none; }
 }
 
-@keyframes tdFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
+/* Staggered card/row entry animation */
 .td-fadein {
   animation: tdFadeUp 0.30s ease both;
 }
-.td-fadein-1 { animation-delay: 50ms; }
-.td-fadein-2 { animation-delay: 100ms; }
-.td-fadein-3 { animation-delay: 150ms; }
-.td-fadein-4 { animation-delay: 200ms; }
-.td-fadein-5 { animation-delay: 250ms; }
+.td-fadein-1 { animation-delay: 40ms; }
+.td-fadein-2 { animation-delay: 80ms; }
+.td-fadein-3 { animation-delay: 120ms; }
+.td-fadein-4 { animation-delay: 160ms; }
+.td-fadein-5 { animation-delay: 200ms; }
 
+/* Tab content entry */
+.td-content-enter {
+  animation: tdFadeUp 0.28s ease both;
+}
+
+/* Root wrapper */
 .td-root {
   position: relative;
 }
 
-.td-sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin: 2px 0;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  transition: background 0.12s, color 0.12s;
-  border: 1px solid transparent;
-  background: transparent;
-  color: rgba(255,255,255,0.55);
-}
-
-.td-sidebar-link:hover {
-  background: rgba(255,255,255,0.04) !important;
-  color: rgba(255,255,255,0.85) !important;
-}
-
-.td-sidebar-link.active {
-  color: #f1be43 !important;
-  background: rgba(241,190,67,0.12) !important;
-  border-color: rgba(241,190,67,0.25) !important;
-}
-
-.td-content-enter {
-  animation: tdFadeUp 0.28s ease both;
+/* Gold focus glow for dark-mode inputs */
+.td-input-gold:focus {
+  border-color: rgba(241,190,67,0.55) !important;
+  box-shadow: 0 0 0 3px rgba(241,190,67,0.10) !important;
+  outline: none;
 }
 
 @media (max-width: 860px) {
