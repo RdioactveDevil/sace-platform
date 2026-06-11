@@ -2127,54 +2127,65 @@ export default function TutorScreen({ profile, theme, subject }) {
 
   const sidebar = (
     <aside style={{
-      width: SIDEBAR_W, flexShrink: 0, background: sidebarBg,
+      width: SIDEBAR_W, flexShrink: 0,
+      background: theme === 'dark'
+        ? 'linear-gradient(180deg, #08091f 0%, #070918 100%)'
+        : sidebarBg,
       borderRight: `1px solid ${sidebarBdr}`,
       display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
+      boxShadow: theme === 'dark' ? '4px 0 24px rgba(0,0,0,0.28)' : 'none',
     }}>
       {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: collapsed ? '20px 16px 14px' : '20px 20px 14px' }}>
+      <div style={{ padding: collapsed ? '22px 16px 0' : '22px 20px 0' }}>
         {collapsed ? (
-          <span style={{ fontFamily: FONT_D, fontSize: 20, color: GOLD, letterSpacing: '-0.5px' }}>g.</span>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <span style={{ fontFamily: FONT_D, fontSize: 22, color: GOLD, letterSpacing: '-0.5px', textShadow: '0 0 20px rgba(241,190,67,0.45)' }}>g.</span>
+          </div>
         ) : (
           <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.20)', borderRadius: 30, padding: '4px 12px', marginBottom: 8 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: '0 0 7px rgba(241,190,67,0.7)', flexShrink: 0 }} />
-              <span style={{ fontFamily: FONT_D, fontSize: 9, letterSpacing: '0.18em', color: GOLD }}>TUTOR</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.28)', borderRadius: 30, padding: '4px 12px', marginBottom: 10 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: '0 0 10px rgba(241,190,67,0.9)', flexShrink: 0 }} />
+              <span style={{ fontFamily: FONT_D, fontSize: 9, letterSpacing: '0.18em', color: GOLD }}>TUTOR PORTAL</span>
             </div>
-            <div style={{ fontFamily: FONT_D, fontSize: 20, color: GOLD, letterSpacing: '-0.5px', whiteSpace: 'nowrap', lineHeight: 1 }}>
-              gradefarm<span style={{ color: '#fff' }}>.</span>
+            <div style={{ fontFamily: FONT_D, fontSize: 22, color: GOLD, letterSpacing: '-0.5px', whiteSpace: 'nowrap', lineHeight: 1, textShadow: '0 0 28px rgba(241,190,67,0.28)' }}>
+              gradefarm<span style={{ color: theme === 'dark' ? 'rgba(255,255,255,0.9)' : t.text }}>.</span>
             </div>
           </div>
         )}
+        <span className="td-brand-sep" />
       </div>
 
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
         {NAV_GROUPS.map(group => (
-          <div key={group.label} style={{ marginTop: 12 }}>
+          <div key={group.label} style={{ marginTop: 14 }}>
             {!collapsed && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: navGroupLbl, padding: '6px 10px' }}>{group.label}</div>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: navGroupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
             )}
             {group.items.map(item => {
               const active = activeTab === item.id
               const badge = badges[item.id]
               return (
                 <button key={item.id} onClick={() => go(item.id)} title={collapsed ? item.label : undefined}
+                  className={`td-nav-item${active ? ' active' : ''}`}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
-                    padding: '10px 12px', borderRadius: 10, margin: '2px 0', cursor: 'pointer',
-                    fontFamily: FONT_B, fontSize: 14, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left',
+                    padding: collapsed ? '11px 0' : '10px 14px',
+                    justifyContent: collapsed ? 'center' : undefined,
+                    margin: '1px 0', cursor: 'pointer',
+                    fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
                     color: active ? GOLD : navItemDflt,
-                    background: active ? 'rgba(241,190,67,0.12)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(241,190,67,0.25)' : 'transparent'}`,
-                    transition: 'background 0.12s, color 0.12s',
+                    background: 'transparent',
                   }}
-                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgHover; e.currentTarget.style.color = theme === 'dark' ? 'rgba(255,255,255,0.82)' : t.text } }}
-                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = navItemDflt } }}
                 >
-                  <span style={{ width: 20, textAlign: 'center', fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
+                  <span style={{ fontSize: 15, flexShrink: 0, opacity: active ? 1 : 0.75, filter: active ? 'none' : 'grayscale(0.3)' }}>{item.icon}</span>
                   {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
                   {!collapsed && badge != null && (
-                    <span style={{ background: item.id === 'assignments' ? t.danger : (theme === 'dark' ? 'rgba(255,255,255,0.08)' : t.bgHover), color: item.id === 'assignments' ? '#fff' : t.textSub, fontSize: 11, fontWeight: 800, borderRadius: 20, padding: '1px 7px' }}>{badge}</span>
+                    <span style={{
+                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.18)' : 'rgba(255,255,255,0.08)',
+                      color: item.id === 'assignments' ? '#f87171' : t.textSub,
+                      fontSize: 10, fontWeight: 800, borderRadius: 20, padding: '2px 7px',
+                      border: item.id === 'assignments' ? '1px solid rgba(248,113,113,0.30)' : '1px solid rgba(255,255,255,0.10)',
+                    }}>{badge}</span>
                   )}
                 </button>
               )
@@ -2184,15 +2195,26 @@ export default function TutorScreen({ profile, theme, subject }) {
       </nav>
 
       {/* User profile footer */}
-      <div style={{ padding: 12, borderTop: `1px solid ${sidebarBdr}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }}>
-          <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+      <div style={{ padding: '10px 10px 12px', borderTop: `1px solid ${sidebarBdr}` }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '9px 10px', borderRadius: 12,
+          background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgHover,
+          border: theme === 'dark' ? '1px solid rgba(255,255,255,0.07)' : `1px solid ${t.border}`,
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: '50%',
+            background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, color: '#0c1037', flexShrink: 0, fontSize: 14,
+            boxShadow: `0 0 14px rgba(241,190,67,0.35)`,
+          }}>
             {(profile.display_name || '?')[0].toUpperCase()}
           </div>
           {!collapsed && (
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>Tutor</div>
+              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tutor</div>
             </div>
           )}
         </div>
@@ -2230,14 +2252,17 @@ export default function TutorScreen({ profile, theme, subject }) {
         {/* Top bar */}
         <header style={{
           position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14,
-          padding: '12px 24px', borderBottom: `1px solid ${headerBdr}`,
-          background: headerBg, backdropFilter: 'blur(12px)',
+          padding: '14px 28px',
+          background: headerBg, backdropFilter: 'blur(16px)',
+          borderBottom: 'none',
+          minHeight: 68,
         }}>
+          <span className="td-header-sep" />
           <button onClick={() => { window.innerWidth <= 860 ? setMobileNav(v => !v) : setCollapsed(v => !v) }}
-            style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.10)' : t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>☰</button>
+            style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.10)' : t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 15, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 20, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.5px', color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
-            <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{meta.sub}</div>
+            <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.04em', color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
+            <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
