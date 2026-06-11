@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const SUBJECTS = [
   { name: 'Chemistry', stage: 'Stage 2', icon: '⚗️', color: '#f1be43', q: 175, desc: 'Organic reactions, equilibrium & electrochemistry' },
   { name: 'Biology', stage: 'Stage 2', icon: '🧬', color: '#10b981', q: 143, desc: 'Cell biology, genetics & ecosystem dynamics' },
@@ -7,8 +9,8 @@ const SUBJECTS = [
 ]
 
 export function VariantB() {
-  const [selected, setSelected] = window.React.useState<number | null>(null)
-  const [hover, setHover] = window.React.useState<number | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [hover, setHover] = useState<number | null>(null)
 
   return (
     <div style={{

@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
 
@@ -11,7 +13,7 @@ const SUBJECTS = [
 ]
 
 export function VariantC() {
-  const [selected, setSelected] = window.React.useState(0)
+  const [selected, setSelected] = useState(0)
   const subj = SUBJECTS[selected]
 
   return (

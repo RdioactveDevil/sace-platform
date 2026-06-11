@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const SUBJECTS = [
   { name: 'Chemistry', stage: 'Stage 2', icon: '⚗️', color: '#f1be43', accent: '#f9d87a', q: 175 },
   { name: 'Biology', stage: 'Stage 2', icon: '🧬', color: '#10b981', accent: '#34d399', q: 143 },
@@ -16,7 +18,7 @@ const TOPICS: Record<string, string[]> = {
 }
 
 export function VariantA() {
-  const [selected, setSelected] = window.React.useState<number | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
 
   return (
     <div style={{
