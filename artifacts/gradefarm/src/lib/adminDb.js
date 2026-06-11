@@ -121,3 +121,41 @@ export async function rejectDraftQuestion(draftId, adminId) {
     .eq('id', draftId)
   if (error) throw error
 }
+
+// ─── QUESTION REPORTS ─────────────────────────────────────────────────────────
+
+async function adminAuthFetch(path, opts = {}) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(opts.headers || {}),
+    },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`)
+  return json
+}
+
+export async function fetchQuestionReports(status = 'all') {
+  const json = await adminAuthFetch(`/api/question-reports?status=${status}`)
+  return json.reports || []
+}
+
+export async function bulkScanQuestions({ subject, limit = 50 } = {}) {
+  return adminAuthFetch('/api/bulk-scan-questions', {
+    method: 'POST',
+    body: JSON.stringify({ subject, limit }),
+  })
+}
+
+export async function retryPendingReports({ limit = 20 } = {}) {
+  return adminAuthFetch('/api/retry-pending-reports', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  })
+}

@@ -1,6 +1,7 @@
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'katex/contrib/mhchem/mhchem.js' // enables \ce{} for chemical equations
+import { tokenizeMath, applyOutsideMath } from '../lib/tokenizeMath.js'
 
 /**
  * Renders text that may contain:
@@ -37,16 +38,93 @@ function insertLineBreaks(text) {
   return text.replace(/\s*(\(\d+\))/g, '\n$1')
 }
 
+// Unicode superscript characters → ASCII, so "x³" becomes "x^3" before wrapping.
+const SUPERSCRIPT_MAP = {
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+  '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+  '⁺': '+', '⁻': '-', 'ⁿ': 'n', 'ⁱ': 'i',
+}
+
+function convertUnicodeSuperscripts(text) {
+  return text.replace(/([0-9A-Za-z)\]])([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿⁱ]+)/g, (whole, base, sup) => {
+    const mapped = Array.from(sup).map((c) => SUPERSCRIPT_MAP[c] ?? '').join('')
+    if (!mapped) return whole
+    return `${base}^${mapped.length > 1 ? `{${mapped}}` : mapped}`
+  })
+}
+
 /**
- * Pre-process plain text to insert $\ce{...}$ delimiters so that the
+ * Auto-detect math expressions not already wrapped in $ delimiters.
+ * Handles two cases:
+ *   A. Pure math strings (answer options like "e^x", "(x+2)e^x") — wrap entirely.
+ *   B. Mixed prose+math (questions like "If f(x)=xe^x, what is f''(x)?") — wrap
+ *      individual sub-expressions.
+ * Unicode superscripts (x², x³) are converted to caret notation first.
+ * (expr)/(expr) fractions are converted to \frac{expr}{expr}.
+ */
+function autoWrapMath(rawText) {
+  // Normalize en/em-dashes to ASCII hyphen so expressions like "x(24 – x²)/2"
+  // are recognised as pure math (en-dashes are used as minus signs in generated output).
+  const text = convertUnicodeSuperscripts(rawText).replace(/[–—]/g, '-')
+  const hasCaret = /[a-zA-Z0-9]\^[a-zA-Z0-9({]/.test(text)
+  const hasDerivative = /[a-z]'{1,3}\([a-z]\)/.test(text)
+  const hasFraction = /\([^()]+\)\/\([^()]+\)/.test(text)
+  if (!hasCaret && !hasDerivative && !hasFraction) return text
+
+  // A pure math string: no sentence punctuation, only math-compatible characters,
+  // and doesn't start with a capitalised English word (e.g. "Find").
+  const isMathOnly =
+    !/[?!]/.test(text) &&
+    !/\.\s/.test(text) &&
+    !/^[A-Z][a-z]/.test(text) &&
+    /^[a-zA-Z0-9\s^+\-*/()\'=,.]+$/.test(text)
+
+  if (isMathOnly) {
+    // Convert (a)/(b) to \frac{a}{b} before wrapping the whole expression in $...$
+    const withFrac = text.replace(
+      /\(([^()]+)\)\/\(([^()]+)\)/g,
+      (m, num, den) => (/[\d^+\-]/.test(num) || /[\d^+\-]/.test(den)) ? `\\frac{${num}}{${den}}` : m,
+    )
+    return `$${withFrac.trim()}$`
+  }
+
+  // Mixed text: convert (a)/(b) to $\frac{a}{b}$ first, then wrap remaining
+  // exponent/derivative sub-expressions only in plain-text segments.
+  let result = text
+
+  result = result.replace(
+    /\(([^()]+)\)\/\(([^()]+)\)/g,
+    (m, num, den) => (/[\d^+\-]/.test(num) || /[\d^+\-]/.test(den)) ? `$\\frac{${num}}{${den}}$` : m,
+  )
+
+  result = applyOutsideMath(result, (seg) => {
+    // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
+    seg = seg.replace(
+      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
+      (m) => `$${m}$`,
+    )
+    // Derivative notation: f'(x), f''(x), g'(t)
+    seg = seg.replace(
+      /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,
+      (m) => `$${m}$`,
+    )
+    return seg
+  })
+
+  return result
+}
+
+/**
+ * Pre-process plain text to insert LaTeX delimiters so that the
  * main KaTeX renderer can pick them up.
  *
  * Rules (applied in order):
  *   1. If the text already has $ signs → skip (it uses explicit LaTeX)
  *   2. If the text has a reaction arrow AND a chemical formula →
  *      treat the whole text as a chemical equation
- *   3. Otherwise scan for subscript-bearing formula tokens (e.g. SO2)
- *      and wrap each individually
+ *   3. Scan for subscript-bearing formula tokens (e.g. SO2) and wrap individually
+ *   4. If no $ signs were introduced by the chemical pass, auto-detect math
+ *      expressions (caret exponents, derivative notation) and wrap them
  */
 function preprocess(text) {
   if (!text || text.includes('$')) return text
@@ -58,22 +136,30 @@ function preprocess(text) {
     return `$\\ce{${toMhchem(text)}}$`
   }
 
-  if (!hasChemFormula(text)) return text
+  let result = text
 
-  // Inline formula pass: find tokens like SO2, H2SO4, CO2, NH3, Ca2+
-  // Each group: [A-Z][a-z]? (element symbol) + \d* (optional subscript)
-  // Optionally followed by charge like 2+ or 3-
-  return text.replace(
-    /(?:[A-Z][a-z]?\d*(?:\([^)]+\)\d*)?)+(?:[+-])?/g,
-    (match) => {
-      // Only wrap if the match contains a digit (subscript is present)
-      // and is longer than 1 character to avoid single letters like "I"
-      if (/\d/.test(match) && match.length > 1) {
-        return `$\\ce{${match}}$`
-      }
-      return match
-    }
-  )
+  if (hasChemFormula(text)) {
+    // Inline formula pass: find tokens like SO2, H2SO4, CO2, NH3, Ca2+
+    result = result.replace(
+      /(?:[A-Z][a-z]?\d*(?:\([^)]+\)\d*)?)+(?:[+-])?/g,
+      (match) => {
+        // Only wrap if the match contains a digit (subscript is present)
+        // and is longer than 1 character to avoid single letters like "I"
+        if (/\d/.test(match) && match.length > 1) {
+          return `$\\ce{${match}}$`
+        }
+        return match
+      },
+    )
+  }
+
+  // Auto-detect math (caret / derivative notation) only when the chemical pass
+  // did not already introduce any $ signs.
+  if (!result.includes('$')) {
+    result = autoWrapMath(result)
+  }
+
+  return result
 }
 
 /**
@@ -85,33 +171,22 @@ export default function MathText({ text = '', style = {} }) {
 
   const withBreaks = insertLineBreaks(text)
   const processed = preprocess(withBreaks)
-  const outerStyle = { whiteSpace: 'pre-line', ...style }
 
-  if (!processed.includes('$')) return <span style={outerStyle}>{processed}</span>
+  // Single source of truth for delimiter pairing (see lib/tokenizeMath.js):
+  // pairs $...$ / $$...$$ left-to-right so prose and math can never desync.
+  const parts = tokenizeMath(processed)
 
-  const parts = []
-  const pattern = /(\$\$[\s\S]+?\$\$|\$(?!\d)[^$\n]+?\$)/g
-  let lastIndex = 0
-  let match
-
-  pattern.lastIndex = 0
-  while ((match = pattern.exec(processed)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', content: processed.slice(lastIndex, match.index) })
-    }
-    const raw = match[0]
-    const isDisplay = raw.startsWith('$$')
-    const latex = isDisplay ? raw.slice(2, -2) : raw.slice(1, -1)
-    parts.push({ type: 'math', content: latex, display: isDisplay })
-    lastIndex = match.index + raw.length
+  if (!parts.some(p => p.type === 'math')) {
+    return <span style={{ whiteSpace: 'pre-line', ...style }}>{processed}</span>
   }
 
-  if (lastIndex < processed.length) {
-    parts.push({ type: 'text', content: processed.slice(lastIndex) })
-  }
+  // Use a block container when any part is display math so we avoid the
+  // invalid block-inside-inline pattern that breaks mobile layout.
+  const hasDisplay = parts.some(p => p.type === 'math' && p.display)
+  const Tag = hasDisplay ? 'div' : 'span'
 
   return (
-    <span style={outerStyle}>
+    <Tag style={{ whiteSpace: 'pre-line', maxWidth: '100%', ...style }}>
       {parts.map((part, i) => {
         if (part.type === 'text') return <span key={i}>{part.content}</span>
         try {
@@ -120,17 +195,26 @@ export default function MathText({ text = '', style = {} }) {
             displayMode: part.display,
             strict: false,
           })
+          if (part.display) {
+            return (
+              <div
+                key={i}
+                dangerouslySetInnerHTML={{ __html: html }}
+                style={{ overflowX: 'auto', textAlign: 'center', margin: '8px 0', maxWidth: '100%' }}
+              />
+            )
+          }
           return (
             <span
               key={i}
               dangerouslySetInnerHTML={{ __html: html }}
-              style={part.display ? { display: 'block', textAlign: 'center', margin: '8px 0' } : {}}
+              style={{ verticalAlign: 'middle' }}
             />
           )
         } catch {
           return <span key={i}>{part.display ? `$$${part.content}$$` : `$${part.content}$`}</span>
         }
       })}
-    </span>
+    </Tag>
   )
 }

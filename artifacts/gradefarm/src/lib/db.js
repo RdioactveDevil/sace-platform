@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase, SUPABASE_URL } from './supabase'
 import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 
@@ -100,6 +100,21 @@ export async function adminListStudents() {
 
 export async function adminGetStudentStats(studentId) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/stats`)
+}
+
+// Soft-delete: active:false deactivates (blocks sign-in, keeps data), active:true reactivates.
+export async function adminSetStudentActive(studentId, active) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/deactivate`, {
+    method: 'POST',
+    body: JSON.stringify({ active: !!active }),
+  })
+}
+
+// Hard-delete: permanently removes the account and all data tied to it.
+export async function adminDeleteStudent(studentId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function adminGetStudentAssignments(studentId) {
@@ -391,6 +406,16 @@ export async function flagQuestion(userId, questionId, flagType) {
     .from('question_flags')
     .upsert({ user_id: userId, question_id: questionId, flag_type: flagType }, { onConflict: 'user_id,question_id,flag_type' })
   if (error) throw error
+}
+
+export async function reportQuestion(questionId) {
+  const res = await fetch('/api/report-question', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ questionId }),
+  })
+  if (!res.ok) throw new Error(`Report failed (${res.status})`)
+  return res.json()
 }
 
 export async function getUserFlags(userId, questionIds) {
@@ -971,6 +996,129 @@ export async function fetchTutorStudentWritingAttempts(studentId) {
   return json.attempts || []
 }
 
+// ── Roster details: year level + tutor-scoped tutored subjects ────────────────
+
+/** { byStudent: { [id]: { year_level, subjects:[{id,subject_name,stage}] } } } */
+export async function fetchRosterDetails() {
+  const json = await tutorFetch('/api/tutor/roster-details')
+  return json.byStudent || {}
+}
+
+/** Set a roster student's Year level. */
+export async function setStudentYearLevel(studentId, yearLevel) {
+  return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/details`, {
+    method: 'PATCH',
+    body: JSON.stringify({ year_level: yearLevel }),
+  })
+}
+
+/** Add a subject + stage the tutor tutors this student in. */
+export async function addStudentSubject(studentId, subjectName, stage) {
+  const json = await tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/subjects`, {
+    method: 'POST',
+    body: JSON.stringify({ subject_name: subjectName, stage }),
+  })
+  return json.subject
+}
+
+/** Remove a tutored subject by its id. */
+export async function removeStudentSubject(studentId, subjectId) {
+  await tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/subjects/${encodeURIComponent(subjectId)}`, {
+    method: 'DELETE',
+  })
+}
+
+// ── TUTOR RESOURCES (notes / files / recordings / links) ──────────────────────
+
+const MAX_RESOURCE_BYTES = 5 * 1024 * 1024 * 1024  // 5 GB (resumable uploads)
+const RESUMABLE_THRESHOLD = 6 * 1024 * 1024        // switch to TUS above ~6 MB
+const RESOURCE_BUCKET = 'tutor-resources'
+
+/** Resumable (TUS) upload to Supabase Storage — survives flaky connections and
+ *  large files. Reports progress 0–100 via onProgress.
+ */
+async function uploadResumable(bucket, objectName, file, contentType, onProgress) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
+  if (!token) throw new Error('Not authenticated.')
+  const { Upload } = await import('tus-js-client')
+
+  await new Promise((resolve, reject) => {
+    const upload = new Upload(file, {
+      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      retryDelays: [0, 1000, 3000, 5000, 10000],
+      headers: { authorization: `Bearer ${token}`, 'x-upsert': 'false' },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      chunkSize: 6 * 1024 * 1024, // Supabase requires exactly 6 MB chunks
+      metadata: { bucketName: bucket, objectName, contentType, cacheControl: '3600' },
+      onError: (err) => reject(new Error(`Upload failed: ${err.message || err}`)),
+      onProgress: (sent, total) => { if (onProgress && total) onProgress(Math.round((sent / total) * 100)) },
+      onSuccess: () => resolve(),
+    })
+    upload.findPreviousUploads().then((prev) => {
+      if (prev.length) upload.resumeFromPreviousUpload(prev[0])
+      upload.start()
+    }).catch(() => upload.start())
+  })
+}
+
+/** Upload a class file to the tutor-resources bucket and return its storage path.
+ *  Files live under <tutorId>/<timestamp>_<name> to satisfy the storage policy.
+ *  Large files use resumable uploads; onProgress(0–100) reports upload progress.
+ */
+export async function uploadTutorResourceFile(tutorId, file, onProgress) {
+  if (file.size > MAX_RESOURCE_BYTES) {
+    throw new Error(`File too large (${Math.round((file.size / (1024 * 1024 * 1024)) * 10) / 10} GB). Max 5 GB.`)
+  }
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${tutorId}/${Date.now()}_${safeName}`
+  const contentType = file.type || 'application/octet-stream'
+
+  if (file.size > RESUMABLE_THRESHOLD) {
+    await uploadResumable(RESOURCE_BUCKET, storagePath, file, contentType, onProgress)
+  } else {
+    const { error } = await supabase.storage
+      .from(RESOURCE_BUCKET)
+      .upload(storagePath, file, { contentType, upsert: false })
+    if (error) throw new Error(`Upload failed: ${error.message}`)
+    if (onProgress) onProgress(100)
+  }
+  return { storagePath, fileName: file.name, fileSize: file.size, mimeType: file.type || null }
+}
+
+/** Create a tutor resource (file or link). Server validates targets + emails. */
+export async function createTutorResource(payload) {
+  const json = await tutorFetch('/api/tutor/resources', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return json
+}
+
+/** List the calling tutor's resources, enriched with class/student names. */
+export async function fetchTutorResources() {
+  const json = await tutorFetch('/api/tutor/resources')
+  return json.resources || []
+}
+
+/** Delete a tutor resource (also removes the stored file). */
+export async function deleteTutorResource(resourceId) {
+  await tutorFetch(`/api/tutor/resources/${encodeURIComponent(resourceId)}`, { method: 'DELETE' })
+}
+
+/** Resolve a fresh signed download URL (or external link) for a resource. */
+export async function getTutorResourceDownloadUrl(resourceId) {
+  const json = await tutorFetch(`/api/resources/${encodeURIComponent(resourceId)}/download`)
+  return json.url
+}
+
+/** List resources shared with the calling student (includes signed URLs). */
+export async function fetchStudentResources() {
+  const json = await tutorFetch('/api/resources/student')
+  return json.resources || []
+}
+
 /**
  * Fetch a student's full progress summary for a tutor's view.
  * Returns: xp, streak, accuracy, totalAttempts, topicBreakdown[], assignments[], recentActivity[]
@@ -1150,14 +1298,14 @@ export async function downloadDiagnosticReportPdf(assessmentId, studentName) {
 // ── Tutoring Sessions ─────────────────────────────────────────────────────────
 
 /** Create a new tutoring session (tutor only). */
-export async function createTutoringSession({ session_type = 'individual', student_id, student_ids, scheduled_at, duration_minutes = 60, title, notes, class_id }) {
+export async function createTutoringSession({ session_type = 'individual', student_id, student_ids, scheduled_at, duration_minutes = 60, title, notes, class_id, record_session = false }) {
   const session = await getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not authenticated.')
   const res = await fetch('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ session_type, student_id, student_ids, scheduled_at, duration_minutes, title, notes, class_id }),
+    body: JSON.stringify({ session_type, student_id, student_ids, scheduled_at, duration_minutes, title, notes, class_id, record_session }),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.error || 'Failed to create session.')
@@ -1241,7 +1389,7 @@ export async function cancelTutoringSession(id) {
 export async function createSessionSeries({
   session_type = 'individual', student_id, student_ids, class_id,
   recurrence_type, day_of_week, time_of_day, timezone = 'Australia/Adelaide',
-  duration_minutes = 60, title, notes, starts_at, ends_at,
+  duration_minutes = 60, title, notes, starts_at, ends_at, record_session = false,
 }) {
   const session = await getSession()
   const token = session?.access_token
@@ -1252,7 +1400,7 @@ export async function createSessionSeries({
     body: JSON.stringify({
       session_type, student_id, student_ids, class_id,
       recurrence_type, day_of_week, time_of_day, timezone,
-      duration_minutes, title, notes, starts_at, ends_at,
+      duration_minutes, title, notes, starts_at, ends_at, record_session,
     }),
   })
   const json = await res.json().catch(() => ({}))
@@ -1327,6 +1475,19 @@ export async function endTutoringSession(sessionId) {
   return json
 }
 
+// ── PLATFORM SETTINGS ─────────────────────────────────────────────────────────
+
+export async function getPlatformSettings(key) {
+  const { data, error } = await supabase.from('platform_settings').select('value').eq('key', key).single()
+  if (error) return null
+  return data?.value ?? null
+}
+
+export async function setPlatformSetting(key, value) {
+  const { error } = await supabase.from('platform_settings').upsert({ key, value, updated_at: new Date().toISOString() })
+  if (error) throw error
+}
+
 /** Generate a LiveKit token by room name (for permanent links). */
 export async function getRoomToken(roomName) {
   const session = await getSession()
@@ -1339,4 +1500,42 @@ export async function getRoomToken(roomName) {
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.error || 'Failed to get room token.')
   return json // { token, wsUrl, roomName, title, is_series }
+}
+
+// ── Exam simulator attempts + percentile analytics ──────────────────────────
+export async function saveExamAttempt(userId, attempt) {
+  if (!userId) return null
+  const row = {
+    user_id: userId,
+    track_id: attempt.trackId,
+    title: attempt.title || null,
+    total_correct: attempt.totalCorrect ?? 0,
+    total_questions: attempt.totalQuestions ?? 0,
+    percent: attempt.percent ?? 0,
+    per_section: attempt.perSection ?? null,
+  }
+  const { data, error } = await supabase.from('exam_attempts').insert(row).select('id').maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// Aggregate percentile for a track via the SECURITY DEFINER RPC (no other
+// users' rows are exposed — only the aggregate comparison).
+export async function fetchExamPercentile(trackId, percent) {
+  const { data, error } = await supabase.rpc('exam_track_percentile', { p_track_id: trackId, p_percent: percent })
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  return row ? { attempts: Number(row.attempts) || 0, average: Number(row.average) || 0, percentile: row.percentile == null ? null : Number(row.percentile) } : null
+}
+
+export async function fetchMyExamAttempts(userId, limit = 10) {
+  if (!userId) return []
+  const { data, error } = await supabase
+    .from('exam_attempts')
+    .select('id, track_id, title, percent, total_correct, total_questions, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
 }

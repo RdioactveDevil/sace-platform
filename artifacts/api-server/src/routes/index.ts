@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import chatRouter from "./chat";
 import generateQuestionsRouter from "./generate-questions";
+import generateFromImageRouter from "./generate-from-image";
 import extractPdfRouter from "./extract-pdf";
 import tutorRouter from "./tutor";
 import adminRouter from "./admin";
@@ -11,12 +12,16 @@ import diagnosticRouter from "./diagnostic";
 import sessionsRouter from "./sessions";
 import seriesRouter from "./series";
 import subjectStatsRouter from "./subject-stats";
+import reportQuestionRouter from "./report-question";
+import resourcesRouter from "./resources";
+import livekitRouter from "./livekit";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(chatRouter);
 router.use(generateQuestionsRouter);
+router.use(generateFromImageRouter);
 router.use(extractPdfRouter);
 router.use(tutorRouter);
 router.use(adminRouter);
@@ -26,5 +31,8 @@ router.use(diagnosticRouter);
 router.use(sessionsRouter);
 router.use(seriesRouter);
 router.use(subjectStatsRouter);
+router.use(reportQuestionRouter);
+router.use(resourcesRouter);
+router.use(livekitRouter);
 
 export default router;

@@ -1,0 +1,79 @@
+name: Apply database migrations
+
+# Manually triggered from the GitHub UI (Actions tab → this workflow → "Run workflow").
+# Applies pending SQL files in supabase/migrations/ to the Supabase Postgres DB,
+# tracked in a schema_migrations table so nothing runs twice.
+#
+# Requires one repository secret (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL — Postgres connection string from the Supabase dashboard
+#                     (Project Settings → Database → Connection string → URI).
+#                     Use the session/pooler URI and include the password.
+#
+# FIRST TIME on this already-migrated database:
+#   The legacy migrations were applied by hand. Run once with "from" set to
+#   20260609000000 (the first new migration) so only the new files are applied
+#   and the old, non-idempotent ones are left untouched.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (preview only, no writes)"
+          - "apply (run pending migrations)"
+        default: "dry-run (preview only, no writes)"
+      from:
+        description: "Only apply migrations at/after this version (recommended: 20260609000000)"
+        type: string
+        default: "20260609000000"
+      baseline:
+        description: "Baseline: record ALL current files as applied without running them (use only on a fully up-to-date DB)"
+        type: boolean
+        default: false
+
+# Never let two migration runs hit the database at once.
+concurrency:
+  group: apply-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run migrations
+        env:
+          MODE: ${{ inputs.mode }}
+          FROM: ${{ inputs.from }}
+          BASELINE: ${{ inputs.baseline }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          ARGS=()
+          case "$MODE" in
+            dry-run*) ARGS+=("--dry-run") ;;
+          esac
+          if [ "$BASELINE" = "true" ]; then ARGS+=("--baseline"); fi
+          if [ -n "${FROM// /}" ]; then ARGS+=("--from" "$FROM"); fi
+          echo "Running migrations with args: ${ARGS[*]:-<apply all pending>}"
+          pnpm --filter @workspace/scripts run migrate -- "${ARGS[@]}"

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { addSubscription } from '../lib/db'
+import { addSubscription, getPlatformSettings } from '../lib/db'
+import { formatSubjectLabel } from '../lib/subjects'
 import { SubjectIcon } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
@@ -22,6 +23,14 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
   const subj      = state?.subject
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
+
+  // Free-tier settings from DB (fallback to beta defaults)
+  const [freeTier, setFreeTier] = useState({ is_beta: true, beta_label: 'Free during Beta' })
+  useEffect(() => {
+    getPlatformSettings('free_tier').then(val => {
+      if (val) setFreeTier(prev => ({ ...prev, ...val }))
+    }).catch(() => {})
+  }, [])
 
   if (!subj) {
     navigate('/subject-picker', { replace: true })
@@ -152,16 +161,18 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
         }}>
           {/* Price */}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 44, color: '#fff', lineHeight: 1 }}>$0</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 7 }}>/ forever</span>
+            <span style={{ fontFamily: FONT_D, fontSize: 44, color: '#fff', lineHeight: 1 }}>{freeTier.is_beta ? '$0' : '$7'}</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 7 }}>{freeTier.is_beta ? '/ forever' : '/ month'}</span>
           </div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            background: `${hex(GOLD, 0.14)}`, border: `1px solid ${hex(GOLD, 0.35)}`,
-            borderRadius: 99, padding: '4px 12px', marginBottom: 22,
-          }}>
-            <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>🎉 Free during Beta</span>
-          </div>
+          {freeTier.is_beta && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: hex(GOLD, 0.14), border: `1px solid ${hex(GOLD, 0.35)}`,
+              borderRadius: 99, padding: '4px 12px', marginBottom: 22,
+            }}>
+              <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>🎉 {freeTier.beta_label || 'Free during Beta'}</span>
+            </div>
+          )}
 
           {/* What's included */}
           <div style={{
@@ -216,7 +227,7 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
             transition: 'all 0.2s ease',
           }}
         >
-          {loading ? 'Unlocking…' : `Unlock ${subj.name} ${subj.stage} — Free →`}
+          {loading ? 'Unlocking…' : `Unlock ${formatSubjectLabel(subj)} — Free →`}
         </button>
 
         <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 14 }}>

@@ -1,15 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
+import { initObservability } from './lib/analytics'
+import { notifyError } from './lib/notify'
+import ErrorBoundary from './components/ErrorBoundary'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
+import { refreshManagedTopicsCache } from './lib/adminTopics'
+import { loadManagedCurriculaTopics } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
-import LandingPage       from './components/LandingPage'
-import AuthScreen        from './components/AuthScreen'
 import SubjectPicker     from './components/SubjectPicker'
-import { QUESTIONS_SUBJECT_BY_ID, ALL_SUBJECTS } from './lib/subjects'
+import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/saceTopics'
-import { getY7TopicConfig } from './lib/australianCurriculumTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -18,23 +21,32 @@ import ProfileScreen     from './components/ProfileScreen'
 import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
-import OnboardingScreen  from './components/OnboardingScreen'
-import TutorOnboardingScreen from './components/TutorOnboardingScreen'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
-import TutorSignupScreen from './components/TutorSignupScreen'
-import GetAccessScreen   from './components/GetAccessScreen'
-import TermsScreen       from './components/TermsScreen'
-import PrivacyScreen     from './components/PrivacyScreen'
 import AdminRoute        from './components/AdminRoute'
-import AdminScreen       from './components/AdminScreen'
 import TutorRoute        from './components/TutorRoute'
-import TutorScreen       from './components/TutorScreen'
-import WritingScreen     from './components/WritingScreen'
-import DiagnosticScreen  from './components/DiagnosticScreen'
-import PricingPage       from './components/PricingPage'
-import SessionRoom       from './components/SessionRoom'
-import RecurringRoomPage from './components/RecurringRoomPage'
+
+// Heavy / route-only screens are lazy-loaded so their dependencies (Excalidraw,
+// LiveKit, MathLive, the entire admin bundle, marketing pages, etc.) are split
+// out of the initial app bundle and only fetched when the route is visited.
+const LandingPage           = lazy(() => import('./components/LandingPage'))
+const AuthScreen            = lazy(() => import('./components/AuthScreen'))
+const OnboardingScreen      = lazy(() => import('./components/OnboardingScreen'))
+const TutorOnboardingScreen = lazy(() => import('./components/TutorOnboardingScreen'))
+const TutorSignupScreen     = lazy(() => import('./components/TutorSignupScreen'))
+const GetAccessScreen       = lazy(() => import('./components/GetAccessScreen'))
+const TermsScreen           = lazy(() => import('./components/TermsScreen'))
+const PrivacyScreen         = lazy(() => import('./components/PrivacyScreen'))
+const AdminScreen           = lazy(() => import('./components/AdminScreen'))
+const TutorScreen           = lazy(() => import('./components/TutorScreen'))
+const WritingScreen         = lazy(() => import('./components/WritingScreen'))
+const DiagnosticScreen      = lazy(() => import('./components/DiagnosticScreen'))
+const PricingPage           = lazy(() => import('./components/PricingPage'))
+const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
+const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
+const EssayMarkerScreen     = lazy(() => import('./components/EssayMarkerScreen'))
+const SessionRoom           = lazy(() => import('./components/SessionRoom'))
+const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -44,6 +56,9 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const NAV_ITEMS = [
   { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
   { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
+  { icon: 'list-check',  label: 'Exam Mode',     id: 'exam',        path: '/exam'          },
+  { icon: 'pen',         label: 'Essay Marker',  id: 'essay',       path: '/essay-lab'     },
+  { icon: 'learn',       label: 'Question Lab',  id: 'qlab',        path: '/question-lab'  },
   { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
   { icon: 'leaderboard', label: 'Leaderboard',   id: 'leaderboard', path: '/leaderboard'   },
   { icon: 'study',       label: 'Study Plan',    id: 'study',       path: '/study-plan'    },
@@ -265,7 +280,7 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
       <div style={{ fontSize: 52 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Subject Not in Your Plan</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 360, lineHeight: 1.6, margin: 0 }}>
-        <strong style={{ color: t.text }}>{subject?.name} {subject?.stage}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
+        <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
       </p>
       <a href="mailto:hello@titaniumtutoring.com.au" style={{ padding: '12px 24px', borderRadius: 12, background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         Contact us to upgrade →
@@ -429,6 +444,20 @@ function mergeTutorialFromStorage(userId, prof) {
   return prof
 }
 
+function RouteFallback({ theme }) {
+  const t = THEMES[theme] || {}
+  return (
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg || '#0c1037' }}>
+      <style>{`@keyframes gf-routespin { to { transform: rotate(360deg); } }`}</style>
+      <div
+        role="status"
+        aria-label="Loading"
+        style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(241,190,67,0.18)', borderTopColor: GOLD, animation: 'gf-routespin 0.8s linear infinite' }}
+      />
+    </div>
+  )
+}
+
 function NavBlockerModal({ blocker, theme }) {
   const t = THEMES[theme]
   if (blocker.state !== 'blocked') return null
@@ -482,7 +511,9 @@ function AppInner() {
       const subs = await getSubscriptions(user.id)
       setSubscriptions(subs)
       setSubscriptionsLoaded(true)
-    } catch {}
+    } catch (e) {
+      notifyError(e, 'Could not refresh your subjects. Please try again.', { source: 'refreshSubscriptions' })
+    }
   }
 
   // Lifted Learn state — survives route changes
@@ -560,6 +591,13 @@ function AppInner() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Load managed curriculum topics cache on login so the student-facing quiz
+  // can look up topic codes for bank exhaustion / infinite question generation.
+  useEffect(() => {
+    if (!user?.id) return
+    refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
+  }, [user?.id])
+
   useEffect(() => {
     if (!user?.id) return
     setLoading(true)
@@ -573,17 +611,8 @@ function AppInner() {
         if (prof) getSubscriptions(user.id).then(subs => {
           setSubscriptions(subs)
           setSubscriptionsLoaded(true)
-          // Migrate legacy Year 10 Maths variants → unified maths_y10 tile,
-          // then evict a persisted subject the user is no longer subscribed to.
-          let stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
-          if (stored && (stored.id === 'vic_maths_y10' || stored.id === 'vic_maths_y10a' || (stored.stage === 'Year 10' && stored.name === 'Mathematics (10A)'))) {
-            const unified = ALL_SUBJECTS.find(s => s.id === 'maths_y10')
-            if (unified) {
-              stored = unified
-              localStorage.setItem('gf-subject', JSON.stringify(unified))
-              setSelectedSubject(unified)
-            }
-          }
+          // Evict a persisted subject the user is no longer subscribed to.
+          const stored = (() => { try { return JSON.parse(localStorage.getItem('gf-subject')) } catch { return null } })()
           if (stored && subs.length > 0 && !subs.some(s => s.subject_name === stored.name && s.stage === stored.stage)) {
             localStorage.removeItem('gf-subject')
             setSelectedSubject(null)
@@ -806,19 +835,23 @@ function AppInner() {
           writingNav: selectedSubject?.type === 'writing',
           isTutor: !!profile.is_tutor,
           theme,
-          onFinish: async () => {
+          // Called as soon as the overlay mounts — prevents re-showing if the user
+          // closes the tab or navigates away before explicitly skipping/finishing.
+          onSeen: async () => {
             const uid = profile.id
             const ts = new Date().toISOString()
             try {
               localStorage.setItem(gfTutorialStorageKey(uid), ts)
             } catch (_) {}
             setProfile(prev => ({ ...prev, app_tutorial_completed_at: ts }))
-            setWelcomeCelebration(true)
             try {
               await markTutorialComplete(uid)
             } catch (e) {
-              console.error('[tutorial complete]', e)
+              console.error('[tutorial seen]', e)
             }
+          },
+          onFinish: () => {
+            setWelcomeCelebration(true)
           },
         }
       : null
@@ -838,12 +871,23 @@ function AppInner() {
   return (
     <>
     <NavBlockerModal blocker={blocker} theme={theme} />
+    <ErrorBoundary label="app">
+    <Suspense fallback={<RouteFallback theme={theme} />}>
     <Routes>
       {/* Root → landing if not logged in, dashboard if logged in */}
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
+
+      {/* Question Lab — public preview of the multi-format question engine */}
+      <Route path="/question-lab" element={<QuestionLabScreen theme={theme} onExit={() => navigate('/home')} />} />
+
+      {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
+      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} profile={profile} onExit={() => navigate('/home')} />} />
+
+      {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
+      <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
@@ -1005,7 +1049,7 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           :               <TutorRoute profile={profile}>
               <AppShell {...shellProps} writingNav={false}>
-                <TutorScreen profile={profile} theme={theme} />
+                <TutorScreen profile={profile} theme={theme} subject={selectedSubject} />
               </AppShell>
             </TutorRoute>
       } />
@@ -1080,7 +1124,7 @@ function AppInner() {
             // names to their matching subtopics; keep direct subtopic matches as-is.
             let expandedSubtopics = nextSubtopics
             if (opts?.assignmentId && nextSubtopics.length > 0) {
-              const { normFn } = getY7TopicConfig(activeSubject?.id) ?? getTopicConfigForSubject(activeSubject)
+              const { normFn } = getTopicConfigForSubject(activeSubject)
               const allSubtopicsLower = new Map()
               activeQuestions.forEach(q => {
                 if (q.subtopic) allSubtopicsLower.set(q.subtopic.toLowerCase(), q.subtopic)
@@ -1138,6 +1182,8 @@ function AppInner() {
           }} quizSubtopics={quizSubtopics} setQuizSubtopics={setQuizSubtopics} />
       } />
     </Routes>
+    </Suspense>
+    </ErrorBoundary>
     {welcomeCelebration && (
       <GradeFarmWelcomeCelebration theme={theme} onDismiss={() => setWelcomeCelebration(false)} />
     )}
@@ -1148,5 +1194,15 @@ function AppInner() {
 const router = createBrowserRouter([{ path: '*', element: <AppInner /> }])
 
 export default function App() {
-  return <RouterProvider router={router} />
+  useEffect(() => { initObservability() }, [])
+  return (
+    <ErrorBoundary label="app">
+      <RouterProvider router={router} />
+      <Toaster
+        position="top-center"
+        theme="dark"
+        toastOptions={{ style: { fontFamily: "'Plus Jakarta Sans', sans-serif" } }}
+      />
+    </ErrorBoundary>
+  )
 }

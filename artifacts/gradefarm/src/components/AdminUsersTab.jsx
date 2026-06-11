@@ -6,6 +6,7 @@ import {
   adminApproveTutor,
   adminRejectTutor,
 } from '../lib/db'
+import { exportRowsToCsv } from '../lib/csv'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -49,6 +50,19 @@ export default function AdminUsersTab({ profile }) {
         || (u.display_name || '').toLowerCase().includes(f)
   })
 
+  const exportCsv = () => {
+    exportRowsToCsv(
+      `gradefarm-users-${new Date().toISOString().slice(0, 10)}`,
+      filtered,
+      [
+        { key: 'display_name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'role', label: 'Role', get: u => (u.is_admin ? 'admin' : u.is_tutor ? 'tutor' : 'student') },
+        { key: 'tutor_application_status', label: 'Application' },
+      ],
+    )
+  }
+
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -67,6 +81,21 @@ export default function AdminUsersTab({ profile }) {
             minWidth: 240,
           }}
         />
+        <button
+          onClick={exportCsv}
+          disabled={loading || filtered.length === 0}
+          title="Download the current list as CSV"
+          style={{
+            flexShrink: 0,
+            padding: '8px 12px', borderRadius: 8, fontFamily: FONT_B,
+            border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)',
+            color: GOLD, fontSize: 12, fontWeight: 700,
+            cursor: loading || filtered.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || filtered.length === 0 ? 0.5 : 1,
+          }}
+        >
+          ↓ Export CSV
+        </button>
       </div>
 
       {error && (

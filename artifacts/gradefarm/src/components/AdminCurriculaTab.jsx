@@ -1,72 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listCurricula, createCurriculum, seedBuiltInSubjectsIfNeeded, deleteCurriculum } from '../lib/curriculaDb'
+import { listCurricula, createCurriculum, deleteCurriculum } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
-import { S1_TOPICS, S2_TOPICS, Y7_MATHS_TOPICS, Y7_ENGLISH_TOPICS, Y10_MATHS_TOPICS } from '../lib/adminTopics'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
-// Group a flat topic array into sections by the prefix of each code.
-// Chemistry uses "1.1" → section "1"; Maths/English use "N1" → section "N".
-function groupIntoSections(topics, sectionNames) {
-  const groups = {}
-  const order = []
-  for (const t of topics) {
-    const key = t.code.includes('.') ? t.code.split('.')[0] : t.code.replace(/\d+$/, '')
-    if (!groups[key]) { groups[key] = []; order.push(key) }
-    groups[key].push(t)
-  }
-  return order.map(key => ({
-    name: sectionNames[key] || `Section ${key}`,
-    subtopics: groups[key].map(t => ({ name: `${t.code} — ${t.short || t.name}` })),
-  }))
-}
-
-const BUILT_IN_SUBJECTS = [
-  {
-    name: 'Chemistry Stage 1',
-    description: 'SACE Chemistry Stage 1 — Australian curriculum covering properties of matter, atomic structure, molecular materials, solutions, acid-base and redox chemistry.',
-    topics: groupIntoSections(S1_TOPICS, {
-      1: 'Properties and Atomic Structure',
-      2: 'Types of Materials',
-      3: 'Molecular Materials',
-      4: 'Solutions',
-      5: 'Acid–Base Chemistry',
-      6: 'Redox Chemistry',
-    }),
-  },
-  {
-    name: 'Chemistry Stage 2',
-    description: 'SACE Chemistry Stage 2 — covering environmental chemistry, rates and equilibrium, organic chemistry, and sustainability.',
-    topics: groupIntoSections(S2_TOPICS, {
-      1: 'Environmental Chemistry and Analysis',
-      2: 'Rates and Equilibrium',
-      3: 'Organic Chemistry',
-      4: 'Sustainability',
-    }),
-  },
-  {
-    name: 'Year 7 Mathematics',
-    description: 'Australian Curriculum v9 — Year 7 Mathematics covering Number, Algebra, Measurement, Space, Statistics and Probability.',
-    topics: groupIntoSections(Y7_MATHS_TOPICS, {
-      N: 'Number', A: 'Algebra', M: 'Measurement', SP: 'Space', ST: 'Statistics', P: 'Probability',
-    }),
-  },
-  {
-    name: 'Year 7 English',
-    description: 'Australian Curriculum v9 — Year 7 English covering Language, Literature and Literacy strands.',
-    topics: groupIntoSections(Y7_ENGLISH_TOPICS, {
-      L: 'Language', LT: 'Literature', LC: 'Literacy',
-    }),
-  },
-  {
-    name: 'Year 10 Mathematics',
-    description: 'Australian Curriculum — Year 10 and 10A Mathematics covering Number, Algebra, Measurement, Geometry, Statistics, Probability and extension topics.',
-    topics: groupIntoSections(Y10_MATHS_TOPICS, {
-      N: 'Number', A: 'Algebra', M: 'Measurement', SP: 'Geometry', ST: 'Statistics', P: 'Probability',
-      XN: 'Year 10A — Number', XA: 'Year 10A — Algebra', XM: 'Year 10A — Measurement',
-      XSP: 'Year 10A — Geometry', XST: 'Year 10A — Statistics', XP: 'Year 10A — Probability',
-    }),
-  },
-]
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -101,11 +37,13 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [createError, setCreateError]  = useState('')
   const [subjectTitle, setSubjectTitle] = useState('')
   const [cohortLevel, setCohortLevel]   = useState('')
+  const [flagLatex, setFlagLatex]       = useState(true)
+  const [flagGraphs, setFlagGraphs]     = useState(false)
+  const [flagTables, setFlagTables]     = useState(false)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      await seedBuiltInSubjectsIfNeeded(BUILT_IN_SUBJECTS)
       setCurricula(await listCurricula())
     } catch (e) {
       if (!silent) setError(e.message)
@@ -115,7 +53,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   useEffect(() => { load() }, [load])
 
-  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel('') }
+  const openModal = () => { setShowModal(true); setCreateError(''); setDescription(''); setUploadedDoc(null); setSubjectTitle(''); setCohortLevel(''); setFlagLatex(true); setFlagGraphs(false); setFlagTables(false) }
   const closeModal = () => { if (!creating) setShowModal(false) }
 
   const handleFileUpload = (e) => {
@@ -162,6 +100,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         subject_description,
         topics,
         level_label: cohortLevel,
+        generation_flags: { latex: flagLatex, graphs: flagGraphs, tables: flagTables },
       })
       setShowModal(false)
       onSelectCurriculum(id)
@@ -319,6 +258,28 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Question features
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, opacity: creating ? 0.6 : 1 }}>
+              {[
+                { key: 'latex',  val: flagLatex,  set: setFlagLatex,  label: 'LaTeX',  desc: 'Mathematical notation in questions and solutions' },
+                { key: 'graphs', val: flagGraphs, set: setFlagGraphs, label: 'Graphs', desc: 'AI generates function graphs when relevant' },
+                { key: 'tables', val: flagTables, set: setFlagTables, label: 'Tables', desc: 'AI generates data tables when relevant' },
+              ].map(({ key, val, set, label, desc }) => (
+                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: creating ? 'not-allowed' : 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={val}
+                    onChange={e => set(e.target.checked)}
+                    disabled={creating}
+                    style={{ width: 15, height: 15, accentColor: '#f1be43', cursor: 'inherit' }}
+                  />
+                  <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>{label}</span>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>{desc}</span>
+                </label>
+              ))}
+            </div>
             <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Course description (optional if uploading a document)
             </label>

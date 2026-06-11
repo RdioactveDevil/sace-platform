@@ -18,6 +18,7 @@ import {
   fetchAndPersistMoreQuestions,
   incrementQuestionVariantUsage,
   flagQuestion,
+  reportQuestion,
   flagTopicForStudyPlan,
   completeAssignment,
 } from '../lib/db'
@@ -33,6 +34,12 @@ import {
   REMEDIATION_DB_TIMEOUT_MS,
 } from '../lib/remediation'
 import MathText from './MathText'
+import GraphView from './GraphView'
+import TableView from './TableView'
+import DiagramView from './DiagramView'
+import QuizToolsDock from './QuizToolsDock'
+import QuestionRenderer from './questions/QuestionRenderer'
+import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -75,8 +82,9 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
     const timeout = setTimeout(() => controller.abort(), 8000)
 
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
+    const subjectLabel = parentQuestion?.subject || 'SACE'
     const system = [
-      'You are a SACE Chemistry teacher generating a concept-builder question for a struggling student.',
+      `You are a ${subjectLabel} teacher generating a concept-builder question for a struggling student.`,
       'Return only a valid JSON object (not an array).',
       'The question MUST embed the key fact or hint directly in the question stem — like a teacher explaining in class.',
       'Structure: state the core concept or mechanism first, then ask the student to apply it.',
@@ -194,7 +202,7 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
             ⚡ Remediation Mode
           </span>
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>
-            {remediationSource === 'generated' ? 'Generated reinforcement' : 'Prebuilt reinforcement'}
+            {remediationSource === 'generated' ? 'Generated reinforcement' : 'From question bank'}
           </span>
         </div>
         <span style={{
@@ -350,6 +358,8 @@ export default function QuizScreen({
   const backgroundPrefetchAttempted = useRef(false)
   const [flaggedMap, setFlaggedMap] = useState({}) // { [questionId]: Set of flag_types }
   const [flagging, setFlagging] = useState(null)   // currently-saving flag tag
+  const [reporting, setReporting] = useState(false)
+  const [reportedIds, setReportedIds] = useState(new Set())
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
   const [assignmentsCompleted, setAssignmentsCompleted] = useState([])
@@ -427,6 +437,23 @@ export default function QuizScreen({
       })
     } catch {}
     setFlagging(null)
+  }
+
+  const handleReport = async () => {
+    if (!currentQ || reporting) return
+    // Track the "reported" indicator per concrete question instance so it never
+    // bleeds onto a different (e.g. "next similar") question. Variants aren't in
+    // the bank, so the backend verifies their parent row instead.
+    const reportKey = currentQ.id
+    if (!reportKey || reportedIds.has(reportKey)) return
+    const backendId = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
+    if (!backendId) return
+    setReporting(true)
+    try {
+      await reportQuestion(backendId)
+      setReportedIds(prev => new Set([...prev, reportKey]))
+    } catch {}
+    setReporting(false)
   }
 
   const setDisplayQuestion = useCallback((q) => {
@@ -510,6 +537,7 @@ export default function QuizScreen({
       runGenerateRemediationQueue({
         parentQuestion,
         existingUsedIds,
+        sessionAnsweredIds: sessionAnswered,
         difficultyTarget,
         options,
         questions,
@@ -521,7 +549,7 @@ export default function QuizScreen({
         onBankQuestionsAdded,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [questions, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
+    [questions, sessionAnswered, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
   )
 
   const enterRemediation = useCallback(
@@ -529,6 +557,7 @@ export default function QuizScreen({
       runEnterRemediation({
         parentQuestion,
         prefetched: variantPrefetchRef.current,
+        questions,
         deps: remediationDeps,
         setRemediationMode,
         setRemediationStreak,
@@ -545,6 +574,7 @@ export default function QuizScreen({
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
+      questions,
       generateRemediationQueue,
       setRemediationConcept,
       setRemediationMode,
@@ -603,14 +633,14 @@ export default function QuizScreen({
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
 
-    // Derive subject + topic from the most-recently-answered main question.
+    // Derive subject + subtopic from the most-recently-answered main question.
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
     const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
-    const subject   = lastQ?.subject
-    const topicName = lastQ?.topic
-    if (!subject || !topicName) return
+    const subject     = lastQ?.subject
+    const subtopicName = lastQ?.subtopic
+    if (!subject || !subtopicName) return
 
-    const topicCode = getTopicCodeByName(subject, topicName)
+    const topicCode = getTopicCodeByName(subject, subtopicName)
     if (!topicCode) return
 
     generatingMoreRef.current = true
@@ -630,6 +660,9 @@ export default function QuizScreen({
         if (!newQs.length) { setFinished(true); return }
         if (typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(newQs)
         setDisplayQuestion(newQs[0])
+        // Reset guards so the cycle can repeat when these questions run out.
+        bankExhaustionAttempted.current = false
+        backgroundPrefetchAttempted.current = false
         // Background top-up: generate 10 more while the user answers the 3.
         fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff)
           .then(moreQs => {
@@ -665,14 +698,14 @@ export default function QuizScreen({
 
     if (remaining > 3) return   // still plenty — don't prefetch yet
 
-    // Derive subject + topic from the most-recently-answered main question.
+    // Derive subject + subtopic from the most-recently-answered main question.
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
     const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
-    const subject   = lastQ?.subject
-    const topicName = lastQ?.topic
-    if (!subject || !topicName) return
+    const subject      = lastQ?.subject
+    const subtopicName = lastQ?.subtopic
+    if (!subject || !subtopicName) return
 
-    const topicCode = getTopicCodeByName(subject, topicName)
+    const topicCode = getTopicCodeByName(subject, subtopicName)
     if (!topicCode) return
 
     backgroundPrefetchAttempted.current = true
@@ -684,6 +717,8 @@ export default function QuizScreen({
         if (newQs.length && typeof onBankQuestionsAdded === 'function') {
           onBankQuestionsAdded(newQs)
         }
+        // Reset so the prefetch can fire again when these questions run low.
+        backgroundPrefetchAttempted.current = false
       })
       .catch(() => {
         // Silent failure — exhaustion handler will retry when the bank runs dry.
@@ -890,6 +925,10 @@ export default function QuizScreen({
             },
           }
         })
+        // Prevent the underlying bank question from appearing again as a main quiz
+        // question this session — critical in 'all' mode (consolidation) where the
+        // only repeat guard is sessionAnswered.
+        setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
       }
 
       if (isCorrect) {
@@ -913,7 +952,10 @@ export default function QuizScreen({
           setRemediationStreak(0)
           const newWrongCount = remediationWrongCount + 1
           setRemediationWrongCount(newWrongCount)
-          const newDiffTarget = Math.max(1, (remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)) - 1)
+          // Keep the difficulty anchored at the original level — selectBankVariants
+          // already prefers "same, then one lower" (e.g. 3 → 3 or 2). Deeper easing
+          // is handled by the concept-builder path at wrongCount === 2.
+          const newDiffTarget = remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)
           setRemediationDifficultyTarget(newDiffTarget)
 
           if (newWrongCount >= 5) {
@@ -965,7 +1007,10 @@ export default function QuizScreen({
       // before the AI tip fetch runs. Without this, the user could click "Next Question →"
       // during the 3.5s AI timeout window and skip remediation entirely.
       const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
-      const initialDiffTarget = Math.max(1, (currentQ.difficulty ?? 3) - 1)
+      // Anchor the reinforcement pool on the difficulty the student just missed.
+      // The per-question difficulty curve ("reduce by 1, then ramp back" toward
+      // this level for the final mastery question) is applied at load time.
+      const initialDiffTarget = currentQ.difficulty ?? 3
       setRemediationMode(true)
       setRemediationStreak(0)
       setRemediationTarget(3)
@@ -988,8 +1033,72 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: 'You are a SACE Chemistry tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.',
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
+          }),
+        })
+        const d = await res.json()
+        setAiTip(d.content?.[0]?.text || '')
+      } catch {
+        setAiTip('')
+      }
+      setLoadingTip(false)
+    }
+  }
+
+  // Outcome handler for non-MCQ question types (numeric, multi-select, short
+  // text, ordering). The renderer grades the response and calls this with the
+  // result. Mirrors the main-question path of handleAnswer; remediation is
+  // MCQ-specific so new types skip it for now (they still record + earn XP).
+  const handleSubmitResponse = async (response, isCorrect) => {
+    if (showAns || !currentQ) return
+    const xpEarned = calcXP(isCorrect, currentQ.difficulty, streak)
+    const newStreak = isCorrect ? streak + 1 : 0
+    const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
+
+    setSelected(response)
+    setShowAns(true)
+    setCorrect(isCorrect)
+    setEarnedXP(xpEarned)
+    setStreak(newStreak)
+    setSessionXP(s => s + xpEarned)
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: false }])
+
+    if (isCorrect) {
+      setFloatXP(xpEarned)
+      setTimeout(() => setFloatXP(null), 1400)
+    }
+
+    try {
+      const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
+      setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
+    } catch {}
+
+    setStruggleMap(prev => {
+      const old = prev[currentQ.id] ?? { attempts: 0, wrong: 0 }
+      return {
+        ...prev,
+        [currentQ.id]: {
+          ...old,
+          attempts: old.attempts + 1,
+          wrong: old.wrong + (isCorrect ? 0 : 1),
+          last_seen: new Date().toISOString(),
+        },
+      }
+    })
+
+    try { await recordAnswer(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs) } catch {}
+
+    if (!isCorrect) {
+      setLoadingTip(true)
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_tokens: 200,
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
+            messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect answer: ${describeCorrectAnswer(currentQ)}\nStudent answered: ${JSON.stringify(response)}\nSolution: ${currentQ.solution}` }],
           }),
         })
         const d = await res.json()
@@ -1007,6 +1116,9 @@ export default function QuizScreen({
       remediationOriginalQ,
       remediationUsedIds,
       remediationDifficultyTarget,
+      remediationStreak,
+      remediationTarget,
+      questions,
       deps: remediationDeps,
       setRemediationQueue,
       setRemediationSource,
@@ -1437,9 +1549,26 @@ export default function QuizScreen({
             />
 
             <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: t.shadowCard, marginBottom: showAns ? 14 : 0 }}>
+              {currentQ.graph && (
+                <GraphView graph={currentQ.graph} theme={theme} />
+              )}
+              {currentQ.table_data && (
+                <TableView table={currentQ.table_data} theme={theme} />
+              )}
+              {currentQ.diagram && (
+                <DiagramView diagram={currentQ.diagram} theme={theme} />
+              )}
+              {currentQ.image_url && getQuestionType(currentQ) !== 'hotspot' && getQuestionType(currentQ) !== 'image_label' && (
+                <img
+                  src={currentQ.image_url}
+                  alt="Question diagram"
+                  style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }}
+                />
+              )}
               <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
                 <MathText text={currentQ.question} />
               </div>
+              {getQuestionType(currentQ) === 'mcq' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {currentQ.options.map((opt, i) => {
                   const isCorrectOpt = i === currentQ.answer_index
@@ -1497,11 +1626,23 @@ export default function QuizScreen({
                       <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                         {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
                       </span>
-                      <MathText text={opt} />
+                      <span style={{ minWidth: 0, flex: 1, overflowX: 'auto' }}>
+                        <MathText text={opt} />
+                      </span>
                     </button>
                   )
                 })}
               </div>
+              ) : (
+                <QuestionRenderer
+                  question={currentQ}
+                  response={selected}
+                  onChange={setSelected}
+                  showAns={showAns}
+                  onSubmit={handleSubmitResponse}
+                  theme={theme}
+                />
+              )}
             </div>
 
               {showAns && (
@@ -1621,6 +1762,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
+                    const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
                     return (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
@@ -1641,6 +1783,18 @@ export default function QuizScreen({
                               >{saving ? '…' : active ? `✓ ${tag}` : tag}</button>
                             )
                           })}
+                          <button
+                            onClick={handleReport}
+                            disabled={reporting || alreadyReported}
+                            style={{
+                              padding: '4px 9px', borderRadius: 6, fontSize: 11,
+                              cursor: reporting || alreadyReported ? 'default' : 'pointer',
+                              fontFamily: FONT_B, transition: 'all 0.15s',
+                              border: `1px solid ${alreadyReported ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.25)'}`,
+                              background: alreadyReported ? 'rgba(239,68,68,0.1)' : 'transparent',
+                              color: alreadyReported ? '#f87171' : reporting ? t.textMuted : 'rgba(239,68,68,0.7)',
+                            }}
+                          >{reporting ? '…' : alreadyReported ? '✓ Reported' : 'Wrong answer'}</button>
                         </div>
                       </div>
                     )
@@ -1682,6 +1836,7 @@ export default function QuizScreen({
                   {(() => {
                     const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
                     const myFlags = flaggedMap[qid] || new Set()
+                    const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
                     return (
                       <div>
                         <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
@@ -1707,6 +1862,20 @@ export default function QuizScreen({
                               </button>
                             )
                           })}
+                          <button
+                            onClick={handleReport}
+                            disabled={reporting || alreadyReported}
+                            style={{
+                              padding: '5px 10px', borderRadius: 7, fontSize: 12,
+                              cursor: reporting || alreadyReported ? 'default' : 'pointer',
+                              fontFamily: FONT_B, transition: 'all 0.15s',
+                              border: `1px solid ${alreadyReported ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.25)'}`,
+                              background: alreadyReported ? 'rgba(239,68,68,0.1)' : 'transparent',
+                              color: alreadyReported ? '#f87171' : reporting ? t.textMuted : 'rgba(239,68,68,0.7)',
+                            }}
+                          >
+                            {reporting ? '…' : alreadyReported ? '✓ Reported' : 'Wrong answer'}
+                          </button>
                         </div>
                       </div>
                     )
@@ -1716,6 +1885,7 @@ export default function QuizScreen({
             </div>
           )}
         </div>
+      <QuizToolsDock theme={theme} />
       </div>
   )
 }

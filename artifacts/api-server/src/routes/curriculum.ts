@@ -4,6 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { expandCurriculumRenameSources } from "../lib/subject-aliases";
+import { normalizeMathText } from "../lib/normalize-math";
+import { extractJsonArray } from "../lib/json-latex";
+import { filterVerifiedQuestions } from "../lib/verify-question";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -24,6 +27,61 @@ function extractJson(text: string): unknown {
 
 function conceptTag(subject: string, topic: string, subtopic: string): string {
   return `${subject}|${topic}|${subtopic || topic}`.toLowerCase();
+}
+
+/**
+ * Rename `user_subscriptions.subject_name` from `oldSubject` to `newSubject` without
+ * tripping the `unique (user_id, subject_name, stage)` constraint.
+ *
+ * A blanket UPDATE would fail when a user already has a row at the target name + stage —
+ * which happens routinely here because alias expansion renames several source spellings
+ * to the same target (e.g. "Stage 1 Chemistry (Stage 1)" and "Chemistry (Stage 1) Stage 1"
+ * both collapse to "Chemistry (Stage 1)"), or when the user was already subscribed under
+ * the new name. For each affected row we update in place when the target is free, otherwise
+ * we drop the now-redundant old row, carrying its `active` flag onto the surviving one.
+ */
+async function renameUserSubscriptionsSafely(
+  admin: SupabaseClient,
+  oldSubject: string,
+  newSubject: string,
+): Promise<void> {
+  const { data: rows, error } = await admin
+    .from("user_subscriptions")
+    .select("id, user_id, stage, active")
+    .eq("subject_name", oldSubject);
+  if (error) throw new Error(error.message);
+  if (!rows?.length) return;
+
+  for (const row of rows as { id: string; user_id: string; stage: string; active: boolean | null }[]) {
+    const { data: existing, error: exErr } = await admin
+      .from("user_subscriptions")
+      .select("id, active")
+      .eq("user_id", row.user_id)
+      .eq("subject_name", newSubject)
+      .eq("stage", row.stage)
+      .maybeSingle();
+    if (exErr) throw new Error(exErr.message);
+
+    if (!existing) {
+      const { error: upErr } = await admin
+        .from("user_subscriptions")
+        .update({ subject_name: newSubject })
+        .eq("id", row.id);
+      if (upErr) throw new Error(upErr.message);
+      continue;
+    }
+
+    // Target already exists → keep it (preserving an active flag from either side) and drop the duplicate.
+    if (row.active && !existing.active) {
+      const { error: actErr } = await admin
+        .from("user_subscriptions")
+        .update({ active: true })
+        .eq("id", existing.id);
+      if (actErr) throw new Error(actErr.message);
+    }
+    const { error: delErr } = await admin.from("user_subscriptions").delete().eq("id", row.id);
+    if (delErr) throw new Error(delErr.message);
+  }
 }
 
 async function cascadeSingleSubjectRename(
@@ -74,11 +132,7 @@ async function cascadeSingleSubjectRename(
   const { error: spErr } = await admin.from("study_plan_items").update({ subject: newSubject }).eq("subject", oldSubject);
   if (spErr) throw new Error(spErr.message);
 
-  const { error: usErr } = await admin
-    .from("user_subscriptions")
-    .update({ subject_name: newSubject })
-    .eq("subject_name", oldSubject);
-  if (usErr) throw new Error(usErr.message);
+  await renameUserSubscriptionsSafely(admin, oldSubject, newSubject);
 
   const { error: asErr } = await admin.from("assignments").update({ subject: newSubject }).eq("subject", oldSubject);
   if (asErr) throw new Error(asErr.message);
@@ -283,7 +337,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     subjectName,
     topicName,
     subtopicName,
-    count = 25,
+    count = 5,
   } = req.body || {};
 
   if (!subtopicId || !subjectName || !topicName || !subtopicName) {
@@ -309,6 +363,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "  answer_index (integer 0–3)",
     "  solution (string — explain why the answer is correct, 2–4 sentences)",
     "  difficulty (integer 1–5)",
+    "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$. Never use plain Unicode for equations.",
     "Questions must be accurate, unambiguous, and test conceptual understanding.",
     "Vary difficulty: include easy (1–2), medium (3), and hard (4–5) questions.",
     "Do not repeat the same scenario across questions.",
@@ -324,9 +379,9 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "Use appropriate terminology and scope for this level of study.",
   ].join("\n");
 
-  // Pre-fetch existing questions to avoid duplicates
+  // Pre-fetch existing live questions to avoid duplicates
   const { data: existing } = await admin
-    .from("draft_questions")
+    .from("questions")
     .select("question")
     .eq("subject", subjectName)
     .eq("topic", topicName)
@@ -369,17 +424,9 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   const claudeData = await claudeRes.json() as { content?: { text: string }[] };
   const rawText = claudeData?.content?.[0]?.text || "";
 
-  let questions: Array<{ question: string; options: string[]; answer_index: number; solution?: string; difficulty?: number }> = [];
-  try {
-    const parsed = JSON.parse(rawText);
-    questions = Array.isArray(parsed) ? parsed : [];
-  } catch {
-    const start = rawText.indexOf("[");
-    const end = rawText.lastIndexOf("]");
-    if (start !== -1 && end > start) {
-      try { questions = JSON.parse(rawText.slice(start, end + 1)); } catch {}
-    }
-  }
+  let questions = extractJsonArray(rawText) as Array<{
+    question: string; options: string[]; answer_index: number; solution?: string; difficulty?: number;
+  }>;
 
   if (!questions.length) {
     await admin.from("curriculum_subtopics").update({ gen_status: "failed" }).eq("id", subtopicId);
@@ -387,20 +434,43 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     return;
   }
 
+  // Verify answer keys before publishing to the live bank: drop unsalvageable
+  // questions and fix any mislabelled answer_index.
+  const verify = await filterVerifiedQuestions(questions, { context: { subtopicId } });
+  if (verify.dropped || verify.fixed || verify.errored) {
+    logger.info(
+      { subtopicId, generated: questions.length, kept: verify.kept.length,
+        dropped: verify.dropped, fixed: verify.fixed, errored: verify.errored },
+      "[curriculum-generate] answer-key verification adjusted the batch",
+    );
+  }
+  questions = verify.kept;
+  if (!questions.length) {
+    await admin.from("curriculum_subtopics").update({ gen_status: "done", questions_generated: 0 }).eq("id", subtopicId);
+    res.status(200).json({ inserted: 0, message: "No questions passed verification" });
+    return;
+  }
+
+  // "Approve and Generate" publishes straight to the live questions bank so
+  // generated questions are immediately playable (no separate review step).
+  const now = new Date().toISOString();
   const rows = questions
     .filter((q) => q.question && !existingSet.has(q.question.trim().toLowerCase()))
     .map((q) => ({
-      source: "ai_generated",
+      id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       subject: subjectName,
       topic: topicName,
-      topic_code: null,
       subtopic: subtopicName,
-      question: q.question,
-      options: q.options,
+      concept_tag: `${subjectName}|${topicName}|${subtopicName}`.toLowerCase(),
+      difficulty: q.difficulty || 3,
+      question: normalizeMathText(q.question) as string,
+      options: q.options.map((o) => normalizeMathText(o) as string),
       answer_index: q.answer_index,
-      solution: q.solution || null,
-      difficulty: q.difficulty || null,
-      status: "pending",
+      solution: normalizeMathText(q.solution || "") as string,
+      graph: null,
+      table_data: null,
+      tip: null,
+      created_at: now,
     }));
 
   if (rows.length === 0) {
@@ -409,7 +479,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     return;
   }
 
-  const { error } = await admin.from("draft_questions").insert(rows);
+  const { error } = await admin.from("questions").insert(rows);
   if (error) {
     await admin.from("curriculum_subtopics").update({ gen_status: "failed" }).eq("id", subtopicId);
     res.status(500).json({ error: error.message });
@@ -428,9 +498,9 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 // Body: { currentTopics, instruction, subjectName, base64Doc?, mediaType? }
 // Returns: { topics: [{ name, subtopics: [{ name }] }] }
 router.post("/admin/curriculum-revise", async (req, res) => {
-  const { currentTopics, instruction, subjectName, base64Doc, mediaType } = req.body || {};
-  if (!currentTopics || (!instruction?.trim() && !base64Doc)) {
-    res.status(400).json({ error: "currentTopics and either instruction or a document are required" });
+  const { currentTopics, instruction, sourceText, subjectName, base64Doc, mediaType } = req.body || {};
+  if (!currentTopics || (!instruction?.trim() && !base64Doc && !sourceText?.trim())) {
+    res.status(400).json({ error: "currentTopics and either instruction, sourceText, or a document are required" });
     return;
   }
 
@@ -443,17 +513,21 @@ router.post("/admin/curriculum-revise", async (req, res) => {
     "You are a curriculum designer. Return ONLY a valid JSON object — no markdown, no commentary.",
     "The object must have a single key 'topics' whose value is an array.",
     "Each topic object has: name (string), subtopics (array of objects with a single key: name (string)).",
-    "You will be given the current curriculum tree and either a revision instruction, an uploaded document, or both.",
-    "Apply the requested changes while preserving the rest of the tree structure.",
-    "If a document is provided, use it to inform or replace the curriculum structure as appropriate.",
+    "You will receive the current curriculum tree plus one or more of: a revision instruction, a pasted reference document (table of contents, topic list, etc.), or an uploaded PDF.",
+    "If a reference document or PDF is provided, use it as the authoritative source to restructure the curriculum — extract topics and subtopics from it.",
+    "If only a revision instruction is provided, apply those targeted changes while preserving the rest of the tree.",
+    "Always return a complete, valid curriculum tree even if restructuring from scratch.",
   ].join("\n");
 
-  const instructionText = instruction?.trim()
-    ? `Revision instruction: ${instruction.trim()}\n\n`
+  const instructionLine = instruction?.trim() ? `Instruction: ${instruction.trim()}\n\n` : "";
+  const sourceLine = sourceText?.trim()
+    ? `Reference document (use this as the source of topics/subtopics):\n---\n${sourceText.trim()}\n---\n\n`
     : "";
-  const userText = base64Doc
-    ? `${instructionText}Current curriculum tree for "${subjectName}":\n${currentTree}\n\nRevise the curriculum tree based on the attached document${instruction?.trim() ? " and the instruction above" : ""}.`
-    : `Current curriculum tree for "${subjectName}":\n${currentTree}\n\nRevision instruction: ${instruction.trim()}`;
+  const baseUserText = `${instructionLine}${sourceLine}Current curriculum tree for "${subjectName}":\n${currentTree}`;
+  const actionLine = base64Doc || sourceText?.trim()
+    ? "\n\nRebuild the curriculum tree based on the reference material above."
+    : "\n\nApply the instruction and return the revised curriculum tree.";
+  const userText = baseUserText + actionLine;
 
   const userContent = base64Doc
     ? [
@@ -503,6 +577,199 @@ router.post("/admin/curriculum-revise", async (req, res) => {
   }
 
   res.json({ topics: parsed.topics });
+});
+
+// POST /api/admin/curriculum-orphaned-questions
+// Body: { subjectName: string, validSubtopics: string[] }
+// Returns: { count: number, orphanedSubtopics: { name: string, topic: string, count: number }[] }
+router.post("/admin/curriculum-orphaned-questions", async (req, res) => {
+  const { subjectName, validSubtopics } = req.body || {};
+  if (!subjectName || !Array.isArray(validSubtopics)) {
+    res.status(400).json({ error: "subjectName and validSubtopics[] are required" });
+    return;
+  }
+  try {
+    const admin = getAdmin();
+    const validSet = new Set<string>(validSubtopics);
+    const orphanMap = new Map<string, { topic: string; count: number }>();
+
+    let offset = 0;
+    const batchSize = 1000;
+    for (;;) {
+      const { data, error } = await admin
+        .from("questions")
+        .select("topic, subtopic")
+        .eq("subject", subjectName)
+        .range(offset, offset + batchSize - 1);
+      if (error) throw new Error(error.message);
+      if (!data?.length) break;
+      for (const row of data as { topic: string; subtopic: string }[]) {
+        if (!validSet.has(row.subtopic)) {
+          const existing = orphanMap.get(row.subtopic);
+          if (existing) {
+            existing.count++;
+          } else {
+            orphanMap.set(row.subtopic, { topic: row.topic, count: 1 });
+          }
+        }
+      }
+      if (data.length < batchSize) break;
+      offset += batchSize;
+    }
+
+    const orphanedSubtopics = Array.from(orphanMap.entries())
+      .map(([name, { topic, count }]) => ({ name, topic, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const count = orphanedSubtopics.reduce((sum, s) => sum + s.count, 0);
+    res.json({ count, orphanedSubtopics });
+  } catch (err) {
+    logger.error({ err }, "curriculum-orphaned-questions failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
+  }
+});
+
+// POST /api/admin/curriculum-suggest-remap
+// Body: { subjectName, orphanedSubtopics: [{ name, topic, count }], newCurriculumTree: { topics: [...] } }
+// Returns: { suggestions: [{ oldSubtopic, newTopic, newSubtopic, action }] }
+router.post("/admin/curriculum-suggest-remap", async (req, res) => {
+  const { subjectName, orphanedSubtopics, newCurriculumTree } = req.body || {};
+  if (!subjectName || !Array.isArray(orphanedSubtopics) || !newCurriculumTree?.topics) {
+    res.status(400).json({ error: "subjectName, orphanedSubtopics[], and newCurriculumTree are required" });
+    return;
+  }
+
+  const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+  const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+
+  // Show names only — no section numbers — so Claude returns exactly the stored names.
+  const treeText = (newCurriculumTree.topics as Array<{ name: string; subtopics: Array<{ name: string }> }>)
+    .map(t =>
+      `Topic: ${t.name}\n${(t.subtopics || []).map(s => `  - ${s.name}`).join("\n")}`
+    )
+    .join("\n\n");
+
+  const system = [
+    "You are a curriculum expert. Return ONLY a valid JSON object — no markdown, no commentary.",
+    'The object must have a single key "suggestions" whose value is an array.',
+    'Each suggestion has: oldSubtopic (string), action ("remap" or "delete"), newTopic (string or null), newSubtopic (string or null).',
+    'Use action "remap" when the old subtopic clearly corresponds to a subtopic in the new curriculum.',
+    'Use action "delete" only if the content has been completely removed from the new curriculum.',
+    'CRITICAL: newTopic and newSubtopic must be EXACT verbatim copies of the topic/subtopic names shown after "Topic:" and "  - " in the curriculum tree. Do not add numbers, punctuation, or any other text.',
+  ].join("\n");
+
+  // Call Claude for a batch of orphaned subtopics, return parsed suggestions array or throw.
+  const callClaude = async (batch: Array<{ name: string; topic: string; count: number }>): Promise<unknown[]> => {
+    const orphanList = batch
+      .map(o => `- "${o.name}" (was under topic "${o.topic}", ${o.count} questions)`)
+      .join("\n");
+
+    const userText = [
+      `Subject: ${subjectName}`,
+      "",
+      "New curriculum tree:",
+      treeText,
+      "",
+      "Orphaned subtopics (exist in questions but not in the new curriculum):",
+      orphanList,
+      "",
+      "For each orphaned subtopic, suggest the best matching subtopic in the new curriculum, or 'delete' if it no longer exists.",
+    ].join("\n");
+
+    const claudeRes = await fetch(`${baseUrl}/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 8000,
+        system,
+        messages: [{ role: "user", content: userText }],
+      }),
+    });
+
+    if (!claudeRes.ok) {
+      const text = await claudeRes.text();
+      throw new Error(`Claude API error: ${text.slice(0, 200)}`);
+    }
+
+    const claudeData = await claudeRes.json() as { content?: { text: string }[] };
+    const rawText = claudeData?.content?.[0]?.text || "";
+    const parsed = extractJson(rawText) as { suggestions?: unknown[] } | null;
+
+    if (!parsed?.suggestions) {
+      logger.error({ rawText: rawText.slice(0, 1000) }, "suggest-remap: could not parse AI response");
+      throw new Error("Could not parse remap suggestions from AI");
+    }
+    return parsed.suggestions;
+  };
+
+  try {
+    const allOrphans = orphanedSubtopics as Array<{ name: string; topic: string; count: number }>;
+    // Batch into chunks of 30 to stay well within token limits for large orphan lists.
+    const BATCH_SIZE = 30;
+    const allSuggestions: unknown[] = [];
+    for (let i = 0; i < allOrphans.length; i += BATCH_SIZE) {
+      const batch = allOrphans.slice(i, i + BATCH_SIZE);
+      const batchSuggestions = await callClaude(batch);
+      allSuggestions.push(...batchSuggestions);
+    }
+    res.json({ suggestions: allSuggestions });
+  } catch (err) {
+    logger.error({ err }, "curriculum-suggest-remap failed");
+    const message = err instanceof Error ? err.message : "Suggest remap failed";
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/admin/curriculum-apply-remap
+// Body: { subjectName, mappings: [{ oldSubtopic, action: 'remap'|'delete'|'ignore', newTopic?, newSubtopic? }] }
+// Returns: { updated: number, deleted: number }
+router.post("/admin/curriculum-apply-remap", async (req, res) => {
+  const { subjectName, mappings } = req.body || {};
+  if (!subjectName || !Array.isArray(mappings)) {
+    res.status(400).json({ error: "subjectName and mappings[] are required" });
+    return;
+  }
+
+  const admin = getAdmin();
+  let updated = 0;
+  let deleted = 0;
+
+  for (const mapping of mappings as Array<{ oldSubtopic: string; action: string; newTopic?: string; newSubtopic?: string }>) {
+    const { oldSubtopic, action, newTopic, newSubtopic } = mapping;
+
+    if (action === "delete") {
+      const { error } = await admin.from("questions").delete()
+        .eq("subject", subjectName)
+        .eq("subtopic", oldSubtopic);
+      if (error) { logger.error({ error }, "apply-remap delete questions failed"); continue; }
+
+      await admin.from("draft_questions").delete()
+        .eq("subject", subjectName)
+        .eq("subtopic", oldSubtopic);
+
+      deleted++;
+    } else if (action === "remap" && newTopic && newSubtopic) {
+      const ct = conceptTag(subjectName, newTopic, newSubtopic);
+
+      const { error } = await admin.from("questions").update({
+        topic: newTopic,
+        subtopic: newSubtopic,
+        concept_tag: ct,
+      }).eq("subject", subjectName).eq("subtopic", oldSubtopic);
+      if (error) { logger.error({ error }, "apply-remap update questions failed"); continue; }
+
+      await admin.from("draft_questions").update({
+        topic: newTopic,
+        subtopic: newSubtopic,
+      }).eq("subject", subjectName).eq("subtopic", oldSubtopic);
+
+      updated++;
+    }
+    // action === 'ignore' → do nothing
+  }
+
+  res.json({ ok: true, updated, deleted });
 });
 
 export default router;

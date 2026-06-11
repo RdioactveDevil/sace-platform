@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
-import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
+import MathText from './MathText'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -92,9 +94,14 @@ STUDENT PROFILE:
 YOUR PERSONALITY:
 - Warm, encouraging, never condescending
 - You feel like a cool older student who genuinely gets it
-- Celebrate wins: "Yes! Exactly right." "That's it!"
-- When wrong: never say "wrong" — say "almost, think about it this way..."
 - Patient — if they don't get it, try a completely different angle
+
+CHECKING ANSWERS — CRITICAL RULE (accuracy matters more than tone):
+- Before you react to ANYTHING the student says, silently work out the correct answer yourself and compare it to theirs. Do the real arithmetic/logic step by step — never judge from the shape or vibe of their reply.
+- If they are RIGHT — even if their wording is loose, even if they answered more than you asked, even if they worked ahead — confirm it immediately and warmly: "Yes! Exactly right." Then move forward. Do NOT say "almost", do NOT ask them to redo it, and do NOT re-ask a question they have already answered correctly.
+- Only when the answer is genuinely INCORRECT: never say "wrong" — say "almost, think about it this way..." and guide them toward it.
+- If a student gives a list or works ahead (e.g. "15, 19, 23"), check every value. If they're all correct, credit the whole thing — don't treat only the first as their answer or pretend they only gave one.
+- If you catch yourself having mis-judged a correct answer, briefly own it ("You're right — that was on me") and move on. Never make the same misjudgment twice in a session.
 
 YOUR TEACHING METHOD:
 - NEVER start with a formula. Always start with a story or scenario
@@ -150,7 +157,7 @@ export default function LearnScreen({
   const fileRef   = useRef(null)
   const photoRef  = useRef(null)
 
-  const subjectTopicConfig = useMemo(() => getY7TopicConfig(subject?.id), [subject?.id])
+  const subjectTopicConfig = useCurriculumTopicConfig(subject)
 
   const struggleTopics = useMemo(() => {
     const bySubtopic = new Map()
@@ -508,17 +515,22 @@ export default function LearnScreen({
     setLoading(false)
   }
 
-  const formatText = (text) => text.split('\n').map((line, i, arr) => (
-    <span key={i}>
-      {line.split(/\*\*(.*?)\*\*/g).map((part, j) =>
-        j % 2 === 1 ? <strong key={j} style={{ color: t.text, fontWeight: 700 }}>{part}</strong> : part
-      )}
-      {i < arr.length - 1 && <br />}
-    </span>
-  ))
+  const renderRichText = (text) => {
+    const parts = text.split(/\*\*(.*?)\*\*/g)
+    if (parts.length === 1) return <MathText text={text} />
+    return (
+      <span style={{ whiteSpace: 'pre-line' }}>
+        {parts.map((part, j) =>
+          j % 2 === 1
+            ? <strong key={j} style={{ fontWeight: 700 }}><MathText text={part} /></strong>
+            : <MathText key={j} text={part} />
+        )}
+      </span>
+    )
+  }
 
   const renderMessageBody = (msg) => {
-    if (typeof msg.content === 'string') return formatText(msg.content)
+    if (typeof msg.content === 'string') return renderRichText(msg.content)
     if (!Array.isArray(msg.content)) return null
     const imageBlocks = msg.content.filter(b => b && b.type === 'image' && b.source?.data)
     const textBlocks  = msg.content.filter(b => b && b.type === 'text' && typeof b.text === 'string')
@@ -543,7 +555,7 @@ export default function LearnScreen({
             })}
           </div>
         )}
-        {combinedText && formatText(combinedText)}
+        {combinedText && renderRichText(combinedText)}
       </>
     )
   }
@@ -933,7 +945,7 @@ export default function LearnScreen({
             </div>
           )}
 
-          {fromContext && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
+          {(contextSubtopic || topic) && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
             <div style={{
               padding: '10px 28px',
               background: t.purpleBg,
@@ -941,7 +953,7 @@ export default function LearnScreen({
               flexShrink: 0,
             }}>
               <button
-                onClick={() => onConsolidate(contextSubtopic)}
+                onClick={() => onConsolidate(contextSubtopic || topic)}
                 style={{
                   width: '100%',
                   padding: '11px 16px',
@@ -960,7 +972,7 @@ export default function LearnScreen({
                 }}
               >
                 <span>Consolidate — practice this topic</span>
-                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({contextSubtopic})</span>
+                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({contextSubtopic || topic})</span>
               </button>
             </div>
           )}

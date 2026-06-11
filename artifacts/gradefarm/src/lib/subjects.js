@@ -4,36 +4,10 @@
 
 /** Picker `id` → Supabase `questions.subject` (see getQuestions in db.js). */
 export const QUESTIONS_SUBJECT_BY_ID = {
-  chemistry_s1: 'Chemistry Stage 1',
-  chemistry_s2: 'Chemistry Stage 2',
-  maths_y7: 'Year 7 Mathematics',
-  english_y7: 'Year 7 English',
-  maths_y10: 'Year 10 Mathematics',
-  maths_methods_s2: 'Mathematical Methods Stage 2',
   quant_y10: 'Year 10 Quantitative Reasoning',
 }
 
 export const ALL_SUBJECTS = [
-  {
-    id: 'chemistry_s1',
-    name: 'Chemistry',
-    stage: 'Stage 1',
-    icon: '⚗️',
-    color: '#f1be43',
-    topics: ['Atomic Structure', 'Bonding', 'Quantities', 'Periodic Table', 'Solutions', 'Acid–Base', 'Redox'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'chemistry_s2',
-    name: 'Chemistry',
-    stage: 'Stage 2',
-    icon: '⚗️',
-    color: '#f1be43',
-    topics: ['Monitoring the Environment', 'Chemical Processes', 'Organic Chemistry', 'Managing Resources'],
-    questionCount: 0,
-    available: true,
-  },
   {
     id: 'biology_s1',
     name: 'Biology',
@@ -89,17 +63,6 @@ export const ALL_SUBJECTS = [
     available: true,
   },
   {
-    id: 'maths_methods_s2',
-    name: 'Mathematical Methods',
-    stage: 'Stage 2',
-    icon: '∫',
-    color: '#6366f1',
-    topics: ['Functions', 'Differential Calculus', 'Applications of Differential Calculus', 'Integration', 'Applications of Integration', 'Statistics', 'Discrete Random Variables', 'Continuous Random Variables', 'Sampling and Confidence Intervals'],
-    questionCount: 0,
-    available: true,
-    curriculumName: 'Mathematical Methods Stage 2',
-  },
-  {
     id: 'english_s2',
     name: 'English Literary Studies',
     stage: 'Stage 2',
@@ -109,36 +72,6 @@ export const ALL_SUBJECTS = [
     questionCount: 0,
     available: false,
     comingSoon: true,
-  },
-  {
-    id: 'maths_y7',
-    name: 'Mathematics',
-    stage: 'Year 7',
-    icon: '📐',
-    color: '#6366f1',
-    topics: ['Number', 'Algebra', 'Measurement', 'Space', 'Statistics', 'Probability'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'english_y7',
-    name: 'English',
-    stage: 'Year 7',
-    icon: '📝',
-    color: '#ec4899',
-    topics: ['Language', 'Literature', 'Literacy'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'maths_y10',
-    name: 'Mathematics',
-    stage: 'Year 10',
-    icon: '📐',
-    color: '#8b5cf6',
-    topics: ['Number', 'Algebra', 'Functions & Graphs', 'Measurement', 'Geometry', 'Statistics', 'Probability'],
-    questionCount: 0,
-    available: true,
   },
   {
     id: 'writing_y56',
@@ -174,6 +107,19 @@ export const ALL_SUBJECTS = [
     available: true,
   },
 ]
+
+/**
+ * Built-in tiles still rendered client-side regardless of the DB.
+ *
+ * Only the Writing feature qualifies: it is a pure client experience with no
+ * `curricula` / `questions` row, and its stages (e.g. "Year 5–6") are not valid
+ * COHORT_LEVEL_OPTIONS, so it cannot be created or removed from the admin
+ * Curricula tab. Every other subject — academic question-bank subjects such as
+ * Quantitative Reasoning, Biology, Physics, and English — now comes ONLY from
+ * the DB, so the admin console is the single source of truth: deleting one in
+ * the Curricula tab removes it from the Subject Picker and onboarding.
+ */
+export const CLIENT_ONLY_SUBJECTS = ALL_SUBJECTS.filter(s => s.type === 'writing')
 
 /** Admin curriculum wizard + detail: SACE stages and Australian year levels. */
 export const COHORT_LEVEL_OPTIONS = [
@@ -233,6 +179,19 @@ export function buildCanonicalCurriculumName(title, levelLabel) {
     return `${t} Stage ${sn ? sn[0] : ''}`.replace(/\s+/g, ' ').trim()
   }
   return `${t} ${lv}`
+}
+
+/**
+ * Display label for a subject tile — avoids repeating the stage when it is
+ * already embedded in the curriculum name (e.g. "Chemistry Stage 2" + stage
+ * "Stage 2" should render as just "Chemistry Stage 2", not "Chemistry Stage 2
+ * Stage 2").
+ */
+export function formatSubjectLabel({ name, stage } = {}) {
+  if (!name) return ''
+  const trimmedStage = (stage || '').trim()
+  if (!trimmedStage || name.includes(trimmedStage)) return name
+  return `${name} ${trimmedStage}`
 }
 
 /** Trim stray punctuation some legacy rows use on `questions.subject`. */

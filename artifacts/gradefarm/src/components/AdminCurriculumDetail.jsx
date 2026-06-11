@@ -71,9 +71,19 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [progress, setProgress]       = useState(null)
   const [genError, setGenError]       = useState('')
   const [reviseInstruction, setReviseInstruction] = useState('')
+  const [reviseSourceText, setReviseSourceText]   = useState('')
+  const [showPasteArea, setShowPasteArea]         = useState(false)
   const [reviseDoc, setReviseDoc]     = useState(null) // { base64, mediaType, name }
   const [revising, setRevising]       = useState(false)
   const pollRef = useRef(null)
+
+  // Question reallocation state
+  const [orphanInfo, setOrphanInfo]         = useState(null)   // { count, orphanedSubtopics }
+  const [showRemap, setShowRemap]           = useState(false)
+  const [remapMappings, setRemapMappings]   = useState([])     // [{ name, topic, count, action, newTopic, newSubtopic }]
+  const [remapSuggesting, setRemapSuggesting] = useState(false)
+  const [remapApplying, setRemapApplying]   = useState(false)
+  const [remapResult, setRemapResult]       = useState(null)   // { updated, deleted }
 
   useEffect(() => {
     loadDetail()
@@ -174,29 +184,143 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   }
 
   const handleRevise = async () => {
-    if (!reviseInstruction.trim() && !reviseDoc) return
+    if (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim()) return
     setRevising(true); setError('')
     try {
       const payload = {
         currentTopics: topics,
         instruction: reviseInstruction.trim(),
+        sourceText: reviseSourceText.trim(),
         subjectName: curriculum.name,
       }
       if (reviseDoc) { payload.base64Doc = reviseDoc.base64; payload.mediaType = reviseDoc.mediaType }
       const { topics: revised } = await adminApiPost('/api/admin/curriculum-revise', payload)
       setTopics(revised.map(t => ({ ...t, subtopics: (t.subtopics || []).map(s => ({ ...s })) })))
       setReviseInstruction('')
+      setReviseSourceText('')
       setReviseDoc(null)
+      setShowPasteArea(false)
     } catch (e) {
       setError(e.message)
     }
     setRevising(false)
   }
 
+  // ── Question reallocation helpers ─────────────────────────────────────────
+
+  async function checkOrphanedQuestions(currentTopics, subjectName) {
+    const validSubtopics = currentTopics.flatMap(t => t.subtopics.map(s => s.name))
+    try {
+      const result = await adminApiPost('/api/admin/curriculum-orphaned-questions', {
+        subjectName,
+        validSubtopics,
+      })
+      if (result.count > 0) {
+        setOrphanInfo(result)
+        setRemapMappings(result.orphanedSubtopics.map(o => ({
+          ...o,
+          action: 'remap',
+          newTopic: '',
+          newSubtopic: '',
+        })))
+      } else {
+        setOrphanInfo(null)
+        setRemapMappings([])
+      }
+    } catch {
+      // Silently ignore — orphan check is advisory
+    }
+  }
+
+  const handleSuggestRemap = async () => {
+    setRemapSuggesting(true)
+    try {
+      const result = await adminApiPost('/api/admin/curriculum-suggest-remap', {
+        subjectName: curriculum.name,
+        orphanedSubtopics: orphanInfo.orphanedSubtopics,
+        newCurriculumTree: { topics },
+      })
+      if (result.suggestions) {
+        // Build a lookup from normalised subtopic name → { topic, subtopic } so we can
+        // correct any leading numbers/punctuation Claude may have added (e.g. "5.2. Foo" → "Foo").
+        const stripLeading = (s) => String(s || '').replace(/^\d[\d.]*\.?\s*/, '').trim()
+        const normKey = (s) => stripLeading(s).toLowerCase()
+        const subtopicLookup = new Map()
+        topics.forEach(t => {
+          t.subtopics?.forEach(s => {
+            subtopicLookup.set(normKey(s.name), { topic: t.name, subtopic: s.name })
+          })
+        })
+
+        setRemapMappings(prev => prev.map(m => {
+          const suggestion = result.suggestions.find(s => s.oldSubtopic === m.name)
+          if (!suggestion) return m
+          if (suggestion.action === 'delete') {
+            return { ...m, action: 'delete', newTopic: '', newSubtopic: '' }
+          }
+          if (suggestion.action === 'remap') {
+            // Try exact match first, then normalised match
+            const exactKey = `${suggestion.newTopic || ''}|||${suggestion.newSubtopic || ''}`
+            const allOptions = topics.flatMap(t => t.subtopics?.map(s => `${t.name}|||${s.name}`) || [])
+            if (allOptions.includes(exactKey)) {
+              return { ...m, action: 'remap', newTopic: suggestion.newTopic, newSubtopic: suggestion.newSubtopic }
+            }
+            // Fuzzy: strip numbers from suggested subtopic name and look up in map
+            const fuzzy = subtopicLookup.get(normKey(suggestion.newSubtopic || ''))
+            if (fuzzy) {
+              return { ...m, action: 'remap', newTopic: fuzzy.topic, newSubtopic: fuzzy.subtopic }
+            }
+          }
+          return { ...m, action: suggestion.action || 'ignore', newTopic: '', newSubtopic: '' }
+        }))
+      }
+    } catch (e) {
+      setError(e.message)
+    }
+    setRemapSuggesting(false)
+  }
+
+  const handleApplyRemap = async () => {
+    const toProcess = remapMappings.filter(m => m.action !== 'ignore')
+    if (toProcess.length === 0) return
+    const remapCount = toProcess.filter(m => m.action === 'remap' && m.newSubtopic).length
+    const deleteCount = toProcess.filter(m => m.action === 'delete').length
+    const missing = toProcess.filter(m => m.action === 'remap' && !m.newSubtopic)
+    if (missing.length > 0) {
+      setError(`Please select a destination for: ${missing.map(m => `"${m.name}"`).join(', ')}`)
+      return
+    }
+    const totalAffected = toProcess.reduce((n, m) => n + m.count, 0)
+    if (!window.confirm(
+      `This will remap ${remapCount} subtopic group(s) and delete ${deleteCount} subtopic group(s), ` +
+      `affecting ${totalAffected} questions. This cannot be undone. Proceed?`
+    )) return
+
+    setRemapApplying(true); setError('')
+    try {
+      const result = await adminApiPost('/api/admin/curriculum-apply-remap', {
+        subjectName: curriculum.name,
+        mappings: remapMappings.map(m => ({
+          oldSubtopic: m.name,
+          action: m.action,
+          newTopic: m.newTopic || null,
+          newSubtopic: m.newSubtopic || null,
+        })),
+      })
+      setRemapResult(result)
+      setShowRemap(false)
+      // Re-check orphans after remapping
+      await checkOrphanedQuestions(topics, curriculum.name)
+    } catch (e) {
+      setError(e.message)
+    }
+    setRemapApplying(false)
+  }
+
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
-    setSaving(true); setError(''); setSaveOk(false)
+    setSaving(true); setError(''); setSaveOk(false); setRemapResult(null)
     try {
       await updateCurriculum(curriculumId, {
         name: curriculum.name,
@@ -206,6 +330,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
       setSaveOk(true)
       setTimeout(() => setSaveOk(false), 2500)
+      // Check for orphaned questions after saving tree changes
+      await checkOrphanedQuestions(topics, curriculum.name)
     } catch (e) {
       setError(e.message)
     }
@@ -216,7 +342,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
   const handleApproveAndGenerate = async () => {
     const subtopicCount = topics.flatMap(t => t.subtopics).length
-    if (!window.confirm(`Generate 25 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
+    if (!window.confirm(`Generate 5 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
     if (!(curriculum.level_label || '').trim()) {
       setError('Select a Stage / year level before generating questions.')
       return
@@ -254,9 +380,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             subjectName: freshDetail.name,
             topicName: sub.topicName,
             subtopicName: sub.name,
-            count: 25,
+            count: 5,
           })
-          setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 25 } : p))
+          setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 5 } : p))
         } catch {
           setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
         }
@@ -277,9 +403,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         subjectName: curriculum.name,
         topicName: sub.topicName,
         subtopicName: sub.name,
-        count: 25,
+        count: 5,
       })
-      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 25 } : p))
+      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 5 } : p))
     } catch {
       setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
     }
@@ -372,6 +498,197 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       {error && <div style={errorBox}>{error}</div>}
       {genError && <div style={errorBox}>{genError}</div>}
 
+      {/* Remap success notice */}
+      {remapResult && (
+        <div style={{
+          marginBottom: 14, padding: '10px 14px',
+          background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)',
+          borderRadius: 8, fontSize: 13, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          ✓ Remap complete — {remapResult.updated} group(s) remapped, {remapResult.deleted} group(s) deleted.
+          <button onClick={() => setRemapResult(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#4ade80', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      {/* Orphaned questions banner */}
+      {orphanInfo && !showRemap && (
+        <div style={{
+          marginBottom: 14, padding: '12px 16px',
+          background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)',
+          borderRadius: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 18 }}>⚠️</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>
+              {orphanInfo.count} question{orphanInfo.count !== 1 ? 's' : ''} not mapped to any current subtopic
+            </div>
+            <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
+              These questions exist in the question bank but don't match any subtopic in the revised curriculum.
+              Remap them to new subtopics or delete them.
+            </div>
+          </div>
+          <button
+            onClick={() => setShowRemap(true)}
+            style={{
+              padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(251,191,36,0.4)',
+              background: 'rgba(251,191,36,0.12)', color: '#fbbf24',
+              fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0,
+            }}
+          >
+            Fix now →
+          </button>
+        </div>
+      )}
+
+      {/* Question reallocation panel */}
+      {showRemap && orphanInfo && (() => {
+        const allSubtopicOptions = topics.flatMap(t =>
+          t.subtopics.map(s => ({ label: `${t.name} → ${s.name}`, topic: t.name, subtopic: s.name }))
+        )
+        return (
+          <div style={{
+            marginBottom: 20, borderRadius: 12,
+            border: '1px solid rgba(251,191,36,0.3)',
+            background: 'rgba(251,191,36,0.04)', overflow: 'hidden',
+          }}>
+            {/* Panel header */}
+            <div style={{
+              padding: '14px 16px', borderBottom: '1px solid rgba(251,191,36,0.15)',
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>
+                  Reallocate Orphaned Questions
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  {orphanInfo.count} questions across {orphanInfo.orphanedSubtopics.length} old subtopic(s).
+                  Assign each to a new subtopic or choose to delete.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={handleSuggestRemap}
+                  disabled={remapSuggesting || remapApplying}
+                  style={{
+                    padding: '7px 13px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.3)',
+                    background: 'rgba(56,189,248,0.08)', color: remapSuggesting ? '#64748b' : '#38bdf8',
+                    fontSize: 12, fontWeight: 700, cursor: remapSuggesting ? 'not-allowed' : 'pointer', fontFamily: FONT_B,
+                  }}
+                >
+                  {remapSuggesting ? '✨ Suggesting…' : '✨ AI Suggest'}
+                </button>
+                <button
+                  onClick={() => setShowRemap(false)}
+                  style={{
+                    padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
+                  }}
+                >
+                  Collapse
+                </button>
+              </div>
+            </div>
+
+            {/* Mapping rows */}
+            <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {remapMappings.map((m, idx) => (
+                <div key={m.name} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto auto',
+                  gap: 10, alignItems: 'center',
+                  padding: '9px 12px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  {/* Old subtopic info */}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                      was in &quot;{m.topic}&quot; · {m.count} question{m.count !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+
+                  {/* Action selector */}
+                  <select
+                    value={m.action}
+                    disabled={remapApplying}
+                    onChange={e => {
+                      const action = e.target.value
+                      setRemapMappings(prev => prev.map((r, i) =>
+                        i !== idx ? r : { ...r, action, newTopic: action === 'remap' ? r.newTopic : '', newSubtopic: action === 'remap' ? r.newSubtopic : '' }
+                      ))
+                    }}
+                    style={{
+                      padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)',
+                      background: '#0c1037', color: '#e2e8f0', fontSize: 12, fontFamily: FONT_B, cursor: 'pointer',
+                    }}
+                  >
+                    <option value="remap">Remap to…</option>
+                    <option value="delete">Delete questions</option>
+                    <option value="ignore">Leave as-is</option>
+                  </select>
+
+                  {/* Destination picker */}
+                  {m.action === 'remap' ? (
+                    <select
+                      value={m.newSubtopic ? `${m.newTopic}|||${m.newSubtopic}` : ''}
+                      disabled={remapApplying}
+                      onChange={e => {
+                        const val = e.target.value
+                        if (!val) {
+                          setRemapMappings(prev => prev.map((r, i) => i !== idx ? r : { ...r, newTopic: '', newSubtopic: '' }))
+                        } else {
+                          const [nt, ns] = val.split('|||')
+                          setRemapMappings(prev => prev.map((r, i) => i !== idx ? r : { ...r, newTopic: nt, newSubtopic: ns }))
+                        }
+                      }}
+                      style={{
+                        padding: '5px 8px', borderRadius: 6, border: `1px solid ${m.newSubtopic ? 'rgba(74,222,128,0.3)' : 'rgba(251,191,36,0.3)'}`,
+                        background: '#0c1037', color: m.newSubtopic ? '#4ade80' : '#fbbf24',
+                        fontSize: 12, fontFamily: FONT_B, cursor: 'pointer', maxWidth: 280,
+                      }}
+                    >
+                      <option value="">— select subtopic —</option>
+                      {allSubtopicOptions.map(opt => (
+                        <option key={`${opt.topic}|||${opt.subtopic}`} value={`${opt.topic}|||${opt.subtopic}`}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{ width: 200, fontSize: 12, color: m.action === 'delete' ? '#f87171' : '#64748b', fontStyle: 'italic' }}>
+                      {m.action === 'delete' ? `${m.count} question${m.count !== 1 ? 's' : ''} will be deleted` : 'No change'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Apply button */}
+            <div style={{ padding: '10px 16px 14px', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                onClick={handleApplyRemap}
+                disabled={remapApplying || remapMappings.every(m => m.action === 'ignore')}
+                style={{
+                  padding: '9px 18px', borderRadius: 9, border: 'none',
+                  background: (remapApplying || remapMappings.every(m => m.action === 'ignore'))
+                    ? 'rgba(241,190,67,0.3)' : GOLD,
+                  color: '#0c1037', fontSize: 13, fontWeight: 800,
+                  cursor: (remapApplying || remapMappings.every(m => m.action === 'ignore')) ? 'not-allowed' : 'pointer',
+                  fontFamily: FONT_B,
+                }}
+              >
+                {remapApplying ? 'Applying…' : 'Apply Remap'}
+              </button>
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                {remapMappings.filter(m => m.action === 'remap' && m.newSubtopic).length} remap · {remapMappings.filter(m => m.action === 'delete').length} delete · {remapMappings.filter(m => m.action === 'ignore').length} ignore
+              </span>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* AI revise panel */}
       {!generating && (
         <div style={{
@@ -382,19 +699,48 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             Revise with AI
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <textarea
-              value={reviseInstruction}
-              onChange={e => setReviseInstruction(e.target.value)}
-              placeholder='e.g. "Add a topic on plant biology with 4 subtopics" or "Split Topic 3 into two separate topics"'
-              rows={2}
-              disabled={revising}
-              style={{
-                flex: 1, minWidth: 220, padding: '8px 10px', borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
-                color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
-              }}
-            />
+            <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <textarea
+                value={reviseInstruction}
+                onChange={e => setReviseInstruction(e.target.value)}
+                placeholder='e.g. "Restructure to match the pasted TOC below" or "Add a topic on probability with 3 subtopics"'
+                rows={2}
+                disabled={revising}
+                style={{
+                  width: '100%', padding: '8px 10px', borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
+                  color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                  resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+                }}
+              />
+              {/* Toggle paste area */}
+              <button
+                onClick={() => setShowPasteArea(v => !v)}
+                disabled={revising}
+                style={{
+                  alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: '1px dashed rgba(255,255,255,0.15)',
+                  background: showPasteArea ? 'rgba(241,190,67,0.08)' : 'transparent',
+                  color: showPasteArea ? '#f1be43' : '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
+                }}
+              >
+                {showPasteArea ? '▾ Hide paste area' : '▸ Paste TOC / text document'}
+              </button>
+              {showPasteArea && (
+                <textarea
+                  value={reviseSourceText}
+                  onChange={e => setReviseSourceText(e.target.value)}
+                  placeholder={'Paste a table of contents, topic list, or any text here.\nClaude will use it as the source to restructure the curriculum.'}
+                  rows={8}
+                  disabled={revising}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: 8,
+                    border: '1px solid rgba(241,190,67,0.2)', background: 'rgba(241,190,67,0.03)',
+                    color: '#f1f5f9', fontSize: 12, fontFamily: FONT_B, outline: 'none',
+                    resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+                  }}
+                />
+              )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
@@ -411,13 +757,14 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
               </label>
               <button
                 onClick={handleRevise}
-                disabled={revising || (!reviseInstruction.trim() && !reviseDoc)}
+                disabled={revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())}
                 style={{
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
-                  background: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
-                  color: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? '#64748b' : '#38bdf8',
-                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc)) ? 'not-allowed' : 'pointer',
-                  fontFamily: FONT_B, border: '1px solid rgba(56,189,248,0.2)',
+                  padding: '8px 16px', borderRadius: 8,
+                  border: '1px solid rgba(56,189,248,0.2)',
+                  background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
+                  color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? '#64748b' : '#38bdf8',
+                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'not-allowed' : 'pointer',
+                  fontFamily: FONT_B,
                 }}
               >
                 {revising ? 'Revising…' : 'Apply'}

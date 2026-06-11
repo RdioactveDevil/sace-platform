@@ -1,6 +1,6 @@
 import { THEMES } from '../lib/theme'
 import { getTopicConfigForSubject } from '../lib/saceTopics'
-import { getY7TopicConfig } from '../lib/australianCurriculumTopics'
+import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif'"
@@ -11,12 +11,14 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif'"
  */
 export default function SubtopicHeatmap({ questions, struggleMap, onStartSession, theme, subject }) {
   const t = THEMES[theme]
-  const { macroGroups, normFn } = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
+  const topicConfig = useCurriculumTopicConfig(subject, { withFallback: true })
+  const { macroGroups, normFn, isTwoLevel = false } = topicConfig
 
   const topicAgg = {}
   const topicTotals = {}
   questions.forEach((q) => {
-    const canon = normFn(q.topic)
+    const raw = isTwoLevel ? q.subtopic : q.topic
+    const canon = normFn(raw)
     if (!canon) return
     topicTotals[canon] = (topicTotals[canon] || 0) + 1
     if (!topicAgg[canon]) topicAgg[canon] = { correct: 0, wrong: 0, attempted: 0 }
@@ -31,7 +33,8 @@ export default function SubtopicHeatmap({ questions, struggleMap, onStartSession
   const subtopicsForCanonical = (canonicalTopic) => {
     const set = new Set()
     questions.forEach((q) => {
-      if (normFn(q.topic) !== canonicalTopic || !q.subtopic) return
+      const raw = isTwoLevel ? q.subtopic : q.topic
+      if (normFn(raw) !== canonicalTopic || !q.subtopic) return
       set.add(q.subtopic)
     })
     return [...set]

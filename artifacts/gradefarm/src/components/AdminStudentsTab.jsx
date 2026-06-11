@@ -8,9 +8,13 @@ import {
   adminSetAdmin,
   adminApproveTutor,
   adminRejectTutor,
+  adminSetStudentActive,
+  adminDeleteStudent,
   downloadWritingReportPdf,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
+import { exportRowsToCsv } from '../lib/csv'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -60,6 +64,15 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   const [writingAttempts, setWritingAttempts] = useState(null)
   const [writingLoading, setWritingLoading] = useState(false)
   const [pdfBusyId, setPdfBusyId] = useState(null)
+  const [subscriptions, setSubscriptions]       = useState([])
+  const [subsLoading, setSubsLoading]           = useState(false)
+  const [subsError, setSubsError]               = useState('')
+  const [liveCurricula, setLiveCurricula]       = useState([])
+  const [curriculaLoading, setCurriculaLoading] = useState(false)
+  const [grantSubject, setGrantSubject]         = useState('')
+  const [grantBusy, setGrantBusy]               = useState(false)
+  const [accountBusy, setAccountBusy]           = useState(false)
+  const [accountError, setAccountError]         = useState('')
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -102,15 +115,36 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     }
   }, [])
 
+  const loadSubscriptions = useCallback(async (userId) => {
+    setSubsLoading(true)
+    setSubsError('')
+    try {
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+      if (error) throw error
+      setSubscriptions(data || [])
+    } catch (e) {
+      setSubsError(e.message)
+    }
+    setSubsLoading(false)
+  }, [])
+
   const openDetail = (student) => {
     setSelected(student)
     setDetailStats(null)
     setDetailAssignments(null)
     setWritingAttempts(null)
     setRoleError('')
+    setAccountError('')
     setStatsLoading(true)
     setAssignmentsLoading(true)
     setWritingLoading(true)
+    setSubscriptions([])
+    setSubsError('')
+    setGrantSubject('')
     adminGetStudentStats(student.id)
       .then(s => { setDetailStats(s); setStatsLoading(false) })
       .catch(() => setStatsLoading(false))
@@ -120,9 +154,32 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     adminGetStudentWritingAttempts(student.id)
       .then(w => { setWritingAttempts(w); setWritingLoading(false) })
       .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
+    loadSubscriptions(student.id)
+    if (liveCurricula.length === 0) {
+      setCurriculaLoading(true)
+      fetchLiveCurricula()
+        .then(c => { setLiveCurricula(c); setCurriculaLoading(false) })
+        .catch(() => setCurriculaLoading(false))
+    }
   }
 
-  const closeDetail = () => { setSelected(null); setDetailStats(null); setDetailAssignments(null); setWritingAttempts(null) }
+  const closeDetail = () => {
+    setSelected(null)
+    setDetailStats(null)
+    setDetailAssignments(null)
+    setWritingAttempts(null)
+    setSubscriptions([])
+    setSubsError('')
+    setGrantSubject('')
+  }
+
+  // Close the detail slide-over on Escape for keyboard accessibility.
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e) => { if (e.key === 'Escape') closeDetail() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected])
 
   const runRole = async (id, fn) => {
     setBusyId(id)
@@ -140,6 +197,51 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
       setRoleError(e.message)
     }
     setBusyId(null)
+  }
+
+  // Deactivate (soft-delete, reversible) or reactivate the selected account.
+  const handleToggleActive = async () => {
+    if (!selected) return
+    const deactivating = !selected.deactivated_at
+    const name = selected.display_name || selected.email
+    const msg = deactivating
+      ? `Deactivate ${name}?\n\nThey'll be signed out and blocked from logging in until you reactivate them. All their data is kept.`
+      : `Reactivate ${name}?\n\nThey'll be able to log in again.`
+    if (!window.confirm(msg)) return
+    setAccountBusy(true)
+    setAccountError('')
+    try {
+      await adminSetStudentActive(selected.id, !deactivating)
+      const json = await adminListStudents()
+      const list = json.students || []
+      setStudents(list)
+      onCountLoad?.(list.length)
+      setSelected(list.find(s => s.id === selected.id) ?? null)
+    } catch (e) {
+      setAccountError(e.message)
+    }
+    setAccountBusy(false)
+  }
+
+  // Permanently delete the selected account and all data tied to it.
+  const handleDelete = async () => {
+    if (!selected) return
+    const name = selected.display_name || selected.email
+    if (!window.confirm(`Permanently delete ${name}?\n\nThis removes their account and ALL their data — progress, sessions, subscriptions and assignments. This cannot be undone.`)) return
+    if (!window.confirm('Are you absolutely sure? This is irreversible.')) return
+    setAccountBusy(true)
+    setAccountError('')
+    try {
+      await adminDeleteStudent(selected.id)
+      const json = await adminListStudents()
+      const list = json.students || []
+      setStudents(list)
+      onCountLoad?.(list.length)
+      closeDetail()
+    } catch (e) {
+      setAccountError(e.message)
+      setAccountBusy(false)
+    }
   }
 
   // Derive filter options from loaded students
@@ -166,6 +268,27 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   }, [students, search, filterSchool, filterSubject, filterTutor])
 
   const hasFilters = search || filterSchool || filterSubject || filterTutor
+
+  const exportCsv = () => {
+    exportRowsToCsv(
+      `gradefarm-students-${new Date().toISOString().slice(0, 10)}`,
+      filtered,
+      [
+        { key: 'display_name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'school', label: 'School' },
+        { key: 'xp', label: 'XP' },
+        { key: 'streak', label: 'Streak' },
+        { key: 'best_streak', label: 'Best streak' },
+        { key: 'last_active', label: 'Last active' },
+        { key: 'subjects', label: 'Subjects', get: r => (r.subjects || []).map(s => s.subject_name).join('; ') },
+        { key: 'tutor_name', label: 'Tutor' },
+        { key: 'created_at', label: 'Joined' },
+        { key: 'onboarding_completed', label: 'Onboarded', get: r => (r.onboarding_completed ? 'yes' : 'no') },
+        { key: 'role', label: 'Role', get: r => (r.is_admin ? 'admin' : r.is_tutor ? 'tutor' : 'student') },
+      ],
+    )
+  }
 
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0', position: 'relative' }}>
@@ -207,6 +330,22 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
             Clear filters
           </button>
         )}
+
+        <button
+          onClick={exportCsv}
+          disabled={loading || filtered.length === 0}
+          title="Download the current list as CSV"
+          style={{
+            marginLeft: 'auto', flexShrink: 0,
+            padding: '7px 12px', borderRadius: 8, fontFamily: FONT_B,
+            border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)',
+            color: GOLD, fontSize: 12, fontWeight: 700,
+            cursor: loading || filtered.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || filtered.length === 0 ? 0.5 : 1,
+          }}
+        >
+          ↓ Export CSV
+        </button>
       </div>
 
       {error && (
@@ -249,6 +388,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   <td style={td}>
                     <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{u.display_name || '—'}</div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{u.email}</div>
+                    {u.deactivated_at && (
+                      <div style={{ fontSize: 10, color: '#f87171', marginTop: 2 }}>Deactivated</div>
+                    )}
                     {!u.onboarding_completed && (
                       <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 2 }}>Onboarding incomplete</div>
                     )}
@@ -305,20 +447,26 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
         <>
           <div
             onClick={closeDetail}
+            aria-hidden="true"
             style={{
               position: 'fixed', inset: 0, zIndex: 40,
               background: 'rgba(0,0,0,0.45)',
             }}
           />
-          <div style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50,
-            width: 420, maxWidth: '100vw',
-            background: '#0f172a',
-            borderLeft: '1px solid rgba(255,255,255,0.08)',
-            overflowY: 'auto',
-            fontFamily: FONT_B,
-            display: 'flex', flexDirection: 'column',
-          }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Student details: ${selected.display_name || selected.email || ''}`}
+            style={{
+              position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50,
+              width: 420, maxWidth: '100vw',
+              background: '#0f172a',
+              borderLeft: '1px solid rgba(255,255,255,0.08)',
+              overflowY: 'auto',
+              fontFamily: FONT_B,
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
             {/* Panel header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
@@ -354,6 +502,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 <Row label="Joined"      value={fmtDate(selected.created_at)} />
                 <Row label="Last active" value={fmtDate(selected.last_active)} />
                 <Row label="Onboarding"  value={selected.onboarding_completed ? '✓ Complete' : '⚠ Incomplete'} valueColor={selected.onboarding_completed ? '#4ade80' : '#f59e0b'} />
+                {selected.deactivated_at && (
+                  <Row label="Status" value="Deactivated" valueColor="#f87171" />
+                )}
               </Section>
 
               {/* XP / Streak stats */}
@@ -518,6 +669,49 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 )}
               </Section>
 
+              {/* Subject Access */}
+              <SubjectAccessSection
+                userId={selected.id}
+                subscriptions={subscriptions}
+                subsLoading={subsLoading}
+                subsError={subsError}
+                liveCurricula={liveCurricula}
+                curriculaLoading={curriculaLoading}
+                grantSubject={grantSubject}
+                setGrantSubject={setGrantSubject}
+                grantBusy={grantBusy}
+                onGrant={async () => {
+                  if (!grantSubject) return
+                  setGrantBusy(true)
+                  setSubsError('')
+                  try {
+                    const cur = liveCurricula.find(c => c.id === grantSubject)
+                    if (!cur) throw new Error('Subject not found')
+                    const { error } = await supabase.from('user_subscriptions').upsert(
+                      { user_id: selected.id, subject_name: cur.name, stage: cur.level_label || '', active: true, beta: true },
+                      { onConflict: 'user_id,subject_name,stage' }
+                    )
+                    if (error) throw error
+                    setGrantSubject('')
+                    await loadSubscriptions(selected.id)
+                  } catch (e) {
+                    setSubsError(e.message)
+                  }
+                  setGrantBusy(false)
+                }}
+                onRevoke={async (subId) => {
+                  if (!window.confirm('Remove this subscription?')) return
+                  setSubsError('')
+                  try {
+                    const { error } = await supabase.from('user_subscriptions').delete().eq('id', subId)
+                    if (error) throw error
+                    await loadSubscriptions(selected.id)
+                  } catch (e) {
+                    setSubsError(e.message)
+                  }
+                }}
+              />
+
               {/* Role management */}
               <Section title="Role Management">
                 {roleError && (
@@ -563,6 +757,34 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 </div>
               </Section>
 
+              {/* Account management — deactivate (reversible) or delete (permanent) */}
+              <Section title="Account">
+                {accountError && (
+                  <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{accountError}</div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Btn
+                      onClick={handleToggleActive}
+                      disabled={accountBusy || selected.id === profile?.id}
+                      title={selected.id === profile?.id ? "You can't deactivate your own account" : ''}
+                    >
+                      {accountBusy ? '…' : selected.deactivated_at ? 'Reactivate Account' : 'Deactivate Account'}
+                    </Btn>
+                    <DangerBtn
+                      onClick={handleDelete}
+                      disabled={accountBusy || selected.id === profile?.id}
+                      title={selected.id === profile?.id ? "You can't delete your own account" : ''}
+                    >
+                      Delete Account
+                    </DangerBtn>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                    Deactivating blocks sign-in but keeps all data — reversible. Deleting permanently removes the account and every record tied to it.
+                  </div>
+                </div>
+              </Section>
+
             </div>
           </div>
         </>
@@ -572,6 +794,101 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function SubjectAccessSection({
+  userId,
+  subscriptions,
+  subsLoading,
+  subsError,
+  liveCurricula,
+  curriculaLoading,
+  grantSubject,
+  setGrantSubject,
+  grantBusy,
+  onGrant,
+  onRevoke,
+}) {
+  // Build a set of already-granted curriculum ids for the dropdown filter
+  const grantedKeys = new Set(subscriptions.map(s => `${s.subject_name}||${s.stage || ''}`))
+
+  const availableCurricula = liveCurricula.filter(
+    c => !grantedKeys.has(`${c.name}||${c.level_label || ''}`)
+  )
+
+  return (
+    <Section title="Subject Access">
+      {subsError && (
+        <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{subsError}</div>
+      )}
+
+      {/* Current subscriptions */}
+      {subsLoading ? (
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Loading…</div>
+      ) : subscriptions.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#475569', marginBottom: 10 }}>No active subscriptions.</div>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          {subscriptions.map(sub => (
+            <span
+              key={sub.id}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 8px 4px 10px', borderRadius: 6,
+                background: 'rgba(241,190,67,0.1)', border: `1px solid ${GOLD}44`,
+                fontSize: 12, fontWeight: 600, color: GOLD,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {sub.subject_name}
+              {sub.stage && <span style={{ opacity: 0.65, fontSize: 11 }}>{sub.stage}</span>}
+              <button
+                onClick={() => onRevoke(sub.id)}
+                title="Remove subscription"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#f87171', fontSize: 14, lineHeight: 1, padding: '0 2px',
+                  display: 'flex', alignItems: 'center',
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Grant access row */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select
+          value={grantSubject}
+          onChange={e => setGrantSubject(e.target.value)}
+          disabled={curriculaLoading || grantBusy}
+          style={{
+            ...selectStyle,
+            flex: 1, minWidth: 0,
+            opacity: curriculaLoading || grantBusy ? 0.5 : 1,
+          }}
+        >
+          <option value="">
+            {curriculaLoading ? 'Loading subjects…' : availableCurricula.length === 0 ? 'No subjects available' : 'Select subject…'}
+          </option>
+          {availableCurricula.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.name}{c.level_label ? ` (${c.level_label})` : ''}
+            </option>
+          ))}
+        </select>
+        <Btn
+          onClick={onGrant}
+          disabled={!grantSubject || grantBusy}
+          variant="primary"
+        >
+          {grantBusy ? 'Granting…' : 'Grant Access'}
+        </Btn>
+      </div>
+    </Section>
+  )
+}
 
 function Section({ title, children }) {
   return (
@@ -626,6 +943,26 @@ function Btn({ children, onClick, disabled, variant, title }) {
         border: '1px solid ' + (isPrimary ? '#f1be4399' : 'rgba(255,255,255,0.12)'),
         background: isPrimary ? '#f1be4322' : 'rgba(255,255,255,0.04)',
         color: isPrimary ? '#f1be43' : '#e2e8f0',
+        fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        fontFamily: FONT_B,
+        whiteSpace: 'nowrap',
+      }}
+    >{children}</button>
+  )
+}
+
+function DangerBtn({ children, onClick, disabled, title }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        padding: '7px 12px', borderRadius: 7,
+        border: '1px solid rgba(248,113,113,0.5)',
+        background: 'rgba(248,113,113,0.12)',
+        color: '#f87171',
         fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         fontFamily: FONT_B,

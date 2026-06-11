@@ -1,30 +1,33 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { adminApiPost } from '../lib/adminApi'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID } from '../lib/subjects'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
+import { supabase } from '../lib/supabase'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
 
-/** ~3 MB raw PDF keeps base64+JSON under Vercel serverless ~4.5 MB body limit */
-const MAX_PDF_BYTES = 3 * 1024 * 1024
-
-/** Build the stage list from the shared subjects source so newly added subjects
- *  automatically appear here. Each option's `value` is the canonical
- *  `questions.subject` string sent to /api/extract-pdf. */
-const STAGE_OPTIONS = ALL_SUBJECTS
-  .filter(s => s.available && QUESTIONS_SUBJECT_BY_ID[s.id])
-  .map(s => ({
-    value: QUESTIONS_SUBJECT_BY_ID[s.id],
-    label: QUESTIONS_SUBJECT_BY_ID[s.id],
-  }))
+/** 50 MB — file goes to Supabase Storage, not base64 through Vercel */
+const MAX_PDF_BYTES = 50 * 1024 * 1024
 
 export default function AdminUploadScreen() {
-  const [stage, setStage]     = useState(STAGE_OPTIONS[0]?.value || '')
+  const [stageOptions, setStageOptions] = useState([])
+  const [stage, setStage]     = useState('')
   const [file, setFile]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState(null)
   const fileRef = useRef()
+
+  useEffect(() => {
+    fetchLiveCurricula()
+      .then(curricula => {
+        // All live curricula from DB are available for upload
+        const opts = curricula.map(c => ({ value: c.name, label: c.name }))
+        setStageOptions(opts)
+        if (opts.length > 0) setStage(opts[0].value)
+      })
+      .catch(() => {})
+  }, [])
 
   const handleFile = (f) => {
     if (f && f.type === 'application/pdf') { setFile(f); setResult(null); setError(null) }
@@ -39,9 +42,7 @@ export default function AdminUploadScreen() {
   const handleSubmit = async () => {
     if (!file) return
     if (file.size > MAX_PDF_BYTES) {
-      setError(
-        `This PDF is too large for browser upload (${Math.round((file.size / (1024 * 1024)) * 10) / 10} MB). Use a file under ~3 MB, or split/compress the PDF so the upload stays within hosting limits.`
-      )
+      setError(`PDF too large (${Math.round((file.size / (1024 * 1024)) * 10) / 10} MB). Max 50 MB.`)
       return
     }
     setLoading(true)
@@ -49,14 +50,15 @@ export default function AdminUploadScreen() {
     setError(null)
 
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
+      // Upload PDF to Supabase Storage so the API receives only a path, not the raw bytes
+      const storagePath = `pdf-uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const { error: upErr } = await supabase.storage.from('admin-uploads').upload(storagePath, file, {
+        contentType: 'application/pdf',
+        upsert: false,
       })
+      if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`)
 
-      const data = await adminApiPost('/api/extract-pdf', { base64, filename: file.name, stage })
+      const data = await adminApiPost('/api/extract-pdf', { storagePath, filename: file.name, stage })
       setResult(data)
     } catch (err) {
       setError(err.message)
@@ -70,14 +72,14 @@ export default function AdminUploadScreen() {
       <h2 style={{ color: '#fff', marginTop: 0 }}>Upload PDF</h2>
       <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
         Upload a SACE Chemistry exam or textbook. Claude will extract all MCQs into the draft queue.
-        {' '}Use PDFs under ~3 MB so the upload fits hosting limits (base64 expands the file size).
+        {' '}PDFs up to 50 MB are supported.
       </p>
 
       {/* Stage selector */}
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stage</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {STAGE_OPTIONS.map(opt => (
+          {stageOptions.map(opt => (
             <button
               key={opt.value}
               onClick={() => setStage(opt.value)}

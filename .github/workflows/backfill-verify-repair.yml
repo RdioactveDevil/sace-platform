@@ -1,0 +1,101 @@
+name: Backfill — verify & repair questions
+
+# Manually triggered from the GitHub UI (Actions tab → this workflow → "Run workflow").
+# Re-verifies answer keys and repairs LaTeX corruption in the live `questions` bank.
+#
+# Requires two repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_SERVICE_KEY        — Supabase service_role key
+#   ANTHROPIC_API_KEY           — Anthropic API key
+# Optional repository variables (Settings → Secrets and variables → Actions → Variables):
+#   AI_VERIFY_MODEL             — overrides the verifier model (default claude-sonnet-4-6)
+#   API_BASE_URL                — deployed app URL used to regenerate flawed questions
+#                                 (default https://www.gradefarm.com.au)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (report only, no writes)"
+          - "apply (write fixes)"
+        default: "dry-run (report only, no writes)"
+      subject:
+        description: "Limit to one subject (exact name, optional)"
+        type: string
+        default: ""
+      limit:
+        description: "Max rows to process (blank = all)"
+        type: string
+        default: ""
+      regenerate_flawed:
+        description: "Replace flawed questions with fresh verified ones (apply mode only)"
+        type: boolean
+        default: false
+      delete_flawed:
+        description: "Instead DELETE flawed questions (apply mode; ignored if regenerate is on)"
+        type: boolean
+        default: false
+      concurrency:
+        description: "Parallel verify calls (blank = 4; lower it if you hit rate limits)"
+        type: string
+        default: ""
+
+# Never let two backfills run against the database at once.
+concurrency:
+  group: backfill-verify-repair
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run backfill
+        env:
+          MODE: ${{ inputs.mode }}
+          SUBJECT: ${{ inputs.subject }}
+          LIMIT: ${{ inputs.limit }}
+          DELETE_FLAWED: ${{ inputs.delete_flawed }}
+          REGENERATE_FLAWED: ${{ inputs.regenerate_flawed }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_VERIFY_MODEL: ${{ vars.AI_VERIFY_MODEL }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "::error::SUPABASE_SERVICE_KEY secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          ARGS=()
+          case "$MODE" in
+            apply*) ARGS+=("--apply") ;;
+          esac
+          if [ "$REGENERATE_FLAWED" = "true" ]; then ARGS+=("--regenerate-flawed"); fi
+          if [ "$DELETE_FLAWED" = "true" ]; then ARGS+=("--delete-flawed"); fi
+          if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
+          if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
+          if [ -n "${CONCURRENCY// /}" ]; then ARGS+=("--concurrency" "$CONCURRENCY"); fi
+          echo "Running backfill with args: ${ARGS[*]:-<dry run, all rows>}"
+          pnpm --filter @workspace/scripts run backfill:verify-repair -- "${ARGS[@]}"

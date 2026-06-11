@@ -2,6 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm run build:vercel",
   "outputDirectory": "artifacts/gradefarm/dist/public",
+  "functions": {
+    "api/index.mjs": { "maxDuration": 300 }
+  },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }

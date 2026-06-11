@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getPlatformSettings } from '../lib/db'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -40,17 +41,26 @@ const DASH = () => (
   </div>
 )
 
+const DEFAULT_PRICING = { student_monthly: 7, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState('students') // 'students' | 'tutors'
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
+  const [dbPricing, setDbPricing] = useState(DEFAULT_PRICING)
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
+
+  useEffect(() => {
+    getPlatformSettings('pricing').then(val => {
+      if (val) setDbPricing(prev => ({ ...DEFAULT_PRICING, ...val, tutor_plans: val.tutor_plans || DEFAULT_PRICING.tutor_plans }))
+    }).catch(() => {})
+  }, [])
 
   const handleGetStarted = onGetStarted || (() => navigate('/auth'))
   const handleSignIn     = onSignIn     || (() => navigate('/auth'))
 
-  const annualDiscount = 0.2 // 20% off annual
+  const annualDiscount = dbPricing.annual_discount ?? 0.2
 
   const studentPlans = [
     {
@@ -75,7 +85,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
     },
     {
       name: 'Per Subject',
-      price: 7,
+      price: dbPricing.student_monthly ?? 7,
       sub: 'per subject · per month',
       badge: 'MOST POPULAR',
       hi: true,
@@ -94,10 +104,11 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
     },
   ]
 
+  const tutorDbPlans = dbPricing.tutor_plans || DEFAULT_PRICING.tutor_plans
   const tutorPlans = [
     {
       name: 'Starter',
-      price: 29,
+      price: tutorDbPlans[0]?.price ?? 29,
       sub: 'per month',
       badge: null,
       hi: false,
@@ -119,7 +130,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
     },
     {
       name: 'Growth',
-      price: 59,
+      price: tutorDbPlans[1]?.price ?? 59,
       sub: 'per month',
       badge: 'MOST POPULAR',
       hi: true,
@@ -141,7 +152,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
     },
     {
       name: 'Pro',
-      price: 99,
+      price: tutorDbPlans[2]?.price ?? 99,
       sub: 'per month',
       badge: null,
       hi: false,

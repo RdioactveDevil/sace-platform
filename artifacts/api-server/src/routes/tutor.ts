@@ -784,4 +784,162 @@ router.get("/tutor/students/:studentId/writing-attempts", async (req: Request, r
   }
 });
 
+// ── Student roster details: year level + tutor-scoped tutored subjects ────────
+
+interface SubjectRow {
+  id: string;
+  student_id: string;
+  subject_name: string;
+  stage: string | null;
+}
+
+interface StudentDetail {
+  override_year_level: string | null;     // tutor override (tutor_students.year_level)
+  profile_year_level: number | null;      // set by the student at onboarding
+  tutored: SubjectRow[];                   // subjects THIS tutor tutors (their selection)
+  subscriptions: { subject_name: string; stage: string | null }[]; // student's onboarding subjects
+}
+
+// GET /tutor/roster-details — per-student year level + subjects (onboarding + tutor selection)
+router.get("/tutor/roster-details", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+
+    const { data: roster, error: rErr } = await admin
+      .from("tutor_students")
+      .select("student_id, year_level")
+      .eq("tutor_id", callerUserId);
+    if (rErr) return res.status(500).json({ error: rErr.message });
+
+    const studentIds = (roster ?? []).map((r: { student_id: string }) => r.student_id);
+
+    const byStudent: Record<string, StudentDetail> = {};
+    for (const r of (roster ?? []) as { student_id: string; year_level: string | null }[]) {
+      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [] };
+    }
+
+    if (studentIds.length > 0) {
+      // Profile year level (student-set at onboarding)
+      const { data: profs } = await admin.from("profiles").select("id, year_level").in("id", studentIds);
+      for (const p of (profs ?? []) as { id: string; year_level: number | null }[]) {
+        if (byStudent[p.id]) byStudent[p.id].profile_year_level = p.year_level ?? null;
+      }
+      // Student's onboarding subjects (the pick list)
+      const { data: subs } = await admin
+        .from("user_subscriptions")
+        .select("user_id, subject_name, stage, active")
+        .in("user_id", studentIds);
+      for (const s of (subs ?? []) as { user_id: string; subject_name: string; stage: string | null; active: boolean | null }[]) {
+        if (s.active === false) continue;
+        if (byStudent[s.user_id]) byStudent[s.user_id].subscriptions.push({ subject_name: s.subject_name, stage: s.stage });
+      }
+    }
+
+    // Tutor's selection of which subjects they tutor
+    const { data: tutored, error: sErr } = await admin
+      .from("tutor_student_subjects")
+      .select("id, student_id, subject_name, stage")
+      .eq("tutor_id", callerUserId);
+    if (sErr) return res.status(500).json({ error: sErr.message });
+    for (const s of (tutored ?? []) as SubjectRow[]) {
+      if (byStudent[s.student_id]) byStudent[s.student_id].tutored.push(s);
+    }
+
+    return res.json({ byStudent });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+async function assertRostered(
+  admin: SupabaseClient & { auth: SupabaseAdminAuth },
+  tutorId: string,
+  studentId: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from("tutor_students")
+    .select("student_id")
+    .eq("tutor_id", tutorId)
+    .eq("student_id", studentId)
+    .maybeSingle<{ student_id: string }>();
+  return !!data;
+}
+
+// PATCH /tutor/students/:studentId/details — set year level
+router.patch("/tutor/students/:studentId/details", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const studentId = String(req.params.studentId);
+    if (!(await assertRostered(admin, callerUserId, studentId))) {
+      return res.status(403).json({ error: "Student not on your roster." });
+    }
+    const { year_level } = req.body as { year_level?: string | null };
+    const { error } = await admin
+      .from("tutor_students")
+      .update({ year_level: year_level?.trim() || null })
+      .eq("tutor_id", callerUserId)
+      .eq("student_id", studentId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /tutor/students/:studentId/subjects — add a tutored subject + stage
+router.post("/tutor/students/:studentId/subjects", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const studentId = String(req.params.studentId);
+    if (!(await assertRostered(admin, callerUserId, studentId))) {
+      return res.status(403).json({ error: "Student not on your roster." });
+    }
+    const { subject_name, stage } = req.body as { subject_name?: string; stage?: string | null };
+    const subj = (subject_name ?? "").trim();
+    if (!subj) return res.status(400).json({ error: "subject_name is required." });
+
+    const { data, error } = await admin
+      .from("tutor_student_subjects")
+      .upsert(
+        { tutor_id: callerUserId, student_id: studentId, subject_name: subj, stage: stage?.trim() || null },
+        { onConflict: "tutor_id,student_id,subject_name,stage" },
+      )
+      .select("id, student_id, subject_name, stage")
+      .single<SubjectRow>();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ subject: data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /tutor/students/:studentId/subjects/:subjectId — remove a tutored subject
+router.delete("/tutor/students/:studentId/subjects/:subjectId", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const subjectId = String(req.params.subjectId);
+    const { error } = await admin
+      .from("tutor_student_subjects")
+      .delete()
+      .eq("id", subjectId)
+      .eq("tutor_id", callerUserId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 export default router;

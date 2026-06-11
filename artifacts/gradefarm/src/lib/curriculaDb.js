@@ -10,7 +10,7 @@ export async function listCurricula() {
   const { data, error } = await supabase
     .from('curricula')
     .select(`
-      id, name, level_label, subject_description, status, created_at,
+      id, name, level_label, subject_description, generation_flags, status, created_at,
       curriculum_topics (
         id,
         curriculum_subtopics ( id, gen_status, questions_generated )
@@ -27,12 +27,13 @@ export async function listCurricula() {
       name: c.name,
       level_label: c.level_label ?? '',
       subject_description: c.subject_description,
+      generation_flags: c.generation_flags ?? {},
       status: c.status,
       created_at: c.created_at,
       topic_count: topics.length,
       subtopic_count: subtopics.length,
       questions_generated: subtopics.reduce((sum, s) => sum + (s.questions_generated || 0), 0),
-      questions_total: subtopics.length * 25,
+      questions_total: subtopics.length * 5,
     }
   })
 }
@@ -82,10 +83,10 @@ export async function getCurriculumDetail(id) {
  * @param {{ name: string, subject_description: string, topics: Array, level_label?: string }} data
  * @returns {Promise<string>} curriculum id
  */
-export async function createCurriculum({ name, subject_description, topics, level_label = '' }) {
+export async function createCurriculum({ name, subject_description, topics, level_label = '', generation_flags = {} }) {
   const { data: curriculum, error: cErr } = await supabase
     .from('curricula')
-    .insert({ name, subject_description, level_label: level_label || '', status: 'draft' })
+    .insert({ name, subject_description, level_label: level_label || '', generation_flags: generation_flags || {}, status: 'draft' })
     .select('id')
     .single()
   if (cErr) throw cErr
@@ -101,7 +102,7 @@ export async function createCurriculum({ name, subject_description, topics, leve
  * @param {string} id
  * @param {{ name?: string, subject_description?: string, level_label?: string, topics?: Array }} updates
  */
-export async function updateCurriculum(id, { name, subject_description, level_label, topics } = {}) {
+export async function updateCurriculum(id, { name, subject_description, level_label, generation_flags, topics } = {}) {
   const { data: cur, error: curErr } = await supabase
     .from('curricula')
     .select('name, level_label')
@@ -136,6 +137,7 @@ export async function updateCurriculum(id, { name, subject_description, level_la
   if (name !== undefined) patch.name = name
   if (subject_description !== undefined) patch.subject_description = subject_description
   if (level_label !== undefined) patch.level_label = level_label
+  if (generation_flags !== undefined) patch.generation_flags = generation_flags || {}
 
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('curricula').update(patch).eq('id', id)
@@ -261,6 +263,37 @@ export async function fetchLiveCurricula() {
 }
 
 /**
+ * Fetch all curricula with status in ['draft', 'generating', 'live'], with topic names.
+ * Used to show draft curricula as "Coming Soon" in SubjectPicker.
+ * @returns {Promise<Array<{ id: string, name: string, level_label: string, status: string, topicNames: string[] }>>}
+ */
+export async function fetchAllActiveCurricula() {
+  const { data: curricula, error: cErr } = await supabase
+    .from('curricula')
+    .select('id, name, level_label, status')
+    .in('status', ['draft', 'generating', 'live'])
+    .order('created_at', { ascending: true })
+  if (cErr) throw cErr
+  if (!curricula?.length) return []
+
+  const ids = curricula.map(c => c.id)
+  const { data: topics, error: tErr } = await supabase
+    .from('curriculum_topics')
+    .select('curriculum_id, name')
+    .in('curriculum_id', ids)
+    .order('order_index')
+  if (tErr) throw tErr
+
+  return curricula.map(c => ({
+    id: c.id,
+    name: c.name,
+    level_label: (c.level_label ?? '').trim(),
+    status: c.status,
+    topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
+  }))
+}
+
+/**
  * Delete a curriculum and all its topics/subtopics (cascade).
  * @param {string} id
  */
@@ -275,15 +308,29 @@ export async function deleteCurriculum(id) {
  * @param {Array<{ name: string, description: string, topics: Array }>} builtIns
  */
 export async function seedBuiltInSubjectsIfNeeded(builtIns) {
-  const { data: existing } = await supabase.from('curricula').select('name')
-  const existingNames = new Set((existing || []).map(c => c.name))
+  const { data: existing } = await supabase.from('curricula').select('id, name')
+  const existingMap = new Map((existing || []).map(c => [c.name, c.id]))
 
-  for (const { name, description, topics } of builtIns) {
-    if (existingNames.has(name)) continue
+  for (const { name, description, topics, generation_flags } of builtIns) {
+    const existingId = existingMap.get(name)
+    if (existingId) {
+      // If topics are still in the old "code — name" format, replace them with canonical names.
+      // This runs once after a deploy; subsequent loads find no " — " and skip.
+      const { data: firstSub } = await supabase
+        .from('curriculum_subtopics')
+        .select('name')
+        .eq('curriculum_id', existingId)
+        .limit(1)
+        .maybeSingle()
+      if (firstSub?.name?.includes(' \u2014 ')) {
+        await _replaceTopicsAndSubtopics(existingId, topics, 'done')
+      }
+      continue
+    }
     const level = inferCohortLabelFromCurriculumName(name)
     const { data: c, error } = await supabase
       .from('curricula')
-      .insert({ name, subject_description: description || name, level_label: level, status: 'live' })
+      .insert({ name, subject_description: description || name, level_label: level, status: 'live', generation_flags: generation_flags || {} })
       .select('id')
       .single()
     if (error || !c) continue
@@ -329,7 +376,6 @@ async function _replaceTopicsAndSubtopics(curriculumId, topics, defaultGenStatus
 /**
  * Load curriculum topics and subtopics for a given curriculum name,
  * formatted as macroGroups for HomeScreen two-level topic display.
- * Each macro group = one curriculum topic; its `topics` array = subtopic names.
  * @param {string} curriculumName  e.g. 'Mathematical Methods Stage 2'
  * @returns {Promise<Array<{id:string,num:number,label:string,topics:string[]}>|null>}
  */

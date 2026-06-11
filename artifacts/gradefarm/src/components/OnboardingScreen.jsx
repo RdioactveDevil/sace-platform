@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
+import { CLIENT_ONLY_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -22,11 +22,6 @@ const ATAR_TARGETS = [
 ]
 
 const STUDY_HOURS = [1, 2, 3, 5, 7, 10]
-
-const BUILT_IN_CURRICULUM_NAMES = new Set([
-  ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
-  ...Object.values(QUESTIONS_SUBJECT_BY_ID),
-])
 
 const inp = {
   padding: '12px 14px', borderRadius: 10,
@@ -59,7 +54,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
       .then(curricula => {
         setDynamicSubjects(
           curricula
-            .filter(c => !BUILT_IN_CURRICULUM_NAMES.has(c.name))
             .map(c => ({
               id: `curriculum_${c.id}`,
               name: c.name,
@@ -75,7 +69,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
       .catch(() => {})
   }, [])
 
-  const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
+  // Client-only built-ins (the Writing feature) plus all DB-loaded dynamic
+  // curricula. Academic subjects come only from the DB so admin controls them.
+  const allSubjects = [...CLIENT_ONLY_SUBJECTS, ...dynamicSubjects]
   const AVAILABLE_SUBJECTS = allSubjects.filter(s => s.available)
   const COMING_SUBJECTS    = allSubjects.filter(s => !s.available)
 
@@ -425,7 +421,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           { label: 'Year',           value: yearLevel ? `Year ${yearLevel}` : '\u2014' },
           { label: 'ATAR Target',    value: atarTarget ? `${atarTarget}+` : '\u2014' },
           { label: 'Study hrs/week', value: studyHours ? `${studyHours}h` : '\u2014' },
-          { label: 'Subjects',       value: selectedSubs.map(s => `${s.subject_name} ${s.stage}`).join(', ') || '\u2014' },
+          { label: 'Subjects',       value: selectedSubs.map(s => formatSubjectLabel({ name: s.subject_name, stage: s.stage })).join(', ') || '\u2014' },
         ].map(row => (
           <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ fontSize: 12, color: '#475569' }}>{row.label}</span>
