@@ -4,19 +4,18 @@ import { ALL_SUBJECTS, QUESTIONS_SUBJECT_BY_ID, effectiveCohortStageForLiveCurri
 import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
+const GOLD  = '#f1be43'
+const GOLDL = '#f9d87a'
 const FONT_B = `'Plus Jakarta Sans', sans-serif`
+const FONT_D = `'Sifonn Pro', sans-serif`
 
-// Built-in subject names as they appear in the curricula table (name + ' ' + stage, trimmed),
-// plus canonical `questions.subject` keys for built-in banks (e.g. "Year 7 Mathematics").
 const BUILT_IN_CURRICULUM_NAMES = new Set([
   ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
   ...Object.values(QUESTIONS_SUBJECT_BY_ID),
 ])
 
 const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
-const COUNTS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const COUNTS_CACHE_TTL = 5 * 60 * 1000
 
 function readCountsCache() {
   try {
@@ -32,9 +31,6 @@ function writeCountsCache(counts) {
   try { localStorage.setItem(COUNTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), counts })) } catch {}
 }
 
-// Match a subscription row to a subject tile.
-// Handles both short-name subscriptions (subject_name === s.name)
-// and full canonical-name subscriptions (subject_name === s.curriculumName).
 function subMatchesSubject(sub, s) {
   if (sub.subject_name === s.name && (sub.stage === s.stage || !sub.stage)) return true
   if (s.curriculumName && sub.subject_name === s.curriculumName) return true
@@ -42,11 +38,12 @@ function subMatchesSubject(sub, s) {
 }
 
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
-  const [selected, setSelected] = useState(null)
-  const [hovering, setHovering] = useState(null)
-  const [liveQuestionCounts, setLiveQuestionCounts] = useState(() => readCountsCache())
-  const [dynamicSubjects, setDynamicSubjects] = useState([])
-  const t = THEMES[theme]
+  const [selected, setSelected]         = useState(null)
+  const [hovering, setHovering]         = useState(null)
+  const [liveQuestionCounts, setLiveCounts] = useState(() => readCountsCache())
+  const [dynamicSubjects, setDynamic]   = useState([])
+  const t = THEMES[theme] ?? THEMES.dark
+  const isDark = theme === 'dark'
 
   useEffect(() => {
     fetchLiveCurricula()
@@ -63,7 +60,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
             questionCount: 0,
             available: c.status === 'live',
           }))
-        setDynamicSubjects(dynamic)
+        setDynamic(dynamic)
       })
       .catch(() => {})
   }, [])
@@ -79,17 +76,14 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
         .map(s => [s.id, s.name, s.stage || '']),
     ]
     if (pairs.length === 0) return undefined
-    const countPayload = pairs.map(([, subjectName, stage]) => ({
-      subject: subjectName,
-      levelLabel: stage,
-    }))
-    fetchSubjectBankCounts(countPayload)
-      .then((counts) => {
+    const payload = pairs.map(([, subjectName, stage]) => ({ subject: subjectName, levelLabel: stage }))
+    fetchSubjectBankCounts(payload)
+      .then(counts => {
         if (cancelled) return
         const results = pairs.map(([id, subjectName]) => [id, counts[subjectName] ?? 0])
         const merged = { ...(readCountsCache() ?? {}), ...Object.fromEntries(results) }
         writeCountsCache(merged)
-        setLiveQuestionCounts(merged)
+        setLiveCounts(merged)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -99,168 +93,343 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
 
   const subscribed = allSubjects.filter(s =>
-    s.available && (
-      !hasSubscriptions ||
-      subscriptions.some(sub => subMatchesSubject(sub, s))
-    )
+    s.available && (!hasSubscriptions || subscriptions.some(sub => subMatchesSubject(sub, s)))
   )
-
   const notSubscribed = hasSubscriptions
-    ? allSubjects.filter(s =>
-        s.available &&
-        !subscriptions.some(sub => subMatchesSubject(sub, s))
-      )
+    ? allSubjects.filter(s => s.available && !subscriptions.some(sub => subMatchesSubject(sub, s)))
     : []
-
   const comingSoon = allSubjects.filter(s => !s.available)
+
+  const handleSelect = (subj) => {
+    setSelected(subj)
+  }
+
+  const handleStart = () => {
+    if (selected) onSelect(selected)
+  }
+
+  const firstName = profile.display_name?.split(' ')[0] ?? 'there'
 
   const SubjectCard = ({ subj, locked = false }) => {
     const isSelected = selected?.id === subj.id
+    const isHovering = hovering === subj.id
+    const qCount = liveQuestionCounts?.[subj.id]
+    const color = subj.color ?? GOLD
+
     return (
       <div
-        onClick={() => !locked && setSelected(subj)}
+        onClick={() => !locked && handleSelect(subj)}
         onMouseEnter={() => !locked && setHovering(subj.id)}
         onMouseLeave={() => setHovering(null)}
         style={{
-          background: locked ? '#f8f9ff' : '#ffffff',
-          border: locked ? '1.5px dashed #c7d0e8' : isSelected ? `2px solid #0c1037` : '1px solid #e2e5f0',
-          borderRadius: 14, padding: '20px',
-          cursor: locked ? 'default' : 'pointer',
-          transition: 'all 0.15s ease',
-          boxShadow: isSelected ? '0 4px 20px rgba(12,16,55,0.14)' : '0 1px 4px rgba(0,0,0,0.06)',
           position: 'relative',
+          borderRadius: 18,
+          padding: '22px 22px 20px',
+          cursor: locked ? 'default' : 'pointer',
+          transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+          transform: !locked && isHovering && !isSelected ? 'translateY(-3px)' : 'none',
+          overflow: 'hidden',
+          background: isDark
+            ? (isSelected ? `linear-gradient(145deg,${color}18,${t.bgCard} 60%)` : t.bgCard)
+            : (isSelected ? `${color}0d` : t.bgCard),
+          border: isSelected
+            ? `1.5px solid ${color}66`
+            : isHovering
+              ? `1px solid ${color}33`
+              : `1px solid ${t.border}`,
+          boxShadow: isSelected
+            ? `0 0 0 1px ${color}22, 0 8px 32px ${color}20`
+            : isHovering
+              ? `0 4px 24px rgba(0,0,0,0.22)`
+              : isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.06)',
         }}
       >
-        {locked && (
-          <div style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, background: '#eef0ff', border: '1px solid #c7d0e8', color: '#6b7db3', padding: '3px 8px', borderRadius: 6, fontWeight: 700, letterSpacing: '0.04em' }}>
-            LOCKED
-          </div>
+        {/* colour glow blob */}
+        {(isSelected || isHovering) && !locked && (
+          <div style={{
+            position: 'absolute', top: -30, right: -30,
+            width: 140, height: 140, borderRadius: '50%',
+            background: `radial-gradient(circle,${color}28 0%,transparent 70%)`,
+            pointerEvents: 'none',
+          }} />
         )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 11, background: locked ? '#f0f2ff' : `${subj.color}22`, border: locked ? '1px solid #c7d0e8' : `1px solid ${subj.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, opacity: locked ? 0.45 : 1 }}>
-              {locked ? '🔒' : subj.icon}
-            </div>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: locked ? '#8896b3' : '#0c1037' }}>{subj.name}</div>
-              <div style={{ fontSize: 11, color: locked ? '#a0aec0' : subj.color, fontWeight: 700, marginTop: 1 }}>{subj.stage}</div>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
-          {subj.topics.slice(0, 4).map(topic => (
-            <span key={topic} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: locked ? '#eef0ff' : '#f1f5f9', border: `1px solid ${locked ? '#c7d0e8' : '#e2e5f0'}`, color: locked ? '#8896b3' : '#334155' }}>{topic}</span>
-          ))}
-          {subj.topics.length > 4 && <span style={{ fontSize: 11, color: '#94a3b8' }}>+{subj.topics.length - 4} more</span>}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: locked ? '#a0aec0' : '#64748b' }}>
-            {liveQuestionCounts?.[subj.id] != null ? liveQuestionCounts[subj.id] : '…'} questions
-          </span>
-          {locked ? (
+
+        {/* locked overlay */}
+        {locked && (
+          <div style={{
+            position: 'absolute', inset: 0, borderRadius: 18,
+            background: isDark ? 'rgba(34,38,64,0.55)' : 'rgba(248,249,255,0.65)',
+            backdropFilter: 'blur(1px)',
+            zIndex: 1,
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+            padding: '16px 18px',
+          }}>
             <button
               onClick={e => {
                 e.stopPropagation()
-                onGetAccess && onGetAccess({
-                  ...subj,
-                  questionCount: liveQuestionCounts[subj.id] ?? subj.questionCount,
-                })
+                onGetAccess?.({ ...subj, questionCount: liveQuestionCounts?.[subj.id] ?? subj.questionCount })
               }}
               style={{
-                fontSize: 12, fontWeight: 700, color: '#ffffff',
-                background: 'linear-gradient(135deg, #0c1037, #1e2a6e)',
-                padding: '6px 14px', borderRadius: 8,
+                fontSize: 12, fontWeight: 700,
+                background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+                color: '#0c1037',
+                padding: '7px 16px', borderRadius: 9,
                 border: 'none', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
                 fontFamily: FONT_B,
-                boxShadow: '0 2px 8px rgba(12,16,55,0.2)',
+                boxShadow: `0 4px 14px ${GOLD}40`,
+                letterSpacing: '0.02em',
               }}
             >
               ✦ Get Access
             </button>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
-              <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>Ready</span>
+          </div>
+        )}
+
+        {/* card content */}
+        <div style={{ position: 'relative', zIndex: 0 }}>
+          {/* icon + name row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+            <div style={{
+              width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+              background: locked
+                ? (isDark ? 'rgba(255,255,255,0.05)' : '#f0f2ff')
+                : `linear-gradient(135deg,${color}30,${color}10)`,
+              border: locked
+                ? `1px solid ${t.border}`
+                : `1px solid ${color}40`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22,
+              boxShadow: locked ? 'none' : `0 4px 14px ${color}20`,
+              opacity: locked ? 0.5 : 1,
+            }}>
+              {locked ? '🔒' : subj.icon}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 15, fontWeight: 800, lineHeight: 1.2,
+                color: locked ? t.textMuted : t.text,
+                marginBottom: 2,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {subj.name}
+              </div>
+              <div style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                color: locked ? t.textFaint : color,
+              }}>
+                {subj.stage}
+              </div>
+            </div>
+            {/* selected checkmark */}
+            {isSelected && (
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, color: '#0c1037', fontWeight: 900,
+                flexShrink: 0,
+              }}>✓</div>
+            )}
+          </div>
+
+          {/* topic pills */}
+          {subj.topics.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
+              {subj.topics.slice(0, 3).map(topic => (
+                <span key={topic} style={{
+                  fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
+                  padding: '3px 8px', borderRadius: 6,
+                  background: locked
+                    ? (isDark ? 'rgba(255,255,255,0.04)' : '#eef0ff')
+                    : `${color}14`,
+                  border: `1px solid ${locked ? t.border : color + '28'}`,
+                  color: locked ? t.textFaint : color,
+                  opacity: locked ? 0.7 : 1,
+                }}>{topic}</span>
+              ))}
+              {subj.topics.length > 3 && (
+                <span style={{ fontSize: 10, color: t.textFaint, alignSelf: 'center' }}>
+                  +{subj.topics.length - 3}
+                </span>
+              )}
             </div>
           )}
+
+          {/* footer row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 500 }}>
+              {qCount != null ? `${qCount} questions` : '…'}
+            </span>
+            {!locked && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} />
+                <span style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>Ready</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     )
   }
 
+  const SectionLabel = ({ children }) => (
+    <div style={{
+      fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase',
+      color: t.textFaint, marginBottom: 14,
+    }}>
+      {children}
+    </div>
+  )
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f8f9ff', color: '#0c1037', fontFamily: FONT_B, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px 60px', boxSizing: 'border-box' }}>
-      <style>{`*, *::before, *::after { box-sizing: border-box; } @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }`}</style>
+    <div style={{
+      flex: 1, minHeight: 0, overflowY: 'auto',
+      background: t.bg, color: t.text, fontFamily: FONT_B,
+      padding: '48px 36px 80px',
+      boxSizing: 'border-box',
+    }}>
+      <style>{`
+        @font-face { font-family:'Sifonn Pro'; src:url('/SIFONN_PRO.otf') format('opentype'); font-display:swap; }
+        *, *::before, *::after { box-sizing: border-box; }
+        @keyframes spFadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+        .sp-card { animation: spFadeUp 0.32s ease both; }
+        .sp-start:hover { opacity: 0.9; transform: translateY(-1px) !important; }
+      `}</style>
 
-      <div style={{ textAlign: 'center', marginBottom: 40, animation: 'fadeUp 0.4s ease' }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 16px' }}>⚗️</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 8px', color: '#0c1037' }}>
-          Welcome back, {profile.display_name.split(' ')[0]}
-        </h1>
-        <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>Choose a subject to practise</p>
-      </div>
+      <div style={{ maxWidth: 880, margin: '0 auto' }}>
 
-      <div style={{ width: '100%', maxWidth: 680, animation: 'fadeUp 0.5s ease' }}>
+        {/* ── Header ── */}
+        <div style={{ marginBottom: 44, animation: 'spFadeUp 0.28s ease' }}>
+          <div style={{ marginBottom: 6 }}>
+            <span style={{
+              fontFamily: FONT_D, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase',
+              color: GOLD, opacity: 0.7,
+            }}>gradefarm.</span>
+          </div>
+          <h1 style={{
+            fontFamily: FONT_D, fontSize: 'clamp(26px,4vw,40px)', fontWeight: 400,
+            margin: '0 0 12px', lineHeight: 1.1, letterSpacing: '0.5px',
+          }}>
+            <span style={{ color: t.text }}>Hey, </span>
+            <span style={{ color: GOLD }}>{firstName}.</span>
+          </h1>
+          <p style={{ fontSize: 15, color: t.textMuted, margin: 0, lineHeight: 1.6, maxWidth: 440 }}>
+            Pick a subject to practise — your session adapts to exactly where you need the most work.
+          </p>
+        </div>
 
+        {/* ── Subscribed subjects ── */}
         {subscribed.length > 0 && (
-          <>
-            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Your Subjects</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 28 }}>
-              {subscribed.map(subj => <SubjectCard key={subj.id} subj={subj} />)}
-            </div>
-          </>
-        )}
-
-        {notSubscribed.length > 0 && (
-          <>
-            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Not in Your Plan</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 28 }}>
-              {notSubscribed.map(subj => <SubjectCard key={subj.id} subj={subj} locked />)}
-            </div>
-          </>
-        )}
-
-        {comingSoon.length > 0 && (
-          <>
-            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Coming Soon</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10, marginBottom: 36, opacity: 0.55 }}>
-              {comingSoon.map(subj => (
-                <div key={subj.id} style={{ background: '#f0f2ff', border: '1px solid #e2e5f0', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}15`, border: `1px solid ${subj.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{subj.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2a5e' }}>{subj.name}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{subj.stage}</div>
-                  </div>
-                  <span style={{ fontSize: 10, background: '#e2e5f0', color: '#64748b', padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>SOON</span>
+          <div style={{ marginBottom: 32, animation: 'spFadeUp 0.34s ease' }}>
+            <SectionLabel>Your Subjects</SectionLabel>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+              gap: 14,
+            }}>
+              {subscribed.map((subj, i) => (
+                <div key={subj.id} className="sp-card" style={{ animationDelay: `${i * 40}ms` }}>
+                  <SubjectCard subj={subj} />
                 </div>
               ))}
             </div>
-          </>
-        )}
-
-        {subscribed.length === 0 && notSubscribed.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '32px 20px', color: '#64748b', fontSize: 14 }}>
-            No subjects available. Please complete onboarding to set up your subjects.
           </div>
         )}
 
-        <button
-          onClick={() => selected && onSelect(selected)}
-          disabled={!selected}
-          style={{
-            width: '100%', padding: '16px', borderRadius: 14, border: 'none',
-            background: selected ? '#0c1037' : '#e2e5f0',
-            color: selected ? GOLD : '#94a3b8',
-            fontSize: 15, fontWeight: 800,
-            cursor: selected ? 'pointer' : 'default',
-            fontFamily: FONT_B,
-            boxShadow: selected ? '0 8px 28px rgba(12,16,55,0.25)' : 'none',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {selected ? `Start ${selected.name} ${selected.stage} →` : 'Select a subject above'}
-        </button>
+        {/* ── Locked / not subscribed ── */}
+        {notSubscribed.length > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <SectionLabel>Unlock More Subjects</SectionLabel>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+              gap: 14,
+            }}>
+              {notSubscribed.map(subj => (
+                <SubjectCard key={subj.id} subj={subj} locked />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Coming soon ── */}
+        {comingSoon.length > 0 && (
+          <div style={{ marginBottom: 32, opacity: 0.45 }}>
+            <SectionLabel>Coming Soon</SectionLabel>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+              gap: 10,
+            }}>
+              {comingSoon.map(subj => (
+                <div key={subj.id} style={{
+                  background: t.bgCard, border: `1px dashed ${t.border}`,
+                  borderRadius: 18, padding: '18px 20px',
+                  display: 'flex', alignItems: 'center', gap: 14,
+                }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 11,
+                    background: `${subj.color}12`, border: `1px solid ${subj.color}22`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 19, flexShrink: 0,
+                  }}>{subj.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: t.textSub }}>{subj.name}</div>
+                    <div style={{ fontSize: 11, color: t.textFaint }}>{subj.stage}</div>
+                  </div>
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, letterSpacing: '0.1em',
+                    background: isDark ? 'rgba(255,255,255,0.06)' : '#e2e5f0',
+                    color: t.textFaint, padding: '3px 8px', borderRadius: 6,
+                  }}>SOON</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Empty state ── */}
+        {subscribed.length === 0 && notSubscribed.length === 0 && (
+          <div style={{
+            textAlign: 'center', padding: '60px 20px',
+            color: t.textMuted, fontSize: 14,
+          }}>
+            No subjects available yet. Complete onboarding to set up your subjects.
+          </div>
+        )}
+
+        {/* ── Start CTA ── */}
+        <div style={{
+          position: 'sticky', bottom: 0, paddingTop: 20,
+          background: `linear-gradient(to top, ${t.bg} 70%, transparent)`,
+          marginTop: 8,
+        }}>
+          <button
+            className="sp-start"
+            onClick={handleStart}
+            disabled={!selected}
+            style={{
+              width: '100%', padding: '16px 24px',
+              borderRadius: 14, border: 'none',
+              background: selected
+                ? `linear-gradient(135deg,${GOLD},${GOLDL})`
+                : (isDark ? 'rgba(255,255,255,0.06)' : '#e8eaf4'),
+              color: selected ? '#0c1037' : t.textFaint,
+              fontSize: 15, fontWeight: 800,
+              cursor: selected ? 'pointer' : 'default',
+              fontFamily: FONT_B,
+              letterSpacing: '0.02em',
+              boxShadow: selected ? `0 6px 28px ${GOLD}44` : 'none',
+              transition: 'all 0.2s ease',
+              transform: 'none',
+            }}
+          >
+            {selected
+              ? `Start ${selected.name}${selected.stage ? ` · ${selected.stage}` : ''} →`
+              : 'Select a subject above'}
+          </button>
+        </div>
+
       </div>
     </div>
   )
