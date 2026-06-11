@@ -1,0 +1,422 @@
+@font-face {
+  font-family: 'Sifonn Pro';
+  src: url('/SIFONN_PRO.otf') format('opentype');
+  font-display: swap;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+@keyframes spFadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes spSpin {
+  to { transform: rotate(360deg); }
+}
+
+.sp-fadein {
+  animation: spFadeUp 0.32s ease both;
+}
+
+.sp-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(241, 190, 67, 0.2);
+  border-top-color: #f1be43;
+  animation: spSpin 0.7s linear infinite;
+}
+
+/* ── Wrapper ── */
+.sp-wrapper {
+  flex: 1;
+  min-height: 100dvh;
+  overflow-y: auto;
+  background: #06071a;
+  color: #f1f5f9;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  padding: 44px 32px 100px;
+  box-sizing: border-box;
+  transition: background-image 0.4s ease;
+}
+
+/* ── Inner container ── */
+.sp-inner {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* ── Header pill badge ── */
+.sp-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  background: rgba(241, 190, 67, 0.10);
+  border: 1px solid rgba(241, 190, 67, 0.22);
+  border-radius: 30px;
+  padding: 5px 14px;
+}
+
+.sp-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f1be43;
+  box-shadow: 0 0 8px rgba(241, 190, 67, 0.7);
+  flex-shrink: 0;
+}
+
+.sp-pill-label {
+  font-family: 'Sifonn Pro', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: #f1be43;
+}
+
+/* ── Heading ── */
+.sp-heading {
+  font-family: 'Sifonn Pro', sans-serif;
+  font-size: clamp(26px, 4vw, 40px);
+  font-weight: 400;
+  margin: 0 0 10px;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  color: #fff;
+}
+
+.sp-heading-accent {
+  color: #f1be43;
+}
+
+.sp-subheading {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0;
+  line-height: 1.6;
+  max-width: 380px;
+}
+
+/* ── Hero card ── */
+.sp-hero {
+  border-radius: 24px;
+  padding: 32px 36px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.sp-hero-glow {
+  position: absolute;
+  bottom: -50px;
+  right: -50px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  pointer-events: none;
+  transition: background 0.35s;
+}
+
+.sp-hero-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.sp-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 99px;
+  padding: 4px 12px;
+}
+
+.sp-stage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.sp-stage-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.08em;
+}
+
+.sp-subject-name {
+  font-size: clamp(24px, 3.5vw, 34px);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.sp-icon-box {
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+  transition: all 0.3s ease;
+}
+
+/* ── Topic pills ── */
+.sp-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 24px;
+}
+
+.sp-topic-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 99px;
+  letter-spacing: 0.01em;
+}
+
+.sp-topics-more {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  align-self: center;
+  padding-left: 4px;
+}
+
+/* ── Hero footer ── */
+.sp-hero-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.sp-q-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sp-q-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 7px rgba(52, 211, 153, 0.8);
+  flex-shrink: 0;
+}
+
+.sp-q-label {
+  font-size: 13px;
+  color: #34d399;
+  font-weight: 600;
+}
+
+.sp-start-btn {
+  padding: 11px 28px;
+  border-radius: 12px;
+  border: none;
+  background: #ffffff;
+  color: #06071a;
+  font-size: 14px;
+  font-weight: 800;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.2s;
+}
+
+.sp-start-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── Section labels ── */
+.sp-section-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.28);
+  margin-bottom: 12px;
+  padding-left: 2px;
+}
+
+.sp-section-label--soon {
+  color: rgba(255, 255, 255, 0.18);
+}
+
+/* ── Subject tile grid — explicit responsive breakpoints ── */
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 480px) {
+  .sp-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 640px) {
+  .sp-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ── Subject tiles ── */
+.sp-tile {
+  --sp-color: #f1be43;
+  border-radius: 16px;
+  padding: 16px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.sp-tile:hover {
+  filter: brightness(1.15);
+}
+
+.sp-tile[data-selected="true"] {
+  background: color-mix(in srgb, var(--sp-color) 18%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--sp-color) 48%, transparent);
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--sp-color) 25%, transparent);
+}
+
+.sp-tile[data-locked="true"] {
+  opacity: 0.5;
+}
+
+.sp-tile-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  margin: 0 auto 10px;
+  background: color-mix(in srgb, var(--sp-color) 14%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--sp-color) 28%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.sp-tile[data-selected="true"] .sp-tile-icon {
+  background: color-mix(in srgb, var(--sp-color) 28%, transparent);
+  border-color: color-mix(in srgb, var(--sp-color) 55%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--sp-color) 35%, transparent);
+}
+
+.sp-tile-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.25;
+  margin-bottom: 3px;
+  transition: color 0.15s;
+}
+
+.sp-tile[data-selected="true"] .sp-tile-name {
+  color: #fff;
+}
+
+.sp-tile-stage {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.28);
+  transition: color 0.15s;
+}
+
+.sp-tile[data-selected="true"] .sp-tile-stage {
+  color: var(--sp-color);
+}
+
+.sp-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f1be43, #f9d87a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #06071a;
+  font-weight: 900;
+  box-shadow: 0 2px 8px rgba(241, 190, 67, 0.55);
+}
+
+/* ── Coming soon tiles ── */
+.sp-cs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  opacity: 0.35;
+}
+
+@media (min-width: 480px) {
+  .sp-cs-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 640px) {
+  .sp-cs-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.sp-cs-tile {
+  border-radius: 16px;
+  padding: 16px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed rgba(255, 255, 255, 0.10);
+  text-align: center;
+}
+
+.sp-cs-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-cs-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 3px;
+}
+
+.sp-cs-soon {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Empty state ── */
+.sp-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 14px;
+}
