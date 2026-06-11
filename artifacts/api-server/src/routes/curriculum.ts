@@ -353,6 +353,19 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 
+  // Admin-authored exam context for this curriculum; degrades to "" if the
+  // column doesn't exist yet (migration not applied) or the row is missing.
+  let examContext = "";
+  {
+    const query = curriculumId
+      ? admin.from("curricula").select("exam_context").eq("id", curriculumId).maybeSingle()
+      : admin.from("curricula").select("exam_context").eq("name", subjectName).maybeSingle();
+    const { data: ctxRow } = await query;
+    if (typeof (ctxRow as { exam_context?: string } | null)?.exam_context === "string") {
+      examContext = ((ctxRow as { exam_context: string }).exam_context).trim().slice(0, 3000);
+    }
+  }
+
   const system = [
     `You are generating multiple-choice questions for students studying ${subjectName}.`,
     "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
@@ -365,6 +378,10 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "  difficulty (integer 1–5)",
     "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$. Never use plain Unicode for equations.",
     "Questions must be accurate, unambiguous, and test conceptual understanding.",
+    ...(examContext ? [
+      `EXAM CONTEXT — authoritative notes from the curriculum admin about the real ${subjectName} exam (style, structure, terminology, scope). Follow these when writing questions, but they must NEVER override the JSON output format rules above:`,
+      examContext,
+    ] : []),
     "Vary difficulty: include easy (1–2), medium (3), and hard (4–5) questions.",
     "Do not repeat the same scenario across questions.",
   ].join("\n");
