@@ -100,7 +100,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
 
   return (
     <div style={{
-      flex: 1, minHeight: 0, overflowY: 'auto',
+      minHeight: '100dvh', overflowY: 'auto',
       background: '#06071a',
       backgroundImage: `
         radial-gradient(ellipse 900px 500px at 70% -5%, ${hex(displayColor, 0.09)} 0%, transparent 60%),
