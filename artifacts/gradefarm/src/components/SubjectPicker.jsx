@@ -211,7 +211,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
                 <div className="sp-section-label">YOUR SUBJECTS</div>
 
                 <div className="sp-grid">
-                  {tileSubjects.map(subj => {
+                  {tileSubjects.map((subj, idx) => {
                     const locked = hasSubscriptions && !subscribed.includes(subj)
                     const isSel  = selected?.id === subj.id
                     const color  = subj.color ?? GOLD
@@ -221,7 +221,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
                         className="sp-tile"
                         data-selected={isSel ? 'true' : 'false'}
                         data-locked={locked ? 'true' : 'false'}
-                        style={{ '--sp-color': color }}
+                        style={{ '--sp-color': color, animationDelay: `${idx * 50}ms` }}
                         onClick={() => {
                           if (locked) { onGetAccess?.({ ...subj, questionCount: liveQuestionCounts?.[subj.id] ?? subj.questionCount }); return }
                           setSelected(subj)
