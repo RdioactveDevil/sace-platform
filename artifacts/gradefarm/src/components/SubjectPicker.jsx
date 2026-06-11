@@ -9,7 +9,6 @@ const GOLDL = '#f9d87a'
 const FONT_B = `'Plus Jakarta Sans', sans-serif`
 const FONT_D = `'Sifonn Pro', sans-serif`
 
-/* ─── hex→rgba helper ─────────────────────────────────── */
 function hex(color, alpha) {
   const c = color.replace('#', '')
   const r = parseInt(c.slice(0, 2), 16)
@@ -18,6 +17,105 @@ function hex(color, alpha) {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
+/* ─── SVG Icons ──────────────────────────────────────────── */
+function IconChemistry({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M9 3h6" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M10 3v6.5L6.5 15a5.5 5.5 0 0011 0L14 9.5V3" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="10" cy="15.5" r="1" fill={color}/>
+      <circle cx="13.5" cy="13.5" r="0.8" fill={color}/>
+      <circle cx="11" cy="17.5" r="0.6" fill={color}/>
+    </svg>
+  )
+}
+
+function IconBiology({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 3c-3.5 2.5-4.5 5.5-3.5 8.5S12 17 12 21" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M12 3c3.5 2.5 4.5 5.5 3.5 8.5S12 17 12 21" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+      <line x1="8.8" y1="7.8" x2="15.2" y2="7.8" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="8.2" y1="12" x2="15.8" y2="12" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="8.8" y1="16.2" x2="15.2" y2="16.2" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconPhysics({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <ellipse cx="12" cy="12" rx="9" ry="3.5" stroke={color} strokeWidth="1.5"/>
+      <ellipse cx="12" cy="12" rx="9" ry="3.5" stroke={color} strokeWidth="1.5" transform="rotate(60 12 12)"/>
+      <ellipse cx="12" cy="12" rx="9" ry="3.5" stroke={color} strokeWidth="1.5" transform="rotate(120 12 12)"/>
+      <circle cx="12" cy="12" r="2" fill={color}/>
+    </svg>
+  )
+}
+
+function IconMaths({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M7 5c-.6 3.5.2 6-.6 9.5C5.6 18 5 19 5 19" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M7 5c2 0 4 .6 5.5 2.3" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M6.5 11.5c1.8 0 3.5-.5 5-1.3" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M14.5 8.5l5 7M14.5 15.5l5-7" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconEnglish({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
+      <line x1="8" y1="7" x2="16" y2="7" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="8" y1="11" x2="16" y2="11" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="8" y1="15" x2="13" y2="15" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconQuant({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <polyline points="3,20 7,12 11,16 15,10 19,20" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      <line x1="3" y1="20" x2="21" y2="20" stroke={color} strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconCurriculum({ color, size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="8" height="8" rx="2" stroke={color} strokeWidth="1.5"/>
+      <rect x="13" y="3" width="8" height="8" rx="2" stroke={color} strokeWidth="1.5"/>
+      <rect x="3" y="13" width="8" height="8" rx="2" stroke={color} strokeWidth="1.5"/>
+      <rect x="13" y="13" width="8" height="8" rx="2" stroke={color} strokeWidth="1.5"/>
+    </svg>
+  )
+}
+
+const ICON_MAP = {
+  chemistry_s1: IconChemistry,
+  chemistry_s2: IconChemistry,
+  biology_s1:   IconBiology,
+  biology_s2:   IconBiology,
+  physics_s1:   IconPhysics,
+  physics_s2:   IconPhysics,
+  maths_y7:     IconMaths,
+  maths_y10:    IconMaths,
+  maths_methods_s2: IconMaths,
+  english_y7:   IconEnglish,
+  quant_y10:    IconQuant,
+}
+
+function SubjectIcon({ subj, color, size = 32 }) {
+  const Icon = ICON_MAP[subj.id] ?? IconCurriculum
+  return <Icon color={color} size={size} />
+}
+
+/* ─── Data wiring ─────────────────────────────────────────── */
 const BUILT_IN_CURRICULUM_NAMES = new Set([
   ...ALL_SUBJECTS.map(s => `${s.name} ${s.stage}`.trim()),
   ...Object.values(QUESTIONS_SUBJECT_BY_ID),
@@ -35,19 +133,22 @@ function readCountsCache() {
     return counts
   } catch { return null }
 }
+
 function writeCountsCache(counts) {
   try { localStorage.setItem(COUNTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), counts })) } catch {}
 }
+
 function subMatchesSubject(sub, s) {
   if (sub.subject_name === s.name && (sub.stage === s.stage || !sub.stage)) return true
   if (s.curriculumName && sub.subject_name === s.curriculumName) return true
   return false
 }
 
+/* ─── Component ───────────────────────────────────────────── */
 export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess, theme }) {
-  const [selected, setSelected]       = useState(null)
+  const [selected, setSelected]         = useState(null)
   const [liveQuestionCounts, setCounts] = useState(() => readCountsCache())
-  const [dynamicSubjects, setDynamic] = useState([])
+  const [dynamicSubjects, setDynamic]   = useState([])
 
   useEffect(() => {
     fetchLiveCurricula()
@@ -58,7 +159,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
             id: `curriculum_${c.id}`,
             name: c.name,
             stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
-            icon: '📚', color: '#6366f1',
+            color: '#6366f1',
             topics: c.topicNames, questionCount: 0,
             available: c.status === 'live',
           })))
@@ -87,257 +188,280 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   }, [dynamicSubjects])
 
   const hasSubscriptions = subscriptions.length > 0
-  const allSubjects = [...ALL_SUBJECTS, ...dynamicSubjects]
-  const subscribed    = allSubjects.filter(s => s.available && (!hasSubscriptions || subscriptions.some(sub => subMatchesSubject(sub, s))))
-  const notSubscribed = hasSubscriptions ? allSubjects.filter(s => s.available && !subscriptions.some(sub => subMatchesSubject(sub, s))) : []
-  const comingSoon    = allSubjects.filter(s => !s.available)
+  const allSubjects      = [...ALL_SUBJECTS, ...dynamicSubjects]
+  const subscribed       = allSubjects.filter(s => s.available && (!hasSubscriptions || subscriptions.some(sub => subMatchesSubject(sub, s))))
+  const notSubscribed    = hasSubscriptions ? allSubjects.filter(s => s.available && !subscriptions.some(sub => subMatchesSubject(sub, s))) : []
+  const comingSoon       = allSubjects.filter(s => !s.available)
 
   const firstName = profile.display_name?.split(' ')[0] ?? 'there'
 
-  /* ─── Subject Card ─────────────────────────────────────── */
-  const SubjectCard = ({ subj, locked = false, delay = 0 }) => {
-    const [hover, setHover] = useState(false)
-    const isSelected = selected?.id === subj.id
-    const color = subj.color ?? GOLD
-    const qCount = liveQuestionCounts?.[subj.id]
+  /* auto-select first available subject */
+  useEffect(() => {
+    if (!selected && subscribed.length > 0) setSelected(subscribed[0])
+  }, [subscribed.length])
 
-    const cardBg = isSelected
-      ? `linear-gradient(145deg, ${hex(color, 0.18)} 0%, ${hex(color, 0.06)} 60%, rgba(20,24,60,0.95) 100%)`
-      : hover && !locked
-        ? `linear-gradient(145deg, ${hex(color, 0.10)} 0%, rgba(20,24,60,0.95) 100%)`
-        : 'rgba(255,255,255,0.035)'
+  const displaySubject = selected ?? subscribed[0] ?? null
+  const displayColor   = displaySubject?.color ?? GOLD
 
-    return (
-      <div
-        onClick={() => !locked && setSelected(subj)}
-        onMouseEnter={() => !locked && setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        className="sp-card"
-        style={{
-          animationDelay: `${delay}ms`,
-          position: 'relative', overflow: 'hidden',
-          borderRadius: 20, padding: '24px',
-          cursor: locked ? 'default' : 'pointer',
-          background: cardBg,
-          border: isSelected
-            ? `1.5px solid ${hex(color, 0.55)}`
-            : hover && !locked
-              ? `1px solid ${hex(color, 0.30)}`
-              : '1px solid rgba(255,255,255,0.08)',
-          boxShadow: isSelected
-            ? `0 0 0 1px ${hex(color, 0.15)}, 0 12px 40px ${hex(color, 0.22)}, 0 2px 8px rgba(0,0,0,0.35)`
-            : hover && !locked
-              ? `0 8px 32px rgba(0,0,0,0.4)`
-              : '0 2px 12px rgba(0,0,0,0.25)',
-          transition: 'all 0.18s ease',
-          transform: hover && !locked && !isSelected ? 'translateY(-4px)' : 'none',
-        }}
-      >
-        {/* colour glow */}
-        <div style={{
-          position: 'absolute', top: -40, right: -40,
-          width: 180, height: 180, borderRadius: '50%', pointerEvents: 'none',
-          background: `radial-gradient(circle, ${hex(color, isSelected ? 0.22 : hover ? 0.14 : 0.07)} 0%, transparent 70%)`,
-          transition: 'opacity 0.2s',
-        }} />
-
-        {/* top row — icon + name */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
-          <div style={{
-            width: 50, height: 50, borderRadius: 14, flexShrink: 0,
-            background: locked
-              ? 'rgba(255,255,255,0.06)'
-              : `linear-gradient(135deg, ${hex(color, 0.35)} 0%, ${hex(color, 0.12)} 100%)`,
-            border: locked ? '1px solid rgba(255,255,255,0.08)' : `1.5px solid ${hex(color, 0.45)}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 24,
-            boxShadow: locked ? 'none' : `0 4px 16px ${hex(color, 0.30)}`,
-            opacity: locked ? 0.45 : 1,
-          }}>
-            {locked ? '🔒' : subj.icon}
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 15, fontWeight: 800, lineHeight: 1.25,
-              color: locked ? 'rgba(255,255,255,0.35)' : '#f1f5f9',
-              marginBottom: 3,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
-              {subj.name}
-            </div>
-            <div style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.05em',
-              color: locked ? 'rgba(255,255,255,0.2)' : color,
-            }}>
-              {subj.stage}
-            </div>
-          </div>
-
-          {isSelected && (
-            <div style={{
-              width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-              background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, color: '#0c1037', fontWeight: 900,
-              boxShadow: `0 2px 10px ${hex(GOLD, 0.5)}`,
-            }}>✓</div>
-          )}
-        </div>
-
-        {/* topic pills */}
-        {subj.topics.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 16 }}>
-            {subj.topics.slice(0, 3).map(topic => (
-              <span key={topic} style={{
-                fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
-                padding: '3px 9px', borderRadius: 20,
-                background: locked ? 'rgba(255,255,255,0.04)' : hex(color, 0.12),
-                border: `1px solid ${locked ? 'rgba(255,255,255,0.07)' : hex(color, 0.28)}`,
-                color: locked ? 'rgba(255,255,255,0.25)' : color,
-              }}>{topic}</span>
-            ))}
-            {subj.topics.length > 3 && (
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', alignSelf: 'center' }}>
-                +{subj.topics.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* footer */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
-            {qCount != null ? `${qCount} questions` : '—'}
-          </span>
-          {locked ? (
-            <button
-              onClick={e => { e.stopPropagation(); onGetAccess?.({ ...subj, questionCount: liveQuestionCounts?.[subj.id] ?? subj.questionCount }) }}
-              style={{
-                fontSize: 11, fontWeight: 700,
-                background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`,
-                color: '#0c1037', padding: '6px 14px', borderRadius: 8,
-                border: 'none', cursor: 'pointer', fontFamily: FONT_B,
-                boxShadow: `0 3px 12px ${hex(GOLD, 0.35)}`,
-              }}
-            >✦ Get Access</button>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 6px rgba(52,211,153,0.6)' }} />
-              <span style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>Ready</span>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  const SectionLabel = ({ children }) => (
-    <div style={{
-      fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase',
-      color: 'rgba(255,255,255,0.28)', marginBottom: 14,
-      paddingLeft: 2,
-    }}>{children}</div>
-  )
+  const tileSubjects = [...subscribed, ...notSubscribed]
 
   return (
     <div style={{
       flex: 1, minHeight: 0, overflowY: 'auto',
-      background: '#0d1140',
+      background: '#06071a',
       backgroundImage: `
-        radial-gradient(ellipse 900px 600px at 60% -10%, rgba(241,190,67,0.07) 0%, transparent 70%),
-        radial-gradient(ellipse 600px 400px at -10% 80%, rgba(99,102,241,0.08) 0%, transparent 60%),
-        linear-gradient(rgba(241,190,67,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(241,190,67,0.025) 1px, transparent 1px)
+        radial-gradient(ellipse 900px 500px at 70% -5%, ${hex(displayColor, 0.09)} 0%, transparent 60%),
+        radial-gradient(ellipse 500px 400px at -5% 90%, rgba(99,102,241,0.07) 0%, transparent 55%)
       `,
-      backgroundSize: '100% 100%, 100% 100%, 48px 48px, 48px 48px',
       color: '#f1f5f9', fontFamily: FONT_B,
-      padding: '52px 40px 100px',
+      padding: '44px 32px 100px',
       boxSizing: 'border-box',
+      transition: 'background-image 0.4s ease',
     }}>
       <style>{`
         @font-face { font-family:'Sifonn Pro'; src:url('/SIFONN_PRO.otf') format('opentype'); font-display:swap; }
         *, *::before, *::after { box-sizing: border-box; }
         @keyframes spFadeUp {
-          from { opacity:0; transform:translateY(18px); }
+          from { opacity:0; transform:translateY(16px); }
           to   { opacity:1; transform:none; }
         }
-        .sp-card { animation: spFadeUp 0.36s ease both; }
+        .sp-fadein { animation: spFadeUp 0.32s ease both; }
+        .sp-tile:hover { filter: brightness(1.15); }
       `}</style>
 
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
         {/* ── Header ── */}
-        <div style={{ marginBottom: 52, animation: 'spFadeUp 0.28s ease' }}>
+        <div className="sp-fadein" style={{ marginBottom: 32 }}>
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 20,
+            display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 18,
             background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.22)',
             borderRadius: 30, padding: '5px 14px',
           }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${hex(GOLD, 0.7)}` }} />
             <span style={{ fontFamily: FONT_D, fontSize: 9, letterSpacing: '0.18em', color: GOLD }}>gradefarm.</span>
           </div>
-
           <h1 style={{
-            fontFamily: FONT_D, fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 400,
-            margin: '0 0 14px', lineHeight: 1.1, letterSpacing: '1px',
-            color: '#fff',
+            fontFamily: FONT_D, fontSize: 'clamp(26px, 4vw, 40px)', fontWeight: 400,
+            margin: '0 0 10px', lineHeight: 1.1, letterSpacing: '1px', color: '#fff',
           }}>
             Hey, <span style={{ color: GOLD }}>{firstName}.</span>
           </h1>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.48)', margin: 0, lineHeight: 1.65, maxWidth: 420 }}>
+          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', margin: 0, lineHeight: 1.6, maxWidth: 380 }}>
             Pick a subject and we'll build your session around exactly where you need the most work.
           </p>
         </div>
 
-        {/* ── Available ── */}
-        {subscribed.length > 0 && (
-          <div style={{ marginBottom: 36, animation: 'spFadeUp 0.34s ease' }}>
-            <SectionLabel>Your Subjects</SectionLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 14 }}>
-              {subscribed.map((subj, i) => <SubjectCard key={subj.id} subj={subj} delay={i * 45} />)}
+        {/* ── Hero Card ── */}
+        {displaySubject && (
+          <div className="sp-fadein" style={{
+            borderRadius: 24,
+            background: `linear-gradient(145deg, ${hex(displayColor, 0.22)} 0%, ${hex(displayColor, 0.08)} 45%, rgba(15,18,50,0.98) 100%)`,
+            border: `1.5px solid ${hex(displayColor, 0.38)}`,
+            padding: '32px 36px',
+            marginBottom: 20,
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: `0 20px 72px ${hex(displayColor, 0.16)}, inset 0 1px 0 rgba(255,255,255,0.06)`,
+            transition: 'all 0.3s ease',
+          }}>
+            {/* glow blob */}
+            <div style={{
+              position: 'absolute', bottom: -50, right: -50,
+              width: 300, height: 300, borderRadius: '50%', pointerEvents: 'none',
+              background: `radial-gradient(circle, ${hex(displayColor, 0.25)} 0%, transparent 65%)`,
+              transition: 'background 0.35s',
+            }} />
+
+            {/* top row */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, position: 'relative' }}>
+              <div>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12,
+                  background: `${hex(displayColor, 0.18)}`, border: `1px solid ${hex(displayColor, 0.38)}`,
+                  borderRadius: 99, padding: '4px 12px',
+                }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: displayColor, boxShadow: `0 0 7px ${displayColor}` }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: displayColor, letterSpacing: '0.08em' }}>
+                    {displaySubject.stage}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: 'clamp(24px, 3.5vw, 34px)', fontWeight: 900, color: '#fff',
+                  letterSpacing: '-0.5px', lineHeight: 1.1,
+                }}>
+                  {displaySubject.name}
+                </div>
+              </div>
+
+              <div style={{
+                width: 68, height: 68, borderRadius: 18, flexShrink: 0,
+                background: `linear-gradient(135deg, ${hex(displayColor, 0.32)}, ${hex(displayColor, 0.12)})`,
+                border: `1.5px solid ${hex(displayColor, 0.45)}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: `0 8px 28px ${hex(displayColor, 0.35)}`,
+                transition: 'all 0.3s ease',
+              }}>
+                <SubjectIcon subj={displaySubject} color={displayColor} size={34} />
+              </div>
+            </div>
+
+            {/* topics */}
+            {displaySubject.topics?.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 24 }}>
+                {displaySubject.topics.slice(0, 5).map(t => (
+                  <span key={t} style={{
+                    fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
+                    background: hex(displayColor, 0.14), border: `1px solid ${hex(displayColor, 0.30)}`,
+                    color: displayColor, letterSpacing: '0.01em',
+                  }}>{t}</span>
+                ))}
+                {displaySubject.topics.length > 5 && (
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', alignSelf: 'center', paddingLeft: 4 }}>
+                    +{displaySubject.topics.length - 5} more
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* footer row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 7px rgba(52,211,153,0.8)' }} />
+                <span style={{ fontSize: 13, color: '#34d399', fontWeight: 600 }}>
+                  {liveQuestionCounts?.[displaySubject.id] != null
+                    ? `${liveQuestionCounts[displaySubject.id]} questions ready`
+                    : 'Loading questions…'}
+                </span>
+              </div>
+              <button
+                onClick={() => selected && onSelect(selected)}
+                style={{
+                  padding: '11px 28px', borderRadius: 12, border: 'none',
+                  background: `linear-gradient(135deg, ${hex(displayColor, 0.9)}, ${displayColor})`,
+                  color: '#06071a', fontSize: 14, fontWeight: 800,
+                  cursor: 'pointer', fontFamily: FONT_B, letterSpacing: '0.01em',
+                  boxShadow: `0 6px 24px ${hex(displayColor, 0.45)}`,
+                  filter: 'brightness(1.05)',
+                  opacity: selected ? 1 : 0.5,
+                  transition: 'opacity 0.2s',
+                }}
+                disabled={!selected}
+              >
+                Start Session →
+              </button>
             </div>
           </div>
         )}
 
-        {/* ── Locked ── */}
-        {notSubscribed.length > 0 && (
-          <div style={{ marginBottom: 36, animation: 'spFadeUp 0.4s ease' }}>
-            <SectionLabel>Unlock More Subjects</SectionLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 14 }}>
-              {notSubscribed.map(subj => <SubjectCard key={subj.id} subj={subj} locked />)}
+        {/* ── Subject Tiles ── */}
+        {tileSubjects.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <div style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: '0.16em',
+              color: 'rgba(255,255,255,0.28)', marginBottom: 12, paddingLeft: 2,
+            }}>YOUR SUBJECTS</div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(auto-fill, minmax(130px, 1fr))`,
+              gap: 10,
+            }}>
+              {tileSubjects.map(subj => {
+                const locked  = hasSubscriptions && !subscribed.includes(subj)
+                const isSel   = selected?.id === subj.id
+                const color   = subj.color ?? GOLD
+                return (
+                  <div
+                    key={subj.id}
+                    className="sp-tile"
+                    onClick={() => {
+                      if (locked) { onGetAccess?.({ ...subj, questionCount: liveQuestionCounts?.[subj.id] ?? subj.questionCount }); return }
+                      setSelected(subj)
+                    }}
+                    style={{
+                      borderRadius: 16, padding: '16px 14px',
+                      background: isSel ? `${hex(color, 0.18)}` : 'rgba(255,255,255,0.03)',
+                      border: isSel ? `1.5px solid ${hex(color, 0.48)}` : '1px solid rgba(255,255,255,0.07)',
+                      cursor: 'pointer', textAlign: 'center',
+                      transition: 'all 0.15s ease',
+                      boxShadow: isSel ? `0 4px 20px ${hex(color, 0.25)}` : 'none',
+                      position: 'relative', overflow: 'hidden',
+                      opacity: locked ? 0.5 : 1,
+                    }}
+                  >
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 12, margin: '0 auto 10px',
+                      background: isSel ? `${hex(color, 0.28)}` : `${hex(color, 0.14)}`,
+                      border: `1.5px solid ${hex(color, isSel ? 0.55 : 0.28)}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: isSel ? `0 4px 14px ${hex(color, 0.35)}` : 'none',
+                      transition: 'all 0.15s',
+                    }}>
+                      {locked
+                        ? <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4" strokeLinecap="round"/></svg>
+                        : <SubjectIcon subj={subj} color={isSel ? color : `${hex(color, 0.85)}`} size={22} />
+                      }
+                    </div>
+                    <div style={{
+                      fontSize: 12, fontWeight: 700, color: isSel ? '#fff' : 'rgba(255,255,255,0.6)',
+                      lineHeight: 1.25, marginBottom: 3, transition: 'color 0.15s',
+                    }}>{subj.name}</div>
+                    <div style={{
+                      fontSize: 10, fontWeight: 600,
+                      color: isSel ? color : 'rgba(255,255,255,0.28)',
+                      transition: 'color 0.15s',
+                    }}>{subj.stage}</div>
+                    {isSel && (
+                      <div style={{
+                        position: 'absolute', top: 8, right: 8,
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: '#06071a', fontWeight: 900,
+                        boxShadow: `0 2px 8px ${hex(GOLD, 0.55)}`,
+                      }}>✓</div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
 
         {/* ── Coming Soon ── */}
         {comingSoon.length > 0 && (
-          <div style={{ marginBottom: 36 }}>
-            <SectionLabel>Coming Soon</SectionLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 10, opacity: 0.4 }}>
-              {comingSoon.map(subj => (
-                <div key={subj.id} style={{
-                  borderRadius: 16, padding: '16px 18px',
-                  background: 'rgba(255,255,255,0.025)',
-                  border: '1px dashed rgba(255,255,255,0.10)',
-                  display: 'flex', alignItems: 'center', gap: 13,
-                }}>
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                    background: hex(subj.color, 0.14), border: `1px solid ${hex(subj.color, 0.22)}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-                  }}>{subj.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>{subj.name}</div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{subj.stage}</div>
+          <div>
+            <div style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: '0.16em',
+              color: 'rgba(255,255,255,0.18)', marginBottom: 12, paddingLeft: 2,
+            }}>COMING SOON</div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(auto-fill, minmax(130px, 1fr))`,
+              gap: 10, opacity: 0.35,
+            }}>
+              {comingSoon.map(subj => {
+                const color = subj.color ?? GOLD
+                return (
+                  <div key={subj.id} style={{
+                    borderRadius: 16, padding: '16px 14px',
+                    background: 'rgba(255,255,255,0.025)',
+                    border: '1px dashed rgba(255,255,255,0.10)',
+                    textAlign: 'center',
+                  }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 12, margin: '0 auto 10px',
+                      background: hex(color, 0.10), border: `1px solid ${hex(color, 0.18)}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <SubjectIcon subj={subj} color={hex(color, 0.55)} size={22} />
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 3 }}>{subj.name}</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.10em', color: 'rgba(255,255,255,0.25)' }}>SOON</div>
                   </div>
-                  <span style={{
-                    fontSize: 9, fontWeight: 800, letterSpacing: '0.12em',
-                    color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.06)',
-                    padding: '3px 8px', borderRadius: 6,
-                  }}>SOON</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -348,34 +472,6 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
             No subjects available yet. Complete onboarding to set up your subjects.
           </div>
         )}
-
-        {/* ── Sticky Start CTA ── */}
-        <div style={{
-          position: 'sticky', bottom: 0,
-          padding: '24px 0 0',
-          background: 'linear-gradient(to top, #0d1140 55%, transparent)',
-          marginTop: 16,
-        }}>
-          <button
-            onClick={() => selected && onSelect(selected)}
-            disabled={!selected}
-            style={{
-              width: '100%', padding: '16px 28px',
-              borderRadius: 14, border: selected ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              background: selected
-                ? `linear-gradient(135deg, ${GOLD} 0%, ${GOLDL} 100%)`
-                : 'rgba(255,255,255,0.04)',
-              color: selected ? '#0c1037' : 'rgba(255,255,255,0.25)',
-              fontSize: 15, fontWeight: 800,
-              cursor: selected ? 'pointer' : 'default',
-              fontFamily: FONT_B, letterSpacing: '0.02em',
-              boxShadow: selected ? `0 8px 32px ${hex(GOLD, 0.40)}, 0 2px 8px rgba(0,0,0,0.3)` : 'none',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {selected ? `Start ${selected.name}${selected.stage ? ` · ${selected.stage}` : ''} →` : 'Select a subject above'}
-          </button>
-        </div>
 
       </div>
     </div>
