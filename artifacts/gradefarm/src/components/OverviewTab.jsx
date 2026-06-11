@@ -75,9 +75,11 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
     setNudged(n => ({ ...n, [id]: res.ok ? 'sent' : 'fail' }))
   }
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
-  const cardH = { padding: '15px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }
-  const h3 = { fontSize: 15, fontWeight: 800, color: t.text }
+  const card = theme === 'dark'
+    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const cardH = { padding: '15px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }
+  const h3 = { fontSize: 14, fontWeight: 800, color: t.text }
   const link = { color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none', fontFamily: FONT_B }
   const avatar = (name, c) => (
     <div style={{ width: 36, height: 36, borderRadius: '50%', background: c || `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0, fontSize: 14 }}>

@@ -5,6 +5,7 @@ import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
 import OverviewTab from './OverviewTab'
 import { THEMES } from '../lib/theme'
+import './TutorDashboard.css'
 import {
   fetchRoster,
   addStudentToRoster,
@@ -385,15 +386,17 @@ function AssignmentsTab({ profile, theme, subject }) {
     return true
   })
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
-  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const card = theme === 'dark'
+    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? (theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border) : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
           {showForm ? '✕ Cancel' : '+ New Assignment'}
         </button>
@@ -745,7 +748,9 @@ function ProgressTab({ profile, theme }) {
       .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
   }, [selectedStudentId, profile.id])
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const card = theme === 'dark'
+    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1057,8 +1062,10 @@ function ClassesTab({ profile, theme }) {
     } catch {}
   }
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
-  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const card = theme === 'dark'
+    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1540,8 +1547,10 @@ function DiagnosticTab({ profile, theme }) {
     setSaveError('')
   }
 
-  const card = { background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }
-  const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const card = theme === 'dark'
+    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 18, overflow: 'hidden', marginBottom: 18 }
+    : { background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }
+  const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
   const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
 
@@ -2106,21 +2115,41 @@ export default function TutorScreen({ profile, theme, subject }) {
   const SIDEBAR_W = collapsed ? 74 : 248
   const meta = SECTION_META[activeTab] || { title: '', sub: '' }
 
+  const sidebarBg   = theme === 'dark' ? '#07091e' : t.bgNav
+  const sidebarBdr  = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
+  const headerBg    = theme === 'dark' ? 'rgba(6,7,26,0.92)' : 'rgba(248,249,255,0.92)'
+  const headerBdr   = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
+  const navGroupLbl = theme === 'dark' ? 'rgba(255,255,255,0.22)' : t.textFaint
+  const navItemDflt = theme === 'dark' ? 'rgba(255,255,255,0.52)' : t.textSub
+
   const sidebar = (
     <aside style={{
-      width: SIDEBAR_W, flexShrink: 0, background: t.bgNav, borderRight: `1px solid ${t.border}`,
+      width: SIDEBAR_W, flexShrink: 0, background: sidebarBg,
+      borderRight: `1px solid ${sidebarBdr}`,
       display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 14px' }}>
-        <span style={{ fontFamily: FONT_D, fontSize: 22, fontWeight: 900, color: GOLD, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
-          {collapsed ? 'g.' : <>gradefarm<span style={{ color: theme === 'dark' ? '#fff' : '#fff' }}>.</span></>}
-        </span>
+      {/* Brand */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: collapsed ? '20px 16px 14px' : '20px 20px 14px' }}>
+        {collapsed ? (
+          <span style={{ fontFamily: FONT_D, fontSize: 20, color: GOLD, letterSpacing: '-0.5px' }}>g.</span>
+        ) : (
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.20)', borderRadius: 30, padding: '4px 12px', marginBottom: 8 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: '0 0 7px rgba(241,190,67,0.7)', flexShrink: 0 }} />
+              <span style={{ fontFamily: FONT_D, fontSize: 9, letterSpacing: '0.18em', color: GOLD }}>TUTOR</span>
+            </div>
+            <div style={{ fontFamily: FONT_D, fontSize: 20, color: GOLD, letterSpacing: '-0.5px', whiteSpace: 'nowrap', lineHeight: 1 }}>
+              gradefarm<span style={{ color: '#fff' }}>.</span>
+            </div>
+          </div>
+        )}
       </div>
+
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
         {NAV_GROUPS.map(group => (
           <div key={group.label} style={{ marginTop: 12 }}>
             {!collapsed && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.textFaint, padding: '6px 10px' }}>{group.label}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: navGroupLbl, padding: '6px 10px' }}>{group.label}</div>
             )}
             {group.items.map(item => {
               const active = activeTab === item.id
@@ -2131,17 +2160,18 @@ export default function TutorScreen({ profile, theme, subject }) {
                     display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
                     padding: '10px 12px', borderRadius: 10, margin: '2px 0', cursor: 'pointer',
                     fontFamily: FONT_B, fontSize: 14, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
-                    color: active ? GOLD : t.textSub,
+                    color: active ? GOLD : navItemDflt,
                     background: active ? 'rgba(241,190,67,0.12)' : 'transparent',
                     border: `1px solid ${active ? 'rgba(241,190,67,0.25)' : 'transparent'}`,
+                    transition: 'background 0.12s, color 0.12s',
                   }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = t.bgHover }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgHover; e.currentTarget.style.color = theme === 'dark' ? 'rgba(255,255,255,0.82)' : t.text } }}
+                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = navItemDflt } }}
                 >
                   <span style={{ width: 20, textAlign: 'center', fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
                   {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
                   {!collapsed && badge != null && (
-                    <span style={{ background: item.id === 'assignments' ? t.danger : t.bgHover, color: item.id === 'assignments' ? '#fff' : t.textSub, fontSize: 11, fontWeight: 800, borderRadius: 20, padding: '1px 7px' }}>{badge}</span>
+                    <span style={{ background: item.id === 'assignments' ? t.danger : (theme === 'dark' ? 'rgba(255,255,255,0.08)' : t.bgHover), color: item.id === 'assignments' ? '#fff' : t.textSub, fontSize: 11, fontWeight: 800, borderRadius: 20, padding: '1px 7px' }}>{badge}</span>
                   )}
                 </button>
               )
@@ -2149,7 +2179,9 @@ export default function TutorScreen({ profile, theme, subject }) {
           </div>
         ))}
       </nav>
-      <div style={{ padding: 12, borderTop: `1px solid ${t.border}` }}>
+
+      {/* User profile footer */}
+      <div style={{ padding: 12, borderTop: `1px solid ${sidebarBdr}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }}>
           <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
             {(profile.display_name || '?')[0].toUpperCase()}
@@ -2166,10 +2198,18 @@ export default function TutorScreen({ profile, theme, subject }) {
   )
 
   return (
-    <div style={{ flex: 1, display: 'flex', background: t.bg, fontFamily: FONT_B, color: t.text, minHeight: 0 }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
-        @media (max-width: 860px){ .tutor-desktop-sidebar{ display:none !important; } }
-        @media (min-width: 861px){ .tutor-mobile-only{ display:none !important; } }`}</style>
+    <div
+      className="td-root"
+      style={{
+        flex: 1, display: 'flex',
+        background: theme === 'dark' ? '#06071a' : t.bg,
+        backgroundImage: theme === 'dark'
+          ? 'radial-gradient(ellipse 900px 700px at 85% -8%, rgba(241,190,67,0.055) 0%, transparent 55%), radial-gradient(ellipse 700px 600px at -5% 95%, rgba(99,102,241,0.05) 0%, transparent 60%)'
+          : 'none',
+        fontFamily: FONT_B, color: t.text, minHeight: 0,
+      }}
+    >
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
 
       {/* Desktop sidebar */}
       <div className="tutor-desktop-sidebar" style={{ display: 'flex', height: '100vh', position: 'sticky', top: 0 }}>{sidebar}</div>
@@ -2178,7 +2218,7 @@ export default function TutorScreen({ profile, theme, subject }) {
       {mobileNav && (
         <div className="tutor-mobile-only" style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex' }}>
           <div style={{ height: '100%' }}>{sidebar}</div>
-          <div onClick={() => setMobileNav(false)} style={{ flex: 1, background: 'rgba(0,0,0,0.5)' }} />
+          <div onClick={() => setMobileNav(false)} style={{ flex: 1, background: 'rgba(0,0,0,0.55)' }} />
         </div>
       )}
 
@@ -2187,14 +2227,14 @@ export default function TutorScreen({ profile, theme, subject }) {
         {/* Top bar */}
         <header style={{
           position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14,
-          padding: '12px 24px', borderBottom: `1px solid ${t.border}`,
-          background: theme === 'dark' ? 'rgba(38,42,64,0.85)' : 'rgba(248,249,255,0.85)', backdropFilter: 'blur(8px)',
+          padding: '12px 24px', borderBottom: `1px solid ${headerBdr}`,
+          background: headerBg, backdropFilter: 'blur(12px)',
         }}>
           <button onClick={() => { window.innerWidth <= 860 ? setMobileNav(v => !v) : setCollapsed(v => !v) }}
-            style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>☰</button>
+            style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.10)' : t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>☰</button>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 19, fontWeight: 800, color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
-            <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.sub}</div>
+            <div style={{ fontSize: 20, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.5px', color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{meta.sub}</div>
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
@@ -2203,7 +2243,7 @@ export default function TutorScreen({ profile, theme, subject }) {
 
         {/* Section content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
-          <div style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+          <div key={activeTab} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
             {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
             {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
             {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
@@ -2255,7 +2295,7 @@ function GlobalSearch({ theme, roster, classes, resources, assignments, onNaviga
 
   return (
     <div ref={boxRef} style={{ position: 'relative', width: 'min(320px, 46vw)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.bgInput, border: `1px solid ${open ? GOLD : t.border}`, borderRadius: 10, padding: '8px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, border: `1px solid ${open ? GOLD : (theme === 'dark' ? 'rgba(255,255,255,0.10)' : t.border)}`, borderRadius: 10, padding: '8px 12px', transition: 'border-color 0.15s' }}>
         <span style={{ color: t.textMuted, fontSize: 13 }}>🔎</span>
         <input
           value={q}

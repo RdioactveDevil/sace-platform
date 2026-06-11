@@ -429,9 +429,13 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const cardBg  = theme === 'dark' ? 'rgba(255,255,255,0.025)' : t.bgCard
+  const cardBdr = theme === 'dark' ? '1px solid rgba(255,255,255,0.07)' : `1px solid ${t.border}`
+  const cardShadow = theme === 'dark' ? '0 4px 28px rgba(0,0,0,0.40)' : t.shadowCard
+
   return (
     <div style={{
-      background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard,
+      background: cardBg, border: cardBdr, borderRadius: 20, boxShadow: cardShadow,
       padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 20,
       flexWrap: 'wrap',
     }}>
@@ -506,8 +510,12 @@ function SeriesCard({ series, theme, onCancel }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const serCardBg  = theme === 'dark' ? 'rgba(255,255,255,0.025)' : t.bgCard
+  const serCardBdr = theme === 'dark' ? '1px solid rgba(241,190,67,0.18)' : `1px solid ${GOLD}33`
+  const serCardShadow = theme === 'dark' ? '0 4px 28px rgba(0,0,0,0.40)' : t.shadowCard
+
   return (
-    <div style={{ background: t.bgCard, border: `1px solid ${GOLD}33`, borderRadius: 16, boxShadow: t.shadowCard, padding: '18px 22px' }}>
+    <div style={{ background: serCardBg, border: serCardBdr, borderRadius: 20, boxShadow: serCardShadow, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>

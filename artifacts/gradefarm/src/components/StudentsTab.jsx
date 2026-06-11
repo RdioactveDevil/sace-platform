@@ -215,8 +215,10 @@ export default function StudentsTab({ profile, theme }) {
     if (res.ok) setTimeout(() => { setNotifyId(null); setNotifyMsg(''); setNotifyState(null) }, 1500)
   }
 
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
-  const ctrl = { padding: '8px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
+  const card = theme === 'dark'
+    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const ctrl = { padding: '8px 11px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
   const chipStyle = (active) => ({ padding: '7px 13px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.14)' : t.bgCard, color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 600, cursor: 'pointer', fontFamily: FONT_B })
   const tag = (text, color, key) => (
     <span key={key} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${color}1f`, color, whiteSpace: 'nowrap' }}>{text}</span>
