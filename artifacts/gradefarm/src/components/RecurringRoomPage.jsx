@@ -1,8 +1,9 @@
-import { memo, useState, useEffect, useLayoutEffect, useCallback } from 'react'
+import { memo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   LiveKitRoom,
   GridLayout,
+  CarouselLayout,
   ParticipantTile,
   RoomAudioRenderer,
   Chat,
@@ -16,6 +17,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { getRoomInfo, getRoomToken } from '../lib/db'
 import { useLiveKitJoinOverlay } from '../hooks/useLiveKitJoinOverlay'
+import { useWhiteboardBroadcast } from '../hooks/useWhiteboardBroadcast'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -87,7 +89,7 @@ function RoomHeader({ room }) {
   )
 }
 
-function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, isTutor }) {
   const connectionState = useConnectionState()
   const showJoinOverlay = useLiveKitJoinOverlay(connectionState)
 
@@ -98,6 +100,13 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
     ],
     { onlySubscribed: false }
   )
+
+  // Camera-only rail beside the whiteboard, so nobody loses sight of faces.
+  const cameraTracks = tracks.filter(t => t.source === Track.Source.Camera)
+
+  // Tutors broadcast their board to everyone as a screen-share track.
+  const whiteboardFrameRef = useRef(null)
+  const broadcasting = useWhiteboardBroadcast(whiteboardFrameRef, isTutor && showWhiteboard)
 
   return (
     <div className="gf-call-stage">
@@ -111,8 +120,22 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
 
       <div className={showWhiteboard ? 'gf-call-surface gf-call-surface--whiteboard' : 'gf-call-surface'}>
         {showWhiteboard ? (
-          <div className="gf-whiteboard-frame">
-            <WhiteboardSurface />
+          <div className="gf-wb-layout">
+            <div className="gf-whiteboard-frame" ref={whiteboardFrameRef}>
+              <WhiteboardSurface />
+              {isTutor && (
+                <div className={broadcasting ? 'gf-wb-live-pill gf-wb-live-pill--on' : 'gf-wb-live-pill'}>
+                  {broadcasting ? '● Students can see this board' : 'Starting broadcast…'}
+                </div>
+              )}
+            </div>
+            {cameraTracks.length > 0 && (
+              <aside className="gf-wb-rail">
+                <CarouselLayout tracks={cameraTracks}>
+                  <ParticipantTile />
+                </CarouselLayout>
+              </aside>
+            )}
           </div>
         ) : (
           <div className="gf-video-surface">
@@ -129,7 +152,9 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
           <TrackToggle source={Track.Source.Camera} className="gf-dock-button">
             Camera
           </TrackToggle>
-          <TrackToggle source={Track.Source.ScreenShare} className="gf-dock-button">
+          <TrackToggle source={Track.Source.ScreenShare} className="gf-dock-button"
+            disabled={isTutor && showWhiteboard}
+            title={isTutor && showWhiteboard ? 'The whiteboard is being shared — close it to share your screen' : undefined}>
             Share
           </TrackToggle>
           <button className="gf-dock-button" type="button" aria-pressed={showWhiteboard} onClick={onToggleWhiteboard}>
@@ -158,7 +183,7 @@ function CallStage({ showChat, showWhiteboard, onToggleChat, onToggleWhiteboard,
   )
 }
 
-function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave }) {
+function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhiteboard, onLeave, isTutor }) {
   return (
     <div className="gf-room-shell">
       <RoomHeader room={room} />
@@ -168,6 +193,7 @@ function RoomContent({ room, showChat, showWhiteboard, onToggleChat, onToggleWhi
         onToggleChat={onToggleChat}
         onToggleWhiteboard={onToggleWhiteboard}
         onLeave={onLeave}
+        isTutor={isTutor}
       />
     </div>
   )
@@ -292,7 +318,12 @@ export default function RecurringRoomPage({ profile }) {
         .gf-chat-header { min-height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #f5f5fb; font-size: 13px; font-weight: 800; }
         .gf-chat-header button { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: #a8a8bd; cursor: pointer; font-size: 16px; }
         .gf-chat-header button:hover { background: #1b1b2f; color: #fff; }
-        .gf-whiteboard-frame { position: absolute; inset: 12px 12px 86px; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
+        .gf-wb-layout { position: absolute; inset: 12px 12px 86px; display: flex; gap: 10px; min-width: 0; min-height: 0; }
+        .gf-whiteboard-frame { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: visible; border-radius: 14px; background: #f8fafc; }
+        .gf-wb-rail { width: 200px; flex-shrink: 0; min-height: 0; overflow: hidden; border-radius: 14px; background: #10101b; border: 1px solid rgba(255,255,255,0.08); padding: 8px; }
+        .gf-wb-rail .lk-carousel { height: 100%; }
+        .gf-wb-live-pill { position: absolute; top: 10px; right: 10px; z-index: 5; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; font-family: ${FONT_B}; background: rgba(15,20,48,0.85); color: #94a3b8; pointer-events: none; }
+        .gf-wb-live-pill--on { background: rgba(23,50,37,0.92); color: #6ee7b7; }
         .gf-whiteboard-surface { position: absolute; inset: 0; width: 100%; height: 100% !important; min-height: 0 !important; overflow: visible; background: #f8fafc; border-radius: 14px; }
         .gf-whiteboard-surface .excalidraw { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; }
         .lk-chat { background: #0d0d1a !important; color: #e5e5e5 !important; height: 100% !important; }
@@ -306,7 +337,8 @@ export default function RecurringRoomPage({ profile }) {
           .gf-room-schedule { display: none; }
           .gf-call-stage { flex-direction: column; }
           .gf-call-surface { padding: 8px 8px 84px; }
-          .gf-whiteboard-frame { inset: 8px 8px 84px; }
+          .gf-wb-layout { inset: 8px 8px 84px; flex-direction: column; }
+          .gf-wb-rail { width: 100%; height: 110px; }
           .gf-chat-panel { width: 100%; min-width: 0; height: 38%; border-left: 0; border-top: 1px solid rgba(255,255,255,0.08); }
           .gf-dock-button { padding: 0 11px; }
         }
@@ -327,6 +359,7 @@ export default function RecurringRoomPage({ profile }) {
           onToggleChat={() => setShowChat(c => !c)}
           onToggleWhiteboard={() => setShowWhiteboard(w => !w)}
           onLeave={handleLeave}
+          isTutor={profile?.is_tutor ?? false}
         />
       </LiveKitRoom>
     </div>
