@@ -278,11 +278,11 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
               <div>
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12,
-                  background: `${hex(displayColor, 0.18)}`, border: `1px solid ${hex(displayColor, 0.38)}`,
+                  background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
                   borderRadius: 99, padding: '4px 12px',
                 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: displayColor, boxShadow: `0 0 7px ${displayColor}` }} />
-                  <span style={{ fontSize: 10, fontWeight: 700, color: displayColor, letterSpacing: '0.08em' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px rgba(255,255,255,0.7)' }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.08em' }}>
                     {displaySubject.stage}
                   </span>
                 </div>
@@ -296,13 +296,13 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
 
               <div style={{
                 width: 68, height: 68, borderRadius: 18, flexShrink: 0,
-                background: `linear-gradient(135deg, ${hex(displayColor, 0.32)}, ${hex(displayColor, 0.12)})`,
-                border: `1.5px solid ${hex(displayColor, 0.45)}`,
+                background: 'rgba(255,255,255,0.12)',
+                border: '1.5px solid rgba(255,255,255,0.28)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: `0 8px 28px ${hex(displayColor, 0.35)}`,
+                boxShadow: '0 8px 28px rgba(0,0,0,0.25)',
                 transition: 'all 0.3s ease',
               }}>
-                <SubjectIcon subj={displaySubject} color={displayColor} size={34} />
+                <SubjectIcon subj={displaySubject} color="#fff" size={34} />
               </div>
             </div>
 
@@ -338,12 +338,11 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
                 onClick={() => selected && onSelect(selected)}
                 style={{
                   padding: '11px 28px', borderRadius: 12, border: 'none',
-                  background: `linear-gradient(135deg, ${hex(displayColor, 0.9)}, ${displayColor})`,
+                  background: '#ffffff',
                   color: '#06071a', fontSize: 14, fontWeight: 800,
                   cursor: 'pointer', fontFamily: FONT_B, letterSpacing: '0.01em',
-                  boxShadow: `0 6px 24px ${hex(displayColor, 0.45)}`,
-                  filter: 'brightness(1.05)',
-                  opacity: selected ? 1 : 0.5,
+                  boxShadow: '0 6px 24px rgba(0,0,0,0.25)',
+                  opacity: selected ? 1 : 0.45,
                   transition: 'opacity 0.2s',
                 }}
                 disabled={!selected}
