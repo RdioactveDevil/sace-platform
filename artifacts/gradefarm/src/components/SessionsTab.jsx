@@ -13,7 +13,8 @@ import {
   cancelSessionSeries,
 } from '../lib/db'
 
-const GOLD = '#f1be43'
+const GOLD  = '#f1be43'
+const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 function fmtDateTime(iso) {
@@ -143,30 +144,38 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     }
   }
 
+  const isDark = theme === 'dark'
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: `1px solid ${t.border}`, background: t.bgNav,
-    color: t.text, fontFamily: FONT_B, fontSize: 14, boxSizing: 'border-box',
+    border: isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
+    background: isDark ? 'rgba(255,255,255,0.05)' : t.bgNav,
+    color: t.text, fontFamily: FONT_B, fontSize: 14, boxSizing: 'border-box', outline: 'none',
   }
-  const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B }
+  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B, textTransform: 'uppercase', letterSpacing: '0.06em' }
 
-  const typeBtn = (type, label, icon) => ({
-    flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-    fontFamily: FONT_B, fontSize: 14, fontWeight: 600,
-    background: sessionType === type ? GOLD : t.bgNav,
-    color: sessionType === type ? '#1a1a2e' : t.textMuted,
+  const typeBtn = (type) => ({
+    flex: 1, padding: '10px 12px', borderRadius: 8,
+    border: sessionType === type ? 'none' : isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
+    cursor: 'pointer', fontFamily: FONT_B, fontSize: 14, fontWeight: 700,
+    background: sessionType === type ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDark ? 'rgba(255,255,255,0.05)' : t.bgNav,
+    color: sessionType === type ? '#0c1037' : t.textMuted,
   })
+
+  const modalBg = isDark ? 'rgba(7,9,30,0.97)' : t.bg
+  const modalBdr = isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`
+  const toggleBg = isDark ? 'rgba(255,255,255,0.04)' : t.bgNav
+  const toggleBdr = isDark ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`
 
   if (createdLink) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-        <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center' }}>
+        <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center', backdropFilter: 'blur(16px)' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
           <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: t.text }}>Meeting Created</h2>
           <p style={{ margin: '0 0 24px', fontSize: 14, color: t.textMuted }}>
             Share this link with anyone you want in the session.
           </p>
-          <div style={{ background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ background: toggleBg, border: toggleBdr, borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ flex: 1, fontSize: 13, color: t.text, wordBreak: 'break-all', textAlign: 'left', fontFamily: 'monospace' }}>
               {createdLink}
             </span>
@@ -179,7 +188,8 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           </div>
           <button
             onClick={onClose}
-            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: GOLD, color: '#1a1a2e', fontFamily: FONT_B, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+            className="btn-gold-shimmer"
+            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
           >
             Done
           </button>
@@ -190,8 +200,8 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
-      <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto' }}>
-        <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700, color: t.text }}>📅 New Meeting</h2>
+      <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
+        <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, letterSpacing: '0.04em', color: t.text }}>📅 New Meeting</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Session type toggle */}
@@ -204,11 +214,12 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               <button type="button" style={typeBtn('group')} onClick={() => setSessionType('group')}>
                 👥 Group
               </button>
+
             </div>
           </div>
 
           {/* Recurring toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: toggleBg, border: toggleBdr, borderRadius: 10, padding: '12px 16px' }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔁 Recurring session</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Same link every week — students bookmark it once</div>
@@ -231,11 +242,11 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 
           {/* Recurring settings */}
           {isRecurring && (
-            <div style={{ background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: toggleBg, border: toggleBdr, borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Repeats</label>
-                  <select value={recurrenceType} onChange={e => setRecurrenceType(e.target.value)} style={inputStyle}>
+                  <select className="td-input-gold" value={recurrenceType} onChange={e => setRecurrenceType(e.target.value)} style={inputStyle}>
                     <option value="weekly">Weekly</option>
                     <option value="fortnightly">Fortnightly</option>
                     <option value="monthly">Monthly</option>
@@ -243,7 +254,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                 </div>
                 <div>
                   <label style={labelStyle}>Day of week</label>
-                  <select value={dayOfWeek} onChange={e => setDayOfWeek(Number(e.target.value))} style={inputStyle}>
+                  <select className="td-input-gold" value={dayOfWeek} onChange={e => setDayOfWeek(Number(e.target.value))} style={inputStyle}>
                     {DAY_NAMES.map((d, i) => <option key={i} value={i}>{d}</option>)}
                   </select>
                 </div>
@@ -251,11 +262,11 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Start from</label>
-                  <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} min={new Date().toISOString().split('T')[0]} placeholder="Today" />
+                  <input className="td-input-gold" type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} min={new Date().toISOString().split('T')[0]} placeholder="Today" />
                 </div>
                 <div>
                   <label style={labelStyle}>End date (optional)</label>
-                  <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} style={inputStyle} min={new Date().toISOString().split('T')[0]} />
+                  <input className="td-input-gold" type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} style={inputStyle} min={new Date().toISOString().split('T')[0]} />
                 </div>
               </div>
               <p style={{ margin: 0, fontSize: 12, color: t.textMuted }}>
@@ -268,7 +279,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           {!isGroup && (
             <div>
               <label style={labelStyle}>Invite student <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional — or share the link directly)</span></label>
-              <select value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle}>
+              <select className="td-input-gold" value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle}>
                 <option value="">None — I'll share the link myself</option>
                 {roster.map(s => (
                   <option key={s.student_id} value={s.student_id}>
@@ -285,7 +296,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               {classes.length > 0 && (
                 <div>
                   <label style={labelStyle}>Add entire class (optional)</label>
-                  <select value={classId} onChange={e => setClassId(e.target.value)} style={inputStyle}>
+                  <select className="td-input-gold" value={classId} onChange={e => setClassId(e.target.value)} style={inputStyle}>
                     <option value="">None — pick students individually below</option>
                     {classes.map(c => (
                       <option key={c.id} value={c.id}>{c.name}{c.subject ? ` · ${c.subject}` : ''}</option>
@@ -297,7 +308,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                 <label style={labelStyle}>
                   Invite students <span style={{ fontWeight: 400, opacity: 0.6 }}>{classId ? '(optional extras on top of class)' : '(optional)'}</span>
                 </label>
-                <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, maxHeight: 180, overflowY: 'auto', background: t.bgNav }}>
+                <div style={{ border: toggleBdr, borderRadius: 10, maxHeight: 180, overflowY: 'auto', background: toggleBg }}>
                   {roster.length === 0 ? (
                     <p style={{ padding: 12, color: t.textMuted, fontSize: 13, margin: 0 }}>No students on your roster yet.</p>
                   ) : roster.map(s => {
@@ -306,8 +317,8 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                     return (
                       <label key={s.student_id} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                        cursor: 'pointer', borderBottom: `1px solid ${t.border}`,
-                        background: checked ? (t.bg === '#ffffff' ? '#fdf8e8' : '#2a2a1a') : 'transparent',
+                        cursor: 'pointer', borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : `1px solid ${t.border}`,
+                        background: checked ? (isDark ? 'rgba(241,190,67,0.08)' : '#fdf8e8') : 'transparent',
                       }}>
                         <input
                           type="checkbox"
@@ -335,11 +346,11 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>Date *</label>
-                <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} required={!isRecurring} min={new Date().toISOString().split('T')[0]} />
+                <input className="td-input-gold" type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} required={!isRecurring} min={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
                 <label style={labelStyle}>Time *</label>
-                <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required={!isRecurring} />
+                <input className="td-input-gold" type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required={!isRecurring} />
               </div>
             </div>
           )}
@@ -347,13 +358,13 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           {isRecurring && (
             <div>
               <label style={labelStyle}>Session time *</label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required />
+              <input className="td-input-gold" type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required />
             </div>
           )}
 
           <div>
             <label style={labelStyle}>Duration</label>
-            <select value={duration} onChange={e => setDuration(Number(e.target.value))} style={inputStyle}>
+            <select className="td-input-gold" value={duration} onChange={e => setDuration(Number(e.target.value))} style={inputStyle}>
               <option value={30}>30 minutes</option>
               <option value={45}>45 minutes</option>
               <option value={60}>1 hour</option>
@@ -364,16 +375,16 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 
           <div>
             <label style={labelStyle}>Topic / Title</label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Chemistry Unit 3 — Acids & Bases" style={inputStyle} />
+            <input className="td-input-gold" type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Chemistry Unit 3 — Acids & Bases" style={inputStyle} />
           </div>
 
           <div>
             <label style={labelStyle}>Notes for {isGroup ? 'students' : 'student'}</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+            <textarea className="td-input-gold" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything to prepare…" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
 
           {/* Record toggle — works for one-off sessions and recurring series */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 8, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: toggleBg, border: toggleBdr, borderRadius: 10, padding: '12px 16px' }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔴 Record {isRecurring ? 'these sessions' : 'this session'}</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
@@ -394,10 +405,10 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 14, cursor: 'pointer' }}>
+            <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 9, border: isDark ? '1px solid rgba(255,255,255,0.12)' : `1px solid ${t.border}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               Cancel
             </button>
-            <button type="submit" disabled={loading} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: GOLD, color: '#1a1a2e', fontFamily: FONT_B, fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+            <button type="submit" disabled={loading} className={loading ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: loading ? (isDark ? 'rgba(255,255,255,0.1)' : t.border) : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: loading ? t.textMuted : '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Creating…' : isRecurring ? 'Create Recurring Series' : 'Create Meeting Link'}
             </button>
           </div>
@@ -624,16 +635,20 @@ export default function SessionsTab({ profile, theme }) {
     return true
   })
 
-  const tabBtn = (id, label) => ({
-    padding: '9px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 600,
-    background: view === id ? GOLD : t.bgNav,
-    color: view === id ? '#1a1a2e' : t.textMuted,
+  const isDarkMain = theme === 'dark'
+
+  const tabBtn = (id) => ({
+    padding: '9px 20px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
+    border: view === id ? 'none' : isDarkMain ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
+    background: view === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.05)' : t.bgNav,
+    color: view === id ? '#0c1037' : t.textMuted,
   })
 
   const filterStyle = (id) => ({
-    padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 600,
-    background: filter === id ? GOLD : t.bgNav,
-    color: filter === id ? '#1a1a2e' : t.textMuted,
+    padding: '7px 16px', borderRadius: 20, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
+    border: filter === id ? 'none' : isDarkMain ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`,
+    background: filter === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.04)' : t.bgNav,
+    color: filter === id ? '#0c1037' : t.textMuted,
   })
 
   return (

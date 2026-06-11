@@ -302,12 +302,12 @@ export default function StudentsTab({ profile, theme }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>Sort</span>
-          <select value={sortKey} onChange={e => setSortKey(e.target.value)} style={ctrl}>{SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
+          <select className="td-input-gold" value={sortKey} onChange={e => setSortKey(e.target.value)} style={ctrl}>{SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
           <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} title="Toggle direction" style={{ ...ctrl, cursor: 'pointer', width: 36 }}>{sortDir === 'asc' ? '↑' : '↓'}</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>Group</span>
-          <select value={groupBy} onChange={e => setGroupBy(e.target.value)} style={ctrl}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}</select>
+          <select className="td-input-gold" value={groupBy} onChange={e => setGroupBy(e.target.value)} style={ctrl}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}</select>
         </div>
         <button onClick={() => { setShowAdd(v => !v); setAddError('') }} style={{ marginLeft: 'auto', padding: '9px 16px', borderRadius: 9, border: 'none', background: showAdd ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showAdd ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>{showAdd ? '✕ Cancel' : '+ Add student'}</button>
       </div>
@@ -334,7 +334,7 @@ export default function StudentsTab({ profile, theme }) {
         <div style={{ ...card, padding: '16px 18px' }}>
           <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 10 }}>Enter the student's email to add them to your roster. You can set their year level &amp; subjects after.</div>
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input value={email} onChange={e => { setEmail(e.target.value); setAddError('') }} placeholder="student@email.com" type="email" style={{ ...ctrl, flex: 1, minWidth: 220 }} />
+            <input className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError('') }} placeholder="student@email.com" type="email" style={{ ...ctrl, flex: 1, minWidth: 220 }} />
             <button type="submit" disabled={addLoading || !email.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Adding…' : 'Add'}</button>
           </form>
           {addError && <div style={{ marginTop: 8, fontSize: 12, color: t.danger }}>{addError}</div>}

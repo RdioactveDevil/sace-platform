@@ -1,11 +1,8 @@
-@keyframes tdFadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: none; }
-}
+/* Reuse shared platform keyframes from SubjectPicker.css (spFadeUp, spTileIn) */
 
-/* Staggered card/row entry animation */
+/* Staggered card/row entry animation — uses shared spFadeUp keyframe */
 .td-fadein {
-  animation: tdFadeUp 0.30s ease both;
+  animation: spFadeUp 0.30s ease both;
 }
 .td-fadein-1 { animation-delay: 40ms; }
 .td-fadein-2 { animation-delay: 80ms; }
@@ -13,9 +10,9 @@
 .td-fadein-4 { animation-delay: 160ms; }
 .td-fadein-5 { animation-delay: 200ms; }
 
-/* Tab content entry */
+/* Tab content entry — uses shared spFadeUp keyframe */
 .td-content-enter {
-  animation: tdFadeUp 0.28s ease both;
+  animation: spFadeUp 0.28s ease both;
 }
 
 /* Root wrapper */
@@ -28,6 +25,26 @@
   border-color: rgba(241,190,67,0.55) !important;
   box-shadow: 0 0 0 3px rgba(241,190,67,0.10) !important;
   outline: none;
+}
+
+/* Gold-gradient button with shimmer sweep */
+.btn-gold-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.btn-gold-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -70%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.45s ease;
+  pointer-events: none;
+}
+.btn-gold-shimmer:hover::after {
+  left: 130%;
 }
 
 @media (max-width: 860px) {

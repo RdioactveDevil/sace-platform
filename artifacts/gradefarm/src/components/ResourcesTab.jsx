@@ -226,18 +226,18 @@ export default function ResourcesTab({ profile, theme }) {
             ) : (
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Link URL</label>
-                <input type="url" value={form.external_url} onChange={e => setForm(f => ({ ...f, external_url: e.target.value }))} placeholder="https://…" style={inputStyle} />
+                <input className="td-input-gold" type="url" value={form.external_url} onChange={e => setForm(f => ({ ...f, external_url: e.target.value }))} placeholder="https://…" style={inputStyle} />
               </div>
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={labelStyle}>Title</label>
-                <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Acids & Bases — class notes" style={inputStyle} />
+                <input className="td-input-gold" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Acids & Bases — class notes" style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>Type</label>
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
+                <select className="td-input-gold" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
                   {RESOURCE_TYPES.map(rt => <option key={rt.id} value={rt.id}>{rt.icon} {rt.label}</option>)}
                 </select>
               </div>

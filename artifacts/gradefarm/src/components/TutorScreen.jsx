@@ -415,7 +415,7 @@ function AssignmentsTab({ profile, theme, subject }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Type</label>
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
+                <select className="td-input-gold" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
                   {ASSIGNMENT_TYPES.map(ty => <option key={ty} value={ty}>{ty}</option>)}
                 </select>
               </div>
@@ -1088,11 +1088,11 @@ function ClassesTab({ profile, theme }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Name *</label>
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Year 10 Chem - Tuesday" style={inputStyle} />
+                <input className="td-input-gold" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Year 10 Chem - Tuesday" style={inputStyle} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject (optional)</label>
-                <input value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={inputStyle} />
+                <input className="td-input-gold" value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={inputStyle} />
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14, marginBottom: 14 }}>
@@ -1102,7 +1102,7 @@ function ClassesTab({ profile, theme }) {
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Description</label>
-                <input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Optional notes about this class" style={inputStyle} />
+                <input className="td-input-gold" value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Optional notes about this class" style={inputStyle} />
               </div>
             </div>
             {createError && <div style={{ marginBottom: 10, fontSize: 12, color: '#f87171' }}>{createError}</div>}
@@ -1595,7 +1595,7 @@ function DiagnosticTab({ profile, theme }) {
               {/* Year level */}
               <div>
                 <label style={labelStyle}>Year Level</label>
-                <select value={yearLevel} onChange={e => { setYearLevel(e.target.value); setSelectedSubjectId(''); setSelectedTopics([]) }} style={inputStyle}>
+                <select className="td-input-gold" value={yearLevel} onChange={e => { setYearLevel(e.target.value); setSelectedSubjectId(''); setSelectedTopics([]) }} style={inputStyle}>
                   <option value="">Select year level…</option>
                   {YEAR_LEVEL_GROUPS.map(g => (
                     <optgroup key={g.label} label={g.label}>
@@ -1608,7 +1608,7 @@ function DiagnosticTab({ profile, theme }) {
               {/* Subject */}
               <div>
                 <label style={labelStyle}>Subject</label>
-                <select value={selectedSubjectId} onChange={e => { setSelectedSubjectId(e.target.value); setSelectedTopics([]) }} style={inputStyle} disabled={!yearLevel}>
+                <select className="td-input-gold" value={selectedSubjectId} onChange={e => { setSelectedSubjectId(e.target.value); setSelectedTopics([]) }} style={inputStyle} disabled={!yearLevel}>
                   <option value="">{yearLevel ? 'Select subject…' : 'Select a year level first…'}</option>
                   {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
@@ -1664,11 +1664,11 @@ function DiagnosticTab({ profile, theme }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label style={labelStyle}>Student Name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
-                  <input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
+                  <input className="td-input-gold" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
                 </div>
                 <div>
                   <label style={labelStyle}>Pre-Call Questionnaire URL <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
-                  <input value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
+                  <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Student is redirected here after completing the test</div>
                 </div>
               </div>
@@ -1781,11 +1781,11 @@ function DiagnosticTab({ profile, theme }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label style={labelStyle}>Student Name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
-                  <input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
+                  <input className="td-input-gold" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
                 </div>
                 <div>
                   <label style={labelStyle}>Pre-Call Questionnaire URL <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
-                  <input value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
+                  <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
                 </div>
               </div>
               {saveError && <div style={{ fontSize: 13, color: '#f87171' }}>{saveError}</div>}
