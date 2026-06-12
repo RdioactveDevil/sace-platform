@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { PDFDocument } from "pdf-lib";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { extractJsonArray } from "../lib/json-latex";
@@ -8,11 +9,12 @@ const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 const BUCKET = "curriculum-resources";
 
-// Claude's native PDF support accepts up to ~32 MB / 100 pages per request. The
-// upload bucket caps at 50 MB; we additionally refuse oversize PDFs up front so
-// the admin gets a clear message rather than an opaque Claude error. Whole-book
-// ingestion beyond this is a future enhancement (page-range chunking).
-const MAX_PDF_BYTES = 30 * 1024 * 1024;
+// Bucket cap. Whole textbooks up to this size are ingested by splitting into
+// page-range chunks; larger files must be split into volumes by the admin.
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+// Pages per chunk — kept well under Claude's ~100-page / 32 MB single-request
+// PDF limit so each chunk is one fast, reliable Claude call.
+const CHUNK_PAGES = 50;
 
 const RESOURCE_TYPES = new Set([
   "textbook",
@@ -34,6 +36,14 @@ type SubtopicRow = { topic_id: string; name: string };
 
 // Distilled exemplar pack as returned by Claude.
 type DistilledExemplar = { subtopic?: string; topic?: string; content?: string };
+
+// Where a resource's chunk sub-PDFs live in the bucket.
+function chunkDir(curriculumId: string, resourceId: string): string {
+  return `${curriculumId}/chunks/${resourceId}`;
+}
+function chunkPath(curriculumId: string, resourceId: string, index: number): string {
+  return `${chunkDir(curriculumId, resourceId)}/chunk_${index}.pdf`;
+}
 
 /**
  * Load a curriculum's topic → subtopic taxonomy so Claude can map document
@@ -58,7 +68,6 @@ async function loadTaxonomy(admin: SupabaseClient, curriculumId: string) {
     subRows = (subs ?? []) as SubtopicRow[];
   }
 
-  // subtopic name (lowercased) → { topic, subtopic } for resolving Claude output.
   const subtopicIndex = new Map<string, { topic: string; subtopic: string }>();
   const taxonomyLines: string[] = [];
   for (const t of topicRows) {
@@ -72,8 +81,8 @@ async function loadTaxonomy(admin: SupabaseClient, curriculumId: string) {
 }
 
 /**
- * Distill a source PDF into per-subtopic exemplar packs via Claude.
- * Returns the rows ready to insert into curriculum_resource_exemplars.
+ * Distill one PDF (whole document or a single page-range chunk) into
+ * per-subtopic exemplar packs via Claude.
  */
 async function distillExemplars(opts: {
   pdfBase64: string;
@@ -81,11 +90,13 @@ async function distillExemplars(opts: {
   resourceType: string;
   taxonomyText: string;
   subtopicIndex: Map<string, { topic: string; subtopic: string }>;
+  partNote?: string;
 }): Promise<{ subtopic: string | null; topic: string | null; content: string }[]> {
-  const { pdfBase64, subjectName, resourceType, taxonomyText, subtopicIndex } = opts;
+  const { pdfBase64, subjectName, resourceType, taxonomyText, subtopicIndex, partNote } = opts;
 
   const system = [
     `You are analysing a ${resourceType.replace("_", " ")} for the "${subjectName}" curriculum.`,
+    partNote ? partNote : "",
     "Your job is to turn this document into reusable EXEMPLAR PACKS that will guide an AI when it later writes new practice questions for this subject.",
     "Work out which of the curriculum subtopics below the document covers, and for EACH covered subtopic produce one exemplar pack.",
     "",
@@ -98,11 +109,13 @@ async function distillExemplars(opts: {
     "  1. 2–4 representative SAMPLE QUESTIONS drawn from or closely modelled on the document, written in its authentic style (keep the wording, structure and command words faithful).",
     "  2. A short STYLE NOTES section: typical difficulty/calibration, key terminology and notation, question formats used, command words, marking style and any scope limits evident in the document.",
     "Keep each pack under ~1200 characters. Be concrete and specific to the document — do not give generic advice.",
-    "Only emit a pack for a subtopic the document genuinely covers. It is fine to return fewer packs than there are subtopics.",
+    "Only emit a pack for a subtopic this document genuinely covers. If it covers nothing relevant, return an empty array [].",
     "",
     "Curriculum subtopics (use these EXACT names):",
-    taxonomyText || "(no subtopics provided — use \"GENERAL\" for everything)",
-  ].join("\n");
+    taxonomyText || '(no subtopics provided — use "GENERAL" for everything)',
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const anthropicBase = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const anthropicKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
@@ -140,9 +153,6 @@ async function distillExemplars(opts: {
   const raw = data?.content?.[0]?.text || "";
   const parsed = extractJsonArray(raw) as DistilledExemplar[];
 
-  // Resolve each pack's subtopic onto the canonical taxonomy. Unknown names that
-  // aren't "GENERAL" are stored as subject-wide (subtopic null) rather than
-  // dropped, so nothing useful is lost.
   const rows: { subtopic: string | null; topic: string | null; content: string }[] = [];
   for (const ex of parsed) {
     const content = (ex.content || "").trim();
@@ -153,19 +163,57 @@ async function distillExemplars(opts: {
       continue;
     }
     const match = subtopicIndex.get(rawName.toLowerCase());
-    if (match) {
-      rows.push({ subtopic: match.subtopic, topic: match.topic, content });
-    } else {
-      rows.push({ subtopic: null, topic: null, content });
-    }
+    rows.push(
+      match
+        ? { subtopic: match.subtopic, topic: match.topic, content }
+        : { subtopic: null, topic: null, content },
+    );
   }
   return rows;
 }
 
-// ── Create + process a resource ──────────────────────────────────────────────
-// The client uploads the PDF to the curriculum-resources bucket, then calls this
-// with the storage path. We register the resource, distill exemplars with Claude
-// (synchronously, like /extract-pdf), and return the final status.
+/** Persist distilled exemplar packs for a resource. Returns the count inserted. */
+async function insertExemplars(
+  admin: SupabaseClient,
+  resourceId: string,
+  curriculumId: string,
+  subject: string,
+  rows: { subtopic: string | null; topic: string | null; content: string }[],
+): Promise<number> {
+  if (!rows.length) return 0;
+  const insertRows = rows.map((r) => ({
+    resource_id: resourceId,
+    curriculum_id: curriculumId,
+    subject,
+    topic: r.topic,
+    subtopic: r.subtopic,
+    content: r.content,
+    enabled: true,
+  }));
+  const { error } = await admin.from("curriculum_resource_exemplars").insert(insertRows);
+  if (error) throw new Error(error.message);
+  return rows.length;
+}
+
+/** Best-effort removal of a resource's chunk sub-PDFs. */
+async function removeChunkFiles(admin: SupabaseClient, curriculumId: string, resourceId: string) {
+  try {
+    const dir = chunkDir(curriculumId, resourceId);
+    const { data: files } = await admin.storage.from(BUCKET).list(dir);
+    if (files && files.length) {
+      await admin.storage.from(BUCKET).remove(files.map((f) => `${dir}/${f.name}`));
+    }
+  } catch {
+    /* ignore cleanup failures */
+  }
+}
+
+// ── Create + (small files) process a resource ────────────────────────────────
+// The client uploads the PDF to the curriculum-resources bucket, then calls
+// this with the storage path. Small documents are distilled inline and returned
+// as 'ready'. Large documents (multi-chunk textbooks) are split into page-range
+// sub-PDFs here and returned as 'processing'; the client then drives
+// /process-chunk once per chunk so no single request exceeds the serverless cap.
 router.post("/curriculum-resources", async (req, res) => {
   const { curriculumId, storagePath, filename, fileSize, mimeType, title, resourceType } = req.body as {
     curriculumId?: string;
@@ -183,7 +231,7 @@ router.post("/curriculum-resources", async (req, res) => {
   }
   if (typeof fileSize === "number" && fileSize > MAX_PDF_BYTES) {
     res.status(400).json({
-      error: `PDF too large for ingestion (${Math.round((fileSize / (1024 * 1024)) * 10) / 10} MB). Max ${MAX_PDF_BYTES / (1024 * 1024)} MB — split large textbooks into chapters and upload each.`,
+      error: `PDF too large (${Math.round((fileSize / (1024 * 1024)) * 10) / 10} MB). Max ${MAX_PDF_BYTES / (1024 * 1024)} MB — split very large textbooks into volumes.`,
     });
     return;
   }
@@ -203,7 +251,6 @@ router.post("/curriculum-resources", async (req, res) => {
   const type = resourceType && RESOURCE_TYPES.has(resourceType) ? resourceType : "resource";
   const resolvedTitle = (title || filename || "Untitled resource").trim();
 
-  // Register the resource row first so it shows up immediately as "processing".
   const { data: resource, error: insErr } = await admin
     .from("curriculum_resources")
     .insert({
@@ -226,44 +273,156 @@ router.post("/curriculum-resources", async (req, res) => {
   const resourceId = resource.id;
 
   try {
-    // Download the PDF (retained in the bucket — not removed afterwards).
     const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(storagePath);
     if (dlErr || !blob) throw new Error(dlErr?.message || "Failed to download PDF from storage");
-    const pdfBase64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+    const pdfBytes = new Uint8Array(await blob.arrayBuffer());
 
-    const { taxonomyText, subtopicIndex } = await loadTaxonomy(admin, curriculumId);
+    const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const pageCount = srcDoc.getPageCount();
+    const totalChunks = Math.max(1, Math.ceil(pageCount / CHUNK_PAGES));
 
-    const exemplarRows = await distillExemplars({
-      pdfBase64,
-      subjectName: curr.name,
-      resourceType: type,
-      taxonomyText,
-      subtopicIndex,
-    });
+    // Small document → one Claude call inline, mark ready.
+    if (totalChunks === 1) {
+      const { taxonomyText, subtopicIndex } = await loadTaxonomy(admin, curriculumId);
+      const rows = await distillExemplars({
+        pdfBase64: Buffer.from(pdfBytes).toString("base64"),
+        subjectName: curr.name,
+        resourceType: type,
+        taxonomyText,
+        subtopicIndex,
+      });
+      const count = await insertExemplars(admin, resourceId, curriculumId, curr.name, rows);
+      await admin
+        .from("curriculum_resources")
+        .update({ status: "ready", exemplar_count: count, total_chunks: 1, processed_chunks: 1, error: null })
+        .eq("id", resourceId);
+      res.status(200).json({ id: resourceId, status: "ready", exemplars: count, totalChunks: 1, processedChunks: 1 });
+      return;
+    }
 
-    if (exemplarRows.length > 0) {
-      const insertRows = exemplarRows.map((r) => ({
-        resource_id: resourceId,
-        curriculum_id: curriculumId,
-        subject: curr.name,
-        topic: r.topic,
-        subtopic: r.subtopic,
-        content: r.content,
-        enabled: true,
-      }));
-      const { error: exErr } = await admin.from("curriculum_resource_exemplars").insert(insertRows);
-      if (exErr) throw new Error(exErr.message);
+    // Large document → split into page-range sub-PDFs and hand back to the client.
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_PAGES;
+      const end = Math.min(start + CHUNK_PAGES, pageCount);
+      const chunkDoc = await PDFDocument.create();
+      const copied = await chunkDoc.copyPages(srcDoc, Array.from({ length: end - start }, (_, k) => start + k));
+      copied.forEach((p) => chunkDoc.addPage(p));
+      const chunkBytes = await chunkDoc.save();
+      const { error: upErr } = await admin.storage
+        .from(BUCKET)
+        .upload(chunkPath(curriculumId, resourceId, i), chunkBytes, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+      if (upErr) throw new Error(`Failed to store chunk ${i}: ${upErr.message}`);
     }
 
     await admin
       .from("curriculum_resources")
-      .update({ status: "ready", exemplar_count: exemplarRows.length, error: null })
+      .update({ total_chunks: totalChunks, processed_chunks: 0, error: null })
       .eq("id", resourceId);
 
-    res.status(200).json({ id: resourceId, status: "ready", exemplars: exemplarRows.length });
+    res.status(200).json({ id: resourceId, status: "processing", totalChunks, processedChunks: 0 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Processing failed";
-    logger.error({ err, resourceId }, "[curriculum-resources] distillation failed");
+    logger.error({ err, resourceId }, "[curriculum-resources] setup failed");
+    await admin
+      .from("curriculum_resources")
+      .update({ status: "failed", error: message.slice(0, 500) })
+      .eq("id", resourceId);
+    res.status(500).json({ id: resourceId, status: "failed", error: message });
+  }
+});
+
+// ── Process a single page-range chunk of a large resource ────────────────────
+// Driven by the client once per chunk. Each call is one Claude request, keeping
+// whole-textbook ingestion within the serverless time limit.
+router.post("/curriculum-resources/:id/process-chunk", async (req, res) => {
+  const resourceId = String(req.params.id);
+  const chunkIndex = Number((req.body as { chunkIndex?: number })?.chunkIndex);
+  if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+    res.status(400).json({ error: "chunkIndex (non-negative integer) is required" });
+    return;
+  }
+
+  const admin = getAdmin();
+  const { data: resource } = await admin
+    .from("curriculum_resources")
+    .select("id, curriculum_id, resource_type, total_chunks, processed_chunks, exemplar_count")
+    .eq("id", resourceId)
+    .maybeSingle<{
+      id: string;
+      curriculum_id: string;
+      resource_type: string;
+      total_chunks: number | null;
+      processed_chunks: number;
+      exemplar_count: number;
+    }>();
+  if (!resource) {
+    res.status(404).json({ error: "Resource not found" });
+    return;
+  }
+  const totalChunks = resource.total_chunks ?? 0;
+  if (chunkIndex >= totalChunks) {
+    res.status(400).json({ error: `chunkIndex out of range (total ${totalChunks})` });
+    return;
+  }
+
+  const { data: curr } = await admin
+    .from("curricula")
+    .select("name")
+    .eq("id", resource.curriculum_id)
+    .maybeSingle<{ name: string }>();
+  if (!curr) {
+    res.status(404).json({ error: "Curriculum not found" });
+    return;
+  }
+
+  try {
+    const { data: blob, error: dlErr } = await admin.storage
+      .from(BUCKET)
+      .download(chunkPath(resource.curriculum_id, resourceId, chunkIndex));
+    if (dlErr || !blob) throw new Error(dlErr?.message || `Chunk ${chunkIndex} missing from storage`);
+    const pdfBase64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+
+    const { taxonomyText, subtopicIndex } = await loadTaxonomy(admin, resource.curriculum_id);
+    const rows = await distillExemplars({
+      pdfBase64,
+      subjectName: curr.name,
+      resourceType: resource.resource_type,
+      taxonomyText,
+      subtopicIndex,
+      partNote: `This is part ${chunkIndex + 1} of ${totalChunks} of a larger document. Only produce packs for subtopics covered in THIS part.`,
+    });
+    const added = await insertExemplars(admin, resourceId, resource.curriculum_id, curr.name, rows);
+
+    // Sequential client → processed advances to chunkIndex + 1.
+    const processed = Math.max(resource.processed_chunks, chunkIndex + 1);
+    const exemplarCount = (resource.exemplar_count || 0) + added;
+    const done = processed >= totalChunks;
+
+    await admin
+      .from("curriculum_resources")
+      .update({
+        processed_chunks: processed,
+        exemplar_count: exemplarCount,
+        status: done ? "ready" : "processing",
+      })
+      .eq("id", resourceId);
+
+    if (done) await removeChunkFiles(admin, resource.curriculum_id, resourceId);
+
+    res.status(200).json({
+      id: resourceId,
+      status: done ? "ready" : "processing",
+      processedChunks: processed,
+      totalChunks,
+      exemplars: exemplarCount,
+      addedThisChunk: added,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Chunk processing failed";
+    logger.error({ err, resourceId, chunkIndex }, "[curriculum-resources] chunk distillation failed");
     await admin
       .from("curriculum_resources")
       .update({ status: "failed", error: message.slice(0, 500) })
@@ -283,7 +442,9 @@ router.get("/curriculum-resources", async (req, res) => {
     const admin = getAdmin();
     const { data, error } = await admin
       .from("curriculum_resources")
-      .select("id, title, resource_type, file_name, file_size, status, error, exemplar_count, created_at")
+      .select(
+        "id, title, resource_type, file_name, file_size, status, error, exemplar_count, total_chunks, processed_chunks, created_at",
+      )
       .eq("curriculum_id", curriculumId)
       .order("created_at", { ascending: false });
     if (error) {
@@ -296,16 +457,16 @@ router.get("/curriculum-resources", async (req, res) => {
   }
 });
 
-// ── Delete a resource (cascades to its exemplars + removes the file) ──────────
+// ── Delete a resource (cascades to its exemplars + removes its files) ─────────
 router.delete("/curriculum-resources/:id", async (req, res) => {
   const id = String(req.params.id);
   try {
     const admin = getAdmin();
     const { data: row } = await admin
       .from("curriculum_resources")
-      .select("id, storage_path")
+      .select("id, curriculum_id, storage_path")
       .eq("id", id)
-      .maybeSingle<{ id: string; storage_path: string | null }>();
+      .maybeSingle<{ id: string; curriculum_id: string; storage_path: string | null }>();
     if (!row) {
       res.status(404).json({ error: "Resource not found" });
       return;
@@ -313,6 +474,7 @@ router.delete("/curriculum-resources/:id", async (req, res) => {
     if (row.storage_path) {
       await admin.storage.from(BUCKET).remove([row.storage_path]).catch(() => {});
     }
+    await removeChunkFiles(admin, row.curriculum_id, id);
     // Exemplars cascade via the FK on delete.
     const { error } = await admin.from("curriculum_resources").delete().eq("id", id);
     if (error) {

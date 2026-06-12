@@ -38,6 +38,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
   const [resources, setResources] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(null)
   const [file, setFile] = useState(null)
   const [resourceType, setResourceType] = useState('textbook')
   const [error, setError] = useState(null)
@@ -63,9 +64,13 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
   const handleUpload = async () => {
     if (!file) return
     setUploading(true)
+    setProgress(null)
     setError(null)
     try {
-      await uploadCurriculumResource(curriculumId, file, { resourceType })
+      await uploadCurriculumResource(curriculumId, file, {
+        resourceType,
+        onProgress: (done, total) => setProgress(total > 1 ? { done, total } : null),
+      })
       setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       await refresh()
@@ -74,6 +79,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
       await refresh()
     } finally {
       setUploading(false)
+      setProgress(null)
     }
   }
 
@@ -95,7 +101,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         Reference Resources
       </div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-        Upload textbooks, past exams or practice tests (PDF, up to 50 MB). Claude reads each one, works out which subtopics it covers, and distills exemplar questions + style notes that steer question generation for this subject.
+        Upload whole textbooks, past exams or practice tests (PDF, up to 50 MB). Large books are split into page ranges automatically. Claude reads each one, works out which subtopics it covers, and distills exemplar questions + style notes that steer question generation for this subject.
       </div>
 
       {/* Upload row */}
@@ -146,7 +152,9 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
 
       {uploading && (
         <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
-          Reading the document and distilling exemplars — this can take up to a minute for large files.
+          {progress
+            ? `Distilling part ${progress.done} of ${progress.total} — keep this tab open for whole textbooks.`
+            : 'Reading the document and distilling exemplars — this can take up to a minute for large files.'}
         </div>
       )}
 
@@ -159,6 +167,9 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {resources.map(r => {
             const st = STATUS_STYLE[r.status] || STATUS_STYLE.processing
+            const statusLabel = r.status === 'processing' && r.total_chunks > 1
+              ? `Processing ${r.processed_chunks || 0}/${r.total_chunks}`
+              : st.label
             const typeLabel = (RESOURCE_TYPES.find(t => t.value === r.resource_type) || {}).label || r.resource_type
             return (
               <div key={r.id} style={{
@@ -179,7 +190,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
                     </div>
                   )}
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: st.color, flexShrink: 0 }}>{st.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: st.color, flexShrink: 0 }}>{statusLabel}</span>
                 <button
                   onClick={() => handleDelete(r.id)}
                   title="Delete resource and its exemplars"

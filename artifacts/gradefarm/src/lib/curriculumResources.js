@@ -31,8 +31,14 @@ export async function listCurriculumResources(curriculumId) {
 /**
  * Upload a PDF to the curriculum-resources bucket, then ask the API to distill
  * per-subtopic exemplar packs from it. Resolves once processing completes.
+ *
+ * Whole textbooks are split server-side into page-range chunks; this drives one
+ * /process-chunk request per chunk (each is a single Claude call, keeping every
+ * request under the serverless time limit) and reports progress via onProgress.
+ *
+ * @param {(processed: number, total: number) => void} [onProgress]
  */
-export async function uploadCurriculumResource(curriculumId, file, { title, resourceType } = {}) {
+export async function uploadCurriculumResource(curriculumId, file, { title, resourceType, onProgress } = {}) {
   if (file.size > MAX_RESOURCE_BYTES) {
     throw new Error(`PDF too large (${Math.round((file.size / (1024 * 1024)) * 10) / 10} MB). Max 50 MB.`)
   }
@@ -43,7 +49,7 @@ export async function uploadCurriculumResource(curriculumId, file, { title, reso
     .upload(storagePath, file, { contentType: 'application/pdf', upsert: false })
   if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`)
 
-  return adminApiPost('/api/curriculum-resources', {
+  const res = await adminApiPost('/api/curriculum-resources', {
     curriculumId,
     storagePath,
     filename: file.name,
@@ -52,6 +58,24 @@ export async function uploadCurriculumResource(curriculumId, file, { title, reso
     title: title || file.name,
     resourceType: resourceType || 'resource',
   })
+
+  // Small document: distilled inline, already done.
+  if (res.status === 'ready' || !res.totalChunks || res.totalChunks <= 1) {
+    onProgress?.(res.processedChunks ?? 1, res.totalChunks ?? 1)
+    return res
+  }
+
+  // Large document: drive each remaining chunk to completion.
+  const total = res.totalChunks
+  let processed = res.processedChunks || 0
+  onProgress?.(processed, total)
+  let last = res
+  for (let i = processed; i < total; i++) {
+    last = await adminApiPost(`/api/curriculum-resources/${res.id}/process-chunk`, { chunkIndex: i })
+    processed = last.processedChunks ?? i + 1
+    onProgress?.(processed, total)
+  }
+  return last
 }
 
 /** Delete a resource and all exemplar packs distilled from it. */
