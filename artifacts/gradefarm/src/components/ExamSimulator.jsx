@@ -9,6 +9,7 @@ import TableView from './TableView'
 import DiagramView from './DiagramView'
 import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock from './QuizToolsDock'
+import StimulusPane from './StimulusPane'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -277,6 +278,22 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
   const urgent = timeLeft <= 30
   const answeredCount = section.questions.filter((qq) => answers[qq.id] !== undefined && answers[qq.id] !== null && !(Array.isArray(answers[qq.id]) && answers[qq.id].length === 0)).length
 
+  // Stimulus for the current question (GAMSAT split-pane).
+  const stimulus = q.stimulus_id && section.stimuli?.[q.stimulus_id]
+
+  // Build navigator groups: consecutive questions sharing the same stimulus_id
+  // are placed under a common header so students can see the unit set structure.
+  const navGroups = []
+  let lastSid = '__none__'
+  section.questions.forEach((qq, i) => {
+    const sid = qq.stimulus_id || null
+    if (sid !== lastSid) {
+      navGroups.push({ stimId: sid, items: [] })
+      lastSid = sid
+    }
+    navGroups[navGroups.length - 1].items.push({ qq, i })
+  })
+
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
@@ -292,10 +309,23 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, flexWrap: 'wrap' }}>
-        {/* Question */}
-        <div style={{ flex: 1, minWidth: 280, padding: '24px 20px', overflowY: 'auto' }}>
-          <div style={{ maxWidth: 620, margin: '0 auto' }}>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+        {/* Stimulus pane — left, only shown when the current question has a stimulus */}
+        {stimulus && (
+          <div style={{
+            width: '42%', minWidth: 280, flexShrink: 0,
+            borderRight: `1px solid ${t.border}`,
+            background: t.bgSubtle,
+            padding: '20px 22px',
+            overflowY: 'auto',
+          }}>
+            <StimulusPane stimulus={stimulus} theme={theme} />
+          </div>
+        )}
+
+        {/* Question panel */}
+        <div style={{ flex: 1, minWidth: 240, padding: '24px 20px', overflowY: 'auto' }}>
+          <div style={{ maxWidth: stimulus ? 560 : 620, margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 700 }}>Question {qIdx + 1} of {section.questions.length}</span>
               <button onClick={() => toggleFlag(q.id)} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, border: `1px solid ${flagged.has(q.id) ? t.borderAccent : t.border}`, background: flagged.has(q.id) ? t.accentGlow : 'transparent', color: flagged.has(q.id) ? GOLD : t.textMuted }}>
@@ -314,29 +344,38 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
           </div>
         </div>
 
-        {/* Navigator */}
-        <div style={{ width: 200, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, padding: 18, overflowY: 'auto' }}>
+        {/* Navigator — groups stimulus-set questions under a shared header */}
+        <div style={{ width: 188, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, padding: 16, overflowY: 'auto' }}>
           <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Questions</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>{answeredCount}/{section.questions.length} answered</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
-            {section.questions.map((qq, i) => {
-              const isAnswered = answers[qq.id] !== undefined && answers[qq.id] !== null && !(Array.isArray(answers[qq.id]) && answers[qq.id].length === 0)
-              const isFlagged = flagged.has(qq.id)
-              const isCurrent = i === qIdx
-              return (
-                <button key={qq.id} onClick={() => setQIdx(i)}
-                  style={{
-                    aspectRatio: '1', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, position: 'relative',
-                    border: `1px solid ${isCurrent ? GOLD : isAnswered ? t.success + '55' : t.border}`,
-                    background: isCurrent ? t.accentGlow : isAnswered ? t.successBg : t.bgCard,
-                    color: isCurrent ? GOLD : isAnswered ? t.success : t.textMuted,
-                  }}>
-                  {i + 1}
-                  {isFlagged && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 10 }}>⚑</span>}
-                </button>
-              )
-            })}
-          </div>
+          {navGroups.map((grp, gi) => (
+            <div key={gi} style={{ marginBottom: 10 }}>
+              {grp.stimId && section.stimuli?.[grp.stimId] && (
+                <div style={{ fontSize: 9, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, paddingBottom: 3, borderBottom: `1px solid ${t.border}` }}>
+                  {section.stimuli[grp.stimId].title || `Stimulus ${gi + 1}`}
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>
+                {grp.items.map(({ qq, i }) => {
+                  const isAnswered = answers[qq.id] !== undefined && answers[qq.id] !== null && !(Array.isArray(answers[qq.id]) && answers[qq.id].length === 0)
+                  const isFlagged = flagged.has(qq.id)
+                  const isCurrent = i === qIdx
+                  return (
+                    <button key={qq.id} onClick={() => setQIdx(i)}
+                      style={{
+                        aspectRatio: '1', borderRadius: 7, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, position: 'relative',
+                        border: `1px solid ${isCurrent ? GOLD : isAnswered ? t.success + '55' : t.border}`,
+                        background: isCurrent ? t.accentGlow : isAnswered ? t.successBg : t.bgCard,
+                        color: isCurrent ? GOLD : isAnswered ? t.success : t.textMuted,
+                      }}>
+                      {i + 1}
+                      {isFlagged && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 9 }}>⚑</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

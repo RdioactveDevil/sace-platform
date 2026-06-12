@@ -15,6 +15,8 @@ export default function GraphView({ graph, theme }) {
     points = [],
     xRange = [-5, 5],
     yRange = [-6, 6],
+    xLabel,
+    yLabel,
   } = graph || {}
 
   const [xMin, xMax] = xRange
@@ -148,8 +150,10 @@ export default function GraphView({ graph, theme }) {
         <polygon points={`${axisX},${PAD.top} ${axisX - 4},${PAD.top + 7} ${axisX + 4},${PAD.top + 7}`} fill={axisColor} />
 
         {/* Axis labels */}
-        <text x={PAD.left + PLOT_W - 4} y={axisY + 28} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">x</text>
-        <text x={axisX + 6} y={PAD.top + 4} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">y</text>
+        <text x={PAD.left + PLOT_W / 2} y={SVG_H - 2} fontSize={10} fill={axisColor} fontFamily="system-ui, sans-serif" textAnchor="middle" fontStyle={xLabel ? 'normal' : 'italic'}>{xLabel || 'x'}</text>
+        {yLabel
+          ? <text transform={`translate(${10},${PAD.top + PLOT_H / 2}) rotate(-90)`} fontSize={10} fill={axisColor} fontFamily="system-ui, sans-serif" textAnchor="middle">{yLabel}</text>
+          : <text x={axisX + 6} y={PAD.top + 4} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">y</text>}
       </svg>
     </div>
   )
