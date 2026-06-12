@@ -54,6 +54,15 @@ function convertUnicodeSuperscripts(text) {
 }
 
 /**
+ * KaTeX needs an exponent grouped in braces, otherwise a bare `e^(-0.5x)`
+ * raises only the "(" to the power. Rewrite `^(...)` → `^{(...)}` so the whole
+ * parenthesised expression is treated as the exponent.
+ */
+function groupParenExponents(str) {
+  return str.replace(/\^\(([^()]*)\)/g, '^{($1)}')
+}
+
+/**
  * Auto-detect math expressions not already wrapped in $ delimiters.
  * Handles two cases:
  *   A. Pure math strings (answer options like "e^x", "(x+2)e^x") — wrap entirely.
@@ -85,7 +94,7 @@ function autoWrapMath(rawText) {
       /\(([^()]+)\)\/\(([^()]+)\)/g,
       (m, num, den) => (/[\d^+\-]/.test(num) || /[\d^+\-]/.test(den)) ? `\\frac{${num}}{${den}}` : m,
     )
-    return `$${withFrac.trim()}$`
+    return `$${groupParenExponents(withFrac.trim())}$`
   }
 
   // Mixed text: convert (a)/(b) to $\frac{a}{b}$ first, then wrap remaining
@@ -98,10 +107,10 @@ function autoWrapMath(rawText) {
   )
 
   result = applyOutsideMath(result, (seg) => {
-    // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x.
+    // Exponent expressions: x^2, xe^x, e^{2x}, (x+1)^2, (x + 2)e^x, e^(-0.5x).
     seg = seg.replace(
-      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
-      (m) => `$${m}$`,
+      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|\([^()]*\)|[a-zA-Z0-9]+)/g,
+      (m) => `$${groupParenExponents(m)}$`,
     )
     // Derivative notation: f'(x), f''(x), g'(t)
     seg = seg.replace(
