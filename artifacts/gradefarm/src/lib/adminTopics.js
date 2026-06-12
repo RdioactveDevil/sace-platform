@@ -1,6 +1,8 @@
 // Managed curricula cache — populated from DB on admin dashboard mount.
 // Keys: curriculum names (e.g. "Year 9 Biology").
 // Values: arrays of { code, name, topicName }.
+import { bankSubjectAliases, normalizeSubjectStorageKey } from './subjects.js'
+
 let _managedTopicsCache = {}
 
 export async function refreshManagedTopicsCache(fetcher) {
@@ -25,14 +27,46 @@ export function getTopicsBySubject(subjectId) {
 }
 
 /**
- * Reverse lookup: topic name → topic code.
+ * Resolve a `questions.subject` row spelling (e.g. "SACE Stage 2 Mathematical
+ * Methods : ") to the managed curriculum name the topics cache is keyed by.
+ * Question rows can store any alias spelling of the curriculum name, so an
+ * exact key match isn't enough — compare the alias expansions of both sides.
+ * @param {string} rawSubject
+ * @returns {string|null} the cache key, or null when nothing matches
+ */
+export function resolveManagedSubjectName(rawSubject) {
+  const raw = normalizeSubjectStorageKey(rawSubject).toLowerCase()
+  if (!raw) return null
+  const keys = Object.keys(_managedTopicsCache)
+
+  // Fast path: exact (normalised) match.
+  for (const key of keys) {
+    if (normalizeSubjectStorageKey(key).toLowerCase() === raw) return key
+  }
+
+  // Alias match: intersect the spellings either side could appear under.
+  const rawAliases = new Set(
+    bankSubjectAliases(rawSubject, '').map(a => normalizeSubjectStorageKey(a).toLowerCase()),
+  )
+  rawAliases.add(raw)
+  for (const key of keys) {
+    const keyAliases = bankSubjectAliases(key, '').map(a => normalizeSubjectStorageKey(a).toLowerCase())
+    if (keyAliases.some(a => rawAliases.has(a))) return key
+  }
+  return null
+}
+
+/**
+ * Reverse lookup: topic name → topic code. Subject may be any alias spelling
+ * of the curriculum name (question rows store legacy variants).
  * @param {string} subject
  * @param {string} topicName
  * @returns {string|null}
  */
 export function getTopicCodeByName(subject, topicName) {
-  const topics = getTopicsBySubject(subject)
-  if (!topics || !topicName) return null
+  const key = resolveManagedSubjectName(subject)
+  const topics = key ? getTopicsBySubject(key) : []
+  if (!topics.length || !topicName) return null
   const norm = topicName.trim().toLowerCase()
   const match = topics.find(t => t.name.trim().toLowerCase() === norm)
   return match?.code ?? null

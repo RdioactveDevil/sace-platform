@@ -23,7 +23,7 @@ import {
   completeAssignment,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
-import { getTopicCodeByName } from '../lib/adminTopics'
+import { getTopicCodeByName, resolveManagedSubjectName } from '../lib/adminTopics'
 import {
   withTimeout,
   normalizeVariantRecord,
@@ -353,6 +353,11 @@ export default function QuizScreen({
   const [showExit, setShowExit] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const [generatingMore, setGeneratingMore] = useState(false)
+  // Bumped on every in-summary session restart so the bank-exhaustion effect
+  // re-evaluates even when `finished` stays true across the restart (pool was
+  // already empty: setFinished(false) + loadNext→setFinished(true) batch to a
+  // true→true non-transition that would otherwise never re-fire the effect).
+  const [sessionEpoch, setSessionEpoch] = useState(0)
   const generatingMoreRef = useRef(false)
   const bankExhaustionAttempted = useRef(false)
   const backgroundPrefetchAttempted = useRef(false)
@@ -625,6 +630,32 @@ export default function QuizScreen({
     if (!finished && _currentQ) sessionCompletedRef.current = false
   }, [_currentQ, finished])
 
+  // Resolve the generation target (canonical subject + topic code) for the
+  // bank exhaustion / prefetch handlers. Question rows can store alias
+  // spellings of the curriculum name, so the subject is resolved against the
+  // managed topics cache; the user's selected subtopics take priority over
+  // the last-answered question so a session that starts on an already
+  // exhausted subtopic still generates for the right one.
+  const getGenerationTarget = () => {
+    const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
+    const lastQ =
+      (lastMain ? questions.find(q => q.id === lastMain.id) : null) ||
+      (effectiveSubtopics.length > 0
+        ? questions.find(q => effectiveSubtopics.includes(q.subtopic))
+        : null) ||
+      questions[0]
+    const rawSubject = lastQ?.subject
+    const subject = resolveManagedSubjectName(rawSubject) || rawSubject
+    const subtopicName =
+      lastQ?.subtopic && (effectiveSubtopics.length === 0 || effectiveSubtopics.includes(lastQ.subtopic))
+        ? lastQ.subtopic
+        : effectiveSubtopics[0]
+    if (!subject || !subtopicName) return null
+    const topicCode = getTopicCodeByName(subject, subtopicName)
+    if (!topicCode) return null
+    return { subject, topicCode }
+  }
+
   // Bank exhaustion: when 'new' or 'all' (Repeat selected) mode runs out of
   // questions, generate more via AI and persist them directly to the live
   // questions table so they're reusable.
@@ -634,15 +665,9 @@ export default function QuizScreen({
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
 
-    // Derive subject + subtopic from the most-recently-answered main question.
-    const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
-    const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
-    const subject     = lastQ?.subject
-    const subtopicName = lastQ?.subtopic
-    if (!subject || !subtopicName) return
-
-    const topicCode = getTopicCodeByName(subject, subtopicName)
-    if (!topicCode) return
+    const target = getGenerationTarget()
+    if (!target) return
+    const { subject, topicCode } = target
 
     generatingMoreRef.current = true
     bankExhaustionAttempted.current = true
@@ -679,7 +704,7 @@ export default function QuizScreen({
         setGeneratingMore(false)
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished])
+  }, [finished, sessionEpoch])
 
   // Background prefetch: when the available question pool drops to ≤ 3, silently
   // generate more questions in the background so the bank is replenished before
@@ -703,15 +728,9 @@ export default function QuizScreen({
 
     if (remaining > 3) return   // still plenty — don't prefetch yet
 
-    // Derive subject + subtopic from the most-recently-answered main question.
-    const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
-    const lastQ = lastMain ? questions.find(q => q.id === lastMain.id) : questions[0]
-    const subject      = lastQ?.subject
-    const subtopicName = lastQ?.subtopic
-    if (!subject || !subtopicName) return
-
-    const topicCode = getTopicCodeByName(subject, subtopicName)
-    if (!topicCode) return
+    const target = getGenerationTarget()
+    if (!target) return
+    const { subject, topicCode } = target
 
     backgroundPrefetchAttempted.current = true
 
@@ -1218,6 +1237,7 @@ export default function QuizScreen({
       bankExhaustionAttempted.current = false
       backgroundPrefetchAttempted.current = false
       setGeneratingMore(false)
+      setSessionEpoch(e => e + 1)
       setQuizMode(mode)
       setSessionAnswered([])
       setSessionResults([])

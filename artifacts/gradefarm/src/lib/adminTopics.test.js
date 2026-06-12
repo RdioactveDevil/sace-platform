@@ -1,6 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { getTopicsBySubject, refreshManagedTopicsCache, getManagedSubjectNames } from './adminTopics.js'
+import {
+  getTopicsBySubject,
+  refreshManagedTopicsCache,
+  getManagedSubjectNames,
+  resolveManagedSubjectName,
+  getTopicCodeByName,
+} from './adminTopics.js'
 
 test('getTopicsBySubject returns empty array for unknown subject when cache is empty', () => {
   const result = getTopicsBySubject('Unknown Subject XYZ')
@@ -24,4 +30,32 @@ test('refreshManagedTopicsCache + getTopicsBySubject returns cached topics', asy
 test('getManagedSubjectNames returns cached subject names', () => {
   const names = getManagedSubjectNames()
   assert.ok(names.includes('Year 9 Biology'))
+})
+
+test('resolveManagedSubjectName matches alias spellings of the curriculum name', async () => {
+  await refreshManagedTopicsCache(async () => ({
+    'Mathematical Methods Stage 2': [
+      { code: 'T1.1', name: 'Exponential Functions', topicName: 'Further Differentiation' },
+    ],
+  }))
+  // Exact key
+  assert.equal(resolveManagedSubjectName('Mathematical Methods Stage 2'), 'Mathematical Methods Stage 2')
+  // Reordered + SACE-prefixed row spellings
+  assert.equal(resolveManagedSubjectName('Stage 2 Mathematical Methods'), 'Mathematical Methods Stage 2')
+  assert.equal(resolveManagedSubjectName('SACE Stage 2 Mathematical Methods'), 'Mathematical Methods Stage 2')
+  // Legacy trailing-junk spelling
+  assert.equal(resolveManagedSubjectName('SACE Stage 2 Mathematical Methods : '), 'Mathematical Methods Stage 2')
+  // Unknown subject
+  assert.equal(resolveManagedSubjectName('Stage 1 Biology'), null)
+})
+
+test('getTopicCodeByName works with alias subject spellings', async () => {
+  await refreshManagedTopicsCache(async () => ({
+    'Mathematical Methods Stage 2': [
+      { code: 'T1.1', name: 'Exponential Functions', topicName: 'Further Differentiation' },
+    ],
+  }))
+  assert.equal(getTopicCodeByName('SACE Stage 2 Mathematical Methods', 'Exponential Functions'), 'T1.1')
+  assert.equal(getTopicCodeByName('Stage 2 Mathematical Methods', 'exponential functions'), 'T1.1')
+  assert.equal(getTopicCodeByName('Stage 2 Mathematical Methods', 'Nonexistent Subtopic'), null)
 })
