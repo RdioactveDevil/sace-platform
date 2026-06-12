@@ -625,10 +625,11 @@ export default function QuizScreen({
     if (!finished && _currentQ) sessionCompletedRef.current = false
   }, [_currentQ, finished])
 
-  // Bank exhaustion: when 'new' mode runs out of questions, generate more via AI
-  // and persist them directly to the live questions table so they're reusable.
+  // Bank exhaustion: when 'new' or 'all' (Repeat selected) mode runs out of
+  // questions, generate more via AI and persist them directly to the live
+  // questions table so they're reusable.
   useEffect(() => {
-    if (!finished || quizMode !== 'new') return
+    if (!finished || (quizMode !== 'new' && quizMode !== 'all')) return
     if (generatingMoreRef.current) return
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
@@ -680,20 +681,24 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished])
 
-  // Background prefetch: when the unseen question pool drops to ≤ 3, silently
+  // Background prefetch: when the available question pool drops to ≤ 3, silently
   // generate more questions in the background so the bank is replenished before
   // the user reaches the end — they never see a loading screen.
   useEffect(() => {
-    if (finished || quizMode !== 'new') return
+    if (finished || (quizMode !== 'new' && quizMode !== 'all')) return
     if (backgroundPrefetchAttempted.current || generatingMoreRef.current) return
 
-    // Count questions still available to pick (unseen + not answered this session).
+    // Count questions still available to pick this session. In 'new' mode that's
+    // unseen questions; in 'all' (Repeat selected) mode every not-yet-answered
+    // question still counts as available to repeat.
     const pool = effectiveSubtopics.length > 0
       ? questions.filter(q => effectiveSubtopics.includes(q.subtopic))
       : questions
     const remaining = pool.filter(q => {
+      if (sessionAnswered.includes(q.id)) return false
+      if (quizMode === 'all') return true
       const s = struggleMap[q.id]
-      return (!s || s.attempts === 0) && !sessionAnswered.includes(q.id)
+      return !s || s.attempts === 0
     }).length
 
     if (remaining > 3) return   // still plenty — don't prefetch yet
