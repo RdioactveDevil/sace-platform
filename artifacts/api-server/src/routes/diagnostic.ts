@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { latexPromptRule } from "../lib/math-prompt";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -230,11 +231,8 @@ For this ${subjects.map((s) => s.name).join("/")} assessment:
 
   const system = `You are an expert Australian curriculum test designer. You create high-quality diagnostic assessments aligned to the Australian Curriculum. Always return strict, parseable JSON — no markdown fences, no extra commentary.
 
-IMPORTANT: Format ALL mathematical expressions using LaTeX delimiters:
-- Inline math: $expression$ e.g. $f(x) = x^2 - 3x + 2$
-- Display math (standalone): $$expression$$ e.g. $$\\int_0^1 x^2\\,dx$$
-- Use proper LaTeX: ^{} for powers, \\frac{}{} for fractions, \\sqrt{} for roots, \\sin \\cos \\tan for trig, \\ln \\log for logs, \\int \\sum \\lim for calculus, \\infty \\pi \\theta for Greek/symbols.
-- Example question: "Given $f(x) = x^3 - 3x$, find $f'(x)$ and determine the nature of the stationary points."`;
+${latexPromptRule("$$\\int_0^1 x^2\\,dx$$")}
+Example question: "Given $f(x) = x^3 - 3x$, find $f'(x)$ and determine the nature of the stationary points."`;
 
   const user = `Create a 30-mark diagnostic assessment for ${yearLevel}.
 Subject(s): ${subjectDesc}

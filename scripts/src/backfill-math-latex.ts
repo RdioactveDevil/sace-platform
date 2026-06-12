@@ -37,6 +37,12 @@ function convertUnicodeSuperscripts(text: string): string {
   });
 }
 
+// KaTeX needs an exponent grouped in braces, otherwise `e^(-0.5x)` raises only
+// the "(" to the power. Rewrite `^(...)` → `^{(...)}`.
+function groupParenExponents(str: string): string {
+  return str.replace(/\^\(([^()]*)\)/g, "^{($1)}");
+}
+
 function applyOutsideMath(s: string, fn: (seg: string) => string): string {
   const re = /\$\$[\s\S]+?\$\$|\$(?!\d+\s)[^$\n]+?\$/g;
   const parts: string[] = [];
@@ -73,7 +79,7 @@ function autoWrapMath(text: string): string {
       (m, num: string, den: string) =>
         /[\d^+\-]/.test(num) || /[\d^+\-]/.test(den) ? `\\frac{${num}}{${den}}` : m,
     );
-    return `$${withFrac.trim()}$`;
+    return `$${groupParenExponents(withFrac.trim())}$`;
   }
 
   let result = t;
@@ -84,8 +90,8 @@ function autoWrapMath(text: string): string {
   );
   result = applyOutsideMath(result, (seg) => {
     seg = seg.replace(
-      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|[a-zA-Z0-9]+)/g,
-      (m) => `$${m}$`,
+      /(?:\([^()]*\)|[a-zA-Z0-9])+\^(?:\{[^}]*\}|\([^()]*\)|[a-zA-Z0-9]+)/g,
+      (m) => `$${groupParenExponents(m)}$`,
     );
     seg = seg.replace(
       /([a-zA-Z]'{1,3}\([a-zA-Z0-9]\))/g,

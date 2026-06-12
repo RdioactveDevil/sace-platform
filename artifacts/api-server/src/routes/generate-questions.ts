@@ -6,6 +6,7 @@ import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
 import { extractJsonArray } from "../lib/json-latex";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
+import { latexPromptRule } from "../lib/math-prompt";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -392,7 +393,7 @@ async function generateForTopic(opts: {
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
     ...(includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
-    ...(flagLatex ? [`IMPORTANT: Use LaTeX notation for ALL mathematical expressions, in the question, EVERY option, and the solution. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $e^x$, $f''(x)$, $(x+2)e^x$, ${latexExample}. Always write exponents with a caret inside $...$ (e.g. $x^2$, NEVER the Unicode "x²"). Always wrap derivative notation like $f'(x)$ and $f''(x)$. Always use \\frac{numerator}{denominator} for fractions — NEVER (a)/(b) slash notation (e.g. write $\\frac{x^2-4}{x-1}$, NOT $(x^2-4)/(x-1)$). Never emit a bare mathematical expression outside $...$.`] : []),
+    ...(flagLatex ? [latexPromptRule(latexExample)] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
     ...(examContext ? [
