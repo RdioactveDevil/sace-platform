@@ -353,6 +353,9 @@ export default function QuizScreen({
   const [showExit, setShowExit] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const [generatingMore, setGeneratingMore] = useState(false)
+  // Human-readable reason the last auto-generation attempt failed, shown on the
+  // session summary so a silent empty/errored top-up is diagnosable.
+  const [generationError, setGenerationError] = useState(null)
   // Bumped on every in-summary session restart so the bank-exhaustion effect
   // re-evaluates even when `finished` stays true across the restart (pool was
   // already empty: setFinished(false) + loadNext→setFinished(true) batch to a
@@ -673,23 +676,40 @@ export default function QuizScreen({
     bankExhaustionAttempted.current = true
     // Also mark prefetch done so we don't double-generate.
     backgroundPrefetchAttempted.current = true
+    setGenerationError(null)
     setGeneratingMore(true)
     setFinished(false)
 
     // Derive target difficulty from recent session performance.
     const exhaustionDiff = getTargetDifficulty(sessionResults, questions)
 
-    // Generate 3 questions first so the user gets back into the quiz quickly,
-    // then immediately fire a background top-up of 10 more while they answer.
-    fetchAndPersistMoreQuestions(subject, topicCode, 3, exhaustionDiff)
+    // Request a healthy batch (6) up front: generation + answer-key
+    // verification + duplicate filtering all shed some questions, so asking for
+    // only 3 can legitimately net zero on a small topic. If the first attempt
+    // returns nothing, retry once with a larger batch before giving up.
+    const generateWithRetry = async () => {
+      let qs = await fetchAndPersistMoreQuestions(subject, topicCode, 6, exhaustionDiff)
+      if (!qs.length) {
+        qs = await fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff)
+      }
+      return qs
+    }
+
+    generateWithRetry()
       .then(newQs => {
-        if (!newQs.length) { setFinished(true); return }
+        if (!newQs.length) {
+          // Generation succeeded but produced no usable questions (all dropped
+          // by verification/dedup). Surface it instead of silently ending.
+          setGenerationError('No new questions could be generated for this topic right now. Please try again in a moment.')
+          setFinished(true)
+          return
+        }
         if (typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(newQs)
         setDisplayQuestion(newQs[0])
         // Reset guards so the cycle can repeat when these questions run out.
         bankExhaustionAttempted.current = false
         backgroundPrefetchAttempted.current = false
-        // Background top-up: generate 10 more while the user answers the 3.
+        // Background top-up: generate 10 more while the user answers the batch.
         fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff)
           .then(moreQs => {
             if (moreQs.length && typeof onBankQuestionsAdded === 'function') {
@@ -698,7 +718,10 @@ export default function QuizScreen({
           })
           .catch(() => {})
       })
-      .catch(() => { setFinished(true) })
+      .catch(err => {
+        setGenerationError(err?.message || 'Question generation failed. Please try again.')
+        setFinished(true)
+      })
       .finally(() => {
         generatingMoreRef.current = false
         setGeneratingMore(false)
@@ -1237,6 +1260,7 @@ export default function QuizScreen({
       bankExhaustionAttempted.current = false
       backgroundPrefetchAttempted.current = false
       setGeneratingMore(false)
+      setGenerationError(null)
       setSessionEpoch(e => e + 1)
       setQuizMode(mode)
       setSessionAnswered([])
@@ -1303,6 +1327,21 @@ export default function QuizScreen({
                 : 'Good work finishing the session.'}
             </div>
           </div>
+
+          {/* Auto-generation failure banner — shown when the bank ran out but
+              the AI top-up could not produce questions, so the cause is visible
+              instead of the session silently ending. */}
+          {generationError && (
+            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.dangerBg || 'rgba(248,113,113,0.12)', border: `1px solid ${(t.danger || '#f87171')}55`, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 18, lineHeight: 1.3 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.danger || '#f87171' }}>
+                  Couldn’t generate more questions
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2, lineHeight: 1.5 }}>{generationError}</div>
+              </div>
+            </div>
+          )}
 
           {/* Assignments completed banner */}
           {assignmentsCompleted.length > 0 && (
