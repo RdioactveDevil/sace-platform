@@ -476,7 +476,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button
           onClick={handleCopyLink}
-          style={{ background: copied ? '#1e3a2f' : t.bgNav, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
+          style={{ background: copied ? '#1e3a2f' : t.bgSubtle, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
           title="Copy meeting link"
         >
           {copied ? '✓' : '🔗'}
@@ -550,7 +550,7 @@ function SeriesCard({ series, theme, onCancel }) {
             </span>
             <button
               onClick={handleCopy}
-              style={{ background: copied ? '#1e3a2f' : t.bgNav, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+              style={{ background: copied ? '#1e3a2f' : t.bgSubtle, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>

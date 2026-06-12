@@ -6,6 +6,7 @@ const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
+const INDIGO = '#6366f1'
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -15,15 +16,36 @@ function fmtTime(iso) {
   if (!iso) return ''
   return new Date(iso).toLocaleString('en-AU', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
 }
+function fmtTimeShort(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+}
 function isToday(iso) {
   if (!iso) return false
   const d = new Date(iso), n = new Date()
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()
 }
+function isTomorrow(iso) {
+  if (!iso) return false
+  const d = new Date(iso), n = new Date()
+  const tom = new Date(n); tom.setDate(n.getDate() + 1)
+  return d.getFullYear() === tom.getFullYear() && d.getMonth() === tom.getMonth() && d.getDate() === tom.getDate()
+}
+function sessionDateLabel(iso) {
+  if (!iso) return ''
+  if (isToday(iso)) return 'Today'
+  if (isTomorrow(iso)) return 'Tomorrow'
+  return new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+}
 function isOverdue(a) {
   if (a.completed_at || !a.due_date) return false
   const due = new Date(a.due_date); due.setHours(23, 59, 59, 999)
   return due.getTime() < Date.now()
+}
+function isStartingSoon(iso) {
+  if (!iso) return false
+  const diff = new Date(iso).getTime() - Date.now()
+  return diff > 0 && diff < 30 * 60 * 1000
 }
 function greeting() {
   const h = new Date().getHours()
@@ -40,18 +62,26 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
   const [nudged, setNudged] = useState({})
   const isDark = theme === 'dark'
 
-  const pending       = useMemo(() => assignments.filter(a => !a.completed_at), [assignments])
-  const overdue       = useMemo(() => assignments.filter(isOverdue), [assignments])
-  const dueThisWeek   = useMemo(() => {
+  const pending     = useMemo(() => assignments.filter(a => !a.completed_at), [assignments])
+  const completed   = useMemo(() => assignments.filter(a => !!a.completed_at), [assignments])
+  const overdue     = useMemo(() => assignments.filter(isOverdue), [assignments])
+  const dueThisWeek = useMemo(() => {
     const wk = Date.now() + 7 * 86400000
     return pending.filter(a => a.due_date && new Date(a.due_date).getTime() <= wk).length
   }, [pending])
+  const completionRate = useMemo(() => {
+    const total = assignments.length
+    return total ? Math.round((completed.length / total) * 100) : 0
+  }, [assignments, completed])
 
   const upcoming = useMemo(() => sessions
     .filter(s => (s.status === 'scheduled' || s.status === 'active') && s.scheduled_at && new Date(s.scheduled_at).getTime() > Date.now() - 3600000)
     .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
-    .slice(0, 4), [sessions])
-  const sessionsToday = useMemo(() => sessions.filter(s => (s.status === 'scheduled' || s.status === 'active') && isToday(s.scheduled_at)).length, [sessions])
+    .slice(0, 5), [sessions])
+  const sessionsThisWeek = useMemo(() => {
+    const wk = Date.now() + 7 * 86400000
+    return sessions.filter(s => s.scheduled_at && new Date(s.scheduled_at).getTime() < wk && new Date(s.scheduled_at).getTime() > Date.now() - 7 * 86400000).length
+  }, [sessions])
 
   const needsAttention = useMemo(() => {
     const byStudent = {}
@@ -65,19 +95,8 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
         return { id, name: v.name || r?.profiles?.display_name || 'Student', count: v.count }
       })
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
+      .slice(0, 6)
   }, [overdue, roster])
-
-  const recent = useMemo(() => {
-    const items = []
-    for (const a of assignments) {
-      if (a.completed_at) items.push({ ts: a.completed_at, icon: '✅', text: `${a.profiles?.display_name || 'A student'} completed ${a.type}` })
-    }
-    for (const r of resources) {
-      items.push({ ts: r.created_at, icon: r.kind === 'link' ? '🔗' : '📁', text: `${r.title} added to Resources` })
-    }
-    return items.filter(i => i.ts).sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 6)
-  }, [assignments, resources])
 
   const handleNudge = async (id) => {
     setNudged(n => ({ ...n, [id]: 'sending' }))
@@ -87,225 +106,367 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
 
   /* ── Design tokens ───────────────────────────────────────────────────── */
   const card = isDark
-    ? { background: 'rgba(255,255,255,0.028)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, boxShadow: '0 4px 32px rgba(0,0,0,0.44)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
+    ? { background: 'rgba(255,255,255,0.028)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, boxShadow: '0 4px 32px rgba(0,0,0,0.44)' }
+    : { background: '#ffffff', border: '1px solid #e2e6ed', borderRadius: 12, boxShadow: '0 4px 24px -4px rgba(0,0,0,0.03), 0 0 1px rgba(0,0,0,0.08)' }
 
-  const divider = isDark ? 'rgba(255,255,255,0.07)' : t.border
-  const cardH   = { padding: '16px 22px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }
-  const h3      = { fontSize: 12, fontWeight: 400, color: t.text, fontFamily: FONT_D, letterSpacing: '0.06em', textTransform: 'uppercase' }
-  const link    = { color: GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none', fontFamily: FONT_B }
-  const avatar  = (name, c) => (
-    <div style={{ width: 36, height: 36, borderRadius: '50%', background: c || `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0, fontSize: 14, boxShadow: '0 2px 10px rgba(241,190,67,0.25)' }}>
-      {(name || '?')[0].toUpperCase()}
-    </div>
-  )
+  const divider    = isDark ? 'rgba(255,255,255,0.07)' : '#f1f4f9'
+  const accent     = isDark ? GOLD : INDIGO
+  const accentSoft = isDark ? 'rgba(241,190,67,0.14)' : '#eef2ff'
+  const textPri    = isDark ? 'rgba(255,255,255,0.92)' : '#0f172a'
+  const textSub    = isDark ? 'rgba(255,255,255,0.52)' : '#64748b'
+  const textMuted  = isDark ? 'rgba(255,255,255,0.35)' : '#94a3b8'
 
-  /* ── KPI definitions ────────────────────────────────────────────────── */
+  const sectionHdr = {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14,
+  }
+  const h2style = { fontSize: 14, fontWeight: 700, color: textPri, fontFamily: FONT_B, margin: 0 }
+  const linkBtn = {
+    fontSize: 13, color: accent, fontWeight: 600, cursor: 'pointer',
+    background: 'none', border: 'none', fontFamily: FONT_B, padding: 0,
+  }
+
+  /* ── Weekly session bar chart data (last 7 days) ─────────────────────── */
+  const weekBars = useMemo(() => {
+    const bars = Array(7).fill(0)
+    const now = new Date()
+    for (const s of sessions) {
+      if (!s.scheduled_at) continue
+      const d = new Date(s.scheduled_at)
+      const diff = Math.floor((now - d) / 86400000)
+      if (diff >= 0 && diff < 7) bars[6 - diff]++
+    }
+    const mx = Math.max(...bars, 1)
+    return bars.map(v => Math.round((v / mx) * 100))
+  }, [sessions])
+
+  /* ── KPI definitions ─────────────────────────────────────────────────── */
   const kpis = [
     {
-      v: roster.length, l: 'Active Students', icon: '👥',
-      sub: `${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
-      cls: '', color: GOLD,
+      title: 'Active Students',
+      value: roster.length,
+      trend: `${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
+      trendUp: true,
+      color: isDark ? GOLD : INDIGO,
+      sparkColor: isDark ? GOLD : INDIGO,
+      sparkFill: isDark ? 'rgba(241,190,67,0.08)' : '#eef2ff',
+      sparkline: (
+        <svg viewBox="0 0 100 30" style={{ width: '100%', height: 32 }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path d="M0,25 L15,20 L30,22 L45,15 L60,18 L75,10 L90,12 L100,5" stroke={isDark ? GOLD : INDIGO} />
+          <path d="M0,25 L15,20 L30,22 L45,15 L60,18 L75,10 L90,12 L100,5 L100,30 L0,30 Z" fill={isDark ? 'rgba(241,190,67,0.08)' : '#eef2ff'} />
+        </svg>
+      ),
     },
     {
-      v: sessionsToday, l: 'Sessions Today', icon: '📹',
-      sub: upcoming[0] ? `Next: ${fmtTime(upcoming[0].scheduled_at)}` : 'None scheduled',
-      cls: 'td-kpi-sessions', color: '#a5b4fc',
+      title: 'Overdue Tasks',
+      value: overdue.length,
+      trend: overdue.length ? `${needsAttention.length} student${needsAttention.length !== 1 ? 's' : ''} affected` : 'All on track',
+      trendUp: overdue.length === 0,
+      alert: overdue.length > 0,
+      color: '#f59e0b',
+      sparkline: (
+        <svg viewBox="0 0 100 30" style={{ width: '100%', height: 32 }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path d="M0,5 L20,15 L40,10 L60,25 L80,20 L100,28" stroke="#f59e0b" />
+          <path d="M0,5 L20,15 L40,10 L60,25 L80,20 L100,28 L100,30 L0,30 Z" fill="rgba(245,158,11,0.08)" />
+        </svg>
+      ),
     },
     {
-      v: pending.length, l: 'Pending Tasks', icon: '📋',
-      sub: `${dueThisWeek} due this week`,
-      cls: '', color: GOLD,
+      title: 'Sessions This Week',
+      value: sessionsThisWeek,
+      trend: `${upcoming.length} upcoming`,
+      trendUp: true,
+      color: isDark ? '#a5b4fc' : INDIGO,
+      sparkline: (
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: 32, gap: 3, paddingTop: 4 }}>
+          {weekBars.map((h, i) => (
+            <div key={i} style={{ flex: 1, background: isDark ? 'rgba(165,180,252,0.12)' : '#e0e7ff', borderRadius: '3px 3px 0 0', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ width: '100%', background: isDark ? '#a5b4fc' : INDIGO, borderRadius: '3px 3px 0 0', height: `${h}%`, minHeight: h ? 3 : 0 }} />
+            </div>
+          ))}
+        </div>
+      ),
     },
     {
-      v: overdue.length, l: 'Overdue', icon: '⚠️',
-      sub: `${needsAttention.length} student${needsAttention.length !== 1 ? 's' : ''} affected`,
-      cls: 'td-kpi-danger', color: '#f87171', danger: true,
+      title: 'Completion Rate',
+      value: `${completionRate}%`,
+      trend: `${completed.length} of ${assignments.length} done`,
+      trendUp: completionRate >= 70,
+      color: isDark ? '#6ee7b7' : '#10b981',
+      sparkline: (
+        <svg viewBox="0 0 100 30" style={{ width: '100%', height: 32 }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path d="M0,20 L20,22 L40,15 L60,18 L80,8 L100,5" stroke={isDark ? '#6ee7b7' : '#10b981'} />
+          <path d="M0,20 L20,22 L40,15 L60,18 L80,8 L100,5 L100,30 L0,30 Z" fill={isDark ? 'rgba(110,231,183,0.08)' : '#ecfdf5'} />
+        </svg>
+      ),
     },
+  ]
+
+  /* ── Assignment stats for right sidebar ──────────────────────────────── */
+  const total = assignments.length || 1
+  const statBars = [
+    { label: 'Completed', value: completed.length, pct: Math.round((completed.length / total) * 100), color: isDark ? '#6ee7b7' : '#10b981', bg: isDark ? 'rgba(110,231,183,0.12)' : '#ecfdf5' },
+    { label: 'Pending', value: pending.length - overdue.length, pct: Math.round(((pending.length - overdue.length) / total) * 100), color: isDark ? '#a5b4fc' : INDIGO, bg: isDark ? 'rgba(165,180,252,0.12)' : '#eef2ff' },
+    { label: 'Overdue', value: overdue.length, pct: Math.round((overdue.length / total) * 100), color: '#f87171', bg: 'rgba(248,113,113,0.10)', warn: overdue.length > 0 },
   ]
 
   const actions = [
-    { icon: '＋', iconBg: `linear-gradient(135deg,${GOLD},${GOLDL})`, iconColor: '#0c1037', t: 'Add student',      d: 'Invite by email',        to: 'students' },
-    { icon: '📋', iconBg: 'rgba(129,140,248,0.18)',                    iconColor: '#a5b4fc',   t: 'New assignment',   d: 'Quiz · Test · HW',       to: 'assignments' },
-    { icon: '📹', iconBg: 'rgba(52,211,153,0.16)',                     iconColor: '#6ee7b7',   t: 'Schedule session', d: '1:1 or group video',     to: 'sessions' },
-    { icon: '📁', iconBg: 'rgba(251,191,36,0.14)',                     iconColor: GOLD,        t: 'Upload resource',  d: 'Notes · recordings',     to: 'resources' },
+    { icon: '📋', label: 'New Assignment', to: 'assignments', color: isDark ? 'rgba(165,180,252,0.18)' : '#eef2ff', iconColor: isDark ? '#a5b4fc' : INDIGO },
+    { icon: '👤', label: 'Add Student',    to: 'students',    color: isDark ? 'rgba(241,190,67,0.14)' : '#fffbeb', iconColor: isDark ? GOLD : '#f59e0b' },
+    { icon: '📹', label: 'Schedule',       to: 'sessions',    color: isDark ? 'rgba(110,231,183,0.12)' : '#ecfdf5', iconColor: isDark ? '#6ee7b7' : '#10b981' },
+    { icon: '📊', label: 'Diagnostic',     to: 'diagnostic',  color: isDark ? 'rgba(248,113,113,0.12)' : '#fff1f2', iconColor: isDark ? '#f87171' : '#ef4444' },
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: FONT_B }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
 
-      {/* ── Welcome hero ──────────────────────────────────────────────── */}
-      <div className="td-fadein" style={{
-        ...card,
-        padding: '24px 28px',
-        background: isDark
-          ? 'linear-gradient(120deg, rgba(241,190,67,0.07) 0%, rgba(255,255,255,0.025) 60%)'
-          : card.background,
-        borderColor: isDark ? 'rgba(241,190,67,0.18)' : t.border,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
-      }}>
+      {/* ── Greeting strip ───────────────────────────────────────────── */}
+      <div className="td-fadein" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div style={{ fontFamily: FONT_D, fontSize: 22, color: t.text, letterSpacing: '0.02em', lineHeight: 1.2, marginBottom: 6 }}>
-            {greeting()}, <span style={{ color: GOLD }}>{profile.display_name?.split(' ')[0] || 'Tutor'}</span>
+          <div style={{ fontSize: 20, fontWeight: 700, color: textPri, lineHeight: 1.2 }}>
+            {greeting()}, <span style={{ color: accent }}>{profile.display_name?.split(' ')[0] || 'Tutor'}</span>
           </div>
-          <div style={{ fontSize: 13, color: t.textMuted, fontFamily: FONT_B }}>
-            {todayLabel()} · {roster.length} student{roster.length !== 1 ? 's' : ''} on your roster
-          </div>
+          <div style={{ fontSize: 13, color: textMuted, marginTop: 3 }}>{todayLabel()} · {roster.length} student{roster.length !== 1 ? 's' : ''} on your roster</div>
         </div>
         {overdue.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 12, padding: '10px 16px' }}>
-            <span style={{ fontSize: 18 }}>⚠️</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#f87171', fontFamily: FONT_B }}>{overdue.length} overdue task{overdue.length !== 1 ? 's' : ''}</div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>{needsAttention.length} student{needsAttention.length !== 1 ? 's' : ''} need attention</div>
+          <button onClick={() => onNavigate('assignments')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: isDark ? 'rgba(248,113,113,0.10)' : '#fff1f2', border: isDark ? '1px solid rgba(248,113,113,0.25)' : '1px solid #fecaca', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontFamily: FONT_B }}>
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>{overdue.length} overdue task{overdue.length !== 1 ? 's' : ''}</div>
+              <div style={{ fontSize: 11, color: textMuted }}>Tap to review</div>
             </div>
-          </div>
+          </button>
         )}
       </div>
 
-      {/* ── KPI row ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+      {/* ── KPI row ───────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
         {kpis.map((k, i) => (
-          <div key={k.l} className={`td-fadein td-fadein-${i + 1} td-kpi ${k.cls}`}
-            style={{ ...card, padding: '24px 22px 20px', position: 'relative', overflow: 'hidden' }}>
-            {/* Large background icon */}
-            <span style={{ position: 'absolute', right: 14, bottom: 12, fontSize: 42, opacity: 0.07, pointerEvents: 'none', userSelect: 'none' }}>{k.icon}</span>
-            {/* Number */}
-            <div style={{ fontFamily: FONT_D, fontSize: 52, letterSpacing: '-1px', lineHeight: 1, color: k.color, marginBottom: 10, textShadow: isDark ? `0 0 32px ${k.color}44` : 'none' }}>{k.v}</div>
-            {/* Label */}
-            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.10em', color: t.textMuted, marginBottom: 5 }}>{k.l}</div>
-            {/* Sub */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: k.danger ? '#f87171' : t.textMuted }}>{k.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Quick actions ──────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-        {actions.map((a, i) => (
-          <button key={a.t} className={`td-fadein td-fadein-${i + 1} td-action-tile`}
-            onClick={() => onNavigate(a.to)}
-            style={{ display: 'flex', alignItems: 'center', gap: 13, ...card, padding: '16px 18px', cursor: 'pointer', textAlign: 'left', fontFamily: FONT_B, color: t.text }}>
-            <span style={{
-              width: 42, height: 42, borderRadius: 12, background: a.iconBg,
-              color: a.iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 20, flexShrink: 0, fontWeight: 800,
-            }}>{a.icon}</span>
-            <span>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>{a.t}</span>
-              <span style={{ fontSize: 11, color: t.textMuted }}>{a.d}</span>
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* ── Two-column grid ────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }} className="ov-grid">
-        <style>{`@media (max-width: 900px){ .ov-grid{ grid-template-columns: 1fr !important; } }`}</style>
-
-        {/* Left column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Needs attention */}
-          <div className="td-panel" style={card}>
-            <div style={cardH}>
-              <div style={h3}>⚠️ Needs attention</div>
-              <button style={link} onClick={() => onNavigate('assignments')}>View all</button>
+          <div key={k.title} className={`td-fadein td-fadein-${i + 1}`}
+            style={{ ...card, padding: '18px 18px 14px', cursor: 'default',
+              transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = isDark ? '0 12px 48px rgba(0,0,0,0.5)' : '0 8px 24px rgba(0,0,0,0.10)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = card.boxShadow }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: textMuted, marginBottom: 6 }}>{k.title}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: k.color, lineHeight: 1, marginBottom: 12, letterSpacing: '-0.5px' }}>{k.value}</div>
+            <div style={{ marginBottom: 10 }}>{k.sparkline}</div>
+            <div style={{ fontSize: 12, color: k.alert ? '#f59e0b' : k.trendUp ? (isDark ? '#6ee7b7' : '#10b981') : textMuted, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {k.alert ? <span>⚠</span> : k.trendUp ? <span>↑</span> : null}
+              {k.trend}
             </div>
-            {needsAttention.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', color: t.textMuted, fontSize: 13 }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🎉</div>
-                Nobody's behind — all tasks are on track.
-              </div>
-            ) : needsAttention.map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 22px', borderBottom: `1px solid ${divider}` }}>
-                {avatar(s.name)}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{s.name}</div>
-                  <div style={{ fontSize: 12, color: t.textMuted }}>{s.count} overdue task{s.count !== 1 ? 's' : ''}</div>
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: 'rgba(248,113,113,0.14)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)' }}>Overdue</span>
-                <button onClick={() => handleNudge(s.id)} disabled={!!nudged[s.id]}
-                  style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: nudged[s.id] === 'sent' ? 'rgba(74,222,128,0.15)' : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: nudged[s.id] === 'sent' ? '#4ade80' : '#0c1037', fontSize: 12, fontWeight: 800, cursor: nudged[s.id] ? 'default' : 'pointer', fontFamily: FONT_B, transition: 'opacity 0.15s' }}>
-                  {nudged[s.id] === 'sending' ? '…' : nudged[s.id] === 'sent' ? '✓ Sent' : nudged[s.id] === 'fail' ? 'Retry' : 'Nudge'}
-                </button>
-              </div>
-            ))}
           </div>
+        ))}
+      </div>
 
-          {/* Recent activity */}
-          <div className="td-panel" style={card}>
-            <div style={cardH}><div style={h3}>Recent activity</div></div>
-            {recent.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No recent activity yet.</div>
-            ) : (
-              <div style={{ padding: '4px 22px 10px' }}>
-                {recent.map((r, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 13, padding: '11px 0', borderBottom: i < recent.length - 1 ? `1px solid ${divider}` : 'none', alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 16, marginTop: 1 }}>{r.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, color: t.text, fontWeight: 500 }}>{r.text}</div>
-                      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 3 }}>{fmtDate(r.ts)}</div>
+      {/* ── Body: 2/3 + 1/3 grid ─────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 20, alignItems: 'start' }} className="ov-grid">
+        <style>{`@media (max-width: 860px){ .ov-grid{ grid-template-columns: 1fr !important; } }`}</style>
+
+        {/* ── Left column ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Upcoming Sessions */}
+          <section className="td-fadein td-fadein-2">
+            <div style={sectionHdr}>
+              <h2 style={h2style}>Upcoming Sessions</h2>
+              <button style={linkBtn} onClick={() => onNavigate('sessions')}>View calendar →</button>
+            </div>
+            <div style={card}>
+              {upcoming.length === 0 ? (
+                <div style={{ padding: '36px 24px', textAlign: 'center', color: textMuted, fontSize: 13 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                  No upcoming sessions scheduled.
+                </div>
+              ) : upcoming.map((s, idx) => {
+                const soon = isStartingSoon(s.scheduled_at)
+                return (
+                  <div key={s.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px',
+                    borderBottom: idx < upcoming.length - 1 ? `1px solid ${divider}` : 'none',
+                    transition: 'background 0.12s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.025)' : '#fafbff'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    {/* Time column */}
+                    <div style={{ width: 64, flexShrink: 0, textAlign: 'center' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: textPri }}>{fmtTimeShort(s.scheduled_at)}</div>
+                      <div style={{ fontSize: 11, color: textMuted, marginTop: 1 }}>{sessionDateLabel(s.scheduled_at)}</div>
+                    </div>
+                    <div style={{ width: 1, height: 32, background: divider, flexShrink: 0 }} />
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: textPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {s.title || 'Tutoring Session'}
+                        </span>
+                        {soon && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: isDark ? 'rgba(245,158,11,0.15)' : '#fffbeb', color: '#f59e0b', border: isDark ? '1px solid rgba(245,158,11,0.25)' : '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
+                            Starting soon
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: textMuted }}>
+                        <span>👤 {s.other_party_name || 'Student'}</span>
+                        <span>📹 {s.type === 'group' ? 'Group' : '1-on-1'}</span>
+                        {s.record_session && <span style={{ color: '#f87171' }}>🔴 Recording</span>}
+                      </div>
+                    </div>
+                    {/* Action */}
+                    <div style={{ flexShrink: 0 }}>
+                      {soon ? (
+                        <button onClick={() => onJoinSession(s.id)}
+                          style={{ padding: '7px 16px', background: isDark ? `linear-gradient(135deg,${GOLD},${GOLDL})` : INDIGO, color: isDark ? '#0c1037' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                          Join
+                        </button>
+                      ) : (
+                        <button onClick={() => onNavigate('sessions')}
+                          style={{ padding: '7px 16px', background: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', color: textSub, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
+                          Details
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Students needing attention */}
+          <section className="td-fadein td-fadein-3">
+            <div style={sectionHdr}>
+              <h2 style={h2style}>Overdue Students</h2>
+              <button style={linkBtn} onClick={() => onNavigate('assignments')}>View all →</button>
+            </div>
+            <div style={card}>
+              {needsAttention.length === 0 ? (
+                <div style={{ padding: '36px 24px', textAlign: 'center', color: textMuted, fontSize: 13 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
+                  All students are on track.
+                </div>
+              ) : (
+                <>
+                  {/* Table header */}
+                  <div style={{ padding: '10px 20px', borderBottom: `1px solid ${divider}`, background: isDark ? 'rgba(255,255,255,0.015)' : '#fafbff' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 16, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: textMuted }}>
+                      <div>Student</div>
+                      <div style={{ textAlign: 'center' }}>Overdue</div>
+                      <div style={{ textAlign: 'right' }}>Action</div>
+                    </div>
+                  </div>
+                  {needsAttention.map((s, idx) => (
+                    <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 16, alignItems: 'center', padding: '13px 20px', borderBottom: idx < needsAttention.length - 1 ? `1px solid ${divider}` : 'none', transition: 'background 0.12s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.02)' : '#fafbff'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: isDark ? `linear-gradient(135deg,${GOLD},${GOLDL})` : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: isDark ? '#0c1037' : '#f59e0b', flexShrink: 0, fontSize: 13 }}>
+                          {(s.name || '?')[0].toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: textPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.22)', whiteSpace: 'nowrap' }}>
+                        {s.count} task{s.count !== 1 ? 's' : ''}
+                      </span>
+                      <button onClick={() => handleNudge(s.id)} disabled={!!nudged[s.id]}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(241,190,67,0.30)' : '#c7d2fe'}`, background: nudged[s.id] === 'sent' ? 'rgba(74,222,128,0.12)' : isDark ? 'rgba(241,190,67,0.10)' : '#eef2ff', color: nudged[s.id] === 'sent' ? '#4ade80' : isDark ? GOLD : INDIGO, fontSize: 12, fontWeight: 700, cursor: nudged[s.id] ? 'default' : 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
+                        {nudged[s.id] === 'sending' ? '…' : nudged[s.id] === 'sent' ? '✓ Sent' : nudged[s.id] === 'fail' ? 'Retry' : 'Nudge'}
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </section>
         </div>
 
-        {/* Right column */}
+        {/* ── Right column ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Sessions */}
-          <div className="td-panel" style={card}>
-            <div style={cardH}>
-              <div style={h3}>📹 Today &amp; upcoming</div>
-              <button style={link} onClick={() => onNavigate('sessions')}>All</button>
-            </div>
-            {upcoming.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', color: t.textMuted, fontSize: 13 }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
-                No upcoming sessions.
-              </div>
-            ) : upcoming.map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 22px', borderBottom: `1px solid ${divider}` }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || 'Tutoring Session'}</div>
-                  <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{fmtTime(s.scheduled_at)} · {s.other_party_name || 'Student'}</div>
-                </div>
-                {(s.recording_status === 'recording' || s.record_session) && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.22)', flexShrink: 0 }}>🔴</span>
-                )}
-                <button onClick={() => onJoinSession(s.id)} className="btn-gold-shimmer"
-                  style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
-                  Join
-                </button>
-              </div>
-            ))}
-          </div>
 
-          {/* Recent resources */}
-          <div className="td-panel" style={card}>
-            <div style={cardH}>
-              <div style={h3}>📁 Recent resources</div>
-              <button style={link} onClick={() => onNavigate('resources')}>All</button>
+          {/* Assignment stats */}
+          <section className="td-fadein td-fadein-2">
+            <div style={sectionHdr}>
+              <h2 style={h2style}>Assignment Stats</h2>
+              <button style={linkBtn} onClick={() => onNavigate('assignments')}>View →</button>
             </div>
-            {resources.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No resources yet.</div>
-            ) : resources.slice(0, 4).map(r => {
-              const icon = { notes: '📝', worksheet: '📄', recording: '🎥', slides: '📊', resource: '📁', link: '🔗' }[r.type] || '📁'
-              const target = r.student_name ? `👤 ${r.student_name}` : r.class_name ? `🏫 ${r.class_name}` : '👥 Roster'
-              return (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 22px', borderBottom: `1px solid ${divider}` }}>
-                  <span style={{ fontSize: 20 }}>{icon}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
-                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{target} · {fmtDate(r.created_at)}</div>
+            <div style={{ ...card, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {statBars.map(b => (
+                  <div key={b.label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
+                      <span style={{ fontWeight: 600, color: textPri }}>{b.label}</span>
+                      <span style={{ color: b.warn ? b.color : textSub, fontWeight: b.warn ? 700 : 500 }}>{b.value}</span>
+                    </div>
+                    <div style={{ height: 7, background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f4f9', borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: b.color, borderRadius: 10, width: `${b.pct}%`, minWidth: b.value ? 6 : 0, transition: 'width 0.5s ease' }} />
+                    </div>
+                    {b.warn && b.value > 0 && (
+                      <div style={{ fontSize: 11, color: '#f87171', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Needs attention</div>
+                    )}
                   </div>
+                ))}
+                <div style={{ paddingTop: 10, borderTop: `1px solid ${divider}`, display: 'flex', justifyContent: 'space-between', fontSize: 12, color: textMuted }}>
+                  <span>{assignments.length} total assignment{assignments.length !== 1 ? 's' : ''}</span>
+                  <span style={{ color: isDark ? '#6ee7b7' : '#10b981', fontWeight: 600 }}>{completionRate}% done</span>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Quick Actions */}
+          <section className="td-fadein td-fadein-3">
+            <h2 style={{ ...h2style, marginBottom: 14 }}>Quick Actions</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {actions.map((a, i) => (
+                <button key={a.label} className={`td-fadein td-fadein-${i + 1}`}
+                  onClick={() => onNavigate(a.to)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    padding: '16px 12px', ...card, cursor: 'pointer', textAlign: 'center', fontFamily: FONT_B,
+                    transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : a.color; e.currentTarget.style.borderColor = isDark ? 'rgba(241,190,67,0.30)' : '#c7d2fe' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.background = card.background; e.currentTarget.style.borderColor = card.border.replace('1px solid ', '') }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, fontSize: 18, transition: 'transform 0.15s' }}>
+                    {a.icon}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: textPri }}>{a.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Recent Resources */}
+          {resources.length > 0 && (
+            <section className="td-fadein td-fadein-4">
+              <div style={sectionHdr}>
+                <h2 style={h2style}>Recent Resources</h2>
+                <button style={linkBtn} onClick={() => onNavigate('resources')}>View →</button>
+              </div>
+              <div style={card}>
+                {resources.slice(0, 4).map((r, idx) => {
+                  const icon = { notes: '📝', worksheet: '📄', recording: '🎥', slides: '📊', resource: '📁', link: '🔗' }[r.type] || '📁'
+                  const target = r.student_name ? `👤 ${r.student_name}` : r.class_name ? `🏫 ${r.class_name}` : '👥 Roster'
+                  return (
+                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderBottom: idx < Math.min(resources.length, 4) - 1 ? `1px solid ${divider}` : 'none', transition: 'background 0.12s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.025)' : '#fafbff'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span style={{ fontSize: 18 }}>{icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: textPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                        <div style={{ fontSize: 11, color: textMuted, marginTop: 1 }}>{target} · {fmtDate(r.created_at)}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>

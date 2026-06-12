@@ -124,3 +124,39 @@
 @media (min-width: 861px) {
   .tutor-mobile-only { display: none !important; }
 }
+
+/* ─── Glass shadow utility ──────────────────────────────────────────────── */
+.shadow-glass {
+  box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.03), 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Light mode sidebar overrides ─────────────────────────────────────── */
+.td-sidebar-light .td-nav-item.active {
+  background: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(226,230,237,0.9) !important;
+  border-radius: 8px !important;
+}
+.td-sidebar-light .td-nav-item.active::before {
+  background: linear-gradient(180deg, #6366f1, #8b5cf6) !important;
+  border-radius: 0 3px 3px 0;
+}
+.td-sidebar-light .td-nav-item:not(.active):hover {
+  background: #f1f4f9 !important;
+}
+/* Remove the gold hover shadow from action tiles in light mode */
+.td-sidebar-light ~ * .td-action-tile:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+  border-color: #c7d2fe !important;
+}
+
+/* ─── Light mode KPI card hover ─────────────────────────────────────────── */
+.td-kpi-light:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10) !important;
+}
+
+/* ─── Scrollbar (light mode friendly) ──────────────────────────────────── */
+.td-sidebar-light ::-webkit-scrollbar { width: 4px; }
+.td-sidebar-light ::-webkit-scrollbar-track { background: transparent; }
+.td-sidebar-light ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+.td-sidebar-light ::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }

@@ -1,0 +1,25 @@
+body {
+  margin: 0;
+}
+
+.font-serif-display {
+  font-family: 'DM Serif Display', serif;
+}
+
+.font-sans-body {
+  font-family: 'DM Sans', sans-serif;
+}
+
+.warm-shadow {
+  box-shadow: 0 4px 20px rgba(28, 20, 16, 0.05);
+}
+
+.warm-shadow-sm {
+  box-shadow: 0 2px 10px rgba(28, 20, 16, 0.03);
+}
+
+.paper-tile {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgba(28, 20, 16, 0.04);
+}

@@ -1,0 +1,72 @@
+/* _tutor.css */
+.tutor-dark-cockpit {
+  --nav-bg: #05061a;
+  --main-bg: #070924;
+  --accent: #f1be43;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8b95a5;
+  --border-dim: rgba(241, 190, 67, 0.15);
+  --border-strong: rgba(241, 190, 67, 0.4);
+  --panel-bg: rgba(255, 255, 255, 0.03);
+  --panel-bg-hover: rgba(255, 255, 255, 0.06);
+}
+
+.tutor-dark-cockpit {
+  font-family: 'Space Grotesk', sans-serif;
+  background-color: var(--main-bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+}
+
+.tutor-sidebar {
+  background-color: var(--nav-bg);
+  border-right: 1px solid var(--border-dim);
+}
+
+.tutor-nav-item {
+  color: var(--text-secondary);
+  border-left: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.tutor-nav-item:hover {
+  color: var(--text-primary);
+  background-color: var(--panel-bg-hover);
+}
+
+.tutor-nav-item.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background-color: var(--panel-bg);
+}
+
+.tutor-kpi-card {
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-dim);
+  transition: all 0.2s ease;
+}
+
+.tutor-kpi-card:hover {
+  border-color: var(--border-strong);
+}
+
+.tutor-glass-panel {
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-dim);
+}
+
+/* Custom Scrollbar for a cockpit feel */
+.tutor-dark-cockpit ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.tutor-dark-cockpit ::-webkit-scrollbar-track {
+  background: var(--nav-bg); 
+}
+.tutor-dark-cockpit ::-webkit-scrollbar-thumb {
+  background: var(--border-strong); 
+}
+.tutor-dark-cockpit ::-webkit-scrollbar-thumb:hover {
+  background: var(--accent); 
+}

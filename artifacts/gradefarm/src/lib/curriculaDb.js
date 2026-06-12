@@ -50,6 +50,18 @@ export async function getCurriculumDetail(id) {
     .single()
   if (cErr) throw cErr
 
+  // exam_context queried separately so a missing column (migration not yet
+  // applied) degrades to an empty editor instead of breaking the detail screen.
+  let examContext = ''
+  {
+    const { data: ctxRow } = await supabase
+      .from('curricula')
+      .select('exam_context')
+      .eq('id', id)
+      .maybeSingle()
+    examContext = ctxRow?.exam_context ?? ''
+  }
+
   const { data: topics, error: tErr } = await supabase
     .from('curriculum_topics')
     .select('id, name, order_index')
@@ -71,6 +83,7 @@ export async function getCurriculumDetail(id) {
 
   return {
     ...curriculum,
+    exam_context: examContext,
     topics: (topics || []).map(t => ({
       ...t,
       subtopics: subtopics.filter(s => s.topic_id === t.id),
@@ -102,7 +115,7 @@ export async function createCurriculum({ name, subject_description, topics, leve
  * @param {string} id
  * @param {{ name?: string, subject_description?: string, level_label?: string, topics?: Array }} updates
  */
-export async function updateCurriculum(id, { name, subject_description, level_label, generation_flags, topics } = {}) {
+export async function updateCurriculum(id, { name, subject_description, level_label, generation_flags, exam_context, topics } = {}) {
   const { data: cur, error: curErr } = await supabase
     .from('curricula')
     .select('name, level_label')
@@ -138,9 +151,20 @@ export async function updateCurriculum(id, { name, subject_description, level_la
   if (subject_description !== undefined) patch.subject_description = subject_description
   if (level_label !== undefined) patch.level_label = level_label
   if (generation_flags !== undefined) patch.generation_flags = generation_flags || {}
+  if (exam_context !== undefined) patch.exam_context = exam_context ?? ''
 
   if (Object.keys(patch).length > 0) {
-    const { error } = await supabase.from('curricula').update(patch).eq('id', id)
+    let { error } = await supabase.from('curricula').update(patch).eq('id', id)
+    // If the exam_context migration hasn't been applied yet, retry without it
+    // so the rest of the save still goes through.
+    if (error && patch.exam_context !== undefined && /exam_context/i.test(error.message || '')) {
+      const { exam_context: _omitted, ...rest } = patch
+      if (Object.keys(rest).length > 0) {
+        ;({ error } = await supabase.from('curricula').update(rest).eq('id', id))
+      } else {
+        error = null
+      }
+    }
     if (error) throw error
   }
 
