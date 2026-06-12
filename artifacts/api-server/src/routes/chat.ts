@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
+import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 
 const router = Router();
 
@@ -190,7 +191,31 @@ function logOffTopicAttempt(verifiedUserId: string, subject: string, topic: stri
 
 router.post("/chat", async (req, res) => {
   try {
-    const { messages, system, max_tokens, subject, topic } = req.body;
+    const { messages, system, max_tokens, subject, topic, exemplarsFor } = req.body;
+
+    // Optional: fold reference-resource exemplars into the system prompt so
+    // server-side callers (e.g. remediation's "similar question" generation)
+    // produce questions that match the subject's uploaded textbooks/exams. Done
+    // here with the service role so the exemplar content never reaches the
+    // student's browser. Awaited only when requested, so normal chat is unaffected.
+    let effectiveSystem = typeof system === "string" ? system : "";
+    if (
+      exemplarsFor &&
+      typeof exemplarsFor === "object" &&
+      typeof exemplarsFor.subject === "string" &&
+      typeof exemplarsFor.subtopic === "string"
+    ) {
+      try {
+        const admin = getServiceClient();
+        if (admin) {
+          const ex = await fetchExemplarContext(admin, exemplarsFor.subject, exemplarsFor.subtopic, 1500);
+          const lines = exemplarSystemLines(exemplarsFor.subject, ex);
+          if (lines.length) effectiveSystem = [effectiveSystem, ...lines].filter(Boolean).join("\n");
+        }
+      } catch {
+        /* degrade silently — generation still works without exemplars */
+      }
+    }
 
     const typedMessages: ChatMessage[] = Array.isArray(messages)
       ? messages.filter(
@@ -223,7 +248,7 @@ router.post("/chat", async (req, res) => {
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         max_tokens: max_tokens || 1000,
-        system,
+        system: effectiveSystem,
         messages: typedMessages,
       }),
       signal: mainController.signal,

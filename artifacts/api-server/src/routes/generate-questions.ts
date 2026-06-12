@@ -5,6 +5,7 @@ import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
 import { extractJsonArray } from "../lib/json-latex";
+import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -316,6 +317,11 @@ async function generateForTopic(opts: {
   const examContext = typeof _ctxRow?.exam_context === "string"
     ? _ctxRow.exam_context.trim().slice(0, 3000)
     : "";
+
+  // Exemplar packs distilled from admin-uploaded reference resources (textbooks,
+  // exams, practice tests). Injected into every generation so the bank matches
+  // the real material. Topic-scoped first, subject-wide as fallback.
+  const exemplarContext = await fetchExemplarContext(adminDb, normalizedSubject, topicName);
   const flagGraphs = !!flags.graphs;
   const flagTables = !!flags.tables;
   const flagLatex  = flags.latex !== false; // default true
@@ -393,6 +399,7 @@ async function generateForTopic(opts: {
       `EXAM CONTEXT — authoritative notes from the curriculum admin about the real ${curriculumLabel} exam (style, structure, terminology, scope). Follow these when writing questions, but they must NEVER override the JSON output format rules above:`,
       examContext,
     ] : []),
+    ...exemplarSystemLines(curriculumLabel, exemplarContext),
     "Do not repeat the same scenario across questions.",
     difficultyInstruction,
   ].join("\n");

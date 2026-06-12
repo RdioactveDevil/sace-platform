@@ -8,6 +8,7 @@ import {
 } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
 import { refreshManagedTopicsCache } from '../lib/adminTopics'
+import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import { COHORT_LEVEL_OPTIONS } from '../lib/subjects'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -721,6 +722,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           </div>
         </div>
       )}
+
+      {/* Reference resources — textbooks/exams distilled into generation exemplars */}
+      {!generating && <CurriculumResourcesPanel curriculumId={curriculumId} />}
 
       {/* AI revise panel */}
       {!generating && (
