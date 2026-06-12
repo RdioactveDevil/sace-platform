@@ -30,9 +30,16 @@ function conceptTag(subject: string, topic: string, subtopic: string): string {
   return `${subject}|${topic}|${subtopic || topic}`.toLowerCase();
 }
 
+/** Split a list into chunks so `.in(...)` filters stay well under URL-length limits. */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 /**
- * Rename `user_subscriptions.subject_name` from `oldSubject` to `newSubject` without
- * tripping the `unique (user_id, subject_name, stage)` constraint.
+ * Rename `user_subscriptions.subject_name` from any of `oldSubjects` to `newSubject`
+ * without tripping the `unique (user_id, subject_name, stage)` constraint.
  *
  * A blanket UPDATE would fail when a user already has a row at the target name + stage —
  * which happens routinely here because alias expansion renames several source spellings
@@ -43,17 +50,21 @@ function conceptTag(subject: string, topic: string, subtopic: string): string {
  */
 async function renameUserSubscriptionsSafely(
   admin: SupabaseClient,
-  oldSubject: string,
+  oldSubjects: string[],
   newSubject: string,
 ): Promise<void> {
-  const { data: rows, error } = await admin
-    .from("user_subscriptions")
-    .select("id, user_id, stage, active")
-    .eq("subject_name", oldSubject);
-  if (error) throw new Error(error.message);
-  if (!rows?.length) return;
+  const rows: { id: string; user_id: string; stage: string; active: boolean | null }[] = [];
+  for (const grp of chunk(oldSubjects, 50)) {
+    const { data, error } = await admin
+      .from("user_subscriptions")
+      .select("id, user_id, stage, active")
+      .in("subject_name", grp);
+    if (error) throw new Error(error.message);
+    if (data?.length) rows.push(...(data as typeof rows));
+  }
+  if (!rows.length) return;
 
-  for (const row of rows as { id: string; user_id: string; stage: string; active: boolean | null }[]) {
+  for (const row of rows) {
     const { data: existing, error: exErr } = await admin
       .from("user_subscriptions")
       .select("id, active")
@@ -85,61 +96,65 @@ async function renameUserSubscriptionsSafely(
   }
 }
 
-async function cascadeSingleSubjectRename(
+/**
+ * Rename every `subject` string in `sources` to `newSubject` across all tables
+ * that store subject strings — set-based, so the work is bounded by the number
+ * of distinct (topic, subtopic) pairs rather than the number of rows or alias
+ * spellings. The old implementation looped one cascade per alias spelling
+ * (36–45 of them) and updated questions ONE ROW AT A TIME, which blew past the
+ * serverless time limit on any real bank and left renames hanging forever.
+ */
+async function cascadeSubjectRename(
   admin: SupabaseClient,
-  oldSubject: string,
+  sources: string[],
   newSubject: string,
 ): Promise<void> {
-  if (!oldSubject || !newSubject || oldSubject === newSubject) return;
+  const srcs = [...new Set(sources)].filter((s) => s && s !== newSubject);
+  if (!srcs.length || !newSubject) return;
 
-  const batch = 400;
-
-  for (;;) {
-    const { data: rows, error } = await admin
-      .from("questions")
-      .select("id, topic, subtopic")
-      .eq("subject", oldSubject)
-      .limit(batch);
-    if (error) throw new Error(error.message);
-    if (!rows?.length) break;
-    for (const r of rows as { id: string; topic: string; subtopic: string }[]) {
-      const ct = conceptTag(newSubject, r.topic, r.subtopic);
-      const { error: uErr } = await admin.from("questions").update({ subject: newSubject, concept_tag: ct }).eq("id", r.id);
+  // questions / question_variants: concept_tag depends on each row's
+  // topic+subtopic, so collect the distinct pairs present, then issue one
+  // set-based UPDATE per pair (typically tens, never thousands).
+  for (const table of ["questions", "question_variants"] as const) {
+    const pairs = new Map<string, { topic: string | null; subtopic: string | null }>();
+    const present = new Set<string>();
+    const page = 1000;
+    for (const grp of chunk(srcs, 50)) {
+      for (let from = 0; ; from += page) {
+        const { data: rows, error } = await admin
+          .from(table)
+          .select("subject, topic, subtopic")
+          .in("subject", grp)
+          .range(from, from + page - 1);
+        if (error) throw new Error(error.message);
+        if (!rows?.length) break;
+        for (const r of rows as { subject: string; topic: string | null; subtopic: string | null }[]) {
+          present.add(r.subject);
+          pairs.set(`${r.topic ?? "\u0000"}|${r.subtopic ?? "\u0000"}`, { topic: r.topic, subtopic: r.subtopic });
+        }
+        if (rows.length < page) break;
+      }
+    }
+    const presentList = [...present];
+    for (const { topic, subtopic } of pairs.values()) {
+      const ct = conceptTag(newSubject, topic as string, subtopic as string);
+      let q = admin.from(table).update({ subject: newSubject, concept_tag: ct }).in("subject", presentList);
+      q = topic === null ? q.is("topic", null) : q.eq("topic", topic);
+      q = subtopic === null ? q.is("subtopic", null) : q.eq("subtopic", subtopic);
+      const { error: uErr } = await q;
       if (uErr) throw new Error(uErr.message);
     }
   }
 
-  for (;;) {
-    const { data: rows, error } = await admin
-      .from("question_variants")
-      .select("id, topic, subtopic")
-      .eq("subject", oldSubject)
-      .limit(batch);
-    if (error) throw new Error(error.message);
-    if (!rows?.length) break;
-    for (const r of rows as { id: string; topic: string; subtopic: string }[]) {
-      const ct = conceptTag(newSubject, r.topic, r.subtopic);
-      const { error: uErr } = await admin.from("question_variants").update({ subject: newSubject, concept_tag: ct }).eq("id", r.id);
-      if (uErr) throw new Error(uErr.message);
+  // Tables where the rename is a plain column swap: one UPDATE per chunk of spellings.
+  for (const table of ["draft_questions", "sessions", "study_plan_items", "assignments", "tutor_classes"] as const) {
+    for (const grp of chunk(srcs, 50)) {
+      const { error } = await admin.from(table).update({ subject: newSubject }).in("subject", grp);
+      if (error) throw new Error(error.message);
     }
   }
 
-  const { error: dErr } = await admin.from("draft_questions").update({ subject: newSubject }).eq("subject", oldSubject);
-  if (dErr) throw new Error(dErr.message);
-
-  const { error: sErr } = await admin.from("sessions").update({ subject: newSubject }).eq("subject", oldSubject);
-  if (sErr) throw new Error(sErr.message);
-
-  const { error: spErr } = await admin.from("study_plan_items").update({ subject: newSubject }).eq("subject", oldSubject);
-  if (spErr) throw new Error(spErr.message);
-
-  await renameUserSubscriptionsSafely(admin, oldSubject, newSubject);
-
-  const { error: asErr } = await admin.from("assignments").update({ subject: newSubject }).eq("subject", oldSubject);
-  if (asErr) throw new Error(asErr.message);
-
-  const { error: tcErr } = await admin.from("tutor_classes").update({ subject: newSubject }).eq("subject", oldSubject);
-  if (tcErr) throw new Error(tcErr.message);
+  await renameUserSubscriptionsSafely(admin, srcs, newSubject);
 }
 
 async function cascadeCurriculumSubjectRename(
@@ -149,11 +164,7 @@ async function cascadeCurriculumSubjectRename(
   oldLevelLabel = "",
 ): Promise<void> {
   if (!oldName || !newName) return;
-
-  const sources = expandCurriculumRenameSources(oldName, oldLevelLabel);
-  for (const src of sources) {
-    await cascadeSingleSubjectRename(admin, src, newName);
-  }
+  await cascadeSubjectRename(admin, expandCurriculumRenameSources(oldName, oldLevelLabel), newName);
 }
 
 // POST /api/admin/curriculum-plan
@@ -281,13 +292,13 @@ router.post("/admin/curriculum-repair-subject-strings", async (req, res) => {
   }
   try {
     const admin = getAdmin();
+    const allSources = new Set<string>();
     for (const raw of rawList) {
       const s = typeof raw === "string" ? raw.trim() : "";
       if (!s || s === b) continue;
-      for (const src of expandCurriculumRenameSources(s, "")) {
-        await cascadeSingleSubjectRename(admin, src, b);
-      }
+      for (const src of expandCurriculumRenameSources(s, "")) allSources.add(src);
     }
+    await cascadeSubjectRename(admin, [...allSources], b);
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "curriculum-repair-subject-strings failed");
