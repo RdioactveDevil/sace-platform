@@ -226,6 +226,12 @@ export async function generateRemediationVariantsViaAI(
         max_tokens: 2000,
         system,
         messages: [{ role: 'user', content: user }],
+        // Steer the fallback "similar question" generation by the subject's
+        // uploaded reference resources. The server injects the exemplars (with
+        // the service role) so they match the textbooks/exams for this subtopic.
+        ...(parentQuestion?.subject && parentQuestion?.subtopic
+          ? { exemplarsFor: { subject: parentQuestion.subject, subtopic: parentQuestion.subtopic } }
+          : {}),
       }),
     })
 
