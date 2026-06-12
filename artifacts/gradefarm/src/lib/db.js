@@ -697,7 +697,16 @@ export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 1
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ subject, topicCode, count, difficulty, autoApprove: true }),
   })
-  if (!res.ok) throw new Error(`generate-questions API error: ${res.status}`)
+  if (!res.ok) {
+    // Surface the server's detail so the caller can show/log why generation
+    // failed instead of silently ending the session.
+    let detail = ''
+    try {
+      const body = await res.json()
+      detail = body?.detail || body?.error || ''
+    } catch { /* non-JSON error body */ }
+    throw new Error(`generate-questions API error ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
   const data = await res.json()
   const rows = data.questions || []
   return rows.map(q => ({
