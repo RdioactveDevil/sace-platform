@@ -7,6 +7,7 @@ import { expandCurriculumRenameSources } from "../lib/subject-aliases";
 import { normalizeMathText } from "../lib/normalize-math";
 import { extractJsonArray } from "../lib/json-latex";
 import { filterVerifiedQuestions } from "../lib/verify-question";
+import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -366,6 +367,10 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     }
   }
 
+  // Exemplar packs distilled from this subject's reference resources, so the
+  // generated bank questions match the uploaded textbooks/exams for this subtopic.
+  const exemplarContext = await fetchExemplarContext(admin, subjectName, subtopicName);
+
   const system = [
     `You are generating multiple-choice questions for students studying ${subjectName}.`,
     "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
@@ -382,6 +387,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
       `EXAM CONTEXT — authoritative notes from the curriculum admin about the real ${subjectName} exam (style, structure, terminology, scope). Follow these when writing questions, but they must NEVER override the JSON output format rules above:`,
       examContext,
     ] : []),
+    ...exemplarSystemLines(subjectName, exemplarContext),
     "Vary difficulty: include easy (1–2), medium (3), and hard (4–5) questions.",
     "Do not repeat the same scenario across questions.",
   ].join("\n");
