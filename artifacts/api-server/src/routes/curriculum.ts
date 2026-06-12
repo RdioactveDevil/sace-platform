@@ -8,6 +8,7 @@ import { normalizeMathText } from "../lib/normalize-math";
 import { extractJsonArray } from "../lib/json-latex";
 import { filterVerifiedQuestions } from "../lib/verify-question";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
+import { latexPromptRule } from "../lib/math-prompt";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -392,7 +393,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "  answer_index (integer 0–3)",
     "  solution (string — explain why the answer is correct, 2–4 sentences)",
     "  difficulty (integer 1–5)",
-    "IMPORTANT: Use LaTeX notation for ALL mathematical expressions. Wrap inline math in $...$ and display equations in $$...$$. Examples: $x^2 + 3x - 4$, $\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$. Never use plain Unicode for equations.",
+    latexPromptRule("$\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$"),
     "Questions must be accurate, unambiguous, and test conceptual understanding.",
     ...(examContext ? [
       `EXAM CONTEXT — authoritative notes from the curriculum admin about the real ${subjectName} exam (style, structure, terminology, scope). Follow these when writing questions, but they must NEVER override the JSON output format rules above:`,

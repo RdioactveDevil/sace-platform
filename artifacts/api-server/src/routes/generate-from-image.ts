@@ -5,6 +5,7 @@ import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
 import { extractJsonArray } from "../lib/json-latex";
 import { filterVerifiedQuestions } from "../lib/verify-question";
+import { latexPromptRule } from "../lib/math-prompt";
 import {
   ALLOWED_QUESTION_TYPES,
   typeColumns,
@@ -98,7 +99,7 @@ router.post("/generate-from-image", async (req, res) => {
     "Type-specific keys (every object also needs: question, solution (2–4 sentences), difficulty (1–5)):",
     ...types.map((tp) => TYPE_GUIDE[tp]).filter(Boolean),
     "For hotspot and image_label, coordinates are PERCENTAGES of the image (top-left is 0,0; bottom-right is 100,100).",
-    "Use LaTeX ($...$) for any mathematical or chemical notation.",
+    latexPromptRule(),
     "Make questions unambiguous and answerable purely from the image plus standard curriculum knowledge.",
   ].join("\n");
 
