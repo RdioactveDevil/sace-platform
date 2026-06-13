@@ -27,6 +27,22 @@ export function getTopicsBySubject(subjectId) {
 }
 
 /**
+ * Strip SACE / Stage N / Year N level tokens to the bare subject title, lower-cased.
+ * Bridges spellings where the level appears on one side but not the other
+ * (e.g. a question stored as "Mathematical Methods" vs a curriculum named
+ * "Mathematical Methods Stage 2").
+ */
+function baseSubjectTitle(s) {
+  return normalizeSubjectStorageKey(s)
+    .replace(/^SACE\b/i, '')
+    .replace(/\bStage\s*[12]\b/ig, '')
+    .replace(/\bYear\s*\d{1,2}\b/ig, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+/**
  * Resolve a `questions.subject` row spelling (e.g. "SACE Stage 2 Mathematical
  * Methods : ") to the managed curriculum name the topics cache is keyed by.
  * Question rows can store any alias spelling of the curriculum name, so an
@@ -52,6 +68,17 @@ export function resolveManagedSubjectName(rawSubject) {
   for (const key of keys) {
     const keyAliases = bankSubjectAliases(key, '').map(a => normalizeSubjectStorageKey(a).toLowerCase())
     if (keyAliases.some(a => rawAliases.has(a))) return key
+  }
+
+  // Base-title match: bridge a bare title to a "title Stage N" curriculum (or
+  // vice versa) when the level token is present on only one side. Only used
+  // when EXACTLY ONE managed curriculum shares the base title, so we never
+  // mis-route a bare "Mathematical Methods" to the wrong stage when both
+  // Stage 1 and Stage 2 are managed.
+  const rawBase = baseSubjectTitle(rawSubject)
+  if (rawBase) {
+    const baseMatches = keys.filter(key => baseSubjectTitle(key) === rawBase)
+    if (baseMatches.length === 1) return baseMatches[0]
   }
   return null
 }

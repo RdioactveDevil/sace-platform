@@ -59,3 +59,26 @@ test('getTopicCodeByName works with alias subject spellings', async () => {
   assert.equal(getTopicCodeByName('Stage 2 Mathematical Methods', 'exponential functions'), 'T1.1')
   assert.equal(getTopicCodeByName('Stage 2 Mathematical Methods', 'Nonexistent Subtopic'), null)
 })
+
+test('resolveManagedSubjectName bridges a bare title to a stage-named curriculum', async () => {
+  await refreshManagedTopicsCache(async () => ({
+    'Mathematical Methods Stage 2': [
+      { code: 'T1.1', name: 'Exponential Functions', topicName: 'Functions' },
+    ],
+  }))
+  // Questions stored under the bare title (e.g. after a curriculum rename) must
+  // still resolve to the stage-named managed curriculum.
+  assert.equal(resolveManagedSubjectName('Mathematical Methods'), 'Mathematical Methods Stage 2')
+  assert.equal(getTopicCodeByName('Mathematical Methods', 'Exponential Functions'), 'T1.1')
+})
+
+test('resolveManagedSubjectName refuses an ambiguous bare title across stages', async () => {
+  await refreshManagedTopicsCache(async () => ({
+    'Mathematical Methods Stage 1': [{ code: 'T1.1', name: 'Polynomials', topicName: 'Algebra' }],
+    'Mathematical Methods Stage 2': [{ code: 'T1.1', name: 'Exponential Functions', topicName: 'Functions' }],
+  }))
+  // Bare title matches both stages → must not guess.
+  assert.equal(resolveManagedSubjectName('Mathematical Methods'), null)
+  // But a stage-qualified spelling still resolves precisely.
+  assert.equal(resolveManagedSubjectName('Stage 2 Mathematical Methods'), 'Mathematical Methods Stage 2')
+})
