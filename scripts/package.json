@@ -8,6 +8,7 @@
     "backfill:verify-repair": "tsx ./src/backfill-verify-repair.ts",
     "migrate": "tsx ./src/apply-migrations.ts",
     "ingest:past-paper": "tsx ./src/ingest-past-paper.ts",
+    "seed:hard-graph": "tsx ./src/seed-hard-graph-questions.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
