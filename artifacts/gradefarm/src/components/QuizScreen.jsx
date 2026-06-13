@@ -944,6 +944,90 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Shared remediation-variant answer handling, used by BOTH the MCQ path
+  // (handleAnswer) and the multi-format path (handleSubmitResponse). Without
+  // this, non-MCQ remediation variants (numeric, multi-select, etc. — which now
+  // exist in the bank and get pulled in as variants) would record XP but never
+  // advance the mastery streak / wrong-count progression.
+  const applyRemediationVariantOutcome = async (isCorrect, newStreak, xpEarned, selectedIndex, timeTakenMs) => {
+    try { await incrementQuestionVariantUsage(currentQ.variant_record_id) } catch {}
+
+    // Track the variant attempt against its real bank id so this question is
+    // excluded from future non-'all' sessions. Only when we have a real
+    // questions.id — synthetic queue keys would violate the answer_log FK.
+    const trackId =
+      currentQ.bank_question_id ||
+      (currentQ.variant_record_id && pendingBankIdsRef.current.get(currentQ.variant_record_id)) ||
+      null
+    if (trackId) {
+      try {
+        await recordAnswer(profile.id, trackId, isCorrect, selectedIndex ?? null, null, timeTakenMs)
+      } catch (recErr) {
+        console.warn('[gradefarm] failed to record variant answer:', recErr?.message || recErr)
+      }
+      setStruggleMap(prev => {
+        const old = prev[trackId] ?? { attempts: 0, wrong: 0 }
+        return {
+          ...prev,
+          [trackId]: {
+            ...old,
+            attempts: old.attempts + 1,
+            wrong: old.wrong + (isCorrect ? 0 : 1),
+            last_seen: new Date().toISOString(),
+          },
+        }
+      })
+      setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
+    }
+
+    if (isCorrect) {
+      const nextMastery = remediationStreak + 1
+      setRemediationStreak(nextMastery)
+
+      if (nextMastery >= remediationTarget) {
+        const bonus = getRemediationCompletionBonus()
+        try {
+          const newXP = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
+          setProfile(p => ({ ...p, xp: newXP }))
+          setSessionXP(s => s + bonus)
+        } catch {}
+        setRemediationStatus('complete')
+      }
+    } else {
+      // Concept-builder questions are exempt from the wrong count.
+      const isConceptBuilder = currentQ.variant_type === 'concept_builder'
+
+      if (!isConceptBuilder) {
+        setRemediationStreak(0)
+        const newWrongCount = remediationWrongCount + 1
+        setRemediationWrongCount(newWrongCount)
+        const newDiffTarget = remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)
+        setRemediationDifficultyTarget(newDiffTarget)
+
+        if (newWrongCount >= 5) {
+          setRemediationStatus('needs_review')
+        } else if (newWrongCount === 3) {
+          setRemediationTarget(1)
+          setRemediationStatus('struggling')
+        } else if (newWrongCount === 2) {
+          setRemediationTarget(2)
+          const tag = remediationOriginalQ?.concept_tag || getQuestionConceptTag(remediationOriginalQ)
+          ;(async () => {
+            const cb = await generateConceptBuilderViaAI(remediationOriginalQ, tag)
+            if (!cb) return
+            const normalized = {
+              ...normalizeVariantRecord(remediationOriginalQ, cb, 0),
+              is_variant: true,
+              source: 'concept_builder',
+              variant_type: 'concept_builder',
+            }
+            setRemediationQueue(prev => [normalized, ...prev])
+          })()
+        }
+      }
+    }
+  }
+
   const handleAnswer = async (idx) => {
     if (showAns || !currentQ) return
 
@@ -974,94 +1058,7 @@ export default function QuizScreen({
     } catch {}
 
     if (isRemediationQuestion) {
-      try { await incrementQuestionVariantUsage(currentQ.variant_record_id) } catch {}
-
-      // Track the variant attempt against its real bank id so this question is
-      // excluded from future non-'all' sessions (no-repeat rule). Only do this
-      // when we have a real questions.id — synthetic queue keys (local_fallback__,
-      // variant__) would violate the answer_log foreign key. If the queue item
-      // didn't have bank_question_id at render time, look it up via pendingBankIdsRef.
-      const trackId =
-        currentQ.bank_question_id ||
-        (currentQ.variant_record_id && pendingBankIdsRef.current.get(currentQ.variant_record_id)) ||
-        null
-      if (trackId) {
-        try {
-          await recordAnswer(profile.id, trackId, isCorrect, idx, null, timeTakenMs)
-        } catch (recErr) {
-          console.warn('[gradefarm] failed to record variant answer:', recErr?.message || recErr)
-        }
-        setStruggleMap(prev => {
-          const old = prev[trackId] ?? { attempts: 0, wrong: 0 }
-          return {
-            ...prev,
-            [trackId]: {
-              ...old,
-              attempts: old.attempts + 1,
-              wrong: old.wrong + (isCorrect ? 0 : 1),
-              last_seen: new Date().toISOString(),
-            },
-          }
-        })
-        // Prevent the underlying bank question from appearing again as a main quiz
-        // question this session — critical in 'all' mode (consolidation) where the
-        // only repeat guard is sessionAnswered.
-        setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
-      }
-
-      if (isCorrect) {
-        const nextMastery = remediationStreak + 1
-        setRemediationStreak(nextMastery)
-
-        if (nextMastery >= remediationTarget) {
-          const bonus = getRemediationCompletionBonus()
-          try {
-            const newXP = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
-            setProfile(p => ({ ...p, xp: newXP }))
-            setSessionXP(s => s + bonus)
-          } catch {}
-          setRemediationStatus('complete')
-        }
-      } else {
-        // Option D: concept-builder questions are exempt from wrong count
-        const isConceptBuilder = currentQ.variant_type === 'concept_builder'
-
-        if (!isConceptBuilder) {
-          setRemediationStreak(0)
-          const newWrongCount = remediationWrongCount + 1
-          setRemediationWrongCount(newWrongCount)
-          // Keep the difficulty anchored at the original level — selectBankVariants
-          // already prefers "same, then one lower" (e.g. 3 → 3 or 2). Deeper easing
-          // is handled by the concept-builder path at wrongCount === 2.
-          const newDiffTarget = remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)
-          setRemediationDifficultyTarget(newDiffTarget)
-
-          if (newWrongCount >= 5) {
-            // Option G: hard exit — flag topic for study plan, no failure messaging
-            setRemediationStatus('needs_review')
-          } else if (newWrongCount === 3) {
-            // Option F: soft pause — student gets a choice
-            setRemediationTarget(1) // Option I: scale target down to 1
-            setRemediationStatus('struggling')
-          } else if (newWrongCount === 2) {
-            // Option I: scale mastery target down, trigger concept builder
-            setRemediationTarget(2)
-            const tag = remediationOriginalQ?.concept_tag || getQuestionConceptTag(remediationOriginalQ)
-            ;(async () => {
-              const cb = await generateConceptBuilderViaAI(remediationOriginalQ, tag)
-              if (!cb) return
-              const normalized = {
-                ...normalizeVariantRecord(remediationOriginalQ, cb, 0),
-                is_variant: true,
-                source: 'concept_builder',
-                variant_type: 'concept_builder',
-              }
-              setRemediationQueue(prev => [normalized, ...prev])
-            })()
-          }
-        }
-        // concept builders: no wrongCount change, no streak reset, student just continues
-      }
+      await applyRemediationVariantOutcome(isCorrect, newStreak, xpEarned, idx, timeTakenMs)
       return
     }
 
@@ -1126,11 +1123,15 @@ export default function QuizScreen({
 
   // Outcome handler for non-MCQ question types (numeric, multi-select, short
   // text, ordering). The renderer grades the response and calls this with the
-  // result. Mirrors the main-question path of handleAnswer; remediation is
-  // MCQ-specific so new types skip it for now (they still record + earn XP).
+  // result. Mirrors the main-question path of handleAnswer, and routes
+  // remediation variants through the same shared outcome handler so the mastery
+  // streak advances for non-MCQ question types too.
   const handleSubmitResponse = async (response, isCorrect) => {
     if (showAns || !currentQ) return
-    const xpEarned = calcXP(isCorrect, currentQ.difficulty, streak)
+    const isVariant = !!currentQ.is_variant
+    const xpEarned = isVariant
+      ? calcRemediationXP(isCorrect, currentQ.difficulty)
+      : calcXP(isCorrect, currentQ.difficulty, streak)
     const newStreak = isCorrect ? streak + 1 : 0
     const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
 
@@ -1140,7 +1141,7 @@ export default function QuizScreen({
     setEarnedXP(xpEarned)
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: false }])
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant }])
 
     if (isCorrect) {
       setFloatXP(xpEarned)
@@ -1151,6 +1152,13 @@ export default function QuizScreen({
       const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
       setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
     } catch {}
+
+    // Remediation variant: mastery-streak / wrong-count progression (shared with
+    // the MCQ path). recordAnswer + sessionAnswered are handled inside.
+    if (isVariant) {
+      await applyRemediationVariantOutcome(isCorrect, newStreak, xpEarned, null, timeTakenMs)
+      return
+    }
 
     setStruggleMap(prev => {
       const old = prev[currentQ.id] ?? { attempts: 0, wrong: 0 }
