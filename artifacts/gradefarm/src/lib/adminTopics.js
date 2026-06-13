@@ -42,15 +42,29 @@ function baseSubjectTitle(s) {
     .toLowerCase()
 }
 
+/** Normalised level token (e.g. "stage 2", "year 10") found in a subject/stage string, or ''. */
+function levelToken(s) {
+  const str = normalizeSubjectStorageKey(s)
+  const st = str.match(/\bStage\s*([12])\b/i)
+  if (st) return `stage ${st[1]}`
+  const yr = str.match(/\bYear\s*(\d{1,2})\b/i)
+  if (yr) return `year ${yr[1]}`
+  return ''
+}
+
 /**
  * Resolve a `questions.subject` row spelling (e.g. "SACE Stage 2 Mathematical
  * Methods : ") to the managed curriculum name the topics cache is keyed by.
  * Question rows can store any alias spelling of the curriculum name, so an
  * exact key match isn't enough — compare the alias expansions of both sides.
+ *
  * @param {string} rawSubject
+ * @param {string} [stageHint] the selected subject tile's level (e.g. "Stage 2"),
+ *   used to disambiguate a bare title when multiple stages of the same subject
+ *   are managed (Stage 1 AND Stage 2 Mathematical Methods).
  * @returns {string|null} the cache key, or null when nothing matches
  */
-export function resolveManagedSubjectName(rawSubject) {
+export function resolveManagedSubjectName(rawSubject, stageHint = '') {
   const raw = normalizeSubjectStorageKey(rawSubject).toLowerCase()
   if (!raw) return null
   const keys = Object.keys(_managedTopicsCache)
@@ -71,14 +85,21 @@ export function resolveManagedSubjectName(rawSubject) {
   }
 
   // Base-title match: bridge a bare title to a "title Stage N" curriculum (or
-  // vice versa) when the level token is present on only one side. Only used
-  // when EXACTLY ONE managed curriculum shares the base title, so we never
-  // mis-route a bare "Mathematical Methods" to the wrong stage when both
-  // Stage 1 and Stage 2 are managed.
+  // vice versa) when the level token is present on only one side.
   const rawBase = baseSubjectTitle(rawSubject)
   if (rawBase) {
     const baseMatches = keys.filter(key => baseSubjectTitle(key) === rawBase)
     if (baseMatches.length === 1) return baseMatches[0]
+    if (baseMatches.length > 1) {
+      // Ambiguous bare title (e.g. Stage 1 AND Stage 2 both managed). Use the
+      // selected tile's stage — or a level embedded in the raw subject — to
+      // pick the right one. Never guess when the level is unknown.
+      const wantLevel = levelToken(stageHint) || levelToken(rawSubject)
+      if (wantLevel) {
+        const stageMatches = baseMatches.filter(key => levelToken(key) === wantLevel)
+        if (stageMatches.length === 1) return stageMatches[0]
+      }
+    }
   }
   return null
 }
@@ -88,10 +109,11 @@ export function resolveManagedSubjectName(rawSubject) {
  * of the curriculum name (question rows store legacy variants).
  * @param {string} subject
  * @param {string} topicName
+ * @param {string} [stageHint] selected tile's level, for stage disambiguation
  * @returns {string|null}
  */
-export function getTopicCodeByName(subject, topicName) {
-  const key = resolveManagedSubjectName(subject)
+export function getTopicCodeByName(subject, topicName, stageHint = '') {
+  const key = resolveManagedSubjectName(subject, stageHint)
   const topics = key ? getTopicsBySubject(key) : []
   if (!topics.length || !topicName) return null
   const norm = topicName.trim().toLowerCase()
