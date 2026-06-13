@@ -48,32 +48,39 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
 /**
- * Derive a target difficulty (1–5) from the last 5 main-quiz results.
- * Returns null when there isn't enough data yet (first 2 questions of a session).
+ * Derive a target difficulty (1–5) from the student's session performance.
+ * Returns null only before the first main-quiz answer.
+ *
+ * The target ratchets off the student's *demonstrated competence ceiling* —
+ * the hardest question they have answered correctly this session — rather than
+ * the average difficulty of whatever questions happened to be served. Anchoring
+ * on the served average created a feedback trap: a run of easy questions kept
+ * the average (and therefore the target) low, so the level could never climb
+ * even when every answer was correct.
  *
  * Logic:
- *   accuracy ≥ 70% → step up by 1 from the recent average difficulty
- *   accuracy ≤ 40% → step down by 1
- *   otherwise      → hold at the recent average
+ *   recent accuracy ≥ 70% → push one level above the demonstrated ceiling
+ *   recent accuracy ≤ 40% → ease one level below the ceiling
+ *   otherwise             → hold at the demonstrated ceiling
  */
 function getTargetDifficulty(sessionResults, questions) {
   const mainResults = (sessionResults || []).filter(r => !r.remediation)
-  const recent = mainResults.slice(-5)
-  if (recent.length < 2) return null
+  if (mainResults.length < 1) return null
 
+  const recent = mainResults.slice(-5)
   const accuracy = recent.filter(r => r.correct).length / recent.length
 
-  const recentDiffs = recent.flatMap(r => {
-    const q = (questions || []).find(qq => qq.id === r.id)
-    return q?.difficulty ? [q.difficulty] : []
-  })
-  const avgDiff = recentDiffs.length > 0
-    ? recentDiffs.reduce((a, b) => a + b, 0) / recentDiffs.length
-    : 3
+  const correctDiffs = mainResults
+    .filter(r => r.correct)
+    .flatMap(r => {
+      const q = (questions || []).find(qq => qq.id === r.id)
+      return q?.difficulty ? [q.difficulty] : []
+    })
+  const ceiling = correctDiffs.length > 0 ? Math.max(...correctDiffs) : 1
 
-  if (accuracy >= 0.7) return Math.min(5, Math.round(avgDiff) + 1)
-  if (accuracy <= 0.4) return Math.max(1, Math.round(avgDiff) - 1)
-  return Math.round(avgDiff)
+  if (accuracy >= 0.7) return Math.min(5, ceiling + 1)
+  if (accuracy <= 0.4) return Math.max(1, ceiling - 1)
+  return Math.min(5, ceiling)
 }
 
 async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
@@ -771,14 +778,26 @@ export default function QuizScreen({
     const pool = effectiveSubtopics.length > 0
       ? questions.filter(q => effectiveSubtopics.includes(q.subtopic))
       : questions
-    const remaining = pool.filter(q => {
+    const available = pool.filter(q => {
       if (sessionAnswered.includes(q.id)) return false
       if (quizMode === 'all') return true
       const s = struggleMap[q.id]
       return !s || s.attempts === 0
-    }).length
+    })
+    const remaining = available.length
 
-    if (remaining > 3) return   // still plenty — don't prefetch yet
+    // Difficulty-gap trigger: as the student levels up, the bank often has no
+    // questions near their current target (it was seeded mostly easy). Without
+    // this, the difficulty would be stuck not because selection is wrong but
+    // because there is nothing hard to select. Generate ahead when the target
+    // has climbed to 3+ and fewer than 2 available questions sit near it.
+    const prefetchDiff = getTargetDifficulty(sessionResults, questions)
+    const nearTargetCount = prefetchDiff == null
+      ? null
+      : available.filter(q => Math.abs((q.difficulty || 3) - prefetchDiff) <= 1).length
+    const difficultyGap = prefetchDiff != null && prefetchDiff >= 3 && nearTargetCount < 2
+
+    if (remaining > 3 && !difficultyGap) return   // plenty, and harder questions are available
 
     // Background prefetch is silent: if the target can't be resolved, just skip
     // (the exhaustion handler surfaces the reason when the bank actually runs dry).
@@ -789,7 +808,6 @@ export default function QuizScreen({
     backgroundPrefetchAttempted.current = true
 
     // Fire-and-forget: no loading state, no UI change.
-    const prefetchDiff = getTargetDifficulty(sessionResults, questions)
     fetchAndPersistMoreQuestions(subject, topicCode, 10, prefetchDiff)
       .then(newQs => {
         if (newQs.length && typeof onBankQuestionsAdded === 'function') {

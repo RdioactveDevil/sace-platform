@@ -250,6 +250,7 @@ async function generateForTopic(opts: {
   autoApprove: boolean;
   questionTypes?: string[];
   includeDiagrams?: boolean;
+  includeGraphs?: boolean;
 }): Promise<GenResult> {
   const { adminDb, resolvedSubject, topicCode, count, difficulty, autoApprove } = opts;
   // Which formats Claude may use. Defaults to MCQ-only so existing flows are
@@ -295,6 +296,18 @@ async function generateForTopic(opts: {
   const curriculumLabel = normalizedSubject;
   const learningObjective = LEARNING_OBJECTIVES[topicName] || topicName;
 
+  // Calibrate the 1\u20135 scale against real SACE / senior-secondary exam standards
+  // so that "difficulty 3\u20134" actually means exam-level challenge, not a slightly
+  // wordier recall question.
+  const SACE_DIFFICULTY_ANCHOR =
+    "Difficulty scale (calibrate against real SACE / senior-secondary exam papers for this subject): " +
+    "1 = recall or a single routine step; " +
+    "2 = straightforward application of one concept; " +
+    "3 = a multi-step question combining two ideas, equivalent to a mid-paper SACE exam question; " +
+    "4 = multi-step analysis, synthesis or an unfamiliar context, equivalent to a harder SACE exam question; " +
+    "5 = demanding multi-part reasoning at the very top of SACE exam difficulty. " +
+    "A difficulty 3 or 4 question MUST be as cognitively demanding as the corresponding question on an actual SACE exam \u2014 not merely longer.";
+
   const numDiff = Number(difficulty);
   const difficultyInstruction =
     !difficulty || difficulty === "mixed" || isNaN(numDiff)
@@ -323,7 +336,11 @@ async function generateForTopic(opts: {
   // exams, practice tests). Injected into every generation so the bank matches
   // the real material. Topic-scoped first, subject-wide as fallback.
   const exemplarContext = await fetchExemplarContext(adminDb, normalizedSubject, topicName);
-  const flagGraphs = !!flags.graphs;
+  // Graphs are enabled by the curriculum's generation flag OR when the caller
+  // explicitly asks for them (e.g. the live quiz top-up, which wants visual
+  // questions to appear). The prompt still only emits a graph when the question
+  // genuinely needs one, so honouring the request is safe for any subject.
+  const flagGraphs = !!flags.graphs || !!opts.includeGraphs;
   const flagTables = !!flags.tables;
   const flagLatex  = flags.latex !== false; // default true
 
@@ -402,6 +419,7 @@ async function generateForTopic(opts: {
     ] : []),
     ...exemplarSystemLines(curriculumLabel, exemplarContext),
     "Do not repeat the same scenario across questions.",
+    SACE_DIFFICULTY_ANCHOR,
     difficultyInstruction,
   ].join("\n");
 
@@ -554,7 +572,7 @@ async function generateForTopic(opts: {
 }
 
 router.post("/generate-questions", async (req, res) => {
-  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams } = req.body;
+  const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams, includeGraphs } = req.body;
 
   const resolvedSubject: string = subject || stage;
   // Support both a single topicCode and a topicCodes array
@@ -587,7 +605,7 @@ router.post("/generate-questions", async (req, res) => {
         const code = topicCodes[cursor++];
         try {
           const { status, body } = await generateForTopic({
-            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes, includeDiagrams,
+            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs,
           });
           if (status === 200) {
             totalInserted += (body.inserted as number) ?? 0;
@@ -610,7 +628,7 @@ router.post("/generate-questions", async (req, res) => {
   // Single topic
   try {
     const { status, body } = await generateForTopic({
-      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes, includeDiagrams,
+      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs,
     });
     res.status(status).json(body);
   } catch (err) {

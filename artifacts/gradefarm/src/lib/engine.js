@@ -27,9 +27,11 @@ export function computeWeights(questions, struggleMap, targetDifficulty = null) 
 
     let weight
     if (!s || s.attempts === 0) {
-      // Random jitter (0–0.15) shuffles unseen questions each session while
-      // keeping them ranked below any meaningfully-struggled question (max ~1.0)
-      weight = 0.3 + (q.difficulty / 5) * 0.1 + Math.random() * 0.15
+      // Small jitter (0–0.05) shuffles unseen questions each session. Kept
+      // deliberately small so it can't swamp the adaptive-difficulty signal
+      // below — a larger jitter let easy questions keep winning even when the
+      // target had moved up, which pinned the session at low difficulty.
+      weight = 0.3 + (q.difficulty / 5) * 0.1 + Math.random() * 0.05
     } else {
       const errorRate = s.wrong / s.attempts
       const msSince = now - new Date(s.last_seen).getTime()
@@ -38,11 +40,15 @@ export function computeWeights(questions, struggleMap, targetDifficulty = null) 
       weight = errorRate * 0.65 + recency * 0.25 + diffBonus
     }
 
-    // Adaptive difficulty: bias towards questions near the target difficulty level.
+    // Adaptive difficulty: bias strongly towards questions near the target
+    // difficulty level. The proximity falls off over a ±2 band (not ±4) and
+    // carries a large bonus, so an on-target question clearly outranks an
+    // off-target unseen one while still sitting just below a genuinely
+    // struggled question (errorRate-driven weight ~0.9+).
     if (targetDifficulty !== null) {
       const qDiff = q.difficulty || 3
-      const proximity = 1 - Math.abs(qDiff - targetDifficulty) / 4 // 0–1
-      weight += proximity * 0.30
+      const proximity = Math.max(0, 1 - Math.abs(qDiff - targetDifficulty) / 2) // 0–1
+      weight += proximity * 0.45
     }
 
     return { id: q.id, weight }
