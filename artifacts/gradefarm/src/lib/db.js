@@ -226,13 +226,32 @@ function mapAndDedupeQuestions(data, subjectFallback) {
 }
 
 // â”€â”€â”€ QUESTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export async function getQuestions(subject = 'Chemistry') {
-  const { data, error } = await supabase
-    .from('questions')
-    .select('*')
-    .eq('subject', subject)
+// PostgREST caps a single response at 1000 rows, so a subject bank larger than
+// that gets silently truncated by an unpaginated `.select()` — newly added
+// questions land in the dropped tail and never reach the UI. Pull successive
+// 1000-row windows until a short page. Order by `id` (a stable key) so the
+// pages don't overlap or skip rows; this does not affect display order, which
+// is handled downstream by mapAndDedupeQuestions and the quiz shuffle.
+const QUESTIONS_PAGE_SIZE = 1000
 
-  if (error) throw error
+async function fetchAllQuestions(applyFilter) {
+  const all = []
+  let from = 0
+  while (true) {
+    const { data, error } = await applyFilter(supabase.from('questions').select('*'))
+      .order('id', { ascending: true })
+      .range(from, from + QUESTIONS_PAGE_SIZE - 1)
+    if (error) throw error
+    const rows = data || []
+    all.push(...rows)
+    if (rows.length < QUESTIONS_PAGE_SIZE) break
+    from += QUESTIONS_PAGE_SIZE
+  }
+  return all
+}
+
+export async function getQuestions(subject = 'Chemistry') {
+  const data = await fetchAllQuestions(q => q.eq('subject', subject))
   return mapAndDedupeQuestions(data, subject)
 }
 
@@ -243,11 +262,7 @@ export async function getQuestionsForSubjectTile(subjectTile) {
   const keys = questionsBankSubjectKeys(subjectTile)
   if (keys.length === 0) return []
   if (keys.length === 1) return getQuestions(keys[0])
-  const { data, error } = await supabase
-    .from('questions')
-    .select('*')
-    .in('subject', keys)
-  if (error) throw error
+  const data = await fetchAllQuestions(q => q.in('subject', keys))
   return mapAndDedupeQuestions(data, keys[0])
 }
 
