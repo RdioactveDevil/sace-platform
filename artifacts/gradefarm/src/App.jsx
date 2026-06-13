@@ -997,7 +997,7 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           : <AppShell {...shellProps}>
               <QuizScreen {...commonProps} {...quizState}
-              profile={profile} setProfile={setProfile}
+              profile={profile} setProfile={setProfile} subjectTile={selectedSubject}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')}
               onOpenLearn={(topic, ctx) => {

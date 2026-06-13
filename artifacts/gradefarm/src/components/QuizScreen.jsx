@@ -313,7 +313,7 @@ function StatusToast({ status, onReturnToQuiz, theme = 'dark' }) {
 
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
-  examMode = false, timerSeconds = 0,
+  examMode = false, timerSeconds = 0, subjectTile,
   onOpenLearn, consolidateSubtopic, onClearConsolidate,
   currentQ: _currentQ, setCurrentQ,
   selected: _selected, setSelected,
@@ -652,8 +652,16 @@ export default function QuizScreen({
         ? questions.find(q => effectiveSubtopics.includes(q.subtopic))
         : null) ||
       questions[0]
-    const rawSubject = lastQ?.subject
-    const subject = resolveManagedSubjectName(rawSubject) || rawSubject
+    // The selected subject tile is the authoritative identity of the curriculum
+    // this session belongs to (it carries the stage). Resolve the subject from
+    // it first — disambiguating bare titles when both Stage 1 and Stage 2 of the
+    // same subject are managed — and fall back to the question row's spelling.
+    const stageHint = subjectTile?.stage || ''
+    const rawSubject = subjectTile?.name || lastQ?.subject
+    const subject =
+      resolveManagedSubjectName(subjectTile?.name || '', stageHint) ||
+      resolveManagedSubjectName(lastQ?.subject || '', stageHint) ||
+      rawSubject
     const subtopicName =
       lastQ?.subtopic && (effectiveSubtopics.length === 0 || effectiveSubtopics.includes(lastQ.subtopic))
         ? lastQ.subtopic
@@ -661,9 +669,9 @@ export default function QuizScreen({
     if (!subject || !subtopicName) {
       return { error: `Could not determine the topic to generate for (subject="${rawSubject ?? ''}", subtopic="${subtopicName ?? ''}").` }
     }
-    const topicCode = getTopicCodeByName(subject, subtopicName)
+    const topicCode = getTopicCodeByName(subject, subtopicName, stageHint)
     if (!topicCode) {
-      const known = resolveManagedSubjectName(rawSubject)
+      const known = resolveManagedSubjectName(subject, stageHint)
       const reason = known
         ? `This subtopic ("${subtopicName}") isn't in the curriculum's topic list, so new questions can't be generated for it.`
         : `This subject ("${rawSubject}") isn't set up as a managed curriculum, so new questions can't be generated for it.`

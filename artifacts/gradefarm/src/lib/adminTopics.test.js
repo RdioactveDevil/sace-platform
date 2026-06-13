@@ -82,3 +82,18 @@ test('resolveManagedSubjectName refuses an ambiguous bare title across stages', 
   // But a stage-qualified spelling still resolves precisely.
   assert.equal(resolveManagedSubjectName('Stage 2 Mathematical Methods'), 'Mathematical Methods Stage 2')
 })
+
+test('resolveManagedSubjectName uses the tile stage hint to break a tie', async () => {
+  await refreshManagedTopicsCache(async () => ({
+    'Mathematical Methods Stage 1': [{ code: 'T1.1', name: 'Polynomials', topicName: 'Algebra' }],
+    'Mathematical Methods Stage 2': [{ code: 'T1.1', name: 'Exponential Functions', topicName: 'Functions' }],
+  }))
+  // Bare subject + a stage hint from the selected tile → resolves to that stage.
+  assert.equal(resolveManagedSubjectName('Mathematical Methods', 'Stage 1'), 'Mathematical Methods Stage 1')
+  assert.equal(resolveManagedSubjectName('Mathematical Methods', 'Stage 2'), 'Mathematical Methods Stage 2')
+  // And topic-code lookup routes to the right stage's topics with the hint.
+  assert.equal(getTopicCodeByName('Mathematical Methods', 'Polynomials', 'Stage 1'), 'T1.1')
+  assert.equal(getTopicCodeByName('Mathematical Methods', 'Exponential Functions', 'Stage 2'), 'T1.1')
+  // Wrong-stage subtopic must NOT match.
+  assert.equal(getTopicCodeByName('Mathematical Methods', 'Polynomials', 'Stage 2'), null)
+})
