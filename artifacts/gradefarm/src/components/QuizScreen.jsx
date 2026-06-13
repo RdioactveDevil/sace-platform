@@ -639,6 +639,11 @@ export default function QuizScreen({
   // managed topics cache; the user's selected subtopics take priority over
   // the last-answered question so a session that starts on an already
   // exhausted subtopic still generates for the right one.
+  //
+  // Returns { subject, topicCode } on success, or { error } with a
+  // human-readable reason so the caller can surface WHY generation could not
+  // even start (most often: the managed-topics cache is empty/stale, or the
+  // question's subtopic label doesn't match a curriculum subtopic).
   const getGenerationTarget = () => {
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
     const lastQ =
@@ -653,9 +658,17 @@ export default function QuizScreen({
       lastQ?.subtopic && (effectiveSubtopics.length === 0 || effectiveSubtopics.includes(lastQ.subtopic))
         ? lastQ.subtopic
         : effectiveSubtopics[0]
-    if (!subject || !subtopicName) return null
+    if (!subject || !subtopicName) {
+      return { error: `Could not determine the topic to generate for (subject="${rawSubject ?? ''}", subtopic="${subtopicName ?? ''}").` }
+    }
     const topicCode = getTopicCodeByName(subject, subtopicName)
-    if (!topicCode) return null
+    if (!topicCode) {
+      const known = resolveManagedSubjectName(rawSubject)
+      const reason = known
+        ? `This subtopic ("${subtopicName}") isn't in the curriculum's topic list, so new questions can't be generated for it.`
+        : `This subject ("${rawSubject}") isn't set up as a managed curriculum, so new questions can't be generated for it.`
+      return { error: reason }
+    }
     return { subject, topicCode }
   }
 
@@ -669,7 +682,15 @@ export default function QuizScreen({
     if (bankExhaustionAttempted.current) return
 
     const target = getGenerationTarget()
-    if (!target) return
+    if (!target || target.error) {
+      // Couldn't even start generation — surface the reason on the summary
+      // instead of silently ending the session with no explanation.
+      if (target?.error) {
+        bankExhaustionAttempted.current = true
+        setGenerationError(target.error)
+      }
+      return
+    }
     const { subject, topicCode } = target
 
     generatingMoreRef.current = true
@@ -751,8 +772,10 @@ export default function QuizScreen({
 
     if (remaining > 3) return   // still plenty — don't prefetch yet
 
+    // Background prefetch is silent: if the target can't be resolved, just skip
+    // (the exhaustion handler surfaces the reason when the bank actually runs dry).
     const target = getGenerationTarget()
-    if (!target) return
+    if (!target || target.error) return
     const { subject, topicCode } = target
 
     backgroundPrefetchAttempted.current = true
