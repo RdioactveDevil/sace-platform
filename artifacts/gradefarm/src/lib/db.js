@@ -226,32 +226,36 @@ function mapAndDedupeQuestions(data, subjectFallback) {
 }
 
 // â”€â”€â”€ QUESTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// PostgREST caps a single response at 1000 rows, so a subject bank larger than
-// that gets silently truncated by an unpaginated `.select()` — newly added
-// questions land in the dropped tail and never reach the UI. Pull successive
-// 1000-row windows until a short page. Order by `id` (a stable key) so the
-// pages don't overlap or skip rows; this does not affect display order, which
-// is handled downstream by mapAndDedupeQuestions and the quiz shuffle.
-const QUESTIONS_PAGE_SIZE = 1000
+// PostgREST caps any single response at 1000 rows, so an unpaginated
+// `.select()` over an unbounded result set (a large subject bank, a whole
+// table, a per-user history that grows without limit) is silently truncated —
+// e.g. newly added questions land in the dropped tail and never reach the UI.
+// `fetchAllRows` pulls successive 1000-row windows until a short page.
+// `buildQuery` must return a *fresh* filtered query each call (Supabase query
+// builders are single-use). `orderColumn` should be a stable key so pages
+// don't overlap or skip rows; it does not change display order, which is
+// handled downstream (mapAndDedupeQuestions, the quiz shuffle, etc.).
+const SUPABASE_PAGE_SIZE = 1000
 
-async function fetchAllQuestions(applyFilter) {
+async function fetchAllRows(buildQuery, orderColumn = 'id') {
   const all = []
   let from = 0
   while (true) {
-    const { data, error } = await applyFilter(supabase.from('questions').select('*'))
-      .order('id', { ascending: true })
-      .range(from, from + QUESTIONS_PAGE_SIZE - 1)
+    const { data, error } = await buildQuery()
+      .order(orderColumn, { ascending: true })
+      .range(from, from + SUPABASE_PAGE_SIZE - 1)
     if (error) throw error
     const rows = data || []
     all.push(...rows)
-    if (rows.length < QUESTIONS_PAGE_SIZE) break
-    from += QUESTIONS_PAGE_SIZE
+    if (rows.length < SUPABASE_PAGE_SIZE) break
+    from += SUPABASE_PAGE_SIZE
   }
   return all
 }
 
 export async function getQuestions(subject = 'Chemistry') {
-  const data = await fetchAllQuestions(q => q.eq('subject', subject))
+  const data = await fetchAllRows(() =>
+    supabase.from('questions').select('*').eq('subject', subject))
   return mapAndDedupeQuestions(data, subject)
 }
 
@@ -262,7 +266,8 @@ export async function getQuestionsForSubjectTile(subjectTile) {
   const keys = questionsBankSubjectKeys(subjectTile)
   if (keys.length === 0) return []
   if (keys.length === 1) return getQuestions(keys[0])
-  const data = await fetchAllQuestions(q => q.in('subject', keys))
+  const data = await fetchAllRows(() =>
+    supabase.from('questions').select('*').in('subject', keys))
   return mapAndDedupeQuestions(data, keys[0])
 }
 
@@ -329,12 +334,15 @@ export async function fetchSubjectBankCounts(entries) {
 }
 
 export async function getStruggleMap(userId) {
-  const { data, error } = await supabase
-    .from('struggle_profiles')
-    .select('question_id, attempts, wrong, last_seen, next_review')
-    .eq('user_id', userId)
-
-  if (error) throw error
+  // A user accumulates one struggle row per question attempted, which grows
+  // past the 1000-row cap for active students — page through so the adaptive
+  // engine sees the full history (review scheduling, "new question" detection).
+  const data = await fetchAllRows(() =>
+    supabase
+      .from('struggle_profiles')
+      .select('question_id, attempts, wrong, last_seen, next_review')
+      .eq('user_id', userId),
+    'question_id')
   return Object.fromEntries(data.map(r => [r.question_id, r]))
 }
 
@@ -452,14 +460,16 @@ export async function getUserFlags(userId, questionIds) {
 // â”€â”€â”€ ANSWER LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getAnswerLogLast30Days(userId) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  const { data, error } = await supabase
-    .from('answer_log')
-    .select('answered_at, correct, question_id')
-    .eq('user_id', userId)
-    .gte('answered_at', since)
-    .order('answered_at', { ascending: true })
-  if (error) throw error
-  return data || []
+  // Heavy users can log >1000 answers in 30 days; an unpaginated ascending
+  // query would keep the oldest 1000 and silently drop the most recent. Page
+  // through the full window (ordered by answered_at, the value callers expect).
+  return fetchAllRows(() =>
+    supabase
+      .from('answer_log')
+      .select('answered_at, correct, question_id')
+      .eq('user_id', userId)
+      .gte('answered_at', since),
+    'answered_at')
 }
 
 // â”€â”€â”€ ASSESSMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1179,11 +1189,11 @@ export async function fetchStudentProgressForTutor(tutorId, studentId) {
     .eq('user_id', studentId)
   if (sError) throw sError
 
-  // Fetch questions to map question_id → topic
-  const { data: questions, error: qError } = await supabase
-    .from('questions')
-    .select('id, topic, subject')
-  if (qError) throw qError
+  // Fetch questions to map question_id → topic. This scans the whole table,
+  // which far exceeds the 1000-row cap — page through so every struggle row
+  // resolves to a topic (an unpaginated read undercounts the breakdown).
+  const questions = await fetchAllRows(() =>
+    supabase.from('questions').select('id, topic, subject'), 'id')
 
   const qMap = {}
   ;(questions || []).forEach(q => { qMap[q.id] = q })
