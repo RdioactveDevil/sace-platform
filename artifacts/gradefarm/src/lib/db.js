@@ -692,10 +692,17 @@ export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 1
   // targetDifficulty: 1–5 numeric or null (→ 'mixed').  The API uses it to
   // bias the AI's difficulty distribution towards the student's current level.
   const difficulty = targetDifficulty != null ? targetDifficulty : 'mixed'
+  // Ask the generator to include visuals where the concept warrants them.
+  // Graphs/diagrams only ever appear when the question genuinely needs one (the
+  // server prompt enforces that), so this is safe across subjects — it just
+  // unblocks visual questions that the live top-up previously never requested.
   const res = await fetch('/api/generate-questions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subject, topicCode, count, difficulty, autoApprove: true }),
+    body: JSON.stringify({
+      subject, topicCode, count, difficulty, autoApprove: true,
+      includeGraphs: true, includeDiagrams: true,
+    }),
   })
   if (!res.ok) {
     // Surface the server's detail so the caller can show/log why generation
