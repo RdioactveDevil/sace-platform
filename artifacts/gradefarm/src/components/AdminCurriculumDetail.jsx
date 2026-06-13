@@ -85,6 +85,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [remapSuggesting, setRemapSuggesting] = useState(false)
   const [remapApplying, setRemapApplying]   = useState(false)
   const [remapResult, setRemapResult]       = useState(null)   // { updated, deleted }
+  const [consolidating, setConsolidating]   = useState(false)
 
   useEffect(() => {
     loadDetail()
@@ -340,6 +341,37 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     setSaving(false)
   }
 
+  // Consolidate every alias/stale spelling of this curriculum's subject in the
+  // question bank onto its canonical name. Passing the level label folds a
+  // bare title (e.g. a "Mathematical Methods" row left behind by a rename) into
+  // the stage-named subject. Scoped to this curriculum's own alias expansion,
+  // idempotent, and safe to run repeatedly.
+  const handleConsolidateSpellings = async () => {
+    const name = (curriculum?.name || '').trim()
+    const level = (curriculum?.level_label || '').trim()
+    if (!name) return
+    if (!window.confirm(
+      `Consolidate question-bank subject spellings onto "${name}"?\n\n` +
+      `This merges legacy/alias spellings of this subject — including a bare title ` +
+      `without the stage — into "${name}", so every question lines up with this curriculum. ` +
+      `Only this subject's questions are affected, and it's safe to run more than once.`
+    )) return
+    setConsolidating(true); setError(''); setSaveOk(false)
+    try {
+      await adminApiPost('/api/admin/curriculum-rename-cascade', {
+        oldSubject: name,
+        newSubject: name,
+        oldLevelLabel: level,
+      })
+      refreshManagedTopicsCache(loadManagedCurriculaTopics).catch(() => {})
+      setSaveOk(true)
+      setTimeout(() => setSaveOk(false), 2500)
+    } catch (e) {
+      setError(e.message)
+    }
+    setConsolidating(false)
+  }
+
   // ── Generation pipeline ───────────────────────────────────────────────────
 
   const handleApproveAndGenerate = async () => {
@@ -473,6 +505,14 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {saveOk && <span style={{ fontSize: 12, color: '#4ade80' }}>✓ Saved</span>}
+          <button
+            onClick={handleConsolidateSpellings}
+            disabled={saving || generating || consolidating}
+            title="Merge legacy/bare subject spellings in the question bank onto this curriculum's exact name"
+            style={secondaryBtn(saving || generating || consolidating)}
+          >
+            {consolidating ? 'Consolidating…' : 'Consolidate spellings'}
+          </button>
           <button
             onClick={handleSave}
             disabled={saving || generating}
