@@ -944,12 +944,76 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Shared remediation-variant answer handling, used by BOTH the MCQ path
-  // (handleAnswer) and the multi-format path (handleSubmitResponse). Without
-  // this, non-MCQ remediation variants (numeric, multi-select, etc. — which now
-  // exist in the bank and get pulled in as variants) would record XP but never
-  // advance the mastery streak / wrong-count progression.
-  const applyRemediationVariantOutcome = async (isCorrect, newStreak, xpEarned, selectedIndex, timeTakenMs) => {
+  // Enter remediation after a wrong MAIN question. SYNCHRONOUS state only — must
+  // run with no awaits before it (batched with setShowAns) so a fast "Next"
+  // click can't read remediationMode === false and skip remediation entirely.
+  const enterRemediationStateSync = (q) => {
+    const conceptTagNow = q.concept_tag || getQuestionConceptTag(q)
+    // Anchor the reinforcement pool on the difficulty the student just missed.
+    const initialDiffTarget = q.difficulty ?? 3
+    setRemediationMode(true)
+    setRemediationStreak(0)
+    setRemediationTarget(3)
+    setRemediationWrongCount(0)
+    setRemediationDifficultyTarget(initialDiffTarget)
+    setRemediationStatus('generating') // keep the button disabled until queue is loaded
+    setRemediationSource('prebuilt')
+    setRemediationConcept(conceptTagNow)
+    setRemediationParentId(q.id)
+    setRemediationOriginalQ(q)
+    setRemediationUsedIds([])
+  }
+
+  // SYNCHRONOUS remediation-variant decision: mastery streak / status /
+  // wrong-count progression. Must run before any await (batched with
+  // setShowAns) so a fast "Next" click can't bypass the mode change on
+  // completion. Returns true when this answer completes remediation, so the
+  // caller can award the bonus asynchronously.
+  const decideRemediationVariantOutcome = (isCorrect) => {
+    if (isCorrect) {
+      const nextMastery = remediationStreak + 1
+      setRemediationStreak(nextMastery)
+      if (nextMastery >= remediationTarget) {
+        setRemediationStatus('complete')
+        return true
+      }
+      return false
+    }
+    // Concept-builder questions are exempt from the wrong count.
+    if (currentQ.variant_type !== 'concept_builder') {
+      setRemediationStreak(0)
+      const newWrongCount = remediationWrongCount + 1
+      setRemediationWrongCount(newWrongCount)
+      setRemediationDifficultyTarget(remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3))
+
+      if (newWrongCount >= 5) {
+        setRemediationStatus('needs_review')
+      } else if (newWrongCount === 3) {
+        setRemediationTarget(1)
+        setRemediationStatus('struggling')
+      } else if (newWrongCount === 2) {
+        setRemediationTarget(2)
+        const tag = remediationOriginalQ?.concept_tag || getQuestionConceptTag(remediationOriginalQ)
+        ;(async () => {
+          const cb = await generateConceptBuilderViaAI(remediationOriginalQ, tag)
+          if (!cb) return
+          const normalized = {
+            ...normalizeVariantRecord(remediationOriginalQ, cb, 0),
+            is_variant: true,
+            source: 'concept_builder',
+            variant_type: 'concept_builder',
+          }
+          setRemediationQueue(prev => [normalized, ...prev])
+        })()
+      }
+    }
+    return false
+  }
+
+  // Async persistence for a remediation-variant answer (attempt tracking +
+  // completion bonus). Runs AFTER the synchronous decision above, so it never
+  // gates the Next button on a network round-trip.
+  const persistRemediationVariantOutcome = async (isCorrect, selectedIndex, timeTakenMs, completed, newStreak, xpEarned) => {
     try { await incrementQuestionVariantUsage(currentQ.variant_record_id) } catch {}
 
     // Track the variant attempt against its real bank id so this question is
@@ -980,51 +1044,13 @@ export default function QuizScreen({
       setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
     }
 
-    if (isCorrect) {
-      const nextMastery = remediationStreak + 1
-      setRemediationStreak(nextMastery)
-
-      if (nextMastery >= remediationTarget) {
-        const bonus = getRemediationCompletionBonus()
-        try {
-          const newXP = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
-          setProfile(p => ({ ...p, xp: newXP }))
-          setSessionXP(s => s + bonus)
-        } catch {}
-        setRemediationStatus('complete')
-      }
-    } else {
-      // Concept-builder questions are exempt from the wrong count.
-      const isConceptBuilder = currentQ.variant_type === 'concept_builder'
-
-      if (!isConceptBuilder) {
-        setRemediationStreak(0)
-        const newWrongCount = remediationWrongCount + 1
-        setRemediationWrongCount(newWrongCount)
-        const newDiffTarget = remediationDifficultyTarget ?? (remediationOriginalQ?.difficulty ?? 3)
-        setRemediationDifficultyTarget(newDiffTarget)
-
-        if (newWrongCount >= 5) {
-          setRemediationStatus('needs_review')
-        } else if (newWrongCount === 3) {
-          setRemediationTarget(1)
-          setRemediationStatus('struggling')
-        } else if (newWrongCount === 2) {
-          setRemediationTarget(2)
-          const tag = remediationOriginalQ?.concept_tag || getQuestionConceptTag(remediationOriginalQ)
-          ;(async () => {
-            const cb = await generateConceptBuilderViaAI(remediationOriginalQ, tag)
-            if (!cb) return
-            const normalized = {
-              ...normalizeVariantRecord(remediationOriginalQ, cb, 0),
-              is_variant: true,
-              source: 'concept_builder',
-              variant_type: 'concept_builder',
-            }
-            setRemediationQueue(prev => [normalized, ...prev])
-          })()
-        }
-      }
+    if (completed) {
+      const bonus = getRemediationCompletionBonus()
+      try {
+        const newXP = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
+        setProfile(p => ({ ...p, xp: newXP }))
+        setSessionXP(s => s + bonus)
+      } catch {}
     }
   }
 
@@ -1052,13 +1078,23 @@ export default function QuizScreen({
       setTimeout(() => setFloatXP(null), 1400)
     }
 
+    // Commit the remediation DECISION synchronously, batched with setShowAns,
+    // so a fast "Next" click can never read stale state and skip remediation
+    // entry (wrong main answer) or the completion mode-change (variant answer).
+    let remediationCompleted = false
+    if (isRemediationQuestion) {
+      remediationCompleted = decideRemediationVariantOutcome(isCorrect)
+    } else if (!isCorrect) {
+      enterRemediationStateSync(currentQ)
+    }
+
     try {
       const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
       setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
     } catch {}
 
     if (isRemediationQuestion) {
-      await applyRemediationVariantOutcome(isCorrect, newStreak, xpEarned, idx, timeTakenMs)
+      await persistRemediationVariantOutcome(isCorrect, idx, timeTakenMs, remediationCompleted, newStreak, xpEarned)
       return
     }
 
@@ -1078,27 +1114,8 @@ export default function QuizScreen({
     await recordAnswer(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
 
     if (!isCorrect) {
-      // Immediately lock into remediation so the button changes to "Start Remediation →"
-      // before the AI tip fetch runs. Without this, the user could click "Next Question →"
-      // during the 3.5s AI timeout window and skip remediation entirely.
-      const conceptTagNow = currentQ.concept_tag || getQuestionConceptTag(currentQ)
-      // Anchor the reinforcement pool on the difficulty the student just missed.
-      // The per-question difficulty curve ("reduce by 1, then ramp back" toward
-      // this level for the final mastery question) is applied at load time.
-      const initialDiffTarget = currentQ.difficulty ?? 3
-      setRemediationMode(true)
-      setRemediationStreak(0)
-      setRemediationTarget(3)
-      setRemediationWrongCount(0)
-      setRemediationDifficultyTarget(initialDiffTarget)
-      setRemediationStatus('generating') // keep button disabled until queue is loaded
-      setRemediationSource('prebuilt')
-      setRemediationConcept(conceptTagNow)
-      setRemediationParentId(currentQ.id)
-      setRemediationOriginalQ(currentQ)
-      setRemediationUsedIds([])
-
-      // Load remediation queue in background — parallel with AI tip fetch
+      // Remediation state was already set synchronously above. Load the queue in
+      // the background — parallel with the AI tip fetch.
       enterRemediation(currentQ)
 
       setLoadingTip(true)
@@ -1148,15 +1165,20 @@ export default function QuizScreen({
       setTimeout(() => setFloatXP(null), 1400)
     }
 
+    // Commit the remediation decision synchronously (batched with setShowAns) so
+    // a fast "Next" click can't bypass the completion mode-change.
+    let remediationCompleted = false
+    if (isVariant) remediationCompleted = decideRemediationVariantOutcome(isCorrect)
+
     try {
       const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
       setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
     } catch {}
 
-    // Remediation variant: mastery-streak / wrong-count progression (shared with
-    // the MCQ path). recordAnswer + sessionAnswered are handled inside.
+    // Remediation variant: persist attempt + completion bonus (decision already
+    // committed above).
     if (isVariant) {
-      await applyRemediationVariantOutcome(isCorrect, newStreak, xpEarned, null, timeTakenMs)
+      await persistRemediationVariantOutcome(isCorrect, null, timeTakenMs, remediationCompleted, newStreak, xpEarned)
       return
     }
 
