@@ -39,6 +39,17 @@ export const VERSIONS = {
     tagline: 'Selective school entry preparation',
     home: '/selective',
     subjects: selectiveBuiltInSubjects(),
+    landing: {
+      eyebrow: 'Victorian Selective Entry',
+      headline: 'Win a place at a selective school.',
+      subhead: 'Adaptive practice for the Year 9 selective-entry exam — Reading, Verbal Reasoning, Numerical Reasoning, Mathematics and Written Expression, with AI feedback and a full timed mock.',
+      primaryCta: 'Start practising free',
+      bullets: [
+        'Adaptive engine that targets exactly where you lose marks',
+        'AI feedback on creative & persuasive writing tasks',
+        'Full timed mock exam with indicative scoring',
+      ],
+    },
   },
   sace: {
     id: 'sace',
@@ -52,6 +63,17 @@ export const VERSIONS = {
     // or an explicit "SACE" tag. Unrelated subjects appear only on the apex
     // full catalogue, never on sace.
     match: /\bsace\b|\bstage\s*[12]\b/i,
+    landing: {
+      eyebrow: 'South Australian Certificate of Education',
+      headline: 'Top your SACE.',
+      subhead: 'Adaptive Stage 1 & Stage 2 practice that learns where you struggle and drills it — with AI tutoring, exam-mode papers and instant feedback.',
+      primaryCta: 'Start studying free',
+      bullets: [
+        'Stage 1 & Stage 2 question banks that adapt to you',
+        'Titan AI tutor explains every question',
+        'Exam-mode papers that mirror the real thing',
+      ],
+    },
   },
   vce: {
     id: 'vce',
@@ -63,6 +85,18 @@ export const VERSIONS = {
     subjects: [], // shell — no built-in subjects yet
     // Auto-claim admin-created VCE curricula by naming convention.
     match: /\bvce\b|\bunit\s*\d/i,
+    landing: {
+      eyebrow: 'Victorian Certificate of Education',
+      headline: 'Master your VCE.',
+      subhead: 'Adaptive Units 1–4 practice across your VCE subjects, with an AI tutor, exam-mode papers and feedback that targets your study score.',
+      primaryCta: 'Join the waitlist',
+      comingSoon: true,
+      bullets: [
+        'Units 1–4 adaptive question banks',
+        'Titan AI tutor on every concept',
+        'Exam-mode practice papers',
+      ],
+    },
   },
   ucat: {
     id: 'ucat',
@@ -73,6 +107,18 @@ export const VERSIONS = {
     home: '/question-bank',
     subjects: [], // shell — coming soon
     comingSoon: true,
+    landing: {
+      eyebrow: 'University Clinical Aptitude Test',
+      headline: 'Ace the UCAT.',
+      subhead: 'Adaptive drills across Verbal Reasoning, Decision Making, Quantitative Reasoning and Abstract Reasoning — timed, scored and tuned to your weak spots.',
+      primaryCta: 'Join the waitlist',
+      comingSoon: true,
+      bullets: [
+        'All five UCAT subtests, timed and adaptive',
+        'Score analytics that pinpoint where to drill',
+        'AI explanations for every question',
+      ],
+    },
   },
   gamsat: {
     id: 'gamsat',
@@ -83,6 +129,18 @@ export const VERSIONS = {
     home: '/question-bank',
     subjects: [], // shell — coming soon
     comingSoon: true,
+    landing: {
+      eyebrow: 'Graduate Medical School Admissions Test',
+      headline: 'Conquer the GAMSAT.',
+      subhead: 'Adaptive practice across Section I (Humanities), Section II (Written Communication) and Section III (Sciences) — with AI feedback and full-length timed sittings.',
+      primaryCta: 'Join the waitlist',
+      comingSoon: true,
+      bullets: [
+        'All three sections with adaptive science drills',
+        'AI feedback on Section II essays',
+        'Full-length timed practice sittings',
+      ],
+    },
   },
   // Apex / unknown host (gradefarm.com.au, *.vercel.app previews): full catalogue,
   // default gold branding.

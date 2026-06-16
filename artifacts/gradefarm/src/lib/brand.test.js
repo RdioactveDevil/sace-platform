@@ -62,6 +62,21 @@ describe('versions registry shape', () => {
   test('BRANDS is a back-compat alias of VERSIONS', () => {
     assert.equal(BRANDS, VERSIONS)
   })
+
+  test('every subdomain version ships landing content for the themed page', () => {
+    for (const v of Object.values(VERSIONS)) {
+      if (v.id === 'default') continue
+      assert.ok(v.landing, `${v.id} missing landing config`)
+      assert.ok(v.landing.headline && v.landing.subhead, `${v.id} landing needs headline + subhead`)
+      assert.ok(Array.isArray(v.landing.bullets) && v.landing.bullets.length > 0, `${v.id} landing needs bullets`)
+    }
+  })
+
+  test('coming-soon versions are flagged in their landing copy', () => {
+    assert.ok(VERSIONS.ucat.landing.comingSoon)
+    assert.ok(VERSIONS.gamsat.landing.comingSoon)
+    assert.ok(!VERSIONS.selective.landing.comingSoon)
+  })
 })
 
 describe('brandTitle', () => {

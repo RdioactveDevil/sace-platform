@@ -75,6 +75,24 @@ logo suffix and the Subject Picker catalogue; shell versions show a "coming
 soon" empty state. Resolved from `window.location.hostname` with `?brand=<id>`
 and `VITE_BRAND` overrides for local/preview testing.
 
+**Themed product layer (each subdomain feels like its own product):**
+- **Accent throughout** — `VERSIONS[id].accent` drives the app-shell accent
+  (sidebar nav active state, logo suffix, profile/XP card, buttons, focus rings)
+  via `ACCENT`/`hexA()` in `App.jsx`, and is exposed as the `--gf-accent` /
+  `--gf-accent-light` CSS variables on `:root`.
+- **Per-version landing** — logged-out visitors on a branded subdomain get
+  `src/components/VersionLanding.jsx`, a single data-driven template themed by
+  the version accent + its `landing` config (eyebrow, headline, subhead,
+  bullets, `comingSoon`). Coming-soon versions (UCAT/GAMSAT, and any with no
+  built-in subjects) render a waitlist hero. The apex/default domain keeps the
+  original full `LandingPage`.
+- **Platform-aware nav** — sidebar `NAV_ITEMS` can carry `versions: [...]`; such
+  items show only on those versions (always on the apex catalogue). E.g.
+  "Selective Entry" appears only on `selective.` + apex.
+
+Adding a version's full product experience = registry fields (`accent`,
+`landing`, optional nav `versions` tag) + a seed migration. No new components.
+
 **Deploy/config:** one Vercel project. Add each subdomain as a Vercel domain
 (all aliased to the same deployment) + DNS CNAME → Vercel. No per-version build.
 Note: Supabase auth sessions are per-origin, so a login on one subdomain does
