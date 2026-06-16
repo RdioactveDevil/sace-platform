@@ -23,6 +23,7 @@
 // title, post-login home, sidebar logo suffix and the Subject Picker catalogue.
 
 import { selectiveBuiltInSubjects } from './selectiveEntry.js'
+import { vceBuiltInSubjects } from './vce.js'
 
 /**
  * The version registry. Order matters only for the apex/default fallback.
@@ -82,17 +83,16 @@ export const VERSIONS = {
     accent: '#60a5fa',
     tagline: 'Victorian Certificate of Education',
     home: '/question-bank',
-    subjects: [], // shell — no built-in subjects yet
-    // Auto-claim admin-created VCE curricula by naming convention.
+    subjects: vceBuiltInSubjects(),
+    // Also auto-claim any further admin-created VCE curricula by naming convention.
     match: /\bvce\b|\bunit\s*\d/i,
     landing: {
       eyebrow: 'Victorian Certificate of Education',
       headline: 'Master your VCE.',
-      subhead: 'Adaptive Units 1–4 practice across your VCE subjects, with an AI tutor, exam-mode papers and feedback that targets your study score.',
-      primaryCta: 'Join the waitlist',
-      comingSoon: true,
+      subhead: 'Adaptive Units 3 & 4 practice across Chemistry, Physics, Biology and Mathematical Methods, with an AI tutor, exam-mode papers and feedback that targets your study score.',
+      primaryCta: 'Start studying free',
       bullets: [
-        'Units 1–4 adaptive question banks',
+        'Units 3 & 4 adaptive question banks',
         'Titan AI tutor on every concept',
         'Exam-mode practice papers',
       ],

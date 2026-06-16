@@ -60,7 +60,7 @@ declarative registry in `src/lib/brand.js` (`VERSIONS`):
 |---|---|---|
 | Selective Entry | `selective.` | Reading, Verbal, Numerical, Maths (seeded) |
 | SACE | `sace.` | SACE curricula only — Stage 1 / Stage 2 (by name or level_label) |
-| VCE | `vce.` | shell (auto-claims admin curricula named "VCE"/"Unit N") |
+| VCE | `vce.` | Chemistry, Physics, Biology, Mathematical Methods (Units 3 & 4, seeded; also auto-claims admin "VCE"/"Unit N" curricula) |
 | UCAT | `ucat.` | shell (coming soon) |
 | GAMSAT | `gamsat.` | shell (coming soon) |
 | _default_ | apex / `*.vercel.app` | full catalogue |
@@ -112,6 +112,15 @@ Practice, Written Expression and a full timed Mock Exam.
   `vse_persuasive` essay types (api-server `routes/writing.ts`, `selective_vic`
   year range), AI prompt + criterion feedback.
 - Logged-out visitors get a fixed sample-paper preview of each component.
+
+### VCE (Units 3 & 4)
+Built-in subjects (`src/lib/vce.js`, single source of truth): **Chemistry,
+Physics, Biology, Mathematical Methods**. Seeded by
+`supabase/migrations/20260616100000_seed_vce.sql` as live DB curricula
+(topics/subtopics + starter bank). No bespoke screen — VCE subjects flow through
+the normal Subject Picker → adaptive `/quiz` pipeline like any curriculum.
+**Run that migration** for VCE content to appear; AI generation extends each
+subtopic. (English/Literature are deferred to the writing module.)
 
 ## Stack
 

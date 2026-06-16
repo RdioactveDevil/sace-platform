@@ -43,12 +43,12 @@ describe('subject ownership is derived from the registry', () => {
 })
 
 describe('versions registry shape', () => {
-  test('selective ships four built-in subjects', () => {
+  test('selective + vce ship built-in subjects', () => {
     assert.equal(VERSIONS.selective.subjects.length, 4)
-    assert.ok(VERSIONS.selective.subjects.every((s) => s.name && s.level))
+    assert.equal(VERSIONS.vce.subjects.length, 4)
+    assert.ok([...VERSIONS.selective.subjects, ...VERSIONS.vce.subjects].every((s) => s.name && s.level))
   })
-  test('vce / ucat / gamsat are shells with no built-in subjects', () => {
-    assert.equal(VERSIONS.vce.subjects.length, 0)
+  test('ucat / gamsat are shells with no built-in subjects', () => {
     assert.equal(VERSIONS.ucat.subjects.length, 0)
     assert.equal(VERSIONS.gamsat.subjects.length, 0)
     assert.ok(VERSIONS.ucat.comingSoon && VERSIONS.gamsat.comingSoon)
