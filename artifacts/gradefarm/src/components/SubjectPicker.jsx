@@ -133,7 +133,20 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
           </div>
         )}
 
-        {!loadingCurricula && (
+        {/* ── Shell version (no built-in subjects yet) ── */}
+        {!loadingCurricula && allSubjects.length === 0 && (
+          <div className="sp-fadein" style={{ textAlign: 'center', padding: '56px 24px', border: '1px dashed rgba(255,255,255,0.16)', borderRadius: 20, background: 'rgba(255,255,255,0.02)' }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>🚧</div>
+            <h2 style={{ margin: '0 0 8px', color: '#fff', fontSize: 22 }}>
+              {brand.productName || 'This version'} is coming soon
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.55)', maxWidth: 460, margin: '0 auto', lineHeight: 1.6, fontSize: 14 }}>
+              {brand.tagline}. Subjects for this version are being built — they'll run on the same adaptive engine you already know. Check back soon.
+            </p>
+          </div>
+        )}
+
+        {!loadingCurricula && allSubjects.length > 0 && (
           <>
             {/* ── Hero Card ── */}
             {displaySubject && (

@@ -51,23 +51,33 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 ### Custom Assets
 - `artifacts/gradefarm/public/SIFONN_PRO.otf` — custom Sifonn Pro font used for the brand logo
 
-### Multi-brand subdomains
-The single SPA serves three exam-domain brands by hostname (`src/lib/brand.js`):
-- `selective.gradefarm.com.au` — Victorian selective-school entry
-- `vce.gradefarm.com.au` — VCE (branded shell; add curricula named/levelled with "VCE"/"Unit N")
-- `sace.gradefarm.com.au` — SACE (owns everything not selective/VCE)
-- apex / `*.vercel.app` previews → default brand, full catalogue
+### Versions (multi-brand subdomains)
+GradeFarm is one SPA + one engine that ships as several **versions**, each an
+exam-domain product with its own built-in subjects. Versions are a first-class,
+declarative registry in `src/lib/brand.js` (`VERSIONS`):
 
-The brand is resolved from `window.location.hostname` (with `?brand=<id>` and
-`VITE_BRAND` overrides for local/preview testing). It drives the document title,
-the post-login home, the sidebar logo suffix, and which subjects the Subject
-Picker shows — each brand owns a slice of the shared `curricula` catalogue via
-`matchSubject(name, level)`.
+| Version | Subdomain | Built-in subjects |
+|---|---|---|
+| Selective Entry | `selective.` | Reading, Verbal, Numerical, Maths (seeded) |
+| SACE | `sace.` | catalogue version — owns every curriculum no other version claims |
+| VCE | `vce.` | shell (auto-claims admin curricula named "VCE"/"Unit N") |
+| UCAT | `ucat.` | shell (coming soon) |
+| GAMSAT | `gamsat.` | shell (coming soon) |
+| _default_ | apex / `*.vercel.app` | full catalogue |
 
-**Deploy/config:** one Vercel project. Add the three subdomains as Vercel domains
-(all aliased to the same deployment) and point DNS (CNAME → Vercel). No per-brand
-build needed. Note: Supabase auth sessions are per-origin, so a login on one
-subdomain does not carry to another (acceptable for v1's separate brand journeys).
+Each version declares `subjects: [{ name, level }]`. Subject ownership
+(`subjectOwnerId`) is derived: explicit built-in subject → version `match`
+pattern → `claimsRemainder` version (SACE). So **adding a version (e.g. UCAT
+subjects) is a registry entry + a seed migration** — engine, quiz, writing and
+mock are untouched. Version drives the document title, post-login home, sidebar
+logo suffix and the Subject Picker catalogue; shell versions show a "coming
+soon" empty state. Resolved from `window.location.hostname` with `?brand=<id>`
+and `VITE_BRAND` overrides for local/preview testing.
+
+**Deploy/config:** one Vercel project. Add each subdomain as a Vercel domain
+(all aliased to the same deployment) + DNS CNAME → Vercel. No per-version build.
+Note: Supabase auth sessions are per-origin, so a login on one subdomain does
+not carry to another (acceptable for v1's separate version journeys).
 
 ### Selective Entry (Victorian Select Entry)
 Dedicated section at `/selective` (`SelectiveEntryScreen`) with Overview,

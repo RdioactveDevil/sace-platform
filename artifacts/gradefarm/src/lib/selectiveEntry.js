@@ -340,6 +340,19 @@ export function getComponent(id) {
 }
 
 /**
+ * Built-in subjects shipped by the Selective Entry version, in the shape the
+ * version registry expects: { name (= curriculum/questions.subject), level,
+ * componentId }.
+ */
+export function selectiveBuiltInSubjects() {
+  return SELECTIVE_COMPONENTS.map((c) => ({
+    name: c.curriculumName,
+    level: SELECTIVE_LEVEL_LABEL,
+    componentId: c.id,
+  }))
+}
+
+/**
  * Subject tile for the adaptive quiz engine. The `curriculum_` id prefix makes
  * `questionsBankSubjectKeys` resolve the bank via `bankSubjectAliases(name,
  * stage)`, so the seeded `questions.subject` (= curriculumName) is loaded.
@@ -360,8 +373,7 @@ export function selectiveSubjectTile(componentId) {
 }
 
 /** All seeded curricula (used by the seed-migration generator). */
-export function selectiveCurriculaSeed() {
-  return SELECTIVE_COMPONENTS.map((c) => ({
+export function selectiveCurriculaSeed() {  return SELECTIVE_COMPONENTS.map((c) => ({
     name: c.curriculumName,
     level_label: SELECTIVE_LEVEL_LABEL,
     subject_description: `${c.name} — ${SELECTIVE_BRAND.name}. ${c.blurb}`,

@@ -1,28 +1,36 @@
-// Multi-brand (subdomain) support.
+// Multi-version (subdomain) platform registry.
 //
-// gradefarm. ships three exam-domain brands on subdomains, all served by this
-// single SPA (one Vercel deploy, the subdomains aliased to it):
-//   • selective.gradefarm.com.au — Victorian selective-school entry
-//   • vce.gradefarm.com.au        — Victorian Certificate of Education
-//   • sace.gradefarm.com.au       — South Australian Certificate of Education
+// GradeFarm is one SPA + one engine (quiz, adaptive selection, remediation, AI
+// bank top-up, writing) that ships as several **versions**, each a self-contained
+// exam-domain product with its own built-in subjects:
 //
-// The brand is resolved from the hostname (with a `?brand=` query override and a
-// VITE_BRAND build override for local dev / previews). The brand drives the
-// document title, the post-login home, and which subjects the Subject Picker
-// shows — each brand owns a slice of the shared curricula catalogue via
-// `matchSubject(name, level)`.
+//   selective.gradefarm.com.au — Victorian selective-school entry  (built-in subjects)
+//   sace.gradefarm.com.au      — South Australian Certificate of Education
+//   vce.gradefarm.com.au       — Victorian Certificate of Education
+//   ucat.gradefarm.com.au      — UCAT (coming soon)
+//   gamsat.gradefarm.com.au    — GAMSAT (coming soon)
+//
+// Built-in subjects are FIRST CLASS here: each version declares the subjects it
+// ships (`subjects: [{ name, level }]`). Subject ownership — "which version does
+// this curriculum belong to" — is derived from those declarations, so adding a
+// new version (e.g. UCAT) is a registry entry + a seed migration and nothing
+// else changes. `claimsRemainder` marks the catalogue version that owns any
+// curriculum no other version claims; `match` lets a version auto-claim
+// admin-created curricula by naming convention before they're listed explicitly.
+//
+// The active version is resolved from the hostname (with `?brand=<id>` and
+// `VITE_BRAND` overrides for local/preview testing) and drives the document
+// title, post-login home, sidebar logo suffix and the Subject Picker catalogue.
 
-/** True when a subject/curriculum belongs to the selective-entry catalogue. */
-function isSelectiveSubject(name) {
-  return /^selective\b/i.test(String(name || '').trim())
-}
+import { selectiveBuiltInSubjects } from './selectiveEntry.js'
 
-/** True when a subject/curriculum belongs to the VCE catalogue. */
-function isVceSubject(name, level) {
-  return /\bvce\b|\bunit\s*\d/i.test(`${name || ''} ${level || ''}`)
-}
-
-export const BRANDS = {
+/**
+ * The version registry. Order matters only for the apex/default fallback.
+ * Each version: { id, productName, logoSuffix, accent, tagline, home,
+ *   subjects: [{ name, level }], match?: RegExp, claimsRemainder?: bool,
+ *   comingSoon?: bool, ownsAll?: bool }
+ */
+export const VERSIONS = {
   selective: {
     id: 'selective',
     productName: 'Selective Entry',
@@ -30,16 +38,7 @@ export const BRANDS = {
     accent: '#34d399',
     tagline: 'Selective school entry preparation',
     home: '/selective',
-    matchSubject: (name) => isSelectiveSubject(name),
-  },
-  vce: {
-    id: 'vce',
-    productName: 'VCE',
-    logoSuffix: 'vce',
-    accent: '#60a5fa',
-    tagline: 'Victorian Certificate of Education',
-    home: '/question-bank',
-    matchSubject: (name, level) => isVceSubject(name, level),
+    subjects: selectiveBuiltInSubjects(),
   },
   sace: {
     id: 'sace',
@@ -48,11 +47,43 @@ export const BRANDS = {
     accent: '#f1be43',
     tagline: 'South Australian Certificate of Education',
     home: '/question-bank',
-    // SACE owns everything that isn't explicitly selective or VCE.
-    matchSubject: (name, level) => !isSelectiveSubject(name) && !isVceSubject(name, level),
+    subjects: [],
+    // SACE is the catalogue version: it owns every curriculum no other version claims.
+    claimsRemainder: true,
   },
-  // Apex / unknown host (e.g. gradefarm.com.au or a *.vercel.app preview) shows
-  // the full catalogue and the default gold branding.
+  vce: {
+    id: 'vce',
+    productName: 'VCE',
+    logoSuffix: 'vce',
+    accent: '#60a5fa',
+    tagline: 'Victorian Certificate of Education',
+    home: '/question-bank',
+    subjects: [], // shell — no built-in subjects yet
+    // Auto-claim admin-created VCE curricula by naming convention.
+    match: /\bvce\b|\bunit\s*\d/i,
+  },
+  ucat: {
+    id: 'ucat',
+    productName: 'UCAT',
+    logoSuffix: 'ucat',
+    accent: '#f472b6',
+    tagline: 'University Clinical Aptitude Test',
+    home: '/question-bank',
+    subjects: [], // shell — coming soon
+    comingSoon: true,
+  },
+  gamsat: {
+    id: 'gamsat',
+    productName: 'GAMSAT',
+    logoSuffix: 'gamsat',
+    accent: '#22d3ee',
+    tagline: 'Graduate Medical School Admissions Test',
+    home: '/question-bank',
+    subjects: [], // shell — coming soon
+    comingSoon: true,
+  },
+  // Apex / unknown host (gradefarm.com.au, *.vercel.app previews): full catalogue,
+  // default gold branding.
   default: {
     id: 'default',
     productName: '',
@@ -60,45 +91,75 @@ export const BRANDS = {
     accent: '#f1be43',
     tagline: 'Adaptive exam preparation',
     home: '/question-bank',
-    matchSubject: () => true,
+    subjects: [],
+    ownsAll: true,
   },
 }
 
-/** Resolve a brand id from a hostname (e.g. "selective.gradefarm.com.au"). */
+const REAL_VERSIONS = Object.values(VERSIONS).filter((v) => v.id !== 'default')
+
+/**
+ * Which version owns a given subject/curriculum. Resolution order:
+ *   1. a version that declares it as a built-in subject (exact name)
+ *   2. a version whose `match` pattern claims it (naming convention)
+ *   3. the `claimsRemainder` catalogue version (SACE)
+ */
+export function subjectOwnerId(name, level) {
+  const n = String(name || '').trim()
+  for (const v of REAL_VERSIONS) {
+    if (v.subjects?.some((s) => s.name === n)) return v.id
+  }
+  const hay = `${name || ''} ${level || ''}`
+  for (const v of REAL_VERSIONS) {
+    if (v.match && v.match.test(hay)) return v.id
+  }
+  const remainder = REAL_VERSIONS.find((v) => v.claimsRemainder)
+  return remainder ? remainder.id : 'default'
+}
+
+// Derive each version's catalogue predicate from the registry. The default
+// (apex) version shows the full catalogue.
+for (const v of Object.values(VERSIONS)) {
+  v.matchSubject = v.ownsAll
+    ? () => true
+    : (name, level) => subjectOwnerId(name, level) === v.id
+}
+
+// Back-compat alias — earlier code imports `BRANDS`.
+export const BRANDS = VERSIONS
+
+/** Resolve a version id from a hostname (e.g. "selective.gradefarm.com.au"). */
 export function brandIdFromHostname(hostname) {
   const host = String(hostname || '').toLowerCase()
   const sub = host.split('.')[0]
-  if (BRANDS[sub] && sub !== 'default') return sub
+  if (VERSIONS[sub] && sub !== 'default') return sub
   return 'default'
 }
 
-/** Resolve the active brand id (query override → env override → hostname). */
+/** Resolve the active version id (query override → env override → hostname). */
 export function resolveBrandId() {
-  // 1. Explicit ?brand= override (handy for local testing / previews).
   try {
     if (typeof window !== 'undefined' && window.location) {
       const q = new URLSearchParams(window.location.search).get('brand')
-      if (q && BRANDS[q]) return q
+      if (q && VERSIONS[q]) return q
     }
   } catch (_) { /* ignore */ }
-  // 2. Build-time override.
   try {
     const env = (typeof import.meta !== 'undefined' && import.meta.env) || {}
-    if (env.VITE_BRAND && BRANDS[env.VITE_BRAND]) return env.VITE_BRAND
+    if (env.VITE_BRAND && VERSIONS[env.VITE_BRAND]) return env.VITE_BRAND
   } catch (_) { /* ignore */ }
-  // 3. Hostname.
   if (typeof window !== 'undefined' && window.location) {
     return brandIdFromHostname(window.location.hostname)
   }
   return 'default'
 }
 
-/** The active brand config for this load. */
+/** The active version config for this load. */
 export function getBrand() {
-  return BRANDS[resolveBrandId()] || BRANDS.default
+  return VERSIONS[resolveBrandId()] || VERSIONS.default
 }
 
-/** Full document title for a brand, e.g. "gradefarm. selective". */
+/** Full document title for a version, e.g. "gradefarm. selective". */
 export function brandTitle(brand) {
   return brand.logoSuffix ? `gradefarm. ${brand.logoSuffix}` : 'gradefarm.'
 }
