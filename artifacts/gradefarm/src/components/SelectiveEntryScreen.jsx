@@ -42,7 +42,7 @@ function Pill({ t, children }) {
   )
 }
 
-export default function SelectiveEntryScreen({ theme = 'dark', profile, onExit }) {
+export default function SelectiveEntryScreen({ theme = 'dark', profile, onExit, onStartAdaptive }) {
   const t = THEMES[theme]
   const [tab, setTab] = useState('overview')
   // Active timed paper (practice or mock) running in the simulator.
@@ -120,7 +120,14 @@ export default function SelectiveEntryScreen({ theme = 'dark', profile, onExit }
         </div>
 
         {tab === 'overview' && <Overview t={t} onTab={setTab} onMock={startMock} />}
-        {tab === 'practice' && <Practice t={t} onStart={startPractice} />}
+        {tab === 'practice' && (
+          <Practice
+            t={t}
+            adaptive={!!(profile && onStartAdaptive)}
+            onStartAdaptive={(id) => onStartAdaptive?.(id)}
+            onStartPreview={startPractice}
+          />
+        )}
         {tab === 'writing' && (
           <div style={{ marginTop: -8 }}>
             <EssayMarkerScreen
@@ -178,11 +185,15 @@ function Overview({ t, onTab, onMock }) {
 }
 
 // ── Practice tab ─────────────────────────────────────────────────────────────
-function Practice({ t, onStart }) {
+// Signed in → the full adaptive quiz engine (difficulty targeting, remediation,
+// AI bank top-up). Logged out → a fixed sample paper preview via the simulator.
+function Practice({ t, adaptive, onStartAdaptive, onStartPreview }) {
   return (
     <div>
       <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 16, textAlign: 'center' }}>
-        Pick a component to practise on its own. Each set is timed but generously, so you can build accuracy before adding exam pressure.
+        {adaptive
+          ? 'Pick a component for an adaptive session — difficulty adjusts to you, wrong answers trigger targeted remediation, and the bank tops itself up so you never run out.'
+          : 'Pick a component to try a timed sample set. Sign in to unlock adaptive practice that adjusts to you and tracks your progress.'}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
         {SELECTIVE_COMPONENTS.map((c) => (
@@ -190,14 +201,17 @@ function Practice({ t, onStart }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
               <div style={{ width: 46, height: 46, borderRadius: 12, background: c.accent + '22', border: `1px solid ${c.accent}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{c.icon}</div>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{c.name}</div>
-                <Pill t={t}>{c.questions.length} questions · {formatClock(c.practiceDurationSec)}</Pill>
+                <div style={{ fontSize: 16, fontWeight: 800, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {c.name}
+                  {adaptive && <span style={{ fontSize: 9, fontWeight: 800, color: c.accent, background: c.accent + '22', border: `1px solid ${c.accent}55`, padding: '2px 7px', borderRadius: 999, letterSpacing: '0.06em' }}>ADAPTIVE</span>}
+                </div>
+                <Pill t={t}>{c.subtopics.length} subtopics{adaptive ? '' : ` · ${formatClock(c.practiceDurationSec)}`}</Pill>
               </div>
             </div>
             <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, flex: 1, marginBottom: 16 }}>{c.blurb}</div>
-            <button onClick={() => onStart(c.id)}
+            <button onClick={() => (adaptive ? onStartAdaptive(c.id) : onStartPreview(c.id))}
               style={{ width: '100%', padding: '12px', borderRadius: 11, border: 'none', background: c.accent, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-              Practise {c.short} →
+              {adaptive ? `Practise ${c.short} →` : `Try ${c.short} sample →`}
             </button>
           </Card>
         ))}

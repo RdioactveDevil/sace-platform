@@ -12,6 +12,8 @@ import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import SubjectPicker     from './components/SubjectPicker'
 import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
+import { getBrand, brandTitle } from './lib/brand'
+import { selectiveSubjectTile } from './lib/selectiveEntry'
 import { getTopicConfigForSubject } from './lib/saceTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -53,6 +55,9 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+
+// Active brand (subdomain) for this load — drives title, home + catalogue slice.
+const BRAND = getBrand()
 
 const NAV_ITEMS = [
   { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
@@ -146,6 +151,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         <div onClick={() => go('/home')} style={{ cursor: 'pointer', lineHeight: 1 }}>
           <span style={{ fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5 }}>
             <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+            {BRAND.logoSuffix && <span style={{ color: BRAND.accent, marginLeft: 6 }}>{BRAND.logoSuffix}</span>}
           </span>
           <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', fontFamily: FONT_B, letterSpacing: '0.08em', marginTop: 5, textTransform: 'uppercase' }}>by Titanium Tutoring</div>
         </div>
@@ -582,6 +588,11 @@ function AppInner() {
     document.body.style.padding = '0'
   }, [t.bg])
 
+  // Brand the tab title per subdomain (gradefarm. / gradefarm. selective / …).
+  useEffect(() => {
+    document.title = BRAND.productName ? `${brandTitle(BRAND)} — ${BRAND.productName}` : brandTitle(BRAND)
+  }, [])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
@@ -643,6 +654,53 @@ function AppInner() {
     } else {
       navigate('/home')
     }
+  }
+
+  // Launch a fully adaptive quiz session for a Victorian Select Entry component
+  // by switching to its (DB-seeded) curriculum subject and routing into /quiz —
+  // the same engine, remediation and AI bank top-up every other subject uses.
+  const startSelectiveAdaptive = async (componentId) => {
+    const tile = selectiveSubjectTile(componentId)
+    if (!tile) return
+    setSelectedSubject(tile)
+    localStorage.setItem('gf-subject', JSON.stringify(tile))
+    let qs = []
+    try { qs = await getQuestionsForSubjectTile(tile) } catch (_) { qs = [] }
+    setQuestions(qs)
+    // Fresh "new" session.
+    setQuizMode('new')
+    setQuizSubtopics([])
+    setQuizExamMode(false)
+    setQuizTimerSeconds(0)
+    setQuizQ(null)
+    setQuizSelected(null)
+    setQuizShowAns(false)
+    setQuizCorrect(null)
+    setQuizEarnedXP(0)
+    setQuizStreak(profile?.streak || 0)
+    setQuizSessionXP(0)
+    setQuizResults([])
+    setQuizAnswered([])
+    setQuizQNumber(1)
+    setQuizAiTip('')
+    setQuizLoadingTip(false)
+    setActiveAssignmentId(null)
+    setQuizRemediationMode(false)
+    setQuizRemediationStreak(0)
+    setQuizRemediationTarget(3)
+    setQuizRemediationQueue([])
+    setQuizRemediationStatus('idle')
+    setQuizRemediationSource('prebuilt')
+    setQuizRemediationConcept(null)
+    setQuizRemediationParentId(null)
+    setQuizRemediationOriginalQ(null)
+    setQuizRemediationUsedIds([])
+    setQuizRemediationWrongCount(0)
+    setConsolidateSubtopic(null)
+    setQuizFinished(false)
+    setQuizSessionTip('')
+    setQuizSessionTipLoading(false)
+    navigate('/quiz')
   }
 
   const handleReplayFeatureTour = useCallback(async () => {
@@ -893,7 +951,7 @@ function AppInner() {
       <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
 
       {/* Selective Entry — dedicated Victorian select-entry section (practice, writing, mock) */}
-      <Route path="/selective" element={<SelectiveEntryScreen theme={theme} profile={profile} onExit={() => navigate('/home')} />} />
+      <Route path="/selective" element={<SelectiveEntryScreen theme={theme} profile={profile} onExit={() => navigate('/home')} onStartAdaptive={startSelectiveAdaptive} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
@@ -907,7 +965,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : BRAND.home} replace />
           : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
       } />
 
@@ -920,7 +978,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : BRAND.home} replace />
           : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
@@ -932,7 +990,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : BRAND.home} replace />
           : <TutorSignupScreen />
       } />
 

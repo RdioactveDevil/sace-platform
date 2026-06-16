@@ -7,6 +7,8 @@ import {
   getComponent,
   buildPracticePaper,
   buildMockPaper,
+  selectiveSubjectTile,
+  selectiveCurriculaSeed,
 } from './selectiveEntry.js'
 
 // The intended correct response for a question, derived from its answer key.
@@ -49,6 +51,16 @@ describe('selective entry content', () => {
     }
   })
 
+  test('every question carries topic, a known subtopic and a 1–5 difficulty', () => {
+    for (const c of SELECTIVE_COMPONENTS) {
+      for (const q of c.questions) {
+        assert.equal(q.topic, c.topic, `${q.id} topic should match component`)
+        assert.ok(c.subtopics.includes(q.subtopic), `${q.id} subtopic "${q.subtopic}" not declared on ${c.id}`)
+        assert.ok(Number.isInteger(q.difficulty) && q.difficulty >= 1 && q.difficulty <= 5, `${q.id} bad difficulty`)
+      }
+    }
+  })
+
   test('mcq answer_index is within range', () => {
     for (const c of SELECTIVE_COMPONENTS) {
       for (const q of c.questions) {
@@ -83,6 +95,25 @@ describe('paper builders', () => {
     for (const s of paper.sections) {
       assert.ok(s.durationSec > 0)
       assert.ok(s.questions.length > 0)
+    }
+  })
+})
+
+describe('adaptive subject tile + curriculum seed', () => {
+  test('subject tile is a curriculum_ tile naming the curriculum', () => {
+    const tile = selectiveSubjectTile('reading')
+    assert.ok(tile.id.startsWith('curriculum_'))
+    assert.equal(tile.name, 'Selective Reading Comprehension')
+    assert.equal(tile.stage, 'Selective Entry')
+    assert.equal(selectiveSubjectTile('nope'), null)
+  })
+
+  test('seed exposes one curriculum per component with subject-tagged questions', () => {
+    const seed = selectiveCurriculaSeed()
+    assert.equal(seed.length, SELECTIVE_COMPONENTS.length)
+    for (const c of seed) {
+      assert.ok(c.name && c.topic && c.subtopics.length > 0)
+      assert.ok(c.questions.every((q) => q.subject === c.name))
     }
   })
 })

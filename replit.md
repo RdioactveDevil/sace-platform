@@ -51,6 +51,39 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 ### Custom Assets
 - `artifacts/gradefarm/public/SIFONN_PRO.otf` — custom Sifonn Pro font used for the brand logo
 
+### Multi-brand subdomains
+The single SPA serves three exam-domain brands by hostname (`src/lib/brand.js`):
+- `selective.gradefarm.com.au` — Victorian selective-school entry
+- `vce.gradefarm.com.au` — VCE (branded shell; add curricula named/levelled with "VCE"/"Unit N")
+- `sace.gradefarm.com.au` — SACE (owns everything not selective/VCE)
+- apex / `*.vercel.app` previews → default brand, full catalogue
+
+The brand is resolved from `window.location.hostname` (with `?brand=<id>` and
+`VITE_BRAND` overrides for local/preview testing). It drives the document title,
+the post-login home, the sidebar logo suffix, and which subjects the Subject
+Picker shows — each brand owns a slice of the shared `curricula` catalogue via
+`matchSubject(name, level)`.
+
+**Deploy/config:** one Vercel project. Add the three subdomains as Vercel domains
+(all aliased to the same deployment) and point DNS (CNAME → Vercel). No per-brand
+build needed. Note: Supabase auth sessions are per-origin, so a login on one
+subdomain does not carry to another (acceptable for v1's separate brand journeys).
+
+### Selective Entry (Victorian Select Entry)
+Dedicated section at `/selective` (`SelectiveEntryScreen`) with Overview,
+Practice, Written Expression and a full timed Mock Exam.
+- **Adaptive practice**: the four components (Reading, Verbal, Numerical, Maths)
+  are real DB curricula seeded by `supabase/migrations/20260616000000_seed_selective_entry.sql`
+  (generated from `src/lib/selectiveEntry.js` — the single source of truth).
+  Signed-in practice routes into the normal `/quiz` adaptive engine (difficulty
+  targeting, remediation, AI bank top-up). **Run that migration** so the curricula
+  + starter bank exist; AI generation extends each subtopic from there.
+- **Mock exam**: full timed paper via the exam simulator (`ExamSimulator`).
+- **Written Expression**: `EssayMarkerScreen` reused with `vse_creative` /
+  `vse_persuasive` essay types (api-server `routes/writing.ts`, `selective_vic`
+  year range), AI prompt + criterion feedback.
+- Logged-out visitors get a fixed sample-paper preview of each component.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

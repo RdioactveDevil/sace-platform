@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CLIENT_ONLY_SUBJECTS, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
+import { getBrand } from '../lib/brand'
 import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchAllActiveCurricula } from '../lib/curriculaDb'
 import { SubjectIcon } from './SubjectIcons'
@@ -80,7 +81,10 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   }, [dynamicSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const builtInSubjects  = CLIENT_ONLY_SUBJECTS
+  // Each brand (subdomain) owns a slice of the shared catalogue.
+  const brand            = getBrand()
   const allSubjects      = [...builtInSubjects, ...dynamicSubjects]
+    .filter(s => brand.matchSubject(s.name, s.stage))
   const hasSubscriptions = subscriptions.length > 0
   const subscribed       = allSubjects.filter(s => s.available && (!hasSubscriptions || subscriptions.some(sub => subMatchesSubject(sub, s))))
   const notSubscribed    = hasSubscriptions ? allSubjects.filter(s => s.available && !subscriptions.some(sub => subMatchesSubject(sub, s))) : []
