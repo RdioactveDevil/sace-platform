@@ -45,6 +45,7 @@ const PricingPage           = lazy(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
 const EssayMarkerScreen     = lazy(() => import('./components/EssayMarkerScreen'))
+const SelectiveEntryScreen  = lazy(() => import('./components/SelectiveEntryScreen'))
 const SessionRoom           = lazy(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
@@ -57,6 +58,7 @@ const NAV_ITEMS = [
   { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
   { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
   { icon: 'list-check',  label: 'Exam Mode',     id: 'exam',        path: '/exam'          },
+  { icon: 'cap',         label: 'Selective Entry', id: 'selective', path: '/selective'     },
   { icon: 'pen',         label: 'Essay Marker',  id: 'essay',       path: '/essay-lab'     },
   { icon: 'learn',       label: 'Question Lab',  id: 'qlab',        path: '/question-lab'  },
   { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
@@ -88,6 +90,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
+      {name === 'cap'         && <><path d="M9 3 1.5 6.5 9 10l7.5-3.5L9 3Z" {...S} /><path d="M4.5 8.25v3.5c0 1 2 2 4.5 2s4.5-1 4.5-2v-3.5" {...S} /><path d="M16.5 6.5v4" {...S} /></>}
     </svg>
   )
 }
@@ -888,6 +891,9 @@ function AppInner() {
 
       {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
       <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
+
+      {/* Selective Entry — dedicated Victorian select-entry section (practice, writing, mock) */}
+      <Route path="/selective" element={<SelectiveEntryScreen theme={theme} profile={profile} onExit={() => navigate('/home')} />} />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />

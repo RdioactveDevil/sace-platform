@@ -29,6 +29,12 @@ export function predictScore(trackId, percent) {
       const scaled = Math.round((p / 100) * 120) // 0–120 raw-style
       return { label: `${scaled}/120`, sublabel: 'indicative scaled raw score' }
     }
+    case 'selective-vic': {
+      // Victorian selective-entry results are reported as a percentile-style
+      // band; frame the raw % as an indicative competitive band.
+      const band = Math.round(40 + (p / 100) * 59) // ~40–99
+      return { label: `~${band}`, sublabel: 'indicative selective-entry band' }
+    }
     default:
       return { label: `${p}%`, sublabel: 'score' }
   }

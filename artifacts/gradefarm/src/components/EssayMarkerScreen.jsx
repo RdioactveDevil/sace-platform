@@ -9,7 +9,7 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 // Essay types map to the /api/writing pipeline. `subject` drives the school-level
 // year range; GAMSAT types ignore it (assessed at adult/graduate level).
-const ESSAY_TYPES = [
+const DEFAULT_ESSAY_TYPES = [
   { id: 'persuasive',       label: 'Persuasive',     subject: 'writing_y910', blurb: 'Argue a position', timed: 30 },
   { id: 'narrative',        label: 'Narrative',      subject: 'writing_y910', blurb: 'Tell a story',     timed: 30 },
   { id: 'gamsat_argument',  label: 'GAMSAT Task A',  subject: 'gamsat',       blurb: 'Argumentative (theme)', timed: 30 },
@@ -39,9 +39,17 @@ function ScoreBar({ t, name, score, comment }) {
   )
 }
 
-export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
+export default function EssayMarkerScreen({
+  theme = 'dark',
+  onExit,
+  essayTypes = DEFAULT_ESSAY_TYPES,
+  badge = '✍️ AI Essay Marker',
+  title = 'Get your writing marked instantly',
+  subtitle = 'Pick a task, generate a real-style prompt, write under timed conditions, and get a band score with criterion-by-criterion feedback.',
+}) {
+  const ESSAY_TYPES = essayTypes
   const t = THEMES[theme]
-  const [typeId, setTypeId] = useState('persuasive')
+  const [typeId, setTypeId] = useState(essayTypes[0]?.id)
   const [prompt, setPrompt] = useState('')
   const [loadingPrompt, setLoadingPrompt] = useState(false)
   const [essay, setEssay] = useState('')
@@ -118,11 +126,11 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
         )}
         <div style={{ textAlign: 'center', marginBottom: 26 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: GOLD, fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            ✍️ AI Essay Marker
+            {badge}
           </div>
-          <div style={{ fontFamily: FONT_D, fontSize: 28, color: t.text, letterSpacing: 1 }}>Get your writing marked instantly</div>
+          <div style={{ fontFamily: FONT_D, fontSize: 28, color: t.text, letterSpacing: 1 }}>{title}</div>
           <div style={{ fontSize: 14, color: t.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 540, margin: '8px auto 0' }}>
-            Pick a task, generate a real-style prompt, write under timed conditions, and get a band score with criterion-by-criterion feedback.
+            {subtitle}
           </div>
         </div>
 
