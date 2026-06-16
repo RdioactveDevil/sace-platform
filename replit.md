@@ -59,7 +59,7 @@ declarative registry in `src/lib/brand.js` (`VERSIONS`):
 | Version | Subdomain | Built-in subjects |
 |---|---|---|
 | Selective Entry | `selective.` | Reading, Verbal, Numerical, Maths (seeded) |
-| SACE | `sace.` | catalogue version — owns every curriculum no other version claims |
+| SACE | `sace.` | SACE curricula only — Stage 1 / Stage 2 (by name or level_label) |
 | VCE | `vce.` | shell (auto-claims admin curricula named "VCE"/"Unit N") |
 | UCAT | `ucat.` | shell (coming soon) |
 | GAMSAT | `gamsat.` | shell (coming soon) |
@@ -67,7 +67,8 @@ declarative registry in `src/lib/brand.js` (`VERSIONS`):
 
 Each version declares `subjects: [{ name, level }]`. Subject ownership
 (`subjectOwnerId`) is derived: explicit built-in subject → version `match`
-pattern → `claimsRemainder` version (SACE). So **adding a version (e.g. UCAT
+pattern → otherwise unowned (shows only on the apex full catalogue, not on any
+version subdomain). So **adding a version (e.g. UCAT
 subjects) is a registry entry + a seed migration** — engine, quiz, writing and
 mock are untouched. Version drives the document title, post-login home, sidebar
 logo suffix and the Subject Picker catalogue; shell versions show a "coming

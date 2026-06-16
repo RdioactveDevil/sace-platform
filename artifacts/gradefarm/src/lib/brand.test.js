@@ -22,9 +22,11 @@ describe('subject ownership is derived from the registry', () => {
     // Selective ships these as built-in subjects (exact names).
     ['Selective Reading Comprehension', 'Selective Entry', 'selective'],
     ['Selective Mathematics', 'Selective Entry', 'selective'],
-    // Anything no version claims falls to the SACE catalogue (claimsRemainder).
+    // SACE owns only SACE curricula (Stage 1 / Stage 2 by name or level_label).
     ['Chemistry Stage 2', 'Stage 2', 'sace'],
-    ['Year 10 Quantitative Reasoning', 'Year 10', 'sace'],
+    ['SACE Stage 1 Biology', 'Stage 1', 'sace'],
+    // Unrelated subjects belong to NO version subdomain — only the apex catalogue.
+    ['Year 10 Quantitative Reasoning', 'Year 10', 'default'],
     // VCE auto-claims by naming convention until subjects are listed explicitly.
     ['VCE Chemistry', 'Units 3 & 4', 'vce'],
     ['Mathematical Methods Unit 1', 'Unit 1', 'vce'],
@@ -51,10 +53,11 @@ describe('versions registry shape', () => {
     assert.equal(VERSIONS.gamsat.subjects.length, 0)
     assert.ok(VERSIONS.ucat.comingSoon && VERSIONS.gamsat.comingSoon)
   })
-  test('exactly one version claims the remainder', () => {
-    const remainder = Object.values(VERSIONS).filter((v) => v.claimsRemainder)
-    assert.equal(remainder.length, 1)
-    assert.equal(remainder[0].id, 'sace')
+  test('no subdomain version is a catch-all; unclaimed subjects go to apex only', () => {
+    assert.equal(Object.values(VERSIONS).filter((v) => v.claimsRemainder).length, 0)
+    // Something no version owns resolves to the default (apex) catalogue.
+    assert.equal(subjectOwnerId('Year 10 Quantitative Reasoning', 'Year 10'), 'default')
+    assert.equal(VERSIONS.sace.matchSubject('Year 10 Quantitative Reasoning', 'Year 10'), false)
   })
   test('BRANDS is a back-compat alias of VERSIONS', () => {
     assert.equal(BRANDS, VERSIONS)

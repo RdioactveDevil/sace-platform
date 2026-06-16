@@ -48,8 +48,10 @@ export const VERSIONS = {
     tagline: 'South Australian Certificate of Education',
     home: '/question-bank',
     subjects: [],
-    // SACE is the catalogue version: it owns every curriculum no other version claims.
-    claimsRemainder: true,
+    // SACE owns only SACE curricula — Stage 1 / Stage 2 (by name or level_label),
+    // or an explicit "SACE" tag. Unrelated subjects appear only on the apex
+    // full catalogue, never on sace.
+    match: /\bsace\b|\bstage\s*[12]\b/i,
   },
   vce: {
     id: 'vce',
