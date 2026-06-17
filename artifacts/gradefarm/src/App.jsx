@@ -12,6 +12,9 @@ import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import SubjectPicker     from './components/SubjectPicker'
 import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
+import { getBrand, brandTitle } from './lib/brand'
+import { selectiveSubjectTile } from './lib/selectiveEntry'
+const VersionLanding = lazy(() => import('./components/VersionLanding'))
 import { getTopicConfigForSubject } from './lib/saceTopics'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -45,6 +48,7 @@ const PricingPage           = lazy(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
 const EssayMarkerScreen     = lazy(() => import('./components/EssayMarkerScreen'))
+const SelectiveEntryScreen  = lazy(() => import('./components/SelectiveEntryScreen'))
 const SessionRoom           = lazy(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
 
@@ -53,10 +57,36 @@ const GOLDL  = '#f9d87a'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
+// Active brand (subdomain) for this load — drives title, home, catalogue slice
+// and the per-version accent applied across the app shell.
+const BRAND = getBrand()
+
+function hexA(hex, a) {
+  const c = hex.replace('#', '')
+  const r = parseInt(c.slice(0, 2), 16)
+  const g = parseInt(c.slice(2, 4), 16)
+  const b = parseInt(c.slice(4, 6), 16)
+  return `rgba(${r},${g},${b},${a})`
+}
+function lightenHex(hex, amt) {
+  const c = hex.replace('#', '')
+  let r = parseInt(c.slice(0, 2), 16)
+  let g = parseInt(c.slice(2, 4), 16)
+  let b = parseInt(c.slice(4, 6), 16)
+  r = Math.round(r + (255 - r) * amt)
+  g = Math.round(g + (255 - g) * amt)
+  b = Math.round(b + (255 - b) * amt)
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')}`
+}
+// Per-version accent (defaults to gold for the apex/SACE versions).
+const ACCENT  = BRAND.accent
+const ACCENTL = lightenHex(ACCENT, 0.32)
+
 const NAV_ITEMS = [
   { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
   { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
   { icon: 'list-check',  label: 'Exam Mode',     id: 'exam',        path: '/exam'          },
+  { icon: 'cap',         label: 'Selective Entry', id: 'selective', path: '/selective', versions: ['selective'] },
   { icon: 'pen',         label: 'Essay Marker',  id: 'essay',       path: '/essay-lab'     },
   { icon: 'learn',       label: 'Question Lab',  id: 'qlab',        path: '/question-lab'  },
   { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
@@ -88,6 +118,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
+      {name === 'cap'         && <><path d="M9 3 1.5 6.5 9 10l7.5-3.5L9 3Z" {...S} /><path d="M4.5 8.25v3.5c0 1 2 2 4.5 2s4.5-1 4.5-2v-3.5" {...S} /><path d="M16.5 6.5v4" {...S} /></>}
     </svg>
   )
 }
@@ -103,7 +134,9 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const go = (path) => { navigate(path); onClose?.() }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
-  const primaryNav = writingNav ? WRITING_NAV_ITEMS : NAV_ITEMS
+  // Platform-aware: items tagged with `versions` only show on those versions (always on the apex/default catalogue).
+  const primaryNav = (writingNav ? WRITING_NAV_ITEMS : NAV_ITEMS)
+    .filter(it => !it.versions || it.versions.includes(BRAND.id) || BRAND.id === 'default')
   const navItems = [
     ...primaryNav,
     ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
@@ -122,20 +155,20 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
     <div className="gf-sidebar" style={{
       display: 'flex', flexDirection: 'column', height: '100%', fontFamily: FONT_B,
       // Layered premium-dark surface: deeper base + radial highlight + top inner highlight + soft outer shadow.
-      background: `radial-gradient(120% 60% at 0% 0%, rgba(241,190,67,0.06) 0%, rgba(241,190,67,0) 55%), linear-gradient(180deg, #07091f 0%, #05071a 100%)`,
+      background: `radial-gradient(120% 60% at 0% 0%, ${hexA(ACCENT, 0.06)} 0%, ${hexA(ACCENT, 0)} 55%), linear-gradient(180deg, #07091f 0%, #05071a 100%)`,
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), inset -1px 0 0 rgba(255,255,255,0.04), 4px 0 24px rgba(0,0,0,0.35)',
       position: 'relative', overflow: 'hidden',
     }}>
       <style>{`
         .gf-nav-btn { position: relative; isolation: isolate; }
-        .gf-nav-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
-        .gf-nav-btn[data-active="true"] { background: linear-gradient(135deg, rgba(241,190,67,0.16), rgba(241,190,67,0.06)) !important; border-color: rgba(241,190,67,0.28) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.2) !important; }
+        .gf-nav-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px ${hexA(ACCENT, 0.55)}, 0 0 0 4px ${hexA(ACCENT, 0.15)} !important; }
+        .gf-nav-btn[data-active="true"] { background: linear-gradient(135deg, ${hexA(ACCENT, 0.16)}, ${hexA(ACCENT, 0.06)}) !important; border-color: ${hexA(ACCENT, 0.28)} !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.2) !important; }
         /* Preserve a visible focus ring even when the focused nav item is the active one */
-        .gf-nav-btn[data-active="true"]:focus-visible { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.65), 0 0 0 4px rgba(241,190,67,0.18) !important; }
+        .gf-nav-btn[data-active="true"]:focus-visible { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px ${hexA(ACCENT, 0.65)}, 0 0 0 4px ${hexA(ACCENT, 0.18)} !important; }
         .gf-nav-btn[data-active="false"]:hover { background: rgba(255,255,255,0.04) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.06) !important; }
         .gf-nav-btn[data-active="false"]:hover .gf-nav-icon { color: #f1f5f9 !important; }
-        .gf-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.5) !important; }
-        .gf-footer-btn:focus-visible { outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
+        .gf-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px ${hexA(ACCENT, 0.5)} !important; }
+        .gf-footer-btn:focus-visible { outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px ${hexA(ACCENT, 0.55)}, 0 0 0 4px ${hexA(ACCENT, 0.15)} !important; }
       `}</style>
 
       {/* Header — logo + theme toggle, with extra breathing room */}
@@ -143,6 +176,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         <div onClick={() => go('/home')} style={{ cursor: 'pointer', lineHeight: 1 }}>
           <span style={{ fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5 }}>
             <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+            {BRAND.logoSuffix && <span style={{ color: BRAND.accent, marginLeft: 6 }}>{BRAND.logoSuffix}</span>}
           </span>
           <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', fontFamily: FONT_B, letterSpacing: '0.08em', marginTop: 5, textTransform: 'uppercase' }}>by Titanium Tutoring</div>
         </div>
@@ -151,12 +185,12 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           onClick={onToggleTheme}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'border-color 0.2s, background 0.2s' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)'; e.currentTarget.style.background = 'rgba(241,190,67,0.06)' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = hexA(ACCENT, 0.35); e.currentTarget.style.background = hexA(ACCENT, 0.06) }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
         >
           <span style={{ fontSize: 11 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
           <div style={{ width: 26, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.08)', position: 'relative', flexShrink: 0 }}>
-            <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 12, width: 10, height: 10, borderRadius: '50%', background: GOLD, transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)', boxShadow: `0 0 6px ${GOLD}80` }} />
+            <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 12, width: 10, height: 10, borderRadius: '50%', background: ACCENT, transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)', boxShadow: `0 0 6px ${hexA(ACCENT, 0.5)}` }} />
           </div>
         </button>
       </div>
@@ -169,8 +203,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.30)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Studying</div>
         <div
           data-tutorial-target="subject-chip"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: `linear-gradient(135deg, ${hexA(ACCENT, 0.12)}, ${hexA(ACCENT, 0.05)})`, border: `1px solid ${hexA(ACCENT, 0.22)}`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: ACCENT, flexShrink: 0, boxShadow: `0 0 6px ${ACCENT}` }} />
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
         </div>
       </div>
@@ -180,24 +214,24 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         <div
           onClick={() => go('/my-account')}
           style={{ padding: '12px 12px 14px', borderRadius: 14, cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s', background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.18)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))'; e.currentTarget.style.borderColor = hexA(ACCENT, 0.18) }}
           onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12 }}>
             <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900, color: '#06091f', boxShadow: `0 4px 14px ${GOLD}55, inset 0 1px 0 rgba(255,255,255,0.4)` }}>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: `linear-gradient(135deg,${ACCENT},${ACCENTL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900, color: '#06091f', boxShadow: `0 4px 14px ${hexA(ACCENT, 0.33)}, inset 0 1px 0 rgba(255,255,255,0.4)` }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
-              <div style={{ position: 'absolute', right: -2, bottom: -2, width: 12, height: 12, borderRadius: '50%', background: '#0b1030', border: '2px solid #07091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: GOLD, fontWeight: 800 }}>{level}</div>
+              <div style={{ position: 'absolute', right: -2, bottom: -2, width: 12, height: 12, borderRadius: '50%', background: '#0b1030', border: '2px solid #07091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: ACCENT, fontWeight: 800 }}>{level}</div>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{profile.display_name}</div>
-              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 2, letterSpacing: '0.04em' }}>{icon} {rank}</div>
+              <div style={{ fontSize: 10, color: ACCENT, fontWeight: 700, marginTop: 2, letterSpacing: '0.04em' }}>{icon} {rank}</div>
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', flexShrink: 0 }}>›</div>
           </div>
           <div style={{ position: 'relative', background: 'rgba(255,255,255,0.06)', borderRadius: 999, height: 4, overflow: 'hidden', marginBottom: 6, boxShadow: 'inset 0 1px 0 rgba(0,0,0,0.25)' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s ease', borderRadius: 999, boxShadow: `0 0 8px ${GOLD}80` }} />
+            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${ACCENT},${ACCENTL})`, transition: 'width 0.8s ease', borderRadius: 999, boxShadow: `0 0 8px ${hexA(ACCENT, 0.5)}` }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.36)', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase' }}>Level {level}</span>
@@ -228,19 +262,19 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
                 display: 'flex', alignItems: 'center', gap: 11,
                 padding: '10px 12px', borderRadius: 10,
                 border: '1px solid transparent', background: 'transparent',
-                color: active ? GOLD : 'rgba(255,255,255,0.62)',
+                color: active ? ACCENT : 'rgba(255,255,255,0.62)',
                 fontSize: 13.5, fontWeight: active ? 700 : 500,
                 cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%',
                 transition: 'color 0.18s, background 0.18s, border-color 0.18s, box-shadow 0.18s',
                 letterSpacing: active ? '-0.01em' : '0',
               }}
             >
-              <span className="gf-nav-icon" style={{ display: 'flex', color: active ? GOLD : 'rgba(255,255,255,0.55)', transition: 'color 0.18s' }}>
+              <span className="gf-nav-icon" style={{ display: 'flex', color: active ? ACCENT : 'rgba(255,255,255,0.55)', transition: 'color 0.18s' }}>
                 <NavIcon name={item.icon} size={17} color="currentColor" />
               </span>
               <span style={{ flex: 1 }}>{item.label}</span>
-              {/* Gold indicator dot for the active item */}
-              {active && <span style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}, 0 0 0 2px rgba(241,190,67,0.18)`, flexShrink: 0 }} />}
+              {/* Accent indicator dot for the active item */}
+              {active && <span style={{ width: 6, height: 6, borderRadius: '50%', background: ACCENT, boxShadow: `0 0 8px ${ACCENT}, 0 0 0 2px ${hexA(ACCENT, 0.18)}`, flexShrink: 0 }} />}
             </button>
           )
         })}
@@ -255,9 +289,9 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           data-tutorial-target="change-subject"
           className="gf-footer-btn"
           onClick={onChangeSubject}
-          style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.28)', background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', color: GOLD, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, letterSpacing: '0.01em' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(241,190,67,0.20), rgba(241,190,67,0.08))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.45)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.28)' }}
+          style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 10, border: `1px solid ${hexA(ACCENT, 0.28)}`, background: `linear-gradient(135deg, ${hexA(ACCENT, 0.12)}, ${hexA(ACCENT, 0.05)})`, color: ACCENT, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, letterSpacing: '0.01em' }}
+          onMouseEnter={e => { e.currentTarget.style.background = `linear-gradient(135deg, ${hexA(ACCENT, 0.20)}, ${hexA(ACCENT, 0.08)})`; e.currentTarget.style.borderColor = hexA(ACCENT, 0.45) }}
+          onMouseLeave={e => { e.currentTarget.style.background = `linear-gradient(135deg, ${hexA(ACCENT, 0.12)}, ${hexA(ACCENT, 0.05)})`; e.currentTarget.style.borderColor = hexA(ACCENT, 0.28) }}
         >⇄ Change Subject</button>
         <button
           className="gf-footer-btn"
@@ -579,6 +613,14 @@ function AppInner() {
     document.body.style.padding = '0'
   }, [t.bg])
 
+  // Brand the tab title + expose the per-version accent as CSS variables.
+  useEffect(() => {
+    document.title = BRAND.productName ? `${brandTitle(BRAND)} — ${BRAND.productName}` : brandTitle(BRAND)
+    const root = document.documentElement
+    root.style.setProperty('--gf-accent', ACCENT)
+    root.style.setProperty('--gf-accent-light', ACCENTL)
+  }, [])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
@@ -640,6 +682,53 @@ function AppInner() {
     } else {
       navigate('/home')
     }
+  }
+
+  // Launch a fully adaptive quiz session for a Victorian Select Entry component
+  // by switching to its (DB-seeded) curriculum subject and routing into /quiz —
+  // the same engine, remediation and AI bank top-up every other subject uses.
+  const startSelectiveAdaptive = async (componentId) => {
+    const tile = selectiveSubjectTile(componentId)
+    if (!tile) return
+    setSelectedSubject(tile)
+    localStorage.setItem('gf-subject', JSON.stringify(tile))
+    let qs = []
+    try { qs = await getQuestionsForSubjectTile(tile) } catch (_) { qs = [] }
+    setQuestions(qs)
+    // Fresh "new" session.
+    setQuizMode('new')
+    setQuizSubtopics([])
+    setQuizExamMode(false)
+    setQuizTimerSeconds(0)
+    setQuizQ(null)
+    setQuizSelected(null)
+    setQuizShowAns(false)
+    setQuizCorrect(null)
+    setQuizEarnedXP(0)
+    setQuizStreak(profile?.streak || 0)
+    setQuizSessionXP(0)
+    setQuizResults([])
+    setQuizAnswered([])
+    setQuizQNumber(1)
+    setQuizAiTip('')
+    setQuizLoadingTip(false)
+    setActiveAssignmentId(null)
+    setQuizRemediationMode(false)
+    setQuizRemediationStreak(0)
+    setQuizRemediationTarget(3)
+    setQuizRemediationQueue([])
+    setQuizRemediationStatus('idle')
+    setQuizRemediationSource('prebuilt')
+    setQuizRemediationConcept(null)
+    setQuizRemediationParentId(null)
+    setQuizRemediationOriginalQ(null)
+    setQuizRemediationUsedIds([])
+    setQuizRemediationWrongCount(0)
+    setConsolidateSubtopic(null)
+    setQuizFinished(false)
+    setQuizSessionTip('')
+    setQuizSessionTipLoading(false)
+    navigate('/quiz')
   }
 
   const handleReplayFeatureTour = useCallback(async () => {
@@ -889,6 +978,9 @@ function AppInner() {
       {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
       <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
 
+      {/* Selective Entry — dedicated Victorian select-entry section (practice, writing, mock) */}
+      <Route path="/selective" element={<SelectiveEntryScreen theme={theme} profile={profile} onExit={() => navigate('/home')} onStartAdaptive={startSelectiveAdaptive} />} />
+
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
 
@@ -901,8 +993,10 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
-          : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
+          : <Navigate to={profile.is_tutor ? '/tutor' : BRAND.home} replace />
+          : BRAND.id === 'default'
+            ? <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
+            : <VersionLanding brand={BRAND} onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
       } />
 
       {/* Auth — public */}
@@ -914,7 +1008,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : BRAND.home} replace />
           : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
@@ -926,7 +1020,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : BRAND.home} replace />
           : <TutorSignupScreen />
       } />
 

@@ -51,6 +51,77 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 ### Custom Assets
 - `artifacts/gradefarm/public/SIFONN_PRO.otf` — custom Sifonn Pro font used for the brand logo
 
+### Versions (multi-brand subdomains)
+GradeFarm is one SPA + one engine that ships as several **versions**, each an
+exam-domain product with its own built-in subjects. Versions are a first-class,
+declarative registry in `src/lib/brand.js` (`VERSIONS`):
+
+| Version | Subdomain | Built-in subjects |
+|---|---|---|
+| Selective Entry | `selective.` | Reading, Verbal, Numerical, Maths (seeded) |
+| SACE | `sace.` | SACE curricula only — Stage 1 / Stage 2 (by name or level_label) |
+| VCE | `vce.` | Chemistry, Physics, Biology, Mathematical Methods (Units 3 & 4, seeded; also auto-claims admin "VCE"/"Unit N" curricula) |
+| UCAT | `ucat.` | shell (coming soon) |
+| GAMSAT | `gamsat.` | shell (coming soon) |
+| _default_ | apex / `*.vercel.app` | full catalogue |
+
+Each version declares `subjects: [{ name, level }]`. Subject ownership
+(`subjectOwnerId`) is derived: explicit built-in subject → version `match`
+pattern → otherwise unowned (shows only on the apex full catalogue, not on any
+version subdomain). So **adding a version (e.g. UCAT
+subjects) is a registry entry + a seed migration** — engine, quiz, writing and
+mock are untouched. Version drives the document title, post-login home, sidebar
+logo suffix and the Subject Picker catalogue; shell versions show a "coming
+soon" empty state. Resolved from `window.location.hostname` with `?brand=<id>`
+and `VITE_BRAND` overrides for local/preview testing.
+
+**Themed product layer (each subdomain feels like its own product):**
+- **Accent throughout** — `VERSIONS[id].accent` drives the app-shell accent
+  (sidebar nav active state, logo suffix, profile/XP card, buttons, focus rings)
+  via `ACCENT`/`hexA()` in `App.jsx`, and is exposed as the `--gf-accent` /
+  `--gf-accent-light` CSS variables on `:root`.
+- **Per-version landing** — logged-out visitors on a branded subdomain get
+  `src/components/VersionLanding.jsx`, a single data-driven template themed by
+  the version accent + its `landing` config (eyebrow, headline, subhead,
+  bullets, `comingSoon`). Coming-soon versions (UCAT/GAMSAT, and any with no
+  built-in subjects) render a waitlist hero. The apex/default domain keeps the
+  original full `LandingPage`.
+- **Platform-aware nav** — sidebar `NAV_ITEMS` can carry `versions: [...]`; such
+  items show only on those versions (always on the apex catalogue). E.g.
+  "Selective Entry" appears only on `selective.` + apex.
+
+Adding a version's full product experience = registry fields (`accent`,
+`landing`, optional nav `versions` tag) + a seed migration. No new components.
+
+**Deploy/config:** one Vercel project. Add each subdomain as a Vercel domain
+(all aliased to the same deployment) + DNS CNAME → Vercel. No per-version build.
+Note: Supabase auth sessions are per-origin, so a login on one subdomain does
+not carry to another (acceptable for v1's separate version journeys).
+
+### Selective Entry (Victorian Select Entry)
+Dedicated section at `/selective` (`SelectiveEntryScreen`) with Overview,
+Practice, Written Expression and a full timed Mock Exam.
+- **Adaptive practice**: the four components (Reading, Verbal, Numerical, Maths)
+  are real DB curricula seeded by `supabase/migrations/20260616000000_seed_selective_entry.sql`
+  (generated from `src/lib/selectiveEntry.js` — the single source of truth).
+  Signed-in practice routes into the normal `/quiz` adaptive engine (difficulty
+  targeting, remediation, AI bank top-up). **Run that migration** so the curricula
+  + starter bank exist; AI generation extends each subtopic from there.
+- **Mock exam**: full timed paper via the exam simulator (`ExamSimulator`).
+- **Written Expression**: `EssayMarkerScreen` reused with `vse_creative` /
+  `vse_persuasive` essay types (api-server `routes/writing.ts`, `selective_vic`
+  year range), AI prompt + criterion feedback.
+- Logged-out visitors get a fixed sample-paper preview of each component.
+
+### VCE (Units 3 & 4)
+Built-in subjects (`src/lib/vce.js`, single source of truth): **Chemistry,
+Physics, Biology, Mathematical Methods**. Seeded by
+`supabase/migrations/20260616100000_seed_vce.sql` as live DB curricula
+(topics/subtopics + starter bank). No bespoke screen — VCE subjects flow through
+the normal Subject Picker → adaptive `/quiz` pipeline like any curriculum.
+**Run that migration** for VCE content to appear; AI generation extends each
+subtopic. (English/Literature are deferred to the writing module.)
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

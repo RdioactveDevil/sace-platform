@@ -16,6 +16,10 @@ describe('predictScore', () => {
     assert.equal(predictScore('selective', 100).label, '120/120')
     assert.equal(predictScore('selective', 50).label, '60/120')
   })
+  test('victorian selective scales into ~40–99', () => {
+    assert.equal(predictScore('selective-vic', 0).label, '~40')
+    assert.equal(predictScore('selective-vic', 100).label, '~99')
+  })
   test('default returns the raw percentage', () => {
     assert.equal(predictScore('mixed-mock', 73).label, '73%')
   })

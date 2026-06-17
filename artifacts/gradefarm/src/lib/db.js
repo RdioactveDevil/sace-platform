@@ -711,22 +711,34 @@ export async function insertGeneratedQuestionsToBank(parentQuestion, variants = 
  * @param {string} subject   e.g. 'Chemistry Stage 1'
  * @param {string} topicCode e.g. '2.2'
  * @param {number} count
+ * @param {number|null} targetDifficulty
+ * @param {string[]} questionTypes  formats the AI may use (the prompt keeps a
+ *   mix and never forces a format that doesn't fit the concept)
  * @returns {Promise<object[]>}
  */
-export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 10, targetDifficulty = null) {
+export async function fetchAndPersistMoreQuestions(
+  subject,
+  topicCode,
+  count = 10,
+  targetDifficulty = null,
+  questionTypes = ['mcq', 'numeric', 'short_text', 'multi_select', 'order'],
+) {
   // targetDifficulty: 1–5 numeric or null (→ 'mixed').  The API uses it to
   // bias the AI's difficulty distribution towards the student's current level.
   const difficulty = targetDifficulty != null ? targetDifficulty : 'mixed'
-  // Ask the generator to include visuals where the concept warrants them.
-  // Graphs/diagrams only ever appear when the question genuinely needs one (the
-  // server prompt enforces that), so this is safe across subjects — it just
-  // unblocks visual questions that the live top-up previously never requested.
+  // Ask the generator to include visuals where the concept warrants them, and to
+  // use a VARIETY of question formats (numeric, short-answer, multi-select,
+  // ordering) — not just MCQ — so the live top-up matches the multi-format
+  // starter banks. Graphs/diagrams and each format only ever appear when the
+  // question genuinely suits them (the server prompt enforces that), so this is
+  // safe across every subject.
   const res = await fetch('/api/generate-questions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       subject, topicCode, count, difficulty, autoApprove: true,
       includeGraphs: true, includeDiagrams: true,
+      ...(Array.isArray(questionTypes) && questionTypes.length ? { questionTypes } : {}),
     }),
   })
   if (!res.ok) {

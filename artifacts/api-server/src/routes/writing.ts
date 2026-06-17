@@ -10,6 +10,8 @@ const YEAR_RANGES: Record<string, string> = {
   writing_y56: "Year 5–6 (ages 10–12)",
   writing_y78: "Year 7–8 (ages 12–14)",
   writing_y910: "Year 9–10 (ages 14–16)",
+  // Victorian selective-entry exam is sat in Year 8 for Year 9 entry.
+  selective_vic: "Year 8 (ages 13–14) preparing for the Victorian selective-entry exam",
 };
 
 function getBaseUrl(): string {
@@ -137,6 +139,9 @@ type EssayConfig = {
   scaleNote?: string;
 };
 
+const VSE_STANDARDS =
+  "the Victorian selective-entry exam written expression task (Edutest / ACER style), where assessors reward ideas, structure, vocabulary and control of language under timed conditions";
+
 const ESSAY_CONFIG: Record<string, EssayConfig> = {
   narrative: {
     criteria: NARRATIVE_CRITERIA,
@@ -147,6 +152,18 @@ const ESSAY_CONFIG: Record<string, EssayConfig> = {
     criteria: PERSUASIVE_CRITERIA,
     who: (yr) => `persuasive writing from a ${yr} student`,
     standards: "Australian national writing assessments (NAPLAN-style) and selective/scholarship writing tasks (ACER / Edutest style)",
+  },
+  // Victorian Select Entry written expression — creative/imaginative task.
+  vse_creative: {
+    criteria: NARRATIVE_CRITERIA,
+    who: (yr) => `an imaginative/creative written-expression piece from a ${yr} student`,
+    standards: VSE_STANDARDS,
+  },
+  // Victorian Select Entry written expression — persuasive/analytical task.
+  vse_persuasive: {
+    criteria: PERSUASIVE_CRITERIA,
+    who: (yr) => `a persuasive written-expression piece from a ${yr} student`,
+    standards: VSE_STANDARDS,
   },
   gamsat_argument: {
     criteria: GAMSAT_A_CRITERIA,
@@ -223,7 +240,7 @@ router.post("/writing/prompt", async (req, res) => {
         "No markdown, no commentary outside the JSON.",
       ].join("\n");
       rawText = await callClaude(system, `Generate a GAMSAT Section 2 ${taskB ? "Task B" : "Task A"} quotation stimulus.`);
-    } else if (essayType === "narrative") {
+    } else if (essayType === "narrative" || essayType === "vse_creative") {
       const system = [
         `You are generating creative writing prompts for ${yearRange} students.`,
         "Return ONLY a valid JSON object with these keys:",
