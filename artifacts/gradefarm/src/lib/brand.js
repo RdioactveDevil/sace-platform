@@ -188,6 +188,9 @@ for (const v of Object.values(VERSIONS)) {
 // Back-compat alias — earlier code imports `BRANDS`.
 export const BRANDS = VERSIONS
 
+// sessionStorage key holding a sticky ?brand= override (see resolveBrandId).
+const STICKY_KEY = 'gf-brand-override'
+
 /** Resolve a version id from a hostname (e.g. "selective.gradefarm.com.au"). */
 export function brandIdFromHostname(hostname) {
   const host = String(hostname || '').toLowerCase()
@@ -198,19 +201,36 @@ export function brandIdFromHostname(hostname) {
 
 /** Resolve the active version id (query override → env override → hostname). */
 export function resolveBrandId() {
+  // 1. Explicit ?brand= override. Persisted for the session so it survives
+  //    client-side navigation that drops the query string (e.g. on the Vercel
+  //    preview URL, where there is no brand subdomain to fall back to).
   try {
     if (typeof window !== 'undefined' && window.location) {
       const q = new URLSearchParams(window.location.search).get('brand')
-      if (q && VERSIONS[q]) return q
+      if (q && VERSIONS[q]) {
+        try { window.sessionStorage.setItem(STICKY_KEY, q) } catch (_) { /* ignore */ }
+        return q
+      }
     }
   } catch (_) { /* ignore */ }
+  // 2. Build-time override.
   try {
     const env = (typeof import.meta !== 'undefined' && import.meta.env) || {}
     if (env.VITE_BRAND && VERSIONS[env.VITE_BRAND]) return env.VITE_BRAND
   } catch (_) { /* ignore */ }
-  if (typeof window !== 'undefined' && window.location) {
-    return brandIdFromHostname(window.location.hostname)
-  }
+  // 3. Hostname (authoritative in production).
+  try {
+    if (typeof window !== 'undefined' && window.location) {
+      const fromHost = brandIdFromHostname(window.location.hostname)
+      if (fromHost !== 'default') return fromHost
+    }
+  } catch (_) { /* ignore */ }
+  // 4. Sticky session override from an earlier ?brand= (preview/testing only —
+  //    no brand subdomain present).
+  try {
+    const s = window.sessionStorage.getItem(STICKY_KEY)
+    if (s && VERSIONS[s]) return s
+  } catch (_) { /* ignore */ }
   return 'default'
 }
 

@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { VERSIONS, BRANDS, brandIdFromHostname, brandTitle, subjectOwnerId } from './brand.js'
+import { VERSIONS, BRANDS, brandIdFromHostname, brandTitle, subjectOwnerId, resolveBrandId } from './brand.js'
 
 describe('brandIdFromHostname', () => {
   test('maps known version subdomains', () => {
@@ -76,6 +76,40 @@ describe('versions registry shape', () => {
     assert.ok(VERSIONS.ucat.landing.comingSoon)
     assert.ok(VERSIONS.gamsat.landing.comingSoon)
     assert.ok(!VERSIONS.selective.landing.comingSoon)
+  })
+})
+
+describe('resolveBrandId — ?brand= override is sticky for the session', () => {
+  test('survives navigation that drops the query string on a preview host', () => {
+    const store = {}
+    const prev = globalThis.window
+    globalThis.window = {
+      location: { search: '?brand=selective', hostname: 'sace-platform-preview.vercel.app' },
+      sessionStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v) } },
+    }
+    try {
+      assert.equal(resolveBrandId(), 'selective')   // from query, now persisted
+      globalThis.window.location.search = ''         // React Router dropped the query
+      assert.equal(resolveBrandId(), 'selective')   // sticky override restores it
+    } finally {
+      if (prev === undefined) delete globalThis.window
+      else globalThis.window = prev
+    }
+  })
+
+  test('a real brand subdomain always wins over a stale sticky override', () => {
+    const store = { 'gf-brand-override': 'selective' }
+    const prev = globalThis.window
+    globalThis.window = {
+      location: { search: '', hostname: 'vce.gradefarm.com.au' },
+      sessionStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v) } },
+    }
+    try {
+      assert.equal(resolveBrandId(), 'vce')
+    } finally {
+      if (prev === undefined) delete globalThis.window
+      else globalThis.window = prev
+    }
   })
 })
 
