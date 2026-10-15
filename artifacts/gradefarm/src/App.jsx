@@ -53,17 +53,31 @@ const GOLDL  = '#f9d87a'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-const NAV_ITEMS = [
-  { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
-  { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
-  { icon: 'list-check',  label: 'Exam Mode',     id: 'exam',        path: '/exam'          },
-  { icon: 'pen',         label: 'Essay Marker',  id: 'essay',       path: '/essay-lab'     },
-  { icon: 'learn',       label: 'Question Lab',  id: 'qlab',        path: '/question-lab'  },
-  { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
-  { icon: 'leaderboard', label: 'Leaderboard',   id: 'leaderboard', path: '/leaderboard'   },
-  { icon: 'study',       label: 'Study Plan',    id: 'study',       path: '/study-plan'    },
-  { icon: 'history',     label: 'History',       id: 'history',     path: '/history'       },
+// Student navigation: three sections in the sidebar, each with tabs across the
+// top of the page (SectionTabs) for its sub-pages. Exam Mode and Essay Marker
+// are full-screen experiences, so their tabs open those screens.
+const NAV_SECTIONS = [
+  { icon: 'home', label: 'Practice', id: 'practice', pages: [
+    { id: 'home',  label: 'Question Bank', path: '/question-bank' },
+    { id: 'exam',  label: 'Exam Mode',     path: '/exam' },
+  ]},
+  { icon: 'learn', label: 'Learn', id: 'learn', pages: [
+    { id: 'learn', label: 'Titan AI',      path: '/learn' },
+    { id: 'essay', label: 'Essay Marker',  path: '/essay-lab' },
+  ]},
+  { icon: 'profile', label: 'Progress', id: 'progress', pages: [
+    { id: 'profile',     label: 'Overview',    path: '/my-progress' },
+    { id: 'study',       label: 'Study Plan',  path: '/study-plan' },
+    { id: 'history',     label: 'History',     path: '/history' },
+    { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
+  ]},
 ]
+const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path }))
+
+function sectionForPath(pathname) {
+  const p = pathname === '/' || pathname === '/quiz' ? '/question-bank' : pathname
+  return NAV_SECTIONS.find(sec => sec.pages.some(page => page.path === p)) || null
+}
 
 /** Sidebar when the active subject is English Writing (replaces quiz-style nav). */
 const WRITING_NAV_ITEMS = [
@@ -110,6 +124,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
     ...(profile?.is_admin ? [{ icon: 'admin', label: 'Admin',           id: 'admin', path: '/admin' }] : []),
   ]
   const isActivePath = (p) =>
+    (!writingNav && sectionForPath(location.pathname)?.pages[0].path === p) ||
     location.pathname === p ||
     (p === '/home' && location.pathname === '/') ||
     (p === '/question-bank' && location.pathname === '/quiz') ||
@@ -293,6 +308,36 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
 }
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
+/** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
+function SectionTabs({ theme }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const t = THEMES[theme]
+  const section = sectionForPath(location.pathname)
+  if (!section || section.pages.length < 2) return null
+  const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
+  return (
+    <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`}
+      style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: `1px solid ${t.border}`, flexShrink: 0, overflowX: 'auto', fontFamily: FONT_B }}>
+      {section.pages.map(page => {
+        const active = page.path === current
+        return (
+          <button key={page.id} type="button" role="tab" aria-selected={active}
+            onClick={() => navigate(page.path)}
+            style={{
+              padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
+              fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500,
+              color: active ? GOLD : t.textMuted,
+              borderBottom: `2px solid ${active ? GOLD : 'transparent'}`, marginBottom: -1,
+            }}>
+            {page.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav = false, tutorialOverlay = null }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
@@ -351,6 +396,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
+        {!writingNav && <SectionTabs theme={theme} />}
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
       {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
@@ -881,7 +927,7 @@ function AppInner() {
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
 
       {/* Question Lab — public preview of the multi-format question engine */}
-      <Route path="/question-lab" element={<QuestionLabScreen theme={theme} onExit={() => navigate('/home')} />} />
+      <Route path="/question-lab" element={<AdminRoute profile={profile}><QuestionLabScreen theme={theme} onExit={() => navigate('/admin')} /></AdminRoute>} />
 
       {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
       <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} profile={profile} onExit={() => navigate('/home')} />} />
