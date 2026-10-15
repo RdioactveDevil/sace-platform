@@ -105,8 +105,10 @@ export function effectiveCohortStageForLiveCurriculum(fullName, levelLabel) {
  * @returns {string}
  */
 export function buildCanonicalCurriculumName(title, levelLabel) {
-  const t = String(title || '').trim().replace(/\s+/g, ' ')
   const lv = String(levelLabel || '').trim()
+  // The level is added below, so drop one the admin typed into the title
+  // ("Year 6 English" + Year 6 → "Year 6 English", not "Year 6 Year 6 English").
+  const t = stripLevelFromTitle(String(title || '').trim().replace(/\s+/g, ' '), lv)
   if (!t) throw new Error('Subject title is required')
   if (!lv) throw new Error('Cohort level is required')
   if (/^year\s*\d+/i.test(lv)) {
@@ -118,6 +120,21 @@ export function buildCanonicalCurriculumName(title, levelLabel) {
     return `${t} Stage ${sn ? sn[0] : ''}`.replace(/\s+/g, ' ').trim()
   }
   return `${t} ${lv}`
+}
+
+/**
+ * Remove a leading/trailing cohort level matching `levelLabel` (and a leading
+ * "SACE") from a subject title. Leaves the title alone if nothing would remain.
+ */
+export function stripLevelFromTitle(title, levelLabel) {
+  const m = String(levelLabel || '').trim().match(/^(year|stage)\s*(\d+)$/i)
+  if (!m) return title
+  const level = `${m[1]}\\s*${m[2]}`
+  const stripped = title
+    .replace(new RegExp(`^(sace\\s+)?${level}\\b[\\s:–-]*`, 'i'), '')
+    .replace(new RegExp(`[\\s:–(-]*\\b${level}\\)?$`, 'i'), '')
+    .trim()
+  return stripped || title
 }
 
 /**
