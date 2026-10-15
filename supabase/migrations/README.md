@@ -68,3 +68,11 @@ spellings) and fix those subjects in Admin → Curricula:
 ```sql
 select * from unlinked_question_subjects;
 ```
+
+## 20261016000000_unique_curriculum_names
+
+Renames curricula whose names clash (e.g. two called "Chemistry") to
+"<Title> Stage N" / "Year N <Title>", moves subscriptions with them, re-sorts
+their questions (a bare "Chemistry" question goes to the stage whose subtopic
+it matches), and adds a unique index on the name. Apply it before deploying
+the matching app change.
