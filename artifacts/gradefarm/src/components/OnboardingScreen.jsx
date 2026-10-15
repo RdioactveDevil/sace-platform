@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { CLIENT_ONLY_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
+import { curriculumToSubjectTile, formatSubjectLabel } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -52,26 +52,13 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   useEffect(() => {
     fetchLiveCurricula()
       .then(curricula => {
-        setDynamicSubjects(
-          curricula
-            .map(c => ({
-              id: `curriculum_${c.id}`,
-              name: c.name,
-              stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
-              icon: '📚',
-              color: '#6366f1',
-              topics: c.topicNames,
-              questionCount: 0,
-              available: c.status === 'live',
-            }))
-        )
+        setDynamicSubjects(curricula.map(curriculumToSubjectTile))
       })
       .catch(() => {})
   }, [])
 
-  // Client-only built-ins (the Writing feature) plus all DB-loaded dynamic
-  // curricula. Academic subjects come only from the DB so admin controls them.
-  const allSubjects = [...CLIENT_ONLY_SUBJECTS, ...dynamicSubjects]
+  // Every subject comes from the curricula table, so the admin controls them.
+  const allSubjects = dynamicSubjects
   const AVAILABLE_SUBJECTS = allSubjects.filter(s => s.available)
   const COMING_SUBJECTS    = allSubjects.filter(s => !s.available)
 

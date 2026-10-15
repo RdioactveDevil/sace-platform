@@ -4,8 +4,8 @@ import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources } from '../lib/db'
-import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/saceTopics'
-import { getY7TopicConfig, getY7ShortLabel } from '../lib/australianCurriculumTopics'
+import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
+import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -16,7 +16,7 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
   const [curriculumMacroGroups, setCurriculumMacroGroups] = useState(null)
-  const baseTopicConfig = getY7TopicConfig(subject?.id) ?? getTopicConfigForSubject(subject)
+  const baseTopicConfig = getTopicConfigForSubject(subject)
   const { macroGroups: MACRO_GROUPS, normFn: topicNormFn, isTwoLevel = false } =
     (curriculumMacroGroups ? buildCurriculumTopicConfig(curriculumMacroGroups) : baseTopicConfig)
   const navigate = useNavigate()
@@ -153,7 +153,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     : isAllTopicsSelected
       ? 'All topics'
       : [...new Set(questions.filter(q => selectedSubtopics.includes(q.subtopic)).map(q => q.topic))]
-          .map(tn => getY7ShortLabel(topicNormFn ? (topicNormFn(tn) ?? tn) : tn))
+          .map(tn => (topicNormFn ? (topicNormFn(tn) ?? tn) : tn) || '')
           .join(', ')
 
   const topStruggles = Object.entries(currentStruggleMap)
@@ -591,7 +591,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Questions</div>
           <h1 style={{ fontSize: 24, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, marginBottom: 4, color: t.text }}>Question Bank</h1>
           <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>
-            {subject?.stage || 'Stage 1'} · {subject?.name || 'Chemistry'} · {questions.length} questions
+            {[subject?.stage, subject?.name].filter(Boolean).join(' · ') || 'No subject selected'} · {questions.length} questions
           </p>
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
@@ -625,12 +625,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Quick Start (All Topics)</div>
-              <button
+              {subjectHasFeature(subject, 'exam_mode') && <button
                 onClick={() => setExamMode(v => !v)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
               >
                 ⏱ {examMode ? 'Exam On' : 'Exam Mode'}
-              </button>
+              </button>}
             </div>
 
             {examMode && (
@@ -741,7 +741,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                             </div>
                             <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} title={topicName}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }} aria-label={topicName}>{mi + 1}.{ti + 1} {getY7ShortLabel(topicName)}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }} aria-label={topicName}>{mi + 1}.{ti + 1} {topicName}</span>
                               <span style={{ fontSize: 11, color: t.textMuted }}> ({tg.attempted}/{tg.total})</span>
                             </div>
                             <span style={{ fontSize: 11, color: t.textFaint, flexShrink: 0 }}>{topicPct}%</span>

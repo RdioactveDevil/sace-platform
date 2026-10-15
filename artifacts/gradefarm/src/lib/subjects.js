@@ -1,130 +1,69 @@
-// Single source of truth for all subjects offered on the platform.
-// `available` = questions exist and are live.
-// `comingSoon` = planned but not yet launched.
-
-/** Picker `id` → Supabase `questions.subject` (see getQuestions in db.js). */
-export const QUESTIONS_SUBJECT_BY_ID = {
-  quant_y10: 'Year 10 Quantitative Reasoning',
-}
-
-export const ALL_SUBJECTS = [
-  {
-    id: 'biology_s1',
-    name: 'Biology',
-    stage: 'Stage 1',
-    icon: '🧬',
-    color: '#10b981',
-    topics: ['Cells', 'Genetics', 'Evolution', 'Ecosystems'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'biology_s2',
-    name: 'Biology',
-    stage: 'Stage 2',
-    icon: '🧬',
-    color: '#10b981',
-    topics: ['DNA & Proteins', 'Cellular Processes', 'Evolution', 'Biodiversity'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'physics_s1',
-    name: 'Physics',
-    stage: 'Stage 1',
-    icon: '⚛️',
-    color: '#f59e0b',
-    topics: ['Motion', 'Forces', 'Energy', 'Waves'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'physics_s2',
-    name: 'Physics',
-    stage: 'Stage 2',
-    icon: '⚛️',
-    color: '#f59e0b',
-    topics: ['Motion', 'Electricity', 'Waves', 'Modern Physics'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'quant_y10',
-    name: 'Quantitative Reasoning',
-    stage: 'Year 10',
-    icon: '🧮',
-    color: '#8b5cf6',
-    topics: ['Numerical Reasoning', 'Pattern Recognition', 'Data Interpretation', 'Problem Solving'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'english_s2',
-    name: 'English Literary Studies',
-    stage: 'Stage 2',
-    icon: '📖',
-    color: '#ec4899',
-    topics: ['Close Analysis', 'Essay Writing', 'Comparative Study'],
-    questionCount: 0,
-    available: false,
-    comingSoon: true,
-  },
-  {
-    id: 'writing_y56',
-    name: 'Writing',
-    stage: 'Year 5–6',
-    icon: '✏️',
-    color: '#14b8a6',
-    type: 'writing',
-    topics: ['Narrative', 'Persuasive'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'writing_y78',
-    name: 'Writing',
-    stage: 'Year 7–8',
-    icon: '✏️',
-    color: '#14b8a6',
-    type: 'writing',
-    topics: ['Narrative', 'Persuasive'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'writing_y910',
-    name: 'Writing',
-    stage: 'Year 9–10',
-    icon: '✏️',
-    color: '#14b8a6',
-    type: 'writing',
-    topics: ['Narrative', 'Persuasive'],
-    questionCount: 0,
-    available: true,
-  },
-]
+// Subjects come from the `curricula` table (admin → Curricula), turned into
+// picker tiles by curriculumToSubjectTile(). There are no built-in subjects.
 
 /**
- * Built-in tiles still rendered client-side regardless of the DB.
- *
- * Only the Writing feature qualifies: it is a pure client experience with no
- * `curricula` / `questions` row, and its stages (e.g. "Year 5–6") are not valid
- * COHORT_LEVEL_OPTIONS, so it cannot be created or removed from the admin
- * Curricula tab. Every other subject — academic question-bank subjects such as
- * Quantitative Reasoning, Biology, Physics, and English — now comes ONLY from
- * the DB, so the admin console is the single source of truth: deleting one in
- * the Curricula tab removes it from the Subject Picker and onboarding.
+ * Writing levels a subject can switch on (features.writing = level id). The id
+ * picks the year range the writing prompts and marking are pitched at, and is
+ * what writing_attempts.subject stores.
  */
-export const CLIENT_ONLY_SUBJECTS = ALL_SUBJECTS.filter(s => s.type === 'writing')
+export const WRITING_LEVELS = [
+  { id: 'writing_y56',  label: 'Year 5–6' },
+  { id: 'writing_y78',  label: 'Year 7–8' },
+  { id: 'writing_y910', label: 'Year 9–10' },
+]
+
+/** The Writing workspace's subject for a tile with Writing on, else null. */
+export function writingSubjectFor(tile) {
+  const level = WRITING_LEVELS.find(l => l.id === tile?.features?.writing)
+  if (!level) return null
+  return { id: level.id, name: tile.name, stage: level.label, icon: '✏️', type: 'writing' }
+}
+
+/**
+ * Picker tile for a `curricula` row (from fetchLiveCurricula).
+ * The tile id `curriculum_<uuid>` is how question loading finds the curriculum.
+ */
+export function curriculumToSubjectTile(c) {
+  return {
+    id: `curriculum_${c.id}`,
+    name: c.name,
+    stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
+    icon: '📚',
+    color: '#6366f1',
+    topics: c.topicNames || [],
+    questionCount: 0,
+    available: c.status === 'live',
+    features: c.features || {},
+  }
+}
+
+/**
+ * Optional per-subject tools, switched on in Admin → Curricula → Features.
+ * Off unless the subject's curriculum enables them.
+ * @param {object} tile  subject tile
+ * @param {'exam_mode'|'essay_marker'|'writing'} feature
+ */
+export function subjectHasFeature(tile, feature) {
+  return !!tile?.features?.[feature]
+}
+
+/** Find the tile whose subject matches a stored subject string (e.g. an assignment's). */
+export function findTileForSubjectString(tiles, subject) {
+  const want = normalizeSubjectStorageKey(subject).toLowerCase()
+  if (!want) return null
+  return (
+    tiles.find(t => normalizeSubjectStorageKey(t.name).toLowerCase() === want) ||
+    tiles.find(t => bankSubjectAliases(t.name, t.stage).some(a => normalizeSubjectStorageKey(a).toLowerCase() === want)) ||
+    null
+  )
+}
 
 /** Admin curriculum wizard + detail: SACE stages and Australian year levels. */
 export const COHORT_LEVEL_OPTIONS = [
   'Stage 1',
   'Stage 2',
+  'Year 5',
+  'Year 6',
   'Year 7',
   'Year 8',
   'Year 9',
@@ -298,7 +237,6 @@ export function bankSubjectAliases(displayName, levelLabel = '') {
 export function questionsBankSubjectKeys(subjectTile) {
   if (!subjectTile) return ['Chemistry']
   const id = subjectTile.id
-  if (QUESTIONS_SUBJECT_BY_ID[id]) return [QUESTIONS_SUBJECT_BY_ID[id]]
   if (typeof id === 'string' && id.startsWith('curriculum_')) {
     return bankSubjectAliases(subjectTile.name || '', subjectTile.stage || '')
   }

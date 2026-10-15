@@ -7,12 +7,12 @@ import { notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
-import { loadManagedCurriculaTopics } from './lib/curriculaDb'
+import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import SubjectPicker     from './components/SubjectPicker'
-import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
-import { getTopicConfigForSubject } from './lib/saceTopics'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor } from './lib/subjects'
+import { getTopicConfigForSubject } from './lib/topicConfig'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -53,25 +53,43 @@ const GOLDL  = '#f9d87a'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-const NAV_ITEMS = [
-  { icon: 'home',        label: 'Question Bank', id: 'home',        path: '/question-bank' },
-  { icon: 'learn',       label: 'Learn',         id: 'learn',       path: '/learn'         },
-  { icon: 'list-check',  label: 'Exam Mode',     id: 'exam',        path: '/exam'          },
-  { icon: 'pen',         label: 'Essay Marker',  id: 'essay',       path: '/essay-lab'     },
-  { icon: 'learn',       label: 'Question Lab',  id: 'qlab',        path: '/question-lab'  },
-  { icon: 'profile',     label: 'My Progress',   id: 'profile',     path: '/my-progress'   },
-  { icon: 'leaderboard', label: 'Leaderboard',   id: 'leaderboard', path: '/leaderboard'   },
-  { icon: 'study',       label: 'Study Plan',    id: 'study',       path: '/study-plan'    },
-  { icon: 'history',     label: 'History',       id: 'history',     path: '/history'       },
+// Student navigation: three sections in the sidebar, each with tabs across the
+// top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
+// appear for subjects that switch it on (Admin → Curricula → Features); Exam
+// Mode and Essay Marker are full-screen, so their tabs open those screens.
+const NAV_SECTIONS = [
+  { icon: 'home', label: 'Practice', id: 'practice', pages: [
+    { id: 'home',  label: 'Question Bank', path: '/question-bank' },
+    { id: 'exam',  label: 'Exam Mode',     path: '/exam', feature: 'exam_mode' },
+  ]},
+  { icon: 'learn', label: 'Learn', id: 'learn', pages: [
+    { id: 'learn', label: 'Titan AI',      path: '/learn' },
+    { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
+  ]},
+  { icon: 'pen', label: 'Writing', id: 'writing', feature: 'writing', pages: [
+    { id: 'w-essay',   label: 'Write an Essay', path: '/writing/essay' },
+    { id: 'w-planner', label: 'Prompt Planner', path: '/writing/planner' },
+    { id: 'w-history', label: 'Writing History', path: '/writing/history' },
+    { id: 'w-study',   label: 'Writing Plan',   path: '/writing/study-plan' },
+  ]},
+  { icon: 'profile', label: 'Progress', id: 'progress', pages: [
+    { id: 'profile',     label: 'Overview',    path: '/my-progress' },
+    { id: 'study',       label: 'Study Plan',  path: '/study-plan' },
+    { id: 'history',     label: 'History',     path: '/history' },
+    { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
+  ]},
 ]
+const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature }))
 
-/** Sidebar when the active subject is English Writing (replaces quiz-style nav). */
-const WRITING_NAV_ITEMS = [
-  { icon: 'pen',         label: 'Write an Essay',   id: 'w-essay',   path: '/writing/essay'     },
-  { icon: 'list-check',  label: 'Prompt Planner',   id: 'w-planner', path: '/writing/planner'   },
-  { icon: 'history',     label: 'History',          id: 'w-history', path: '/writing/history'   },
-  { icon: 'study',       label: 'Study Plan',       id: 'w-study',   path: '/writing/study-plan' },
-]
+/** A section's pages that the current subject has switched on. */
+function visiblePages(section, subject) {
+  return section.pages.filter(page => !page.feature || subjectHasFeature(subject, page.feature))
+}
+
+function sectionForPath(pathname) {
+  const p = pathname === '/' || pathname === '/quiz' ? '/question-bank' : pathname
+  return NAV_SECTIONS.find(sec => sec.pages.some(page => page.path === p)) || null
+}
 
 // Cohesive lucide-style icon family — uniform 18px viewBox, 1.5 stroke, rounded caps/joins.
 function NavIcon({ name, size = 18, color = 'currentColor' }) {
@@ -93,7 +111,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose, writingNav = false }) {
+function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { level, pct, next } = getLevelProgress(profile.xp)
@@ -103,13 +121,14 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const go = (path) => { navigate(path); onClose?.() }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
-  const primaryNav = writingNav ? WRITING_NAV_ITEMS : NAV_ITEMS
+  const primaryNav = NAV_ITEMS.filter(item => !item.feature || subjectHasFeature(subject, item.feature))
   const navItems = [
     ...primaryNav,
     ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
     ...(profile?.is_admin ? [{ icon: 'admin', label: 'Admin',           id: 'admin', path: '/admin' }] : []),
   ]
   const isActivePath = (p) =>
+    sectionForPath(location.pathname)?.pages[0].path === p ||
     location.pathname === p ||
     (p === '/home' && location.pathname === '/') ||
     (p === '/question-bank' && location.pathname === '/quiz') ||
@@ -171,7 +190,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           data-tutorial-target="subject-chip"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{[subject?.name, subject?.stage].filter(Boolean).join(' · ') || 'No subject selected'}</div>
         </div>
       </div>
 
@@ -293,7 +312,38 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
 }
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
-function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav = false, tutorialOverlay = null }) {
+/** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
+function SectionTabs({ theme, subject }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const t = THEMES[theme]
+  const section = sectionForPath(location.pathname)
+  const pages = section ? visiblePages(section, subject) : []
+  if (pages.length < 2) return null
+  const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
+  return (
+    <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`}
+      style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: `1px solid ${t.border}`, flexShrink: 0, overflowX: 'auto', fontFamily: FONT_B }}>
+      {pages.map(page => {
+        const active = page.path === current
+        return (
+          <button key={page.id} type="button" role="tab" aria-selected={active}
+            onClick={() => navigate(page.path)}
+            style={{
+              padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
+              fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500,
+              color: active ? GOLD : t.textMuted,
+              borderBottom: `2px solid ${active ? GOLD : 'transparent'}`, marginBottom: -1,
+            }}>
+            {page.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, tutorialOverlay = null }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
@@ -311,7 +361,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, writingNav }
+  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: t.bg }}>
@@ -351,6 +401,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
+        <SectionTabs theme={theme} subject={subject} />
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
       {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
@@ -383,8 +434,19 @@ function AppShellScreens({
 
   const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'visible' } : { display: 'none' }
 
+  // Writing workspace — only for subjects with Writing switched on.
+  const writingSubject = writingSubjectFor(subject)
+  const onWriting = screen === 'writing' || screen.startsWith('writing/')
+  if (onWriting && !writingSubject) return <Navigate to="/question-bank" replace />
+  if (screen === 'writing') return <Navigate to="/writing/essay" replace />
+
   return (
     <AppShell {...shellProps}>
+      {writingSubject && (
+        <div style={onWriting ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }}>
+          <WritingScreen subject={writingSubject} profile={profile} theme={theme} onBack={onChangeSubject} />
+        </div>
+      )}
       <div style={show('question-bank')}>
         <HomeScreen {...commonProps}
           profile={profile} struggleMap={struggleMap}
@@ -498,7 +560,11 @@ function AppInner() {
   const [loading, setLoading]                 = useState(true)
   const [bootstrapped, setBootstrapped]       = useState(false)
   const [selectedSubject, setSelectedSubject] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('gf-subject')) || null } catch { return null }
+    try {
+      const stored = JSON.parse(localStorage.getItem('gf-subject'))
+      // Standalone Writing tiles were retired; Writing now lives inside a subject.
+      return stored && stored.type !== 'writing' ? stored : null
+    } catch { return null }
   })
   const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
@@ -622,6 +688,23 @@ function AppInner() {
       .catch(() => { setLoading(false); setBootstrapped(true) })
   }, [user?.id])
 
+  // A subject tile saved in localStorage can be stale (renamed subject, feature
+  // switches changed in admin). Refresh it from the curricula table once.
+  useEffect(() => {
+    const id = selectedSubject?.id
+    if (typeof id !== 'string' || !id.startsWith('curriculum_')) return
+    let cancelled = false
+    fetchLiveCurricula()
+      .then(cs => {
+        const fresh = cs.map(curriculumToSubjectTile).find(tile => tile.id === id)
+        if (cancelled || !fresh) return
+        setSelectedSubject(prev => (prev?.id === id ? { ...prev, ...fresh } : prev))
+        try { localStorage.setItem('gf-subject', JSON.stringify(fresh)) } catch { /* storage unavailable */ }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedSubject?.id])
+
   // Reload questions if subject was persisted but questions are empty
   useEffect(() => {
     if (!selectedSubject || questions.length > 0) return
@@ -635,11 +718,7 @@ function AppInner() {
     localStorage.setItem('gf-subject', JSON.stringify(subject))
     const qs = await getQuestionsForSubjectTile(subject)
     setQuestions(qs)
-    if (subject.type === 'writing') {
-      navigate('/writing/essay', { replace: true })
-    } else {
-      navigate('/home')
-    }
+    navigate('/home')
   }
 
   const handleReplayFeatureTour = useCallback(async () => {
@@ -652,8 +731,8 @@ function AppInner() {
       console.error('[replay tutorial]', e)
     }
     setProfile(prev => (prev ? { ...prev, app_tutorial_completed_at: null } : prev))
-    navigate(selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank')
-  }, [profile?.id, navigate, selectedSubject?.type])
+    navigate('/question-bank')
+  }, [profile?.id, navigate])
 
   const handleSignOut = async () => {
     setWelcomeCelebration(false)
@@ -832,7 +911,6 @@ function AppInner() {
   const tutorialOverlay =
     user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject
       ? {
-          writingNav: selectedSubject?.type === 'writing',
           isTutor: !!profile.is_tutor,
           theme,
           // Called as soon as the overlay mounts — prevents re-showing if the user
@@ -881,13 +959,21 @@ function AppInner() {
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
 
       {/* Question Lab — public preview of the multi-format question engine */}
-      <Route path="/question-lab" element={<QuestionLabScreen theme={theme} onExit={() => navigate('/home')} />} />
+      <Route path="/question-lab" element={<AdminRoute profile={profile}><QuestionLabScreen theme={theme} onExit={() => navigate('/admin')} /></AdminRoute>} />
 
-      {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
-      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} profile={profile} onExit={() => navigate('/home')} />} />
+      {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
+      <Route path="/exam" element={
+        subjectHasFeature(selectedSubject, 'exam_mode')
+          ? <ExamModeScreen theme={theme} questions={questions} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
+          : <Navigate to="/question-bank" replace />
+      } />
 
-      {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
-      <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
+      {/* AI Essay Marker — only for subjects with essay_marker on */}
+      <Route path="/essay-lab" element={
+        subjectHasFeature(selectedSubject, 'essay_marker')
+          ? <EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />
+          : <Navigate to="/question-bank" replace />
+      } />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
@@ -900,7 +986,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && !selectedSubject
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
-            ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
+            ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
       } />
@@ -913,7 +999,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && !selectedSubject
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
-            ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
+            ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
@@ -925,7 +1011,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && !selectedSubject
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
-            ? <Navigate to={selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank'} replace />
+            ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
           : <TutorSignupScreen />
       } />
@@ -968,7 +1054,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <Navigate to={selectedSubject ? (selectedSubject?.type === 'writing' ? '/writing/essay' : '/question-bank') : '/subject-picker'} replace />
+          : <Navigate to={selectedSubject ? ('/question-bank') : '/subject-picker'} replace />
       } />
 
       {/* Subject picker — logged in only */}
@@ -1048,7 +1134,7 @@ function AppInner() {
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
           :               <TutorRoute profile={profile}>
-              <AppShell {...shellProps} writingNav={false}>
+              <AppShell {...shellProps}>
                 <TutorScreen profile={profile} theme={theme} subject={selectedSubject} />
               </AppShell>
             </TutorRoute>
@@ -1073,20 +1159,7 @@ function AppInner() {
         !(user && profile) ? <Navigate to="/home" replace /> :
         !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        (subscriptionsLoaded && subscriptions.length > 0 && selectedSubject?.type !== 'writing' && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
-        selectedSubject?.type === 'writing' ? (
-          <Routes>
-            <Route path="/writing" element={<Navigate to="/writing/essay" replace />} />
-            <Route path="/writing/*" element={
-              <AppShell {...shellProps} writingNav>
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <WritingScreen subject={selectedSubject} profile={profile} theme={theme} onBack={handleChangeSubject} />
-                </div>
-              </AppShell>
-            } />
-            <Route path="*" element={<Navigate to="/writing/essay" replace />} />
-          </Routes>
-        ) :
+        (subscriptionsLoaded && subscriptions.length > 0 && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
@@ -1107,9 +1180,8 @@ function AppInner() {
             let activeQuestions = questions
             let activeSubject = selectedSubject
             if (opts?.assignmentSubject) {
-              const matchingSubject = ALL_SUBJECTS.find(
-                s => `${s.name} ${s.stage}` === opts.assignmentSubject
-              )
+              const tiles = await fetchLiveCurricula().then(cs => cs.map(curriculumToSubjectTile)).catch(() => [])
+              const matchingSubject = findTileForSubjectString(tiles, opts.assignmentSubject)
               if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))

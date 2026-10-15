@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { THEMES } from '../lib/theme'
-import { getY7ShortLabel } from '../lib/australianCurriculumTopics'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 
 const GOLD   = '#f1be43'
@@ -319,7 +318,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {macroTopics.map(topic => {
                               const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
-                              const shortLabel = getY7ShortLabel(topic.topic)
+                              const shortLabel = topic.topic || ''
                               const ti = macro.topics.indexOf(topic.topic)
                               const prefix = ti >= 0 ? `${macro.num}.${ti + 1}` : null
                               return (

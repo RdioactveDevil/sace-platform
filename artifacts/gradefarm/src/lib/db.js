@@ -260,15 +260,43 @@ export async function getQuestions(subject = 'Chemistry') {
 }
 
 /**
- * Load the bank for a subject tile (curriculum_* tiles query all spelling variants, e.g. SACE Stage 2 …).
+ * Load the bank for a subject tile.
+ *
+ * Curriculum tiles load by `questions.curriculum_id` (set by the DB on insert —
+ * see migration 20261015000001), plus any still-unlinked rows whose subject
+ * spelling matches. If the curriculum_id column doesn't exist yet the query
+ * errors and we fall back to spelling-matching alone.
  */
 export async function getQuestionsForSubjectTile(subjectTile) {
   const keys = questionsBankSubjectKeys(subjectTile)
+  const curriculumId = curriculumIdFromTile(subjectTile)
+
+  if (curriculumId) {
+    try {
+      // Reading-comprehension questions carry their passage (migration 20261015000003).
+      const cols = '*, passage:passages(id, title, kind, body)'
+      const linked = await fetchAllRows(() =>
+        supabase.from('questions').select(cols).eq('curriculum_id', curriculumId))
+      const unlinked = keys.length
+        ? await fetchAllRows(() =>
+            supabase.from('questions').select(cols).is('curriculum_id', null).in('subject', keys))
+        : []
+      return mapAndDedupeQuestions([...linked, ...unlinked], keys[0] || subjectTile.name)
+    } catch {
+      // curriculum_id not migrated yet — fall through to spelling match
+    }
+  }
+
   if (keys.length === 0) return []
   if (keys.length === 1) return getQuestions(keys[0])
   const data = await fetchAllRows(() =>
     supabase.from('questions').select('*').in('subject', keys))
   return mapAndDedupeQuestions(data, keys[0])
+}
+
+function curriculumIdFromTile(tile) {
+  const id = tile?.id
+  return typeof id === 'string' && id.startsWith('curriculum_') ? id.slice('curriculum_'.length) : null
 }
 
 // â”€â”€â”€ STRUGGLE PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -403,24 +431,16 @@ export async function updateSession(sessionId, updates) {
 }
 
 // â”€â”€â”€ XP & STREAK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// XP and streaks are awarded server-side (award_xp clamps the amount and derives
+// the streak) — the profiles row itself is not writable for these columns.
 export async function addXP(userId, xpEarned, newStreak, currentProfile) {
-  const newXP = Math.max(0, currentProfile.xp + xpEarned)
-  const today = new Date().toDateString()
-  const lastActive = currentProfile.last_active
-    ? new Date(currentProfile.last_active).toDateString()
-    : null
-
-  const yesterday = new Date(Date.now() - 86400000).toDateString()
-  const validStreak = lastActive === today || lastActive === yesterday
-
-  await updateProfile(userId, {
-    xp: newXP,
-    streak: validStreak ? newStreak : newStreak === 0 ? 0 : 1,
-    best_streak: Math.max(currentProfile.best_streak ?? 0, newStreak),
-    last_active: new Date().toISOString(),
+  const { data, error } = await supabase.rpc('award_xp', {
+    p_xp_earned: Math.round(xpEarned),
+    p_new_streak: newStreak,
   })
-
-  return newXP
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  return row?.xp ?? Math.max(0, (currentProfile?.xp ?? 0) + xpEarned)
 }
 
 // â”€â”€â”€ QUESTION FLAGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

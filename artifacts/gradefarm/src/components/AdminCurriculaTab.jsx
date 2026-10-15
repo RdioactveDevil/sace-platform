@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listCurricula, createCurriculum, deleteCurriculum } from '../lib/curriculaDb'
+import { listCurricula, createCurriculum, deleteCurriculum, setCurriculumArchived } from '../lib/curriculaDb'
+import { fetchSubjectBankCounts } from '../lib/db'
 import { adminApiPost } from '../lib/adminApi'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
@@ -12,6 +13,7 @@ function StatusBadge({ status }) {
     live:       { bg: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.3)',  color: '#4ade80' },
     generating: { bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)',  color: '#38bdf8' },
     draft:      { bg: 'rgba(241,190,67,0.1)',  border: 'rgba(241,190,67,0.3)',  color: GOLD },
+    archived:   { bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', color: '#94a3b8' },
   }
   const s = map[status] || map.draft
   return (
@@ -41,10 +43,17 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [flagGraphs, setFlagGraphs]     = useState(false)
   const [flagTables, setFlagTables]     = useState(false)
 
+  const [bankCounts, setBankCounts]     = useState({})
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      setCurricula(await listCurricula())
+      const rows = await listCurricula()
+      // Active subjects first, archived at the bottom.
+      rows.sort((a, b) => Number(!!a.archived_at) - Number(!!b.archived_at))
+      setCurricula(rows)
+      fetchSubjectBankCounts(rows.map(c => ({ subject: c.name, levelLabel: c.level_label })))
+        .then(setBankCounts)
+        .catch(() => {})
     } catch (e) {
       if (!silent) setError(e.message)
     }
@@ -110,9 +119,21 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
     setCreating(false)
   }
 
+  const handleArchive = async (e, c) => {
+    e.stopPropagation()
+    const archiving = !c.archived_at
+    if (archiving && !window.confirm(`Archive "${c.name}"?\n\nStudents won't see it any more. Its topics, questions and student history are kept, and you can unarchive it any time.`)) return
+    try {
+      await setCurriculumArchived(c.id, archiving)
+      await load(true)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const handleDelete = async (e, c) => {
     e.stopPropagation()
-    if (!window.confirm(`Delete "${c.name}"? This cannot be undone.`)) return
+    if (!window.confirm(`Permanently delete "${c.name}"?\n\nThis removes its topics, subtopics and uploaded resources and cannot be undone. Its questions stay in the database but are no longer attached to any subject.\n\nTo just hide it from students, use Archive instead.`)) return
     try {
       await deleteCurriculum(c.id)
       setCurricula(prev => prev.filter(x => x.id !== c.id))
@@ -158,14 +179,25 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
             <div
               key={c.id}
               onClick={() => onSelectCurriculum(c.id)}
-              style={card}
+              style={c.archived_at ? { ...card, opacity: 0.55 } : card}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
               onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.3, flex: 1 }}>{c.name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <StatusBadge status={c.status} />
+                  <StatusBadge status={c.archived_at ? 'archived' : c.status} />
+                  <button
+                    onClick={e => handleArchive(e, c)}
+                    title={c.archived_at ? 'Unarchive — show to students again' : 'Archive — hide from students, keep everything'}
+                    style={{
+                      background: 'none', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 5,
+                      color: '#94a3b8', fontSize: 11, fontWeight: 700, cursor: 'pointer', height: 22,
+                      padding: '0 7px', fontFamily: FONT_B,
+                    }}
+                  >
+                    {c.archived_at ? 'Unarchive' : 'Archive'}
+                  </button>
                   <button
                     onClick={e => handleDelete(e, c)}
                     title="Delete curriculum"
@@ -190,6 +222,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                   <span style={{ color: GOLD }}>{(c.level_label || '').trim()}</span>
                 ) : null}
               </div>
+              {bankCounts[c.name] != null && (
+                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+                  {bankCounts[c.name]} question{bankCounts[c.name] !== 1 ? 's' : ''} in bank
+                </div>
+              )}
               {c.status !== 'draft' && c.questions_total > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 4 }}>

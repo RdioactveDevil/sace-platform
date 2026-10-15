@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
+import { requireAdmin } from "../lib/auth";
 
 const router = Router();
 
@@ -74,6 +75,8 @@ function topicsAsPromptList(stage: string): string {
 }
 
 router.post("/extract-pdf", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { base64, storagePath, filename, stage } = req.body;
   if ((!base64 && !storagePath) || !stage) {
     res.status(400).json({ error: "storagePath (or base64) and stage required" });

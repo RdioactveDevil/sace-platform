@@ -1,5 +1,5 @@
 import { THEMES } from '../lib/theme'
-import { getTopicConfigForSubject } from '../lib/saceTopics'
+import { getTopicConfigForSubject } from '../lib/topicConfig'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 
 const GOLD = '#f1be43'

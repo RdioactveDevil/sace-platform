@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { extractJsonArray } from "../lib/json-latex";
+import { requireAdmin } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -215,6 +216,8 @@ async function removeChunkFiles(admin: SupabaseClient, curriculumId: string, res
 // sub-PDFs here and returned as 'processing'; the client then drives
 // /process-chunk once per chunk so no single request exceeds the serverless cap.
 router.post("/curriculum-resources", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { curriculumId, storagePath, filename, fileSize, mimeType, title, resourceType } = req.body as {
     curriculumId?: string;
     storagePath?: string;
@@ -338,6 +341,8 @@ router.post("/curriculum-resources", async (req, res) => {
 // Driven by the client once per chunk. Each call is one Claude request, keeping
 // whole-textbook ingestion within the serverless time limit.
 router.post("/curriculum-resources/:id/process-chunk", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const resourceId = String(req.params.id);
   const chunkIndex = Number((req.body as { chunkIndex?: number })?.chunkIndex);
   if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
@@ -433,6 +438,8 @@ router.post("/curriculum-resources/:id/process-chunk", async (req, res) => {
 
 // ── List a curriculum's resources ────────────────────────────────────────────
 router.get("/curriculum-resources", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const curriculumId = String(req.query.curriculumId || "");
   if (!curriculumId) {
     res.status(400).json({ error: "curriculumId query parameter is required" });
@@ -459,6 +466,8 @@ router.get("/curriculum-resources", async (req, res) => {
 
 // ── Delete a resource (cascades to its exemplars + removes its files) ─────────
 router.delete("/curriculum-resources/:id", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const id = String(req.params.id);
   try {
     const admin = getAdmin();

@@ -7,6 +7,8 @@ import { filterVerifiedQuestions } from "../lib/verify-question";
 import { extractJsonArray } from "../lib/json-latex";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
+import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
+import { requireUser } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -318,6 +320,40 @@ async function generateForTopic(opts: {
           ? "All questions must be difficulty 4\u20135 out of 5 (challenging). The student has been answering recent questions correctly and is ready for harder material."
           : `Questions should be around difficulty ${Math.round(numDiff)} out of 5. You may vary between ${Math.max(1, Math.round(numDiff) - 1)} and ${Math.min(5, Math.round(numDiff) + 1)}.`;
 
+  // Reading-comprehension topics: generate passage sets instead of standalone
+  // questions, so every question arrives with the passage it refers to.
+  if (await topicQuestionStyle(adminDb, tRow.id) === "passage") {
+    try {
+      const { data: currMeta } = await adminDb
+        .from("curricula").select("*").eq("id", currRow.id).maybeSingle();
+      const meta = (currMeta ?? {}) as { level_label?: string; exam_context?: string };
+      const { data: subIdRow } = await adminDb
+        .from("curriculum_subtopics").select("id").eq("topic_id", tRow.id).eq("name", topicName).maybeSingle();
+      const sets = await generatePassageSets({
+        subjectName: normalizedSubject,
+        levelLabel: meta.level_label,
+        topicName: parentTopicName,
+        subtopicName: topicName,
+        sets: Math.max(1, Math.round(count / QUESTIONS_PER_PASSAGE)),
+        examContext: typeof meta.exam_context === "string" ? meta.exam_context.trim().slice(0, 3000) : "",
+        difficultyInstruction,
+      });
+      const rows = await insertPassageSets(adminDb, sets, {
+        table: autoApprove ? "questions" : "draft_questions",
+        subject: normalizedSubject,
+        topic: parentTopicName,
+        subtopic: topicName,
+        curriculumId: currRow.id,
+        subtopicId: (subIdRow as { id?: string } | null)?.id ?? null,
+        topicCode,
+      });
+      return { status: 200, body: autoApprove ? { inserted: rows.length, questions: rows } : { inserted: rows.length } };
+    } catch (err) {
+      logger.error({ err, topicCode }, "[generate-questions] passage generation failed");
+      return { status: 500, body: { error: "Passage generation failed", detail: err instanceof Error ? err.message : String(err) } };
+    }
+  }
+
   // Fetch generation_flags from DB (controls LaTeX, graph, table usage in prompts).
   const { data: _curriculumRow } = await adminDb
     .from("curricula").select("generation_flags").eq("name", normalizedSubject).maybeSingle();
@@ -572,6 +608,8 @@ async function generateForTopic(opts: {
 }
 
 router.post("/generate-questions", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
   const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams, includeGraphs } = req.body;
 
   const resolvedSubject: string = subject || stage;
@@ -582,6 +620,14 @@ router.post("/generate-questions", async (req, res) => {
 
   if (!resolvedSubject || !topicCodes.length) {
     res.status(400).json({ error: "subject (or stage) and topicCode/topicCodes required" });
+    return;
+  }
+
+  // Students trigger this for live bank top-ups (one subtopic, a handful of
+  // questions). Bulk batches are admin-only so a signed-in student can't burn
+  // AI credits or flood the live bank.
+  if (!caller.isAdmin && (topicCodes.length > 1 || Number(count) > 10)) {
+    res.status(403).json({ error: "Bulk generation is admin only" });
     return;
   }
 

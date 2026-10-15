@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useApp } from "@/contexts/AppContext";
 import { useColors } from "@/hooks/useColors";
+import { apiHeaders } from "@/lib/supabase";
 
 const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN ?? "localhost"}`;
 
@@ -88,7 +89,7 @@ export default function LearnScreen() {
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await apiHeaders(),
         body: JSON.stringify({
           system: systemPrompt,
           messages: apiMessages,

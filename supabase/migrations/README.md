@@ -35,3 +35,36 @@ the already-migrated production DB:
 - New files (version ≥ the last applied) are picked up automatically; just run
   the workflow in **apply** mode (no `from` needed once `schema_migrations` is
   populated).
+
+## October 2026: security + subject IDs
+
+Four migrations need applying together with the matching app deploy:
+
+- `20261015000000_lock_down_profiles` stops users editing their own
+  `is_admin` / `is_tutor` / XP / streak columns, adds the `award_xp()` RPC the
+  app now uses for XP, and makes profiles private (the leaderboard view still
+  shows public columns).
+- `20261015000001_question_curriculum_ids` adds `questions.curriculum_id` /
+  `subtopic_id` (and on `draft_questions`), backfills them from the subject
+  spelling, and keeps them filled by trigger.
+
+- `20261015000002_curricula_features` adds `curricula.features` (per-subject
+  switches for Exam Mode, Essay Marker and Writing, all off until switched on
+  in Admin → Curricula → subject → Student features) and
+  `curricula.archived_at` (Archive hides a subject from students, keeps data).
+- `20261015000003_reading_passages` adds the `passages` table,
+  `questions.passage_id` and `curriculum_topics.question_style`
+  ('standard' | 'passage') for reading-comprehension topics.
+
+Deploy order: **apply the migrations first, then deploy the app.** The old app
+writes XP directly, which the new trigger ignores, so XP would stop increasing
+until the new app is live. The new app still works against the old schema
+(question loading falls back to spelling-matching), but `award_xp` won't exist
+until the migration runs.
+
+After applying, check what didn't link (ambiguous or unknown subject
+spellings) and fix those subjects in Admin → Curricula:
+
+```sql
+select * from unlinked_question_subjects;
+```

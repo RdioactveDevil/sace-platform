@@ -85,9 +85,9 @@ function studentSteps(isTutor) {
     },
     {
       path: '/question-bank',
-      target: 'nav-home',
-      title: 'Question Bank',
-      body: 'Start adaptive practice sessions, track readiness, and earn XP from the home hub.',
+      target: 'nav-practice',
+      title: 'Practice',
+      body: 'Adaptive practice sessions from the Question Bank — this is where you earn XP.',
     },
     {
       path: '/learn',
@@ -97,27 +97,15 @@ function studentSteps(isTutor) {
     },
     {
       path: '/my-progress',
-      target: 'nav-profile',
-      title: 'My Progress',
-      body: 'See strengths, gaps, and streaks so you know where to focus next.',
+      target: 'nav-progress',
+      title: 'Progress',
+      body: 'See strengths, gaps and streaks so you know where to focus next.',
     },
     {
-      path: '/leaderboard',
-      target: 'nav-leaderboard',
-      title: 'Leaderboard',
-      body: 'Compare XP with other students on the same subjects — friendly motivation, optional gamification.',
-    },
-    {
-      path: '/study-plan',
-      target: 'nav-study',
-      title: 'Study Plan',
-      body: 'Auto-built priorities from your mistakes and assignments keep revision structured.',
-    },
-    {
-      path: '/history',
-      target: 'nav-history',
-      title: 'History',
-      body: 'Review past sessions and drill patterns over time.',
+      path: '/my-progress',
+      target: 'tabs-progress',
+      title: 'Plan, history and leaderboard',
+      body: 'Each section has tabs along the top. Under Progress you\'ll find your Study Plan, past sessions and the Leaderboard.',
     },
   ]
   const tutorStep = isTutor
@@ -141,45 +129,6 @@ function studentSteps(isTutor) {
   ]
   return [...base, ...tutorStep, ...tail]
 }
-
-const WRITING_STEPS = [
-  {
-    path: '/writing/essay',
-    target: 'subject-chip',
-    title: 'Writing mode',
-    body: 'English Writing uses a focused sidebar: essays, planner, history, and study plan for writing.',
-  },
-  {
-    path: '/writing/essay',
-    target: 'nav-w-essay',
-    title: 'Write an Essay',
-    body: 'Draft, get structured feedback, and download reports from the writing workspace.',
-  },
-  {
-    path: '/writing/planner',
-    target: 'nav-w-planner',
-    title: 'Prompt Planner',
-    body: 'Break down prompts and plan paragraphs before you write.',
-  },
-  {
-    path: '/writing/history',
-    target: 'nav-w-history',
-    title: 'Writing history',
-    body: 'Revisit past attempts and feedback in one place.',
-  },
-  {
-    path: '/writing/study-plan',
-    target: 'nav-w-study',
-    title: 'Writing study plan',
-    body: 'Stay on track with writing-specific goals and reminders.',
-  },
-  {
-    path: '/writing/essay',
-    target: 'change-subject',
-    title: 'Back to other subjects',
-    body: 'Switch subject to return to multiple-choice banks and the standard sidebar.',
-  },
-]
 
 function SpotlightSlices({ rect }) {
   const pad = 10
@@ -213,15 +162,12 @@ function SpotlightSlices({ rect }) {
   )
 }
 
-export default function WebsiteTutorialOverlay({ writingNav, isTutor, theme, onSeen, onFinish }) {
+export default function WebsiteTutorialOverlay({ isTutor, theme, onSeen, onFinish }) {
   const navigate = useNavigate()
   const location = useLocation()
   const t = THEMES[theme] || THEMES.dark
 
-  const steps = useMemo(() => {
-    if (writingNav) return WRITING_STEPS
-    return studentSteps(isTutor)
-  }, [writingNav, isTutor])
+  const steps = useMemo(() => studentSteps(isTutor), [isTutor])
 
   const [ix, setIx] = useState(0)
 

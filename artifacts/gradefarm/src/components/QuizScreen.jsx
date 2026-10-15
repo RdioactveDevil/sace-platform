@@ -37,6 +37,7 @@ import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
+import PassageView from './PassageView'
 import QuizToolsDock from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
@@ -607,7 +608,7 @@ export default function QuizScreen({
 
   useEffect(() => {
     async function init() {
-      try { await createSession(profile.id, 'Chemistry') } catch {}
+      try { await createSession(profile.id, subjectTile?.name || questions[0]?.subject || 'Unknown') } catch {}
     }
     if (!_currentQ) {
       init()
@@ -1102,7 +1103,9 @@ export default function QuizScreen({
     let remediationCompleted = false
     if (isRemediationQuestion) {
       remediationCompleted = decideRemediationVariantOutcome(isCorrect)
-    } else if (!isCorrect) {
+    } else if (!isCorrect && !currentQ.passage_id) {
+      // Reading-passage questions skip remediation: a generated "similar
+      // question" would have no passage to answer from.
       enterRemediationStateSync(currentQ)
     }
 
@@ -1134,7 +1137,7 @@ export default function QuizScreen({
     if (!isCorrect) {
       // Remediation state was already set synchronously above. Load the queue in
       // the background — parallel with the AI tip fetch.
-      enterRemediation(currentQ)
+      if (!currentQ.passage_id) enterRemediation(currentQ)
 
       setLoadingTip(true)
       try {
@@ -1692,6 +1695,7 @@ export default function QuizScreen({
             />
 
             <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: t.shadowCard, marginBottom: showAns ? 14 : 0 }}>
+              {currentQ.passage && <PassageView passage={currentQ.passage} theme={theme} />}
               {currentQ.graph && (
                 <GraphView graph={currentQ.graph} theme={theme} />
               )}

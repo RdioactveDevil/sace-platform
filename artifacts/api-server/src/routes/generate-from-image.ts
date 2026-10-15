@@ -12,6 +12,7 @@ import {
   mcqColumns,
   type GeneratedQuestion,
 } from "./generate-questions";
+import { requireAdmin } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -35,6 +36,8 @@ const TYPE_GUIDE: Record<string, string> = {
 
 // POST /api/generate-from-image
 router.post("/generate-from-image", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const {
     imageBase64,
     imageUrl,

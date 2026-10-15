@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatClock, buildPaper, countQuestions, gradePaper } from './examEngine.js'
+import { formatClock, buildPaper, buildSubjectExam, countQuestions, gradePaper, DEFAULT_EXAM_QUESTIONS } from './examEngine.js'
 
 describe('formatClock', () => {
   test('M:SS under an hour', () => {
@@ -68,5 +68,51 @@ describe('gradePaper', () => {
     const r = gradePaper(paper, { m: 1 }) // m right, n blank
     assert.equal(r.totalCorrect, 1)
     assert.equal(r.percent, 50)
+  })
+})
+
+describe('buildSubjectExam', () => {
+  const pool = [
+    ...Array.from({ length: 30 }, (_, i) => ({ id: `a${i}`, topic: 'Acids' })),
+    { id: 'b1', topic: 'Bonding' },
+    { id: 'c1', topic: 'Cells' },
+  ]
+
+  test('defaults to DEFAULT_EXAM_QUESTIONS at 90 s each', () => {
+    const exam = buildSubjectExam({ id: 'curriculum_x', name: 'Chem', features: { exam_mode: true } }, pool)
+    assert.equal(countQuestions(exam), DEFAULT_EXAM_QUESTIONS)
+    assert.equal(exam.sections[0].durationSec, DEFAULT_EXAM_QUESTIONS * 90)
+    assert.equal(exam.id, 'subject-curriculum_x')
+  })
+
+  test('covers every topic before repeating one', () => {
+    const exam = buildSubjectExam({ features: { exam_questions: 3 } }, pool)
+    const topics = new Set(exam.sections[0].questions.map(q => q.topic))
+    assert.deepEqual([...topics].sort(), ['Acids', 'Bonding', 'Cells'])
+  })
+
+  test('uses configured size and time, capped by the bank', () => {
+    const exam = buildSubjectExam({ features: { exam_questions: 50, exam_minutes: 45 } }, pool)
+    assert.equal(countQuestions(exam), pool.length)
+    assert.equal(exam.sections[0].durationSec, 45 * 60)
+    assert.equal(new Set(exam.sections[0].questions.map(q => q.id)).size, pool.length)
+  })
+
+  test('keeps a passage\'s questions together and in one block', () => {
+    const withPassage = [
+      { id: 'p1', topic: 'Reading', passage_id: 'P' },
+      { id: 'p2', topic: 'Reading', passage_id: 'P' },
+      { id: 'p3', topic: 'Reading', passage_id: 'P' },
+      { id: 'g1', topic: 'Grammar' },
+    ]
+    const qs = buildSubjectExam({ features: { exam_questions: 4 } }, withPassage).sections[0].questions
+    const idx = qs.map(q => q.id)
+    const first = idx.indexOf('p1')
+    assert.deepEqual(new Set(idx.slice(first, first + 3)), new Set(['p1', 'p2', 'p3']))
+    assert.equal(qs.length, 4)
+  })
+
+  test('empty bank gives an empty paper', () => {
+    assert.equal(countQuestions(buildSubjectExam({ features: {} }, [])), 0)
   })
 })

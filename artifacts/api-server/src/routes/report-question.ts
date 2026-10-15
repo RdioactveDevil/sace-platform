@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { verifyQuestionPayload, type Verdict } from "../lib/verify-question";
+import { verifyQuestionPayload, withStimulus, type Verdict } from "../lib/verify-question";
 import { logger } from "../lib/logger";
+import { requireUser } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -32,7 +33,12 @@ async function verifyQuestion(questionId: string): Promise<Verdict> {
   if (!q) throw new Error(`Question ${questionId} not found`);
 
   const options: string[] = typeof q.options === "string" ? JSON.parse(q.options) : (q.options || []);
-  return verifyQuestionPayload({ question: q.question, options, answer_index: q.answer_index });
+  let passage: string | null = null;
+  if (q.passage_id) {
+    const { data: p } = await adminDb.from("passages").select("body").eq("id", q.passage_id).maybeSingle();
+    passage = (p as { body?: string } | null)?.body ?? null;
+  }
+  return verifyQuestionPayload({ question: withStimulus(q.question, passage), options, answer_index: q.answer_index });
 }
 
 async function getTopicCode(
@@ -94,7 +100,10 @@ async function resolveReport(reportId: string, questionId: string) {
           const port = process.env.PORT || 3001;
           const genRes = await fetch(`http://localhost:${port}/api/generate-questions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
+            },
             body: JSON.stringify({
               subject: q.subject, topicCode, count: 1,
               difficulty: q.difficulty || 3, autoApprove: true,
@@ -134,6 +143,8 @@ async function resolveReport(reportId: string, questionId: string) {
 // ── POST /api/report-question ─────────────────────────────────────────────────
 
 router.post("/report-question", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
   const { questionId } = req.body as { questionId?: string };
   if (!questionId) { res.status(400).json({ error: "questionId required" }); return; }
 

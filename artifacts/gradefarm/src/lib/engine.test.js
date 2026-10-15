@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeWeights, selectNextQuestion } from './engine.js'
+import { computeWeights, selectNextQuestion, nextPassageSibling } from './engine.js'
 
 // A spread of unseen questions across the full difficulty range.
 const bank = [
@@ -54,4 +54,17 @@ test('a genuinely struggled question still outranks an on-target unseen one', ()
   }
   const weights = computeWeights(bank, struggleMap, 4)
   assert.ok(weightOf(weights, 'd2') > weightOf(weights, 'd4'))
+})
+
+test('continues the current reading passage before picking elsewhere', () => {
+  const qs = [
+    { id: 'a', difficulty: 3, subtopic: 'r', passage_id: 'P' },
+    { id: 'b', difficulty: 3, subtopic: 'r', passage_id: 'P' },
+    { id: 'c', difficulty: 3, subtopic: 'r' },
+  ]
+  for (let i = 0; i < 20; i++) {
+    assert.equal(selectNextQuestion(qs, {}, ['a'], 'all')?.id, 'b')
+  }
+  assert.equal(nextPassageSibling(qs, [qs[2]], ['a', 'b']), null)
+  assert.equal(nextPassageSibling(qs, qs, ['c']), null)
 })
