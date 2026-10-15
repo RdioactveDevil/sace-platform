@@ -13,7 +13,7 @@ export default function PassageView({ passage, theme = 'dark' }) {
   return (
     <div style={{
       marginBottom: 20, borderRadius: 12, border: `1px solid ${t.border}`,
-      background: t.bg, padding: '16px 18px', maxHeight: 360, overflowY: 'auto',
+      background: t.bg, padding: '16px 18px', maxHeight: '55vh', overflowY: 'auto',
     }}>
       <div style={{ fontSize: 11, fontWeight: 800, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
         {isPoem ? 'Read the poem' : 'Read the passage'}

@@ -123,6 +123,7 @@ export async function createCurriculum({ name, subject_description, topics, leve
     .insert({ name, subject_description, level_label: level_label || '', generation_flags: generation_flags || {}, status: 'draft' })
     .select('id')
     .single()
+  if (cErr?.code === '23505') throw new Error(`A subject called "${name}" already exists. Open it from the list, or archive it first.`)
   if (cErr) throw cErr
 
   const curriculumId = curriculum.id
@@ -176,6 +177,7 @@ export async function updateCurriculum(id, { name, subject_description, level_la
 
   if (Object.keys(patch).length > 0) {
     let { error } = await supabase.from('curricula').update(patch).eq('id', id)
+    if (error?.code === '23505') throw new Error(`Another subject is already called "${name}". Choose a different name.`)
     // If the exam_context migration hasn't been applied yet, retry without it
     // so the rest of the save still goes through.
     if (error && patch.exam_context !== undefined && /exam_context/i.test(error.message || '')) {
