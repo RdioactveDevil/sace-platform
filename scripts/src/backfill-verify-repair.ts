@@ -226,7 +226,7 @@ async function regenerateReplacement(subject: string, topicCode: string, difficu
       const resp = await fetch(`${API_BASE_URL}/api/generate-questions`, {
         method: "POST",
         signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           subject,
           topicCode,

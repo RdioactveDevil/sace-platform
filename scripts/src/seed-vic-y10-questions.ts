@@ -73,7 +73,7 @@ function makeId(): string {
 async function generateForTopic(subject: string, topicCode: string, count: number): Promise<number> {
   const resp = await fetch(`${API_BASE}/api/generate-questions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
     body: JSON.stringify({ subject, topicCode, count, difficulty: "mixed" }),
     signal: AbortSignal.timeout(120_000),
   });

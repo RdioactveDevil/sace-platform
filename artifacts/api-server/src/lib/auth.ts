@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -34,7 +35,13 @@ export async function requireUser(req: Request, res: Response): Promise<Caller |
     res.status(500).json({ error: err instanceof Error ? err.message : "Server misconfigured" });
     return null;
   }
-  const { data, error } = await admin.auth.getUser(authHeader.slice(7));
+  const token = authHeader.slice(7);
+  // Trusted server-side callers (scripts/, report-question's regeneration)
+  // authenticate with the service key itself and act as admin.
+  if (isServiceKey(token)) {
+    return { userId: "service", isAdmin: true, isTutor: false, admin };
+  }
+  const { data, error } = await admin.auth.getUser(token);
   if (error || !data?.user) {
     res.status(401).json({ error: "Invalid or expired session" });
     return null;
@@ -65,4 +72,10 @@ export async function requireAdmin(req: Request, res: Response): Promise<Caller 
     return null;
   }
   return caller;
+}
+
+function isServiceKey(token: string): boolean {
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!key || token.length !== key.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(key));
 }

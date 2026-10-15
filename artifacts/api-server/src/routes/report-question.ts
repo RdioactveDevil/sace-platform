@@ -95,7 +95,10 @@ async function resolveReport(reportId: string, questionId: string) {
           const port = process.env.PORT || 3001;
           const genRes = await fetch(`http://localhost:${port}/api/generate-questions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
+            },
             body: JSON.stringify({
               subject: q.subject, topicCode, count: 1,
               difficulty: q.difficulty || 3, autoApprove: true,
