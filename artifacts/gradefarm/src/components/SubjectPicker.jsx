@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CLIENT_ONLY_SUBJECTS, effectiveCohortStageForLiveCurriculum } from '../lib/subjects'
+import { CLIENT_ONLY_SUBJECTS, curriculumToSubjectTile } from '../lib/subjects'
 import { fetchSubjectBankCounts } from '../lib/db'
 import { fetchAllActiveCurricula } from '../lib/curriculaDb'
 import { SubjectIcon } from './SubjectIcons'
@@ -48,15 +48,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   useEffect(() => {
     fetchAllActiveCurricula()
       .then(curricula => {
-        setDynamic(curricula.map(c => ({
-          id: `curriculum_${c.id}`,
-          name: c.name,
-          stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
-          color: '#6366f1',
-          topics: c.topicNames,
-          questionCount: 0,
-          available: c.status === 'live',
-        })))
+        setDynamic(curricula.map(curriculumToSubjectTile))
       })
       .catch(() => {})
       .finally(() => setLoading(false))

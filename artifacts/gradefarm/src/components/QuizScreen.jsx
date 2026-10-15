@@ -607,7 +607,7 @@ export default function QuizScreen({
 
   useEffect(() => {
     async function init() {
-      try { await createSession(profile.id, 'Chemistry') } catch {}
+      try { await createSession(profile.id, subjectTile?.name || questions[0]?.subject || 'Unknown') } catch {}
     }
     if (!_currentQ) {
       init()

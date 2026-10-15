@@ -60,7 +60,7 @@ export default function Layout({
 
       {/* Subject badge */}
       <div style={{ padding: '10px 20px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
-        <div style={{ fontSize: 11, color: t.textMuted }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+        <div style={{ fontSize: 11, color: t.textMuted }}>{[subject?.name, subject?.stage].filter(Boolean).join(' · ') || 'No subject selected'}</div>
       </div>
 
       {/* Profile */}

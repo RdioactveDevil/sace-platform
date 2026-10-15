@@ -7,12 +7,12 @@ import { notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
-import { loadManagedCurriculaTopics } from './lib/curriculaDb'
+import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import SubjectPicker     from './components/SubjectPicker'
-import { ALL_SUBJECTS, formatSubjectLabel } from './lib/subjects'
-import { getTopicConfigForSubject } from './lib/saceTopics'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel } from './lib/subjects'
+import { getTopicConfigForSubject } from './lib/topicConfig'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
 import LearnScreen       from './components/LearnScreen'
@@ -171,7 +171,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           data-tutorial-target="subject-chip"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{subject?.name || 'Chemistry'} · {subject?.stage || 'Stage 1'}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{[subject?.name, subject?.stage].filter(Boolean).join(' · ') || 'No subject selected'}</div>
         </div>
       </div>
 
@@ -1107,9 +1107,8 @@ function AppInner() {
             let activeQuestions = questions
             let activeSubject = selectedSubject
             if (opts?.assignmentSubject) {
-              const matchingSubject = ALL_SUBJECTS.find(
-                s => `${s.name} ${s.stage}` === opts.assignmentSubject
-              )
+              const tiles = await fetchLiveCurricula().then(cs => cs.map(curriculumToSubjectTile)).catch(() => [])
+              const matchingSubject = findTileForSubjectString(tiles, opts.assignmentSubject)
               if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))

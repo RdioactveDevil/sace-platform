@@ -260,15 +260,41 @@ export async function getQuestions(subject = 'Chemistry') {
 }
 
 /**
- * Load the bank for a subject tile (curriculum_* tiles query all spelling variants, e.g. SACE Stage 2 …).
+ * Load the bank for a subject tile.
+ *
+ * Curriculum tiles load by `questions.curriculum_id` (set by the DB on insert —
+ * see migration 20261015000001), plus any still-unlinked rows whose subject
+ * spelling matches. If the curriculum_id column doesn't exist yet the query
+ * errors and we fall back to spelling-matching alone.
  */
 export async function getQuestionsForSubjectTile(subjectTile) {
   const keys = questionsBankSubjectKeys(subjectTile)
+  const curriculumId = curriculumIdFromTile(subjectTile)
+
+  if (curriculumId) {
+    try {
+      const linked = await fetchAllRows(() =>
+        supabase.from('questions').select('*').eq('curriculum_id', curriculumId))
+      const unlinked = keys.length
+        ? await fetchAllRows(() =>
+            supabase.from('questions').select('*').is('curriculum_id', null).in('subject', keys))
+        : []
+      return mapAndDedupeQuestions([...linked, ...unlinked], keys[0] || subjectTile.name)
+    } catch {
+      // curriculum_id not migrated yet — fall through to spelling match
+    }
+  }
+
   if (keys.length === 0) return []
   if (keys.length === 1) return getQuestions(keys[0])
   const data = await fetchAllRows(() =>
     supabase.from('questions').select('*').in('subject', keys))
   return mapAndDedupeQuestions(data, keys[0])
+}
+
+function curriculumIdFromTile(tile) {
+  const id = tile?.id
+  return typeof id === 'string' && id.startsWith('curriculum_') ? id.slice('curriculum_'.length) : null
 }
 
 // â”€â”€â”€ STRUGGLE PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

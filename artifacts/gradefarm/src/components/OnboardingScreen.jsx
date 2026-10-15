@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { CLIENT_ONLY_SUBJECTS, effectiveCohortStageForLiveCurriculum, formatSubjectLabel } from '../lib/subjects'
+import { CLIENT_ONLY_SUBJECTS, curriculumToSubjectTile, formatSubjectLabel } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -52,19 +52,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   useEffect(() => {
     fetchLiveCurricula()
       .then(curricula => {
-        setDynamicSubjects(
-          curricula
-            .map(c => ({
-              id: `curriculum_${c.id}`,
-              name: c.name,
-              stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
-              icon: '📚',
-              color: '#6366f1',
-              topics: c.topicNames,
-              questionCount: 0,
-              available: c.status === 'live',
-            }))
-        )
+        setDynamicSubjects(curricula.map(curriculumToSubjectTile))
       })
       .catch(() => {})
   }, [])

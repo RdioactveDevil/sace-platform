@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
-import { getY7ShortLabel } from '../lib/australianCurriculumTopics'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import MathText from './MathText'
 
@@ -224,7 +223,7 @@ export default function LearnScreen({
           body: JSON.stringify({
             max_tokens: 300,
             system: 'You are an educational primer generator. Given a subject and topic, return a JSON array of exactly 4 objects: [{ "concept": string, "definition": string }]. Each definition must be 10 words or fewer. No markdown, no commentary — only the raw JSON array.',
-            messages: [{ role: 'user', content: `Subject: ${subject?.name || 'Chemistry'}. Topic: ${t}` }],
+            messages: [{ role: 'user', content: `Subject: ${subject?.name || 'General'}. Topic: ${t}` }],
           }),
         })
         const data = await res.json()
@@ -606,7 +605,7 @@ export default function LearnScreen({
                 What do you want to <span style={{ color: GOLD }}>learn</span> today?
               </h1>
               <div style={{ fontSize: 14, color: t.textMuted, marginTop: 12, maxWidth: 540, lineHeight: 1.55 }}>
-                Pick a topic and Titan will start a one-on-one lesson tuned to {subject?.name || 'Chemistry'}. You can attach a photo of a textbook page or your working in the chat.
+                Pick a topic and Titan will start a one-on-one lesson tuned to {subject?.name || 'your subject'}. You can attach a photo of a textbook page or your working in the chat.
               </div>
             </div>
 
@@ -716,7 +715,7 @@ export default function LearnScreen({
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {macro.topics.map((topicName, ti) => {
                           const active = topic === topicName
-                          const shortLabel = getY7ShortLabel(topicName)
+                          const shortLabel = topicName || ''
                           const prefix = `${macro.num}.${ti + 1}`
                           return (
                             <button
