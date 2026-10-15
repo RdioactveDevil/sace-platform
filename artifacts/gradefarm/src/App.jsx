@@ -11,7 +11,7 @@ import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaD
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
 import SubjectPicker     from './components/SubjectPicker'
-import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel } from './lib/subjects'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -54,16 +54,17 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 // Student navigation: three sections in the sidebar, each with tabs across the
-// top of the page (SectionTabs) for its sub-pages. Exam Mode and Essay Marker
-// are full-screen experiences, so their tabs open those screens.
+// top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
+// appear for subjects that switch it on (Admin → Curricula → Features); Exam
+// Mode and Essay Marker are full-screen, so their tabs open those screens.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
-    { id: 'exam',  label: 'Exam Mode',     path: '/exam' },
+    { id: 'exam',  label: 'Exam Mode',     path: '/exam', feature: 'exam_mode' },
   ]},
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
-    { id: 'essay', label: 'Essay Marker',  path: '/essay-lab' },
+    { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
   ]},
   { icon: 'profile', label: 'Progress', id: 'progress', pages: [
     { id: 'profile',     label: 'Overview',    path: '/my-progress' },
@@ -73,6 +74,11 @@ const NAV_SECTIONS = [
   ]},
 ]
 const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path }))
+
+/** A section's pages that the current subject has switched on. */
+function visiblePages(section, subject) {
+  return section.pages.filter(page => !page.feature || subjectHasFeature(subject, page.feature))
+}
 
 function sectionForPath(pathname) {
   const p = pathname === '/' || pathname === '/quiz' ? '/question-bank' : pathname
@@ -309,17 +315,18 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
 /** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
-function SectionTabs({ theme }) {
+function SectionTabs({ theme, subject }) {
   const navigate = useNavigate()
   const location = useLocation()
   const t = THEMES[theme]
   const section = sectionForPath(location.pathname)
-  if (!section || section.pages.length < 2) return null
+  const pages = section ? visiblePages(section, subject) : []
+  if (pages.length < 2) return null
   const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
   return (
     <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`}
       style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: `1px solid ${t.border}`, flexShrink: 0, overflowX: 'auto', fontFamily: FONT_B }}>
-      {section.pages.map(page => {
+      {pages.map(page => {
         const active = page.path === current
         return (
           <button key={page.id} type="button" role="tab" aria-selected={active}
@@ -396,7 +403,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
-        {!writingNav && <SectionTabs theme={theme} />}
+        {!writingNav && <SectionTabs theme={theme} subject={subject} />}
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
       {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
@@ -668,6 +675,23 @@ function AppInner() {
       .catch(() => { setLoading(false); setBootstrapped(true) })
   }, [user?.id])
 
+  // A subject tile saved in localStorage can be stale (renamed subject, feature
+  // switches changed in admin). Refresh it from the curricula table once.
+  useEffect(() => {
+    const id = selectedSubject?.id
+    if (typeof id !== 'string' || !id.startsWith('curriculum_')) return
+    let cancelled = false
+    fetchLiveCurricula()
+      .then(cs => {
+        const fresh = cs.map(curriculumToSubjectTile).find(tile => tile.id === id)
+        if (cancelled || !fresh) return
+        setSelectedSubject(prev => (prev?.id === id ? { ...prev, ...fresh } : prev))
+        try { localStorage.setItem('gf-subject', JSON.stringify(fresh)) } catch { /* storage unavailable */ }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedSubject?.id])
+
   // Reload questions if subject was persisted but questions are empty
   useEffect(() => {
     if (!selectedSubject || questions.length > 0) return
@@ -929,11 +953,19 @@ function AppInner() {
       {/* Question Lab — public preview of the multi-format question engine */}
       <Route path="/question-lab" element={<AdminRoute profile={profile}><QuestionLabScreen theme={theme} onExit={() => navigate('/admin')} /></AdminRoute>} />
 
-      {/* Exam Mode — timed sectioned simulator (UCAT / GAMSAT / selective tracks) */}
-      <Route path="/exam" element={<ExamModeScreen theme={theme} questions={questions} profile={profile} onExit={() => navigate('/home')} />} />
+      {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
+      <Route path="/exam" element={
+        subjectHasFeature(selectedSubject, 'exam_mode')
+          ? <ExamModeScreen theme={theme} questions={questions} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
+          : <Navigate to="/question-bank" replace />
+      } />
 
-      {/* AI Essay Marker — instant rubric-based marking (incl. GAMSAT S2) */}
-      <Route path="/essay-lab" element={<EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />} />
+      {/* AI Essay Marker — only for subjects with essay_marker on */}
+      <Route path="/essay-lab" element={
+        subjectHasFeature(selectedSubject, 'essay_marker')
+          ? <EssayMarkerScreen theme={theme} onExit={() => navigate('/home')} />
+          : <Navigate to="/question-bank" replace />
+      } />
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />

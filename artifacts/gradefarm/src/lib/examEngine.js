@@ -48,6 +48,56 @@ export function buildPaper(track, pool = []) {
   return { title: track.title, sections }
 }
 
+export const DEFAULT_EXAM_QUESTIONS = 20
+const DEFAULT_SECONDS_PER_QUESTION = 90
+
+/**
+ * A practice exam for one subject, drawn from that subject's question bank.
+ * Questions are picked round-robin across topics so the paper covers the
+ * course rather than whichever topic has the most questions. Size and time
+ * come from the subject's feature settings (exam_questions / exam_minutes).
+ *
+ * @param {{ id?: string, name?: string, features?: object }} subject
+ * @param {object[]} pool  the subject's bank questions
+ * @returns {{ id: string, title: string, sections: object[] }}
+ */
+export function buildSubjectExam(subject, pool = []) {
+  const features = subject?.features || {}
+  const wanted = Math.max(1, Math.round(Number(features.exam_questions) || DEFAULT_EXAM_QUESTIONS))
+
+  const byTopic = new Map()
+  for (const q of pool) {
+    const key = q.topic || ''
+    if (!byTopic.has(key)) byTopic.set(key, [])
+    byTopic.get(key).push(q)
+  }
+  const queues = shuffle([...byTopic.values()].map(shuffle))
+  const picked = []
+  while (picked.length < wanted && queues.some(q => q.length)) {
+    for (const queue of queues) {
+      if (picked.length >= wanted) break
+      if (queue.length) picked.push(queue.shift())
+    }
+  }
+
+  const minutes = Number(features.exam_minutes)
+  const durationSec = minutes > 0
+    ? Math.round(minutes * 60)
+    : picked.length * DEFAULT_SECONDS_PER_QUESTION
+
+  return {
+    id: `subject-${subject?.id || 'unknown'}`,
+    title: `${subject?.name || 'Subject'} practice exam`,
+    sections: [{
+      id: 'paper',
+      name: subject?.name || 'Paper',
+      durationSec,
+      instructions: 'Answer every question. Flag any you want to revisit — marks and solutions appear only when you submit.',
+      questions: picked,
+    }],
+  }
+}
+
 /** Total question count across all sections. */
 export function countQuestions(paper) {
   return (paper.sections || []).reduce((n, s) => n + (s.questions?.length || 0), 0)

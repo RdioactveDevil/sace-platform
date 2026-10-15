@@ -5,11 +5,13 @@ import {
   updateCurriculumStatus,
   getSubtopicStatuses,
   loadManagedCurriculaTopics,
+  updateCurriculumFeatures,
 } from '../lib/curriculaDb'
 import { adminApiPost } from '../lib/adminApi'
 import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import { COHORT_LEVEL_OPTIONS } from '../lib/subjects'
+import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -317,6 +319,23 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       setError(e.message)
     }
     setRemapApplying(false)
+  }
+
+  // ── Feature switches (saved immediately, independent of the draft Save) ────
+
+  const [featureSaving, setFeatureSaving] = useState(false)
+  const saveFeatures = async (patch) => {
+    const next = { ...(curriculum.features || {}), ...patch }
+    const prev = curriculum.features || {}
+    setCurriculum(c => ({ ...c, features: next }))
+    setFeatureSaving(true); setError('')
+    try {
+      await updateCurriculumFeatures(curriculumId, next)
+    } catch (e) {
+      setCurriculum(c => ({ ...c, features: prev }))
+      setError(`Couldn't save features: ${e.message}`)
+    }
+    setFeatureSaving(false)
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -732,6 +751,11 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         )
       })()}
 
+      {/* Per-subject feature switches */}
+      {!generating && (
+        <FeatureSwitches features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />
+      )}
+
       {/* Exam scope & generation context */}
       {!generating && (
         <div style={{
@@ -1031,3 +1055,60 @@ const secondaryBtn = (disabled) => ({
   cursor: disabled ? 'not-allowed' : 'pointer',
   fontFamily: "'Plus Jakarta Sans', sans-serif",
 })
+
+/** Optional student tools for this subject. Everything is off unless switched on here. */
+function FeatureSwitches({ features, saving, onChange }) {
+  const row = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', cursor: 'pointer' }
+  const numInput = {
+    width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)',
+    background: '#0c1037', color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B,
+  }
+  const commitNumber = (key) => (e) => {
+    const v = Math.round(Number(e.target.value))
+    onChange({ [key]: v > 0 ? v : undefined })
+  }
+  return (
+    <div style={{
+      marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)',
+    }}>
+      <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+        Student features {saving && <span style={{ textTransform: 'none', letterSpacing: 0 }}>· saving…</span>}
+      </div>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+        Optional tools shown to students of this subject only. Changes save immediately.
+      </div>
+
+      <label style={row}>
+        <input type="checkbox" checked={!!features.exam_mode} onChange={e => onChange({ exam_mode: e.target.checked })} />
+        <span>
+          <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>Exam Mode</span>
+          <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Timed practice exam drawn from this subject's question bank (Practice → Exam Mode).</span>
+        </span>
+      </label>
+      {features.exam_mode && (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '0 0 8px 26px', fontSize: 12, color: '#94a3b8' }}>
+          <label>Questions{' '}
+            <input type="number" min={1} max={200} style={numInput}
+              defaultValue={features.exam_questions ?? DEFAULT_EXAM_QUESTIONS}
+              onBlur={commitNumber('exam_questions')} />
+          </label>
+          <label>Minutes{' '}
+            <input type="number" min={1} max={300} style={numInput}
+              defaultValue={features.exam_minutes ?? ''} placeholder="auto"
+              onBlur={commitNumber('exam_minutes')} />
+          </label>
+          <span style={{ color: '#475569' }}>Blank minutes = 1.5 min per question.</span>
+        </div>
+      )}
+
+      <label style={row}>
+        <input type="checkbox" checked={!!features.essay_marker} onChange={e => onChange({ essay_marker: e.target.checked })} />
+        <span>
+          <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>Essay Marker</span>
+          <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>AI marking of persuasive, narrative and GAMSAT-style essays (Learn → Essay Marker).</span>
+        </span>
+      </label>
+    </div>
+  )
+}

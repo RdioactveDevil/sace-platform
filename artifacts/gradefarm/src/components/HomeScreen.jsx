@@ -5,6 +5,7 @@ import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
+import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -624,12 +625,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Quick Start (All Topics)</div>
-              <button
+              {subjectHasFeature(subject, 'exam_mode') && <button
                 onClick={() => setExamMode(v => !v)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
               >
                 ⏱ {examMode ? 'Exam On' : 'Exam Mode'}
-              </button>
+              </button>}
             </div>
 
             {examMode && (

@@ -87,13 +87,13 @@ function studentSteps(isTutor) {
       path: '/question-bank',
       target: 'nav-practice',
       title: 'Practice',
-      body: 'Adaptive practice sessions from the Question Bank, plus timed Exam Mode — this is where you earn XP.',
+      body: 'Adaptive practice sessions from the Question Bank — this is where you earn XP.',
     },
     {
       path: '/learn',
       target: 'nav-learn',
       title: 'Learn',
-      body: 'When you need deeper explanation, open Learn — Titan can walk through concepts, and Essay Marker grades your writing.',
+      body: 'When you need deeper explanation, open Learn — Titan can walk through concepts and tie them to your notes.',
     },
     {
       path: '/my-progress',

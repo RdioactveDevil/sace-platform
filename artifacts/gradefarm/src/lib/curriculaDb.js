@@ -61,6 +61,15 @@ export async function getCurriculumDetail(id) {
       .maybeSingle()
     examContext = ctxRow?.exam_context ?? ''
   }
+  let features = {}
+  {
+    const { data: fRow } = await supabase
+      .from('curricula')
+      .select('features')
+      .eq('id', id)
+      .maybeSingle()
+    features = fRow?.features || {}
+  }
 
   const { data: topics, error: tErr } = await supabase
     .from('curriculum_topics')
@@ -84,11 +93,22 @@ export async function getCurriculumDetail(id) {
   return {
     ...curriculum,
     exam_context: examContext,
+    features,
     topics: (topics || []).map(t => ({
       ...t,
       subtopics: subtopics.filter(s => s.topic_id === t.id),
     })),
   }
+}
+
+/**
+ * Save a curriculum's feature switches (see migration 20261015000002).
+ * @param {string} id
+ * @param {{ exam_mode?: boolean, exam_questions?: number, exam_minutes?: number, essay_marker?: boolean }} features
+ */
+export async function updateCurriculumFeatures(id, features) {
+  const { error } = await supabase.from('curricula').update({ features: features || {} }).eq('id', id)
+  if (error) throw error
 }
 
 /**
@@ -263,7 +283,7 @@ export async function loadManagedCurriculaTopics() {
 export async function fetchLiveCurricula() {
   const { data: curricula, error: cErr } = await supabase
     .from('curricula')
-    .select('id, name, level_label, status')
+    .select('*')
     .in('status', ['live', 'generating'])
     .order('created_at', { ascending: true })
   if (cErr) throw cErr
@@ -282,6 +302,7 @@ export async function fetchLiveCurricula() {
     name: c.name,
     level_label: (c.level_label ?? '').trim(),
     status: c.status,
+    features: c.features || {},
     topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
   }))
 }
@@ -294,7 +315,7 @@ export async function fetchLiveCurricula() {
 export async function fetchAllActiveCurricula() {
   const { data: curricula, error: cErr } = await supabase
     .from('curricula')
-    .select('id, name, level_label, status')
+    .select('*')
     .in('status', ['draft', 'generating', 'live'])
     .order('created_at', { ascending: true })
   if (cErr) throw cErr
@@ -313,6 +334,7 @@ export async function fetchAllActiveCurricula() {
     name: c.name,
     level_label: (c.level_label ?? '').trim(),
     status: c.status,
+    features: c.features || {},
     topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
   }))
 }
