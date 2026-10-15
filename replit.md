@@ -32,6 +32,12 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
   - `POST /api/tutor/notify-assignment` — sends styled HTML assignment email (type, subject, topics, due date)
   - `POST /api/tutor/notify-student` — sends a custom message email from tutor to student
 
+### Subjects & navigation
+- Subjects are **database-driven**: each row in `curricula` (Admin → Curricula) becomes a picker tile via `curriculumToSubjectTile()` in `src/lib/subjects.js`. The only built-in tiles are the Writing feature.
+- Questions link to their subject by `questions.curriculum_id` / `subtopic_id`, filled automatically by a DB trigger from the subject spelling. `select * from unlinked_question_subjects` lists anything that didn't match.
+- Student sidebar has three sections — Practice, Learn, Progress — with tabs for their sub-pages (`NAV_SECTIONS` in `App.jsx`).
+- API routes that call Claude or touch admin data require a Supabase JWT (`api-server/src/lib/auth.ts`); the web app attaches it to every `/api/*` call (`src/lib/apiAuth.ts`).
+
 ### Required Environment Variables
 - `ANTHROPIC_API_KEY` — for AI chat/question generation features
 - `SUPABASE_SERVICE_KEY` — for admin operations (question generation, PDF extraction)
