@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { verifyQuestionPayload, type Verdict } from "../lib/verify-question";
+import { verifyQuestionPayload, withStimulus, type Verdict } from "../lib/verify-question";
 import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
 
@@ -33,7 +33,12 @@ async function verifyQuestion(questionId: string): Promise<Verdict> {
   if (!q) throw new Error(`Question ${questionId} not found`);
 
   const options: string[] = typeof q.options === "string" ? JSON.parse(q.options) : (q.options || []);
-  return verifyQuestionPayload({ question: q.question, options, answer_index: q.answer_index });
+  let passage: string | null = null;
+  if (q.passage_id) {
+    const { data: p } = await adminDb.from("passages").select("body").eq("id", q.passage_id).maybeSingle();
+    passage = (p as { body?: string } | null)?.body ?? null;
+  }
+  return verifyQuestionPayload({ question: withStimulus(q.question, passage), options, answer_index: q.answer_index });
 }
 
 async function getTopicCode(

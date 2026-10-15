@@ -273,11 +273,13 @@ export async function getQuestionsForSubjectTile(subjectTile) {
 
   if (curriculumId) {
     try {
+      // Reading-comprehension questions carry their passage (migration 20261015000003).
+      const cols = '*, passage:passages(id, title, kind, body)'
       const linked = await fetchAllRows(() =>
-        supabase.from('questions').select('*').eq('curriculum_id', curriculumId))
+        supabase.from('questions').select(cols).eq('curriculum_id', curriculumId))
       const unlinked = keys.length
         ? await fetchAllRows(() =>
-            supabase.from('questions').select('*').is('curriculum_id', null).in('subject', keys))
+            supabase.from('questions').select(cols).is('curriculum_id', null).in('subject', keys))
         : []
       return mapAndDedupeQuestions([...linked, ...unlinked], keys[0] || subjectTile.name)
     } catch {

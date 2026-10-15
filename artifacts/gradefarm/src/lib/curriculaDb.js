@@ -10,7 +10,7 @@ export async function listCurricula() {
   const { data, error } = await supabase
     .from('curricula')
     .select(`
-      id, name, level_label, subject_description, generation_flags, status, created_at,
+      *,
       curriculum_topics (
         id,
         curriculum_subtopics ( id, gen_status, questions_generated )
@@ -29,6 +29,7 @@ export async function listCurricula() {
       subject_description: c.subject_description,
       generation_flags: c.generation_flags ?? {},
       status: c.status,
+      archived_at: c.archived_at ?? null,
       created_at: c.created_at,
       topic_count: topics.length,
       subtopic_count: subtopics.length,
@@ -73,7 +74,7 @@ export async function getCurriculumDetail(id) {
 
   const { data: topics, error: tErr } = await supabase
     .from('curriculum_topics')
-    .select('id, name, order_index')
+    .select('*') // includes question_style once migration 20261015000003 is applied
     .eq('curriculum_id', id)
     .order('order_index')
   if (tErr) throw tErr
@@ -131,7 +132,7 @@ export async function createCurriculum({ name, subject_description, topics, leve
 
 /**
  * Update an existing curriculum's name, description, and full topic/subtopic tree.
- * Replaces all existing topics/subtopics (full replace, not patch).
+ * The topic tree is updated in place, keeping existing topic/subtopic ids.
  * @param {string} id
  * @param {{ name?: string, subject_description?: string, level_label?: string, topics?: Array }} updates
  */
@@ -281,45 +282,14 @@ export async function loadManagedCurriculaTopics() {
  * @returns {Promise<Array<{ id: string, name: string, level_label: string, status: string, topicNames: string[] }>>}
  */
 export async function fetchLiveCurricula() {
-  const { data: curricula, error: cErr } = await supabase
+  let { data: curricula, error: cErr } = await supabase
     .from('curricula')
     .select('*')
     .in('status', ['live', 'generating'])
     .order('created_at', { ascending: true })
   if (cErr) throw cErr
-  if (!curricula?.length) return []
-
-  const ids = curricula.map(c => c.id)
-  const { data: topics, error: tErr } = await supabase
-    .from('curriculum_topics')
-    .select('curriculum_id, name')
-    .in('curriculum_id', ids)
-    .order('order_index')
-  if (tErr) throw tErr
-
-  return curricula.map(c => ({
-    id: c.id,
-    name: c.name,
-    level_label: (c.level_label ?? '').trim(),
-    status: c.status,
-    features: c.features || {},
-    topicNames: (topics || []).filter(t => t.curriculum_id === c.id).map(t => t.name),
-  }))
-}
-
-/**
- * Fetch all curricula with status in ['draft', 'generating', 'live'], with topic names.
- * Used to show draft curricula as "Coming Soon" in SubjectPicker.
- * @returns {Promise<Array<{ id: string, name: string, level_label: string, status: string, topicNames: string[] }>>}
- */
-export async function fetchAllActiveCurricula() {
-  const { data: curricula, error: cErr } = await supabase
-    .from('curricula')
-    .select('*')
-    .in('status', ['draft', 'generating', 'live'])
-    .order('created_at', { ascending: true })
-  if (cErr) throw cErr
-  if (!curricula?.length) return []
+  curricula = (curricula || []).filter(c => !c.archived_at)
+  if (!curricula.length) return []
 
   const ids = curricula.map(c => c.id)
   const { data: topics, error: tErr } = await supabase
@@ -343,79 +313,104 @@ export async function fetchAllActiveCurricula() {
  * Delete a curriculum and all its topics/subtopics (cascade).
  * @param {string} id
  */
+/** Hide (archived=true) or restore a subject. Nothing is deleted. */
+export async function setCurriculumArchived(id, archived) {
+  const { error } = await supabase
+    .from('curricula')
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .eq('id', id)
+  if (error) throw error
+}
+
 export async function deleteCurriculum(id) {
   const { error } = await supabase.from('curricula').delete().eq('id', id)
   if (error) throw error
 }
 
-/**
- * Seed built-in hardcoded subjects into the curricula table if they don't exist yet.
- * Subjects already present (matched by name) are skipped.
- * @param {Array<{ name: string, description: string, topics: Array }>} builtIns
- */
-export async function seedBuiltInSubjectsIfNeeded(builtIns) {
-  const { data: existing } = await supabase.from('curricula').select('id, name')
-  const existingMap = new Map((existing || []).map(c => [c.name, c.id]))
-
-  for (const { name, description, topics, generation_flags } of builtIns) {
-    const existingId = existingMap.get(name)
-    if (existingId) {
-      // If topics are still in the old "code — name" format, replace them with canonical names.
-      // This runs once after a deploy; subsequent loads find no " — " and skip.
-      const { data: firstSub } = await supabase
-        .from('curriculum_subtopics')
-        .select('name')
-        .eq('curriculum_id', existingId)
-        .limit(1)
-        .maybeSingle()
-      if (firstSub?.name?.includes(' \u2014 ')) {
-        await _replaceTopicsAndSubtopics(existingId, topics, 'done')
-      }
-      continue
-    }
-    const level = inferCohortLabelFromCurriculumName(name)
-    const { data: c, error } = await supabase
-      .from('curricula')
-      .insert({ name, subject_description: description || name, level_label: level, status: 'live', generation_flags: generation_flags || {} })
-      .select('id')
-      .single()
-    if (error || !c) continue
-    await _replaceTopicsAndSubtopics(c.id, topics, 'done')
-  }
-}
-
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 async function _replaceTopicsAndSubtopics(curriculumId, topics, defaultGenStatus = 'pending') {
-  // Delete existing topics (cascade deletes subtopics)
-  const { error: delErr } = await supabase
+  // Update the tree in place rather than delete-and-reinsert: topic/subtopic
+  // ids are what questions link to (questions.subtopic_id), and subtopics
+  // carry generation progress that a plain Save must not reset. Rows are
+  // matched by id, else by name (e.g. after an AI revise returns names only).
+  const { data: existingTopics, error: etErr } = await supabase
     .from('curriculum_topics')
-    .delete()
+    .select('id, name')
     .eq('curriculum_id', curriculumId)
-  if (delErr) throw delErr
+  if (etErr) throw etErr
+  const topicIds = (existingTopics || []).map(t => t.id)
+  let existingSubs = []
+  if (topicIds.length) {
+    const { data, error } = await supabase
+      .from('curriculum_subtopics')
+      .select('id, topic_id, name')
+      .in('topic_id', topicIds)
+    if (error) throw error
+    existingSubs = data || []
+  }
+
+  const key = (name) => String(name || '').trim().toLowerCase()
+  const claim = (pool, item) => {
+    const i = pool.findIndex(r => (item.id && r.id === item.id) || (!item.id && key(r.name) === key(item.name)))
+    return i === -1 ? null : pool.splice(i, 1)[0]
+  }
+  const unusedTopics = [...(existingTopics || [])]
+  const unusedSubs = [...existingSubs]
 
   for (let ti = 0; ti < topics.length; ti++) {
     const topic = topics[ti]
-    const { data: topicRow, error: tErr } = await supabase
-      .from('curriculum_topics')
-      .insert({ curriculum_id: curriculumId, name: topic.name, order_index: ti })
-      .select('id')
-      .single()
-    if (tErr) throw tErr
+    const topicFields = { name: topic.name, order_index: ti }
+    if (topic.question_style !== undefined) topicFields.question_style = topic.question_style || 'standard'
+
+    let topicId
+    const match = claim(unusedTopics, topic)
+    if (match) {
+      topicId = match.id
+      const { error } = await supabase.from('curriculum_topics').update(topicFields).eq('id', topicId)
+      if (error) throw error
+    } else {
+      const { data: topicRow, error } = await supabase
+        .from('curriculum_topics')
+        .insert({ curriculum_id: curriculumId, ...topicFields })
+        .select('id')
+        .single()
+      if (error) throw error
+      topicId = topicRow.id
+    }
 
     const subtopics = topic.subtopics || []
-    if (subtopics.length > 0) {
-      const subRows = subtopics.map((s, si) => ({
-        topic_id: topicRow.id,
-        curriculum_id: curriculumId,
-        name: s.name,
-        order_index: si,
-        gen_status: defaultGenStatus,
-        questions_generated: 0,
-      }))
-      const { error: sErr } = await supabase.from('curriculum_subtopics').insert(subRows)
-      if (sErr) throw sErr
+    for (let si = 0; si < subtopics.length; si++) {
+      const sub = subtopics[si]
+      const subMatch = claim(unusedSubs, sub)
+      if (subMatch) {
+        const { error } = await supabase
+          .from('curriculum_subtopics')
+          .update({ name: sub.name, order_index: si, topic_id: topicId })
+          .eq('id', subMatch.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('curriculum_subtopics').insert({
+          topic_id: topicId,
+          curriculum_id: curriculumId,
+          name: sub.name,
+          order_index: si,
+          gen_status: defaultGenStatus,
+          questions_generated: 0,
+        })
+        if (error) throw error
+      }
     }
+  }
+
+  if (unusedSubs.length) {
+    const { error } = await supabase.from('curriculum_subtopics').delete().in('id', unusedSubs.map(r => r.id))
+    if (error) throw error
+  }
+  if (unusedTopics.length) {
+    // Cascades to any of their subtopics not already moved elsewhere.
+    const { error } = await supabase.from('curriculum_topics').delete().in('id', unusedTopics.map(r => r.id))
+    if (error) throw error
   }
 }
 

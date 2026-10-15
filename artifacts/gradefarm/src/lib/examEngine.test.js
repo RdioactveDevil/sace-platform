@@ -98,6 +98,20 @@ describe('buildSubjectExam', () => {
     assert.equal(new Set(exam.sections[0].questions.map(q => q.id)).size, pool.length)
   })
 
+  test('keeps a passage\'s questions together and in one block', () => {
+    const withPassage = [
+      { id: 'p1', topic: 'Reading', passage_id: 'P' },
+      { id: 'p2', topic: 'Reading', passage_id: 'P' },
+      { id: 'p3', topic: 'Reading', passage_id: 'P' },
+      { id: 'g1', topic: 'Grammar' },
+    ]
+    const qs = buildSubjectExam({ features: { exam_questions: 4 } }, withPassage).sections[0].questions
+    const idx = qs.map(q => q.id)
+    const first = idx.indexOf('p1')
+    assert.deepEqual(new Set(idx.slice(first, first + 3)), new Set(['p1', 'p2', 'p3']))
+    assert.equal(qs.length, 4)
+  })
+
   test('empty bank gives an empty paper', () => {
     assert.equal(countQuestions(buildSubjectExam({ features: {} }, [])), 0)
   })

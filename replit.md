@@ -36,7 +36,9 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - Subjects are **database-driven**: each row in `curricula` (Admin → Curricula) becomes a picker tile via `curriculumToSubjectTile()` in `src/lib/subjects.js`. The only built-in tiles are the Writing feature.
 - Questions link to their subject by `questions.curriculum_id` / `subtopic_id`, filled automatically by a DB trigger from the subject spelling. `select * from unlinked_question_subjects` lists anything that didn't match.
 - Student sidebar has three sections — Practice, Learn, Progress — with tabs for their sub-pages (`NAV_SECTIONS` in `App.jsx`).
-- Exam Mode and Essay Marker are **per-subject** tools, off by default; switch them on in Admin → Curricula → (subject) → Student features (`curricula.features`). Exam Mode builds a timed paper from that subject's own bank (`buildSubjectExam` in `src/lib/examEngine.js`).
+- Exam Mode, Essay Marker and Writing are **per-subject** tools, off by default; switch them on in Admin → Curricula → (subject) → Student features (`curricula.features`). Exam Mode builds a timed paper from that subject's own bank (`buildSubjectExam` in `src/lib/examEngine.js`). Writing (`features.writing` = a level such as `writing_y56`) adds a Writing section to that subject; there are no standalone Writing tiles any more.
+- **Archive** (Admin → Curricula) hides a subject from students without deleting anything (`curricula.archived_at`). Delete is permanent.
+- **Reading passages:** set a topic's style to "Reading passages" in the curriculum topic list and generation produces passage sets (one passage or poem + 5 questions, `passages` table, `questions.passage_id`). The quiz keeps a passage's questions together and shows the passage above each question; remediation is skipped for them. Shared generator: `api-server/src/lib/passages.ts`.
 - API routes that call Claude or touch admin data require a Supabase JWT (`api-server/src/lib/auth.ts`); the web app attaches it to every `/api/*` call (`src/lib/apiAuth.ts`).
 
 ### Required Environment Variables

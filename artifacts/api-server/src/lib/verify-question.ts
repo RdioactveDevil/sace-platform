@@ -143,7 +143,7 @@ export type VerifiableQuestion = {
  */
 export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
   questions: T[],
-  opts: { concurrency?: number; context?: Record<string, unknown> } = {},
+  opts: { concurrency?: number; context?: Record<string, unknown>; stimulus?: string } = {},
 ): Promise<{ kept: T[]; dropped: number; fixed: number; errored: number }> {
   if (process.env.VERIFY_GENERATED_QUESTIONS === "false" || questions.length === 0) {
     return { kept: questions, dropped: 0, fixed: 0, errored: 0 };
@@ -167,7 +167,7 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
       }
       try {
         const verdict = await verifyQuestionPayload({
-          question: q.question,
+          question: withStimulus(q.question, opts.stimulus),
           options: q.options,
           answer_index: q.answer_index,
         });
@@ -204,4 +204,13 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
 
   const kept = results.filter((r): r is T => r !== null);
   return { kept, dropped: questions.length - kept.length, fixed, errored };
+}
+
+/**
+ * Prefix a question with the passage it refers to, so the verifier judges
+ * reading-comprehension answers against the text the student actually sees.
+ */
+export function withStimulus(question: string, stimulus?: string | null): string {
+  const body = (stimulus || "").trim();
+  return body ? `Read the passage, then answer the question.\n\nPASSAGE:\n${body}\n\nQUESTION: ${question}` : question;
 }

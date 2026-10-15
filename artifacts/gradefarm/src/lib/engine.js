@@ -90,6 +90,10 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
 
   if (!pool.length) return null
 
+  // Finish the reading passage the student is part-way through before moving on.
+  const sibling = nextPassageSibling(questions, pool, sessionAnsweredIds)
+  if (sibling) return sibling
+
   const weights = computeWeights(pool, struggleMap, targetDifficulty)
   weights.sort((a, b) => b.weight - a.weight)
 
@@ -103,6 +107,18 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
   }
 
   return questions.find(q => q.id === top[0].id)
+}
+
+/**
+ * If the most recently answered question belongs to a reading passage, return
+ * the next unanswered question (in pool) from the same passage, else null.
+ */
+export function nextPassageSibling(questions, pool, sessionAnsweredIds) {
+  const lastId = sessionAnsweredIds[sessionAnsweredIds.length - 1]
+  if (!lastId) return null
+  const last = questions.find(q => q.id === lastId)
+  if (!last?.passage_id) return null
+  return pool.find(q => q.passage_id === last.passage_id) || null
 }
 
 /**

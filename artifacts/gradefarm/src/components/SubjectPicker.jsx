@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { CLIENT_ONLY_SUBJECTS, curriculumToSubjectTile } from '../lib/subjects'
+import { curriculumToSubjectTile } from '../lib/subjects'
 import { fetchSubjectBankCounts } from '../lib/db'
-import { fetchAllActiveCurricula } from '../lib/curriculaDb'
+import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIcon } from './SubjectIcons'
 import './SubjectPicker.css'
 
@@ -46,7 +46,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   const [loadingCurricula, setLoading]  = useState(true)
 
   useEffect(() => {
-    fetchAllActiveCurricula()
+    fetchLiveCurricula()
       .then(curricula => {
         setDynamic(curricula.map(curriculumToSubjectTile))
       })
@@ -71,8 +71,7 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
     return () => { cancelled = true }
   }, [dynamicSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const builtInSubjects  = CLIENT_ONLY_SUBJECTS
-  const allSubjects      = [...builtInSubjects, ...dynamicSubjects]
+  const allSubjects      = dynamicSubjects
   const hasSubscriptions = subscriptions.length > 0
   const subscribed       = allSubjects.filter(s => s.available && (!hasSubscriptions || subscriptions.some(sub => subMatchesSubject(sub, s))))
   const notSubscribed    = hasSubscriptions ? allSubjects.filter(s => s.available && !subscriptions.some(sub => subMatchesSubject(sub, s))) : []

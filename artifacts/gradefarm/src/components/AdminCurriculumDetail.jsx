@@ -10,7 +10,7 @@ import {
 import { adminApiPost } from '../lib/adminApi'
 import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
-import { COHORT_LEVEL_OPTIONS } from '../lib/subjects'
+import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -135,6 +135,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   // ── Tree mutation helpers ─────────────────────────────────────────────────
 
   const renameTopic = (ti, name) => setTopics(prev => prev.map((t, i) => i === ti ? { ...t, name } : t))
+  const setTopicStyle = (ti, question_style) => setTopics(prev => prev.map((t, i) => i === ti ? { ...t, question_style } : t))
   const renameSubtopic = (ti, si, name) => setTopics(prev => prev.map((t, i) =>
     i !== ti ? t : { ...t, subtopics: t.subtopics.map((s, j) => j === si ? { ...s, name } : s) }
   ))
@@ -893,6 +894,19 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   onSave={name => renameTopic(ti, name)}
                   style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}
                 />
+                <select
+                  value={topic.question_style || 'standard'}
+                  onChange={e => setTopicStyle(ti, e.target.value)}
+                  title="How questions for this topic are generated. Saved with the curriculum."
+                  style={{
+                    flexShrink: 0, padding: '3px 6px', borderRadius: 6, fontSize: 11, fontFamily: FONT_B,
+                    border: '1px solid rgba(255,255,255,0.1)', background: '#0c1037',
+                    color: topic.question_style === 'passage' ? GOLD : '#94a3b8',
+                  }}
+                >
+                  <option value="standard">Standard questions</option>
+                  <option value="passage">Reading passages</option>
+                </select>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   <IconBtn title="Move up"      onClick={() => moveTopicUp(ti)}   disabled={ti === 0}>↑</IconBtn>
                   <IconBtn title="Move down"    onClick={() => moveTopicDown(ti)} disabled={ti === topics.length - 1}>↓</IconBtn>
@@ -1101,6 +1115,21 @@ function FeatureSwitches({ features, saving, onChange }) {
           <span style={{ color: '#475569' }}>Blank minutes = 1.5 min per question.</span>
         </div>
       )}
+
+      <div style={{ ...row, cursor: 'default' }}>
+        <select
+          value={features.writing || ''}
+          onChange={e => onChange({ writing: e.target.value || undefined })}
+          style={{ ...numInput, width: 'auto' }}
+        >
+          <option value="">Off</option>
+          {WRITING_LEVELS.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+        </select>
+        <span>
+          <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>Writing</span>
+          <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Writing section (essays, prompt planner, history) pitched at the chosen year level.</span>
+        </span>
+      </div>
 
       <label style={row}>
         <input type="checkbox" checked={!!features.essay_marker} onChange={e => onChange({ essay_marker: e.target.checked })} />

@@ -9,6 +9,7 @@ import { extractJsonArray } from "../lib/json-latex";
 import { filterVerifiedQuestions } from "../lib/verify-question";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
+import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireAdmin } from "../lib/auth";
 
 const router = Router();
@@ -393,6 +394,44 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   // Exemplar packs distilled from this subject's reference resources, so the
   // generated bank questions match the uploaded textbooks/exams for this subtopic.
   const exemplarContext = await fetchExemplarContext(admin, subjectName, subtopicName);
+
+  // Reading-comprehension topics get passage sets (one passage + several
+  // questions) instead of standalone questions.
+  const { data: subRow } = await admin
+    .from("curriculum_subtopics").select("topic_id").eq("id", subtopicId).maybeSingle();
+  const style = await topicQuestionStyle(admin, (subRow as { topic_id?: string } | null)?.topic_id);
+  if (style === "passage") {
+    try {
+      const { data: currRow } = curriculumId
+        ? await admin.from("curricula").select("id, level_label").eq("id", curriculumId).maybeSingle()
+        : await admin.from("curricula").select("id, level_label").eq("name", subjectName).maybeSingle();
+      const sets = await generatePassageSets({
+        subjectName,
+        levelLabel: (currRow as { level_label?: string } | null)?.level_label,
+        topicName,
+        subtopicName,
+        sets: Math.max(1, Math.round(Number(count) / QUESTIONS_PER_PASSAGE)),
+        examContext,
+        extraSystemLines: exemplarSystemLines(subjectName, exemplarContext),
+      });
+      const inserted = await insertPassageSets(admin, sets, {
+        table: "questions",
+        subject: subjectName,
+        topic: topicName,
+        subtopic: subtopicName,
+        curriculumId: (currRow as { id?: string } | null)?.id ?? curriculumId ?? null,
+        subtopicId,
+      });
+      await admin.from("curriculum_subtopics")
+        .update({ gen_status: "done", questions_generated: inserted.length }).eq("id", subtopicId);
+      res.json({ inserted: inserted.length, passages: sets.length });
+    } catch (err) {
+      logger.error({ err, subtopicId }, "[curriculum-generate] passage generation failed");
+      await admin.from("curriculum_subtopics").update({ gen_status: "failed" }).eq("id", subtopicId);
+      res.status(500).json({ error: err instanceof Error ? err.message : "Passage generation failed" });
+    }
+    return;
+  }
 
   const system = [
     `You are generating multiple-choice questions for students studying ${subjectName}.`,

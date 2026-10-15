@@ -54,7 +54,9 @@ const DEFAULT_SECONDS_PER_QUESTION = 90
 /**
  * A practice exam for one subject, drawn from that subject's question bank.
  * Questions are picked round-robin across topics so the paper covers the
- * course rather than whichever topic has the most questions. Size and time
+ * course rather than whichever topic has the most questions. A reading
+ * passage's questions are kept together, so the paper can run slightly over
+ * the requested size to finish a passage. Size and time
  * come from the subject's feature settings (exam_questions / exam_minutes).
  *
  * @param {{ id?: string, name?: string, features?: object }} subject
@@ -65,18 +67,34 @@ export function buildSubjectExam(subject, pool = []) {
   const features = subject?.features || {}
   const wanted = Math.max(1, Math.round(Number(features.exam_questions) || DEFAULT_EXAM_QUESTIONS))
 
-  const byTopic = new Map()
+  // A reading passage's questions travel together as one block; everything
+  // else is a block of one.
+  const blocks = []
+  const passageBlocks = new Map()
   for (const q of pool) {
-    const key = q.topic || ''
-    if (!byTopic.has(key)) byTopic.set(key, [])
-    byTopic.get(key).push(q)
+    if (q.passage_id) {
+      if (!passageBlocks.has(q.passage_id)) {
+        const block = { topic: q.topic || '', questions: [] }
+        passageBlocks.set(q.passage_id, block)
+        blocks.push(block)
+      }
+      passageBlocks.get(q.passage_id).questions.push(q)
+    } else {
+      blocks.push({ topic: q.topic || '', questions: [q] })
+    }
+  }
+
+  const byTopic = new Map()
+  for (const block of blocks) {
+    if (!byTopic.has(block.topic)) byTopic.set(block.topic, [])
+    byTopic.get(block.topic).push(block)
   }
   const queues = shuffle([...byTopic.values()].map(shuffle))
   const picked = []
   while (picked.length < wanted && queues.some(q => q.length)) {
     for (const queue of queues) {
       if (picked.length >= wanted) break
-      if (queue.length) picked.push(queue.shift())
+      if (queue.length) picked.push(...queue.shift().questions)
     }
   }
 

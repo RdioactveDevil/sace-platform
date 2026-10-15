@@ -1,45 +1,26 @@
 // Subjects come from the `curricula` table (admin → Curricula), turned into
-// picker tiles by curriculumToSubjectTile(). The only built-in tiles are the
-// Writing feature: a client-side experience with no curricula/questions rows,
-// whose stages (e.g. "Year 5–6") aren't valid COHORT_LEVEL_OPTIONS.
-export const CLIENT_ONLY_SUBJECTS = [
-  {
-    id: 'writing_y56',
-    name: 'Writing',
-    stage: 'Year 5–6',
-    icon: '✏️',
-    color: '#14b8a6',
-    type: 'writing',
-    topics: ['Narrative', 'Persuasive'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'writing_y78',
-    name: 'Writing',
-    stage: 'Year 7–8',
-    icon: '✏️',
-    color: '#14b8a6',
-    type: 'writing',
-    topics: ['Narrative', 'Persuasive'],
-    questionCount: 0,
-    available: true,
-  },
-  {
-    id: 'writing_y910',
-    name: 'Writing',
-    stage: 'Year 9–10',
-    icon: '✏️',
-    color: '#14b8a6',
-    type: 'writing',
-    topics: ['Narrative', 'Persuasive'],
-    questionCount: 0,
-    available: true,
-  },
-]
+// picker tiles by curriculumToSubjectTile(). There are no built-in subjects.
 
 /**
- * Picker tile for a `curricula` row (from fetchLiveCurricula / fetchAllActiveCurricula).
+ * Writing levels a subject can switch on (features.writing = level id). The id
+ * picks the year range the writing prompts and marking are pitched at, and is
+ * what writing_attempts.subject stores.
+ */
+export const WRITING_LEVELS = [
+  { id: 'writing_y56',  label: 'Year 5–6' },
+  { id: 'writing_y78',  label: 'Year 7–8' },
+  { id: 'writing_y910', label: 'Year 9–10' },
+]
+
+/** The Writing workspace's subject for a tile with Writing on, else null. */
+export function writingSubjectFor(tile) {
+  const level = WRITING_LEVELS.find(l => l.id === tile?.features?.writing)
+  if (!level) return null
+  return { id: level.id, name: tile.name, stage: level.label, icon: '✏️', type: 'writing' }
+}
+
+/**
+ * Picker tile for a `curricula` row (from fetchLiveCurricula).
  * The tile id `curriculum_<uuid>` is how question loading finds the curriculum.
  */
 export function curriculumToSubjectTile(c) {
@@ -60,7 +41,7 @@ export function curriculumToSubjectTile(c) {
  * Optional per-subject tools, switched on in Admin → Curricula → Features.
  * Off unless the subject's curriculum enables them.
  * @param {object} tile  subject tile
- * @param {'exam_mode'|'essay_marker'} feature
+ * @param {'exam_mode'|'essay_marker'|'writing'} feature
  */
 export function subjectHasFeature(tile, feature) {
   return !!tile?.features?.[feature]
@@ -81,6 +62,8 @@ export function findTileForSubjectString(tiles, subject) {
 export const COHORT_LEVEL_OPTIONS = [
   'Stage 1',
   'Stage 2',
+  'Year 5',
+  'Year 6',
   'Year 7',
   'Year 8',
   'Year 9',

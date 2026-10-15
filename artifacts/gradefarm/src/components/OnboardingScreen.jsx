@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { CLIENT_ONLY_SUBJECTS, curriculumToSubjectTile, formatSubjectLabel } from '../lib/subjects'
+import { curriculumToSubjectTile, formatSubjectLabel } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
@@ -57,9 +57,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
       .catch(() => {})
   }, [])
 
-  // Client-only built-ins (the Writing feature) plus all DB-loaded dynamic
-  // curricula. Academic subjects come only from the DB so admin controls them.
-  const allSubjects = [...CLIENT_ONLY_SUBJECTS, ...dynamicSubjects]
+  // Every subject comes from the curricula table, so the admin controls them.
+  const allSubjects = dynamicSubjects
   const AVAILABLE_SUBJECTS = allSubjects.filter(s => s.available)
   const COMING_SUBJECTS    = allSubjects.filter(s => !s.available)
 

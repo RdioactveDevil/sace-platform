@@ -7,6 +7,7 @@ import { filterVerifiedQuestions } from "../lib/verify-question";
 import { extractJsonArray } from "../lib/json-latex";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
+import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireUser } from "../lib/auth";
 
 const router = Router();
@@ -318,6 +319,40 @@ async function generateForTopic(opts: {
         : numDiff >= 4
           ? "All questions must be difficulty 4\u20135 out of 5 (challenging). The student has been answering recent questions correctly and is ready for harder material."
           : `Questions should be around difficulty ${Math.round(numDiff)} out of 5. You may vary between ${Math.max(1, Math.round(numDiff) - 1)} and ${Math.min(5, Math.round(numDiff) + 1)}.`;
+
+  // Reading-comprehension topics: generate passage sets instead of standalone
+  // questions, so every question arrives with the passage it refers to.
+  if (await topicQuestionStyle(adminDb, tRow.id) === "passage") {
+    try {
+      const { data: currMeta } = await adminDb
+        .from("curricula").select("*").eq("id", currRow.id).maybeSingle();
+      const meta = (currMeta ?? {}) as { level_label?: string; exam_context?: string };
+      const { data: subIdRow } = await adminDb
+        .from("curriculum_subtopics").select("id").eq("topic_id", tRow.id).eq("name", topicName).maybeSingle();
+      const sets = await generatePassageSets({
+        subjectName: normalizedSubject,
+        levelLabel: meta.level_label,
+        topicName: parentTopicName,
+        subtopicName: topicName,
+        sets: Math.max(1, Math.round(count / QUESTIONS_PER_PASSAGE)),
+        examContext: typeof meta.exam_context === "string" ? meta.exam_context.trim().slice(0, 3000) : "",
+        difficultyInstruction,
+      });
+      const rows = await insertPassageSets(adminDb, sets, {
+        table: autoApprove ? "questions" : "draft_questions",
+        subject: normalizedSubject,
+        topic: parentTopicName,
+        subtopic: topicName,
+        curriculumId: currRow.id,
+        subtopicId: (subIdRow as { id?: string } | null)?.id ?? null,
+        topicCode,
+      });
+      return { status: 200, body: autoApprove ? { inserted: rows.length, questions: rows } : { inserted: rows.length } };
+    } catch (err) {
+      logger.error({ err, topicCode }, "[generate-questions] passage generation failed");
+      return { status: 500, body: { error: "Passage generation failed", detail: err instanceof Error ? err.message : String(err) } };
+    }
+  }
 
   // Fetch generation_flags from DB (controls LaTeX, graph, table usage in prompts).
   const { data: _curriculumRow } = await adminDb

@@ -7,6 +7,7 @@ import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
+import PassageView from './PassageView'
 import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock from './QuizToolsDock'
 
@@ -52,6 +53,7 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
   const value = answers[q.id]
   return (
     <div>
+      {q.passage && <PassageView passage={q.passage} theme={theme} />}
       {q.graph && <GraphView graph={q.graph} theme={theme} />}
       {q.table_data && <TableView table={q.table_data} theme={theme} />}
       {q.diagram && <DiagramView diagram={q.diagram} theme={theme} />}

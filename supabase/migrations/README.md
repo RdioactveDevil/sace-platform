@@ -38,7 +38,7 @@ the already-migrated production DB:
 
 ## October 2026: security + subject IDs
 
-Three migrations need applying together with the matching app deploy:
+Four migrations need applying together with the matching app deploy:
 
 - `20261015000000_lock_down_profiles` stops users editing their own
   `is_admin` / `is_tutor` / XP / streak columns, adds the `award_xp()` RPC the
@@ -48,9 +48,13 @@ Three migrations need applying together with the matching app deploy:
   `subtopic_id` (and on `draft_questions`), backfills them from the subject
   spelling, and keeps them filled by trigger.
 
-- `20261015000002_curricula_features` adds `curricula.features`, the
-  per-subject switches for Exam Mode and Essay Marker (Admin → Curricula →
-  subject → Student features). Both are off until switched on.
+- `20261015000002_curricula_features` adds `curricula.features` (per-subject
+  switches for Exam Mode, Essay Marker and Writing, all off until switched on
+  in Admin → Curricula → subject → Student features) and
+  `curricula.archived_at` (Archive hides a subject from students, keeps data).
+- `20261015000003_reading_passages` adds the `passages` table,
+  `questions.passage_id` and `curriculum_topics.question_style`
+  ('standard' | 'passage') for reading-comprehension topics.
 
 Deploy order: **apply the migrations first, then deploy the app.** The old app
 writes XP directly, which the new trigger ignores, so XP would stop increasing

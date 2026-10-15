@@ -190,7 +190,35 @@ create trigger relink_questions_for_curricula
   after insert or update of name, level_label on public.curricula
   for each row execute function public.relink_questions_for_curricula();
 
--- ── 7. Admin report: questions that still have no curriculum ────────────────
+-- ── 7. Link unlinked questions when a subtopic is added or renamed ─────────
+create or replace function public.relink_questions_for_subtopic()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_curriculum uuid;
+begin
+  select t.curriculum_id into v_curriculum from public.curriculum_topics t where t.id = new.topic_id;
+  if v_curriculum is null then
+    return null;
+  end if;
+  update public.questions q
+     set subtopic_id = new.id
+   where q.curriculum_id = v_curriculum
+     and q.subtopic_id is null
+     and lower(btrim(q.subtopic)) = lower(btrim(new.name));
+  return null;
+end;
+$$;
+
+drop trigger if exists relink_questions_for_subtopic on public.curriculum_subtopics;
+create trigger relink_questions_for_subtopic
+  after insert or update of name, topic_id on public.curriculum_subtopics
+  for each row execute function public.relink_questions_for_subtopic();
+
+-- ── 8. Admin report: questions that still have no curriculum ────────────────
 create or replace view public.unlinked_question_subjects
 with (security_invoker = true)
 as
