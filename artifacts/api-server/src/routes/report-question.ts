@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { verifyQuestionPayload, type Verdict } from "../lib/verify-question";
 import { logger } from "../lib/logger";
+import { requireUser } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -134,6 +135,8 @@ async function resolveReport(reportId: string, questionId: string) {
 // ── POST /api/report-question ─────────────────────────────────────────────────
 
 router.post("/report-question", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
   const { questionId } = req.body as { questionId?: string };
   if (!questionId) { res.status(400).json({ error: "questionId required" }); return; }
 

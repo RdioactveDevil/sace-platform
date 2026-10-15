@@ -7,6 +7,7 @@ import { filterVerifiedQuestions } from "../lib/verify-question";
 import { extractJsonArray } from "../lib/json-latex";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
+import { requireUser } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -572,6 +573,8 @@ async function generateForTopic(opts: {
 }
 
 router.post("/generate-questions", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
   const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams, includeGraphs } = req.body;
 
   const resolvedSubject: string = subject || stage;
@@ -582,6 +585,14 @@ router.post("/generate-questions", async (req, res) => {
 
   if (!resolvedSubject || !topicCodes.length) {
     res.status(400).json({ error: "subject (or stage) and topicCode/topicCodes required" });
+    return;
+  }
+
+  // Students trigger this for live bank top-ups (one subtopic, a handful of
+  // questions). Bulk batches are admin-only so a signed-in student can't burn
+  // AI credits or flood the live bank.
+  if (!caller.isAdmin && (topicCodes.length > 1 || Number(count) > 10)) {
+    res.status(403).json({ error: "Bulk generation is admin only" });
     return;
   }
 

@@ -9,6 +9,7 @@ import { extractJsonArray } from "../lib/json-latex";
 import { filterVerifiedQuestions } from "../lib/verify-question";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
+import { requireAdmin } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -172,6 +173,8 @@ async function cascadeCurriculumSubjectRename(
 // Body: { subjectDescription: string, base64Doc?: string, mediaType?: string }
 // Returns: { topics: [{ name: string, subtopics: [{ name: string }] }] }
 router.post("/admin/curriculum-plan", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { subjectDescription, base64Doc, mediaType, cohortLevel } = req.body || {};
   if (!subjectDescription?.trim() && !base64Doc) {
     res.status(400).json({ error: "subjectDescription or a document is required" });
@@ -262,6 +265,8 @@ router.post("/admin/curriculum-plan", async (req, res) => {
 // POST /api/admin/curriculum-rename-cascade
 // Body: { oldSubject: string, newSubject: string, oldLevelLabel?: string }
 router.post("/admin/curriculum-rename-cascade", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { oldSubject, newSubject, oldLevelLabel } = req.body || {};
   const a = typeof oldSubject === "string" ? oldSubject.trim() : "";
   const b = typeof newSubject === "string" ? newSubject.trim() : "";
@@ -284,6 +289,8 @@ router.post("/admin/curriculum-rename-cascade", async (req, res) => {
 // POST /api/admin/curriculum-repair-subject-strings
 // Body: { newSubject: string, sourceSubjects: string[] } — merges every source string (plus alias expansion) into newSubject.
 router.post("/admin/curriculum-repair-subject-strings", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { newSubject, sourceSubjects } = req.body || {};
   const b = typeof newSubject === "string" ? newSubject.trim() : "";
   const rawList = Array.isArray(sourceSubjects) ? sourceSubjects : [];
@@ -311,6 +318,8 @@ router.post("/admin/curriculum-repair-subject-strings", async (req, res) => {
 // POST /api/admin/curriculum-subscription-stage
 // Body: { subjectName: string, oldStage: string, newStage: string }
 router.post("/admin/curriculum-subscription-stage", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { subjectName, oldStage, newStage } = req.body || {};
   const sub = typeof subjectName === "string" ? subjectName.trim() : "";
   if (!sub) {
@@ -344,6 +353,8 @@ router.post("/admin/curriculum-subscription-stage", async (req, res) => {
 // Body: { subtopicId, curriculumId, subjectName, topicName, subtopicName, count? }
 // Generates `count` draft questions for one subtopic, then marks it done/failed.
 router.post("/admin/curriculum-generate", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const {
     subtopicId,
     curriculumId,
@@ -533,6 +544,8 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 // Body: { currentTopics, instruction, subjectName, base64Doc?, mediaType? }
 // Returns: { topics: [{ name, subtopics: [{ name }] }] }
 router.post("/admin/curriculum-revise", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { currentTopics, instruction, sourceText, subjectName, base64Doc, mediaType } = req.body || {};
   if (!currentTopics || (!instruction?.trim() && !base64Doc && !sourceText?.trim())) {
     res.status(400).json({ error: "currentTopics and either instruction, sourceText, or a document are required" });
@@ -618,6 +631,8 @@ router.post("/admin/curriculum-revise", async (req, res) => {
 // Body: { subjectName: string, validSubtopics: string[] }
 // Returns: { count: number, orphanedSubtopics: { name: string, topic: string, count: number }[] }
 router.post("/admin/curriculum-orphaned-questions", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { subjectName, validSubtopics } = req.body || {};
   if (!subjectName || !Array.isArray(validSubtopics)) {
     res.status(400).json({ error: "subjectName and validSubtopics[] are required" });
@@ -668,6 +683,8 @@ router.post("/admin/curriculum-orphaned-questions", async (req, res) => {
 // Body: { subjectName, orphanedSubtopics: [{ name, topic, count }], newCurriculumTree: { topics: [...] } }
 // Returns: { suggestions: [{ oldSubtopic, newTopic, newSubtopic, action }] }
 router.post("/admin/curriculum-suggest-remap", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { subjectName, orphanedSubtopics, newCurriculumTree } = req.body || {};
   if (!subjectName || !Array.isArray(orphanedSubtopics) || !newCurriculumTree?.topics) {
     res.status(400).json({ error: "subjectName, orphanedSubtopics[], and newCurriculumTree are required" });
@@ -760,6 +777,8 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
 // Body: { subjectName, mappings: [{ oldSubtopic, action: 'remap'|'delete'|'ignore', newTopic?, newSubtopic? }] }
 // Returns: { updated: number, deleted: number }
 router.post("/admin/curriculum-apply-remap", async (req, res) => {
+  const caller = await requireAdmin(req, res);
+  if (!caller) return;
   const { subjectName, mappings } = req.body || {};
   if (!subjectName || !Array.isArray(mappings)) {
     res.status(400).json({ error: "subjectName and mappings[] are required" });

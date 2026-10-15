@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/contexts/AppContext";
 import { useColors } from "@/hooks/useColors";
 import { addXP, recordAnswer } from "@/lib/db";
+import { apiHeaders } from "@/lib/supabase";
 import { calcXP, getLevelProgress, type Question, selectNextQuestion } from "@/lib/engine";
 
 const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN ?? "localhost"}`;
@@ -25,7 +26,7 @@ async function fetchAITip(question: Question, wrongAnswer: string): Promise<stri
   try {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await apiHeaders(),
       body: JSON.stringify({
         system:
           "You are a concise SACE Chemistry tutor. Give a short, helpful 1-2 sentence tip to help a student understand why an answer is correct. Be direct and educational.",

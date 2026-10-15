@@ -403,24 +403,16 @@ export async function updateSession(sessionId, updates) {
 }
 
 // â”€â”€â”€ XP & STREAK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// XP and streaks are awarded server-side (award_xp clamps the amount and derives
+// the streak) — the profiles row itself is not writable for these columns.
 export async function addXP(userId, xpEarned, newStreak, currentProfile) {
-  const newXP = Math.max(0, currentProfile.xp + xpEarned)
-  const today = new Date().toDateString()
-  const lastActive = currentProfile.last_active
-    ? new Date(currentProfile.last_active).toDateString()
-    : null
-
-  const yesterday = new Date(Date.now() - 86400000).toDateString()
-  const validStreak = lastActive === today || lastActive === yesterday
-
-  await updateProfile(userId, {
-    xp: newXP,
-    streak: validStreak ? newStreak : newStreak === 0 ? 0 : 1,
-    best_streak: Math.max(currentProfile.best_streak ?? 0, newStreak),
-    last_active: new Date().toISOString(),
+  const { data, error } = await supabase.rpc('award_xp', {
+    p_xp_earned: Math.round(xpEarned),
+    p_new_streak: newStreak,
   })
-
-  return newXP
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  return row?.xp ?? Math.max(0, (currentProfile?.xp ?? 0) + xpEarned)
 }
 
 // â”€â”€â”€ QUESTION FLAGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

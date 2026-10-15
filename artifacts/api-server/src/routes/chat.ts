@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
+import { requireUser } from "../lib/auth";
 
 const router = Router();
 
@@ -190,6 +191,8 @@ function logOffTopicAttempt(verifiedUserId: string, subject: string, topic: stri
 }
 
 router.post("/chat", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
   try {
     const { messages, system, max_tokens, subject, topic, exemplarsFor } = req.body;
 
@@ -247,7 +250,7 @@ router.post("/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: max_tokens || 1000,
+        max_tokens: Math.min(Number(max_tokens) || 1000, 4000),
         system: effectiveSystem,
         messages: typedMessages,
       }),

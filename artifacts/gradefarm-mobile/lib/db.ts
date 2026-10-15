@@ -129,27 +129,20 @@ export async function recordAnswer(
   });
 }
 
+// XP and streaks are awarded server-side by the award_xp RPC.
 export async function addXP(
-  userId: string,
+  _userId: string,
   xpEarned: number,
   newStreak: number,
   currentProfile: Profile
 ): Promise<number> {
-  const newXP = Math.max(0, currentProfile.xp + xpEarned);
-  const today = new Date().toDateString();
-  const lastActive = currentProfile.last_active
-    ? new Date(currentProfile.last_active).toDateString()
-    : null;
-  const yesterday = new Date(Date.now() - 86400000).toDateString();
-  const validStreak = lastActive === today || lastActive === yesterday;
-
-  await updateProfile(userId, {
-    xp: newXP,
-    streak: validStreak ? newStreak : newStreak === 0 ? 0 : 1,
-    best_streak: Math.max(currentProfile.best_streak ?? 0, newStreak),
-    last_active: new Date().toISOString(),
+  const { data, error } = await supabase.rpc("award_xp", {
+    p_xp_earned: Math.round(xpEarned),
+    p_new_streak: newStreak,
   });
-  return newXP;
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row?.xp ?? Math.max(0, currentProfile.xp + xpEarned);
 }
 
 export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
