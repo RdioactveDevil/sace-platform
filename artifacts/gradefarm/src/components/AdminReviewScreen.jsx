@@ -570,7 +570,7 @@ export default function AdminReviewScreen({ profile }) {
                   {draft.topic_code || '?'}
                 </span>
                 <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {draft.question}
+                  <MathText text={draft.question} style={{ whiteSpace: 'nowrap' }} />
                 </span>
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
                   D{draft.difficulty ?? '?'}

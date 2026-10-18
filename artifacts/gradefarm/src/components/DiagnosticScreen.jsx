@@ -5,7 +5,7 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'mathlive'
 import 'mathlive/fonts.css'
-import { tokenizeMath } from '../lib/tokenizeMath.js'
+import MathText from './MathText'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -22,22 +22,6 @@ function renderMath(text, displayMode = false) {
   } catch {
     return text
   }
-}
-
-function MathText({ children }) {
-  if (!children) return null
-  // Shared deterministic delimiter pairing (see lib/tokenizeMath.js).
-  const parts = tokenizeMath(String(children))
-
-  return (
-    <span>
-      {parts.map((p, i) => {
-        if (p.type === 'text') return <span key={i}>{p.content}</span>
-        const html = renderMath(p.content, p.display)
-        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} style={p.display ? { display: 'block', textAlign: 'center', margin: '8px 0' } : undefined} />
-      })}
-    </span>
-  )
 }
 
 // ── Subject detection ──────────────────────────────────────────────────────────
@@ -271,7 +255,7 @@ function McqQuestion({ q, answer, onAnswer, disabled }) {
               {letter}
             </span>
             <span style={{ flex: 1, lineHeight: 1.5, marginTop: 2 }}>
-              <MathText>{opt.replace(/^[A-D]\.\s*/, '')}</MathText>
+              <MathText text={opt.replace(/^[A-D]\.\s*/, '')} />
             </span>
           </button>
         )
@@ -389,7 +373,7 @@ function QuestionCard({ q, idx, answer, onAnswer, disabled, isMath }) {
             )}
           </div>
           <div style={{ fontSize: 15, color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-            <MathText>{q.question}</MathText>
+            <MathText text={q.question} />
           </div>
         </div>
       </div>
