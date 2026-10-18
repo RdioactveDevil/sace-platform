@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
+import MathText from './MathText'
 import { supabase } from '../lib/supabase'
 
 const GOLD = '#f1be43'
@@ -162,7 +163,7 @@ export default function HistoryScreen({ profile, theme, embedded }) {
                             <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: j < Math.min(session.answers.length, 15) - 1 ? `1px solid ${t.border}` : 'none' }}>
                               <div style={{ width: 20, height: 20, borderRadius: '50%', background: a.correct ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: a.correct ? t.success : t.danger, flexShrink: 0 }}>{a.correct ? '✓' : '✗'}</div>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.question_text || `Question ${j + 1}`}</div>
+                                <div style={{ fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.question_text ? <MathText text={a.question_text} style={{ whiteSpace: 'nowrap' }} /> : `Question ${j + 1}`}</div>
                                 {a.subtopic && <div style={{ fontSize: 10, color: t.textMuted, marginTop: 1 }}>{a.subtopic}</div>}
                               </div>
                               <div style={{ fontSize: 11, color: a.correct ? t.success : t.danger, fontWeight: 600, flexShrink: 0 }}>{a.correct ? '+XP' : 'Wrong'}</div>

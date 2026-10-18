@@ -100,6 +100,7 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
       'Required keys: question, options (array of exactly 4 strings), answer_index, solution, tip,',
       'difficulty (always 1), topic, subtopic, concept_tag, variant_type (always "concept_builder").',
       'No markdown, no commentary outside the JSON.',
+      'Write all maths in LaTeX inside $...$, escaping backslashes for JSON (e.g. "$\\\\frac{1}{2}$").',
     ].join(' ')
 
     const user = [
@@ -1146,7 +1147,7 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
           }),
         })
@@ -1226,7 +1227,7 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble.`,
+            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect answer: ${describeCorrectAnswer(currentQ)}\nStudent answered: ${JSON.stringify(response)}\nSolution: ${currentQ.solution}` }],
           }),
         })

@@ -5,6 +5,7 @@ import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
 import OverviewTab from './OverviewTab'
 import { THEMES } from '../lib/theme'
+import MathText from './MathText'
 import './TutorDashboard.css'
 import {
   fetchRoster,
@@ -1755,12 +1756,12 @@ function DiagnosticTab({ profile, theme }) {
                         <span style={{ fontSize: 11, color: t.textFaint }}>{q.topic}{q.subtopic ? ` · ${q.subtopic}` : ''}</span>
                         <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 'auto' }}>{q.type?.replace(/_/g, ' ')}</span>
                       </div>
-                      <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{q.question}</div>
+                      <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}><MathText text={q.question} style={{ whiteSpace: 'pre-wrap' }} /></div>
                       {q.options && (
                         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
                           {q.options.map(opt => (
                             <div key={opt} style={{ fontSize: 12, color: opt.startsWith(q.correct_answer) ? '#4ade80' : t.textMuted, paddingLeft: 4 }}>
-                              {opt.startsWith(q.correct_answer) ? '✓ ' : '   '}{opt}
+                              {opt.startsWith(q.correct_answer) ? '✓ ' : '   '}<MathText text={opt} />
                             </div>
                           ))}
                         </div>
@@ -2026,7 +2027,7 @@ function DiagnosticTab({ profile, theme }) {
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: col }}>{qr.marks_awarded}/{qr.marks_possible} marks</span>
                               </div>
-                              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{qr.feedback}</div>
+                              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}><MathText text={qr.feedback} /></div>
                               {qr.student_answer && (
                                 <div style={{ marginTop: 6, fontSize: 11, color: t.textFaint }}>
                                   Student answered: <span style={{ color: t.textMuted }}>{qr.student_answer.length > 80 ? qr.student_answer.slice(0, 80) + '…' : qr.student_answer}</span>
