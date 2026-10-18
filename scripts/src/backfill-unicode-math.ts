@@ -88,6 +88,7 @@ Rules:
 - Write slash fractions of expressions as \\frac{}{} (e.g. σ/√n → \\frac{\\sigma}{\\sqrt{n}}).
 - Write chemical formulas and ions with mhchem: CH₃CH₂OH → $\\ce{CH3CH2OH}$, O₂ → $\\ce{O2}$, NAD⁺ → $\\ce{NAD+}$, SO₄²⁻ → $\\ce{SO4^2-}$.
 - Keep every word, number, and punctuation mark. Do not add, remove, round, or reorder anything, and do not fix the maths even if it looks wrong.
+- Write each number exactly as given: keep e-notation as written (2.46e-4 stays 2.46e-4, never 2.46 \\times 10^{-4}), and keep "x" used as a multiplication sign as x.
 - Leave prose outside $...$. Leave Greek letters that are part of a name in prose as they are (e.g. "α-helix", "β-decay").
 - Keep option text in the same order. Do not add "A." style labels that were not there.
 - A literal dollar sign for money is written \\$.

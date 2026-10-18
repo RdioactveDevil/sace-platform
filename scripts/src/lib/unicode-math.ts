@@ -29,16 +29,30 @@ export function mathSegments(s: string): { tex: string; display: boolean }[] {
   return out;
 }
 
+// Greek letters naming something in prose ("α-cleavage", "β-sheet",
+// "γ-aminobutyric acid") read fine as text and aren't maths.
+const PROSE_GREEK_RE = /[α-ωΑ-Ω]-(?=[A-Za-z])/g;
+
 /** True when the string has Unicode maths outside any $...$ segment. */
 export function hasUnicodeMath(s: unknown): boolean {
-  return typeof s === "string" && UNICODE_MATH_RE.test(outsideMath(s));
+  return typeof s === "string" && UNICODE_MATH_RE.test(outsideMath(s).replace(PROSE_GREEK_RE, ""));
 }
 
 // ─── fidelity check ──────────────────────────────────────────────────────────
+//
+// A formatting-only rewrite keeps every digit and every Latin letter, in the
+// same order. Comparing them as ordered streams (rather than as bags of words
+// and numbers) accepts notation that splits or regroups them — "pKa" →
+// "\mathrm{p}K_a", "NOx" → "\ce{NO_x}", "CO32−" → "\ce{CO3^2-}" — while still
+// catching any added, dropped or reordered character.
 
 const SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 const SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉";
 const VULGAR: Record<string, string> = { "½": "1/2", "¼": "1/4", "¾": "3/4", "⅓": "1/3", "⅔": "2/3" };
+const SCRIPT_LETTERS: Record<string, string> = {
+  "ⁿ": "n", "ⁱ": "i", "ₐ": "a", "ₑ": "e", "ₒ": "o", "ₓ": "x", "ₕ": "h", "ₖ": "k",
+  "ₗ": "l", "ₘ": "m", "ₙ": "n", "ₚ": "p", "ₛ": "s", "ₜ": "t",
+};
 
 // \sin, \log ... carry a word the original wrote in plain text ("sin x").
 const FUNCTION_NAMES = new Set([
@@ -46,34 +60,34 @@ const FUNCTION_NAMES = new Set([
   "sinh", "cosh", "tanh", "log", "ln", "exp", "lim", "max", "min", "det", "gcd",
 ]);
 
-function plainDigits(s: string): string {
-  return s
-    .replace(new RegExp(`[${SUPERSCRIPTS}]+`, "g"), (run) => ` ${[...run].map((c) => SUPERSCRIPTS.indexOf(c)).join("")} `)
-    .replace(new RegExp(`[${SUBSCRIPTS}]+`, "g"), (run) => ` ${[...run].map((c) => SUBSCRIPTS.indexOf(c)).join("")} `)
-    .replace(/[½¼¾⅓⅔]/g, (c) => ` ${VULGAR[c]} `);
+/** Map Unicode super/subscripts and vulgar fractions to plain characters. */
+function plain(s: string): string {
+  return [...s]
+    .map((c) => {
+      const sup = SUPERSCRIPTS.indexOf(c);
+      if (sup !== -1) return String(sup);
+      const sub = SUBSCRIPTS.indexOf(c);
+      if (sub !== -1) return String(sub);
+      return VULGAR[c] ?? SCRIPT_LETTERS[c] ?? c;
+    })
+    .join("");
 }
 
-function numbers(s: string): string[] {
-  return (plainDigits(s).match(/\d+(?:\.\d+)?/g) ?? []).sort();
+/** Drop LaTeX command names, keeping function names like \sin as their word. */
+function stripCommands(s: string): string {
+  return s.replace(/\\([A-Za-z]+)/g, (_, name: string) => (FUNCTION_NAMES.has(name) ? name : " "));
 }
 
-function words(s: string, isLatex: boolean): string[] {
-  let t = s;
-  if (isLatex) {
-    t = t.replace(/\\([A-Za-z]+)/g, (_, name: string) => (FUNCTION_NAMES.has(name) ? ` ${name} ` : " "));
-  }
-  return (t.match(/[A-Za-z]{3,}/g) ?? []).map((w) => w.toLowerCase()).sort();
-}
+const digitStream = (s: string) => s.replace(/[^0-9]/g, "");
+const letterStream = (s: string) => s.replace(/[^A-Za-z]/g, "").toLowerCase();
+const decimals = (s: string) => (s.match(/\d+\.\d+/g) ?? []).sort().join(" ");
 
-function diff(a: string[], b: string[]): string {
-  const counts = new Map<string, number>();
-  for (const x of a) counts.set(x, (counts.get(x) ?? 0) + 1);
-  for (const x of b) counts.set(x, (counts.get(x) ?? 0) - 1);
-  const lost = [...counts].filter(([, n]) => n > 0).map(([k]) => k);
-  const added = [...counts].filter(([, n]) => n < 0).map(([k]) => k);
-  return [lost.length ? `lost ${lost.join(", ")}` : "", added.length ? `added ${added.join(", ")}` : ""]
-    .filter(Boolean)
-    .join("; ");
+/** Where two streams first differ, as "…before|after…" context from each side. */
+function firstDifference(a: string, b: string): string {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const from = Math.max(0, i - 6);
+  return `"…${a.slice(from, i + 6)}…" became "…${b.slice(from, i + 6)}…"`;
 }
 
 /**
@@ -85,10 +99,14 @@ export function checkRewrite(before: string, after: string): string | null {
   if (/\\[A-Za-z]/.test(outsideMath(after))) return "LaTeX command outside $...$";
   if (hasUnicodeMath(after)) return "Unicode maths left outside $...$";
 
-  const n = diff(numbers(before), numbers(after));
-  if (n) return `numbers changed (${n})`;
-  const w = diff(words(before, false), words(after, true));
-  if (w) return `words changed (${w})`;
+  const b = stripCommands(plain(before));
+  const a = stripCommands(plain(after));
+  if (digitStream(b) !== digitStream(a) || decimals(b) !== decimals(a)) {
+    return `numbers changed (${firstDifference(digitStream(b), digitStream(a))})`;
+  }
+  if (letterStream(b) !== letterStream(a)) {
+    return `words changed (${firstDifference(letterStream(b), letterStream(a))})`;
+  }
 
   for (const { tex, display } of mathSegments(after)) {
     try {

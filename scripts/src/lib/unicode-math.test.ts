@@ -55,3 +55,45 @@ test("rejects leftover Unicode maths, bare LaTeX and \\( \\) delimiters", () => 
   assert.match(checkRewrite("√n", "\\sqrt{n}") ?? "", /outside/);
   assert.match(checkRewrite("√n", "\\(\\sqrt{n}\\)") ?? "", /delimiters/);
 });
+
+// Real rewrites from the first production dry run that were accepted — they must stay accepted.
+test("keeps accepting the dry run's good rewrites", () => {
+  const accepted: [string, string][] = [
+    ["Mass number = protons + neutrons. Carbon has 6 protons. 14 − 6 = 8 neutrons.",
+      "Mass number = protons + neutrons. Carbon has 6 protons. $14 - 6 = 8$ neutrons."],
+    ["How many moles are in 44g of CO₂? (Molar mass = 44 g/mol)",
+      "How many moles are in $44$g of $\\ce{CO2}$? (Molar mass $= 44$ g/mol)"],
+    ["n = m ÷ M. The three-way triangle: n, m, M.", "$n = m \\div M$. The three-way triangle: $n$, $m$, $M$."],
+    ["Mg is oxidised (0→+2), H is reduced (+1→0). Electron transfer = redox.",
+      "$\\ce{Mg}$ is oxidised ($0 \\to +2$), $\\ce{H}$ is reduced ($+1 \\to 0$). Electron transfer = redox."],
+    ["slope ≈ 0.0725 $ppm^{-1}$", "slope $\\approx 0.0725\\ \\text{ppm}^{-1}$"],
+    ["CₙH₂ₙ₊₂O", "$\\ce{C_{n}H_{2n+2}O}$"],
+    ["C₆H₈O₆ → C₆H₆O₆ + 2H^+ + 2e^-", "$\\ce{C6H8O6 -> C6H6O6 + 2H+ + 2e-}$"],
+  ];
+  for (const [before, after] of accepted) assert.equal(checkRewrite(before, after), null, before);
+});
+
+// Rejected in the first dry run although only the notation changed.
+test("accepts notation that regroups letters or digits", () => {
+  assert.equal(checkRewrite("above the pKa of the carboxylic acid (~4.2)", "above the $\\mathrm{p}K_a$ of the carboxylic acid (~4.2)"), null);
+  assert.equal(checkRewrite("methylamine (pKaH ~10.64)", "methylamine ($\\mathrm{p}K_{aH}$ ~10.64)"), null);
+  assert.equal(checkRewrite("They form stable compounds with CO and NOx", "They form stable compounds with $\\ce{CO}$ and $\\ce{NO_x}$"), null);
+  assert.equal(checkRewrite("carbonate ions (CO32−) and Ca2+", "carbonate ions ($\\ce{CO3^2-}$) and $\\ce{Ca^2+}$"), null);
+});
+
+test("leaves Greek letters that name things in prose alone", () => {
+  const before = "α-cleavage gives CH₃CO^+ at m/z = 43";
+  assert.equal(hasUnicodeMath("GABA (γ-aminobutyric acid) is a β-amino acid"), false);
+  assert.equal(checkRewrite(before, "α-cleavage gives $\\ce{CH3CO+}$ at $m/z = 43$"), null);
+});
+
+test("still rejects changed, added or moved digits", () => {
+  // e-notation rewritten as scientific notation adds a 10
+  assert.match(checkRewrite("2.46e-4 mol", "$2.46 \\times 10^{-4}$ mol") ?? "", /numbers changed/);
+  // a moved decimal point keeps the same digits
+  assert.match(checkRewrite("√n = 25.76", "$\\sqrt{n} = 2.576$") ?? "", /numbers changed/);
+  // swapped digits
+  assert.match(checkRewrite("14 − 6 = 8", "$14 - 8 = 6$") ?? "", /numbers changed/);
+  // a changed short word the old 3-letter rule ignored
+  assert.match(checkRewrite("x is 5", "$x$ = 5") ?? "", /words changed/);
+});
