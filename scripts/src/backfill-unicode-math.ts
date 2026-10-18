@@ -263,6 +263,11 @@ async function main() {
 
   writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2));
 
+  if (SUBJECT && stats.scanned === 0) {
+    console.error(`\nERROR: no ${TABLE} rows have subject "${SUBJECT}". Check the exact subject name (or leave it blank).`);
+    process.exitCode = 1;
+  }
+
   console.log("\n── Summary ──");
   console.log(`  scanned:     ${stats.scanned}`);
   console.log(`  candidates:  ${stats.candidates} (Unicode maths outside $...$)`);
