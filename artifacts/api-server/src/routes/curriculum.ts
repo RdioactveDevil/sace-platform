@@ -666,13 +666,24 @@ router.post("/admin/curriculum-revise", async (req, res) => {
   res.json({ topics: parsed.topics });
 });
 
+// Questions belonging to one curriculum. Scoped by curriculum_id when the
+// caller sends it: matching by subject text alone also caught questions from
+// another curriculum with the same subject spelling (Stage 1 "Chemistry"
+// questions were remapped and deleted from the Stage 2 editor this way).
+function scopeToCurriculum<T>(query: T, subjectName: string, curriculumId: unknown): T {
+  const q = query as unknown as { eq: (col: string, val: string) => T };
+  return typeof curriculumId === "string" && curriculumId
+    ? q.eq("curriculum_id", curriculumId)
+    : q.eq("subject", subjectName);
+}
+
 // POST /api/admin/curriculum-orphaned-questions
-// Body: { subjectName: string, validSubtopics: string[] }
+// Body: { subjectName: string, curriculumId?: string, validSubtopics: string[] }
 // Returns: { count: number, orphanedSubtopics: { name: string, topic: string, count: number }[] }
 router.post("/admin/curriculum-orphaned-questions", async (req, res) => {
   const caller = await requireAdmin(req, res);
   if (!caller) return;
-  const { subjectName, validSubtopics } = req.body || {};
+  const { subjectName, curriculumId, validSubtopics } = req.body || {};
   if (!subjectName || !Array.isArray(validSubtopics)) {
     res.status(400).json({ error: "subjectName and validSubtopics[] are required" });
     return;
@@ -685,11 +696,11 @@ router.post("/admin/curriculum-orphaned-questions", async (req, res) => {
     let offset = 0;
     const batchSize = 1000;
     for (;;) {
-      const { data, error } = await admin
-        .from("questions")
-        .select("topic, subtopic")
-        .eq("subject", subjectName)
-        .range(offset, offset + batchSize - 1);
+      const { data, error } = await scopeToCurriculum(
+        admin.from("questions").select("topic, subtopic"),
+        subjectName,
+        curriculumId,
+      ).range(offset, offset + batchSize - 1);
       if (error) throw new Error(error.message);
       if (!data?.length) break;
       for (const row of data as { topic: string; subtopic: string }[]) {
@@ -813,12 +824,12 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
 });
 
 // POST /api/admin/curriculum-apply-remap
-// Body: { subjectName, mappings: [{ oldSubtopic, action: 'remap'|'delete'|'ignore', newTopic?, newSubtopic? }] }
+// Body: { subjectName, curriculumId?, mappings: [{ oldSubtopic, action: 'remap'|'delete'|'ignore', newTopic?, newSubtopic? }] }
 // Returns: { updated: number, deleted: number }
 router.post("/admin/curriculum-apply-remap", async (req, res) => {
   const caller = await requireAdmin(req, res);
   if (!caller) return;
-  const { subjectName, mappings } = req.body || {};
+  const { subjectName, curriculumId, mappings } = req.body || {};
   if (!subjectName || !Array.isArray(mappings)) {
     res.status(400).json({ error: "subjectName and mappings[] are required" });
     return;
@@ -832,30 +843,29 @@ router.post("/admin/curriculum-apply-remap", async (req, res) => {
     const { oldSubtopic, action, newTopic, newSubtopic } = mapping;
 
     if (action === "delete") {
-      const { error } = await admin.from("questions").delete()
-        .eq("subject", subjectName)
+      const { error } = await scopeToCurriculum(admin.from("questions").delete(), subjectName, curriculumId)
         .eq("subtopic", oldSubtopic);
       if (error) { logger.error({ error }, "apply-remap delete questions failed"); continue; }
 
-      await admin.from("draft_questions").delete()
-        .eq("subject", subjectName)
+      await scopeToCurriculum(admin.from("draft_questions").delete(), subjectName, curriculumId)
         .eq("subtopic", oldSubtopic);
 
       deleted++;
     } else if (action === "remap" && newTopic && newSubtopic) {
       const ct = conceptTag(subjectName, newTopic, newSubtopic);
 
-      const { error } = await admin.from("questions").update({
-        topic: newTopic,
-        subtopic: newSubtopic,
-        concept_tag: ct,
-      }).eq("subject", subjectName).eq("subtopic", oldSubtopic);
+      const { error } = await scopeToCurriculum(
+        admin.from("questions").update({ topic: newTopic, subtopic: newSubtopic, concept_tag: ct }),
+        subjectName,
+        curriculumId,
+      ).eq("subtopic", oldSubtopic);
       if (error) { logger.error({ error }, "apply-remap update questions failed"); continue; }
 
-      await admin.from("draft_questions").update({
-        topic: newTopic,
-        subtopic: newSubtopic,
-      }).eq("subject", subjectName).eq("subtopic", oldSubtopic);
+      await scopeToCurriculum(
+        admin.from("draft_questions").update({ topic: newTopic, subtopic: newSubtopic }),
+        subjectName,
+        curriculumId,
+      ).eq("subtopic", oldSubtopic);
 
       updated++;
     }

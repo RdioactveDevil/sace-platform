@@ -218,6 +218,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     try {
       const result = await adminApiPost('/api/admin/curriculum-orphaned-questions', {
         subjectName,
+        curriculumId: curriculum.id,
         validSubtopics,
       })
       if (result.count > 0) {
@@ -305,6 +306,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     try {
       const result = await adminApiPost('/api/admin/curriculum-apply-remap', {
         subjectName: curriculum.name,
+        curriculumId: curriculum.id,
         mappings: remapMappings.map(m => ({
           oldSubtopic: m.name,
           action: m.action,
