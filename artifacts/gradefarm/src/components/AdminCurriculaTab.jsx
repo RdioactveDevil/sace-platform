@@ -51,7 +51,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
       // Active subjects first, archived at the bottom.
       rows.sort((a, b) => Number(!!a.archived_at) - Number(!!b.archived_at))
       setCurricula(rows)
-      fetchSubjectBankCounts(rows.map(c => ({ subject: c.name, levelLabel: c.level_label })))
+      fetchSubjectBankCounts(rows.map(c => ({ subject: c.name, levelLabel: c.level_label, curriculumId: c.id })))
         .then(setBankCounts)
         .catch(() => {})
     } catch (e) {

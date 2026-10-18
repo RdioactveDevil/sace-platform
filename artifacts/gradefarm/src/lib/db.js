@@ -323,7 +323,11 @@ export async function fetchSubjectBankCounts(entries) {
     if (e && typeof e === 'object' && 'subject' in e) {
       const subject = String(e.subject || '').trim()
       if (!subject) continue
-      items.push({ name: subject, levelLabel: String(e.levelLabel || '').trim() })
+      items.push({
+        name: subject,
+        levelLabel: String(e.levelLabel || '').trim(),
+        ...(e.curriculumId ? { curriculumId: String(e.curriculumId) } : {}),
+      })
     } else {
       const s = String(e || '').trim()
       if (s) items.push({ name: s, levelLabel: '' })
