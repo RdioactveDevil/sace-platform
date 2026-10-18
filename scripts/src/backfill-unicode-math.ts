@@ -27,7 +27,7 @@
 import { writeFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
-import { checkRewrite, hasUnicodeMath } from "./lib/unicode-math";
+import { checkRewrite, hasUnicodeMath, repairControlChars } from "./lib/unicode-math";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 
@@ -89,6 +89,7 @@ Rules:
 - Write chemical formulas and ions with mhchem: CH₃CH₂OH → $\\ce{CH3CH2OH}$, O₂ → $\\ce{O2}$, NAD⁺ → $\\ce{NAD+}$, SO₄²⁻ → $\\ce{SO4^2-}$.
 - Keep every word, number, and punctuation mark. Do not add, remove, round, or reorder anything, and do not fix the maths even if it looks wrong.
 - Write each number exactly as given, with two exceptions: e-notation becomes scientific notation (2.46e-4 → $2.46 \\times 10^{-4}$), and an "x" used as a multiplication sign becomes \\times (0.0150 x 0.0164 → $0.0150 \\times 0.0164$; 0.100 mol x 180 g/mol → $0.100 \\text{ mol} \\times 180 \\text{ g/mol}$). Never write e-notation inside $...$.
+- Every Unicode maths symbol must end up inside $...$, including ones between words and in units: "Mean = sum ÷ count" → "Mean $= \\text{sum} \\div \\text{count}$", "base area × height" → "$\\text{base area} \\times \\text{height}$", "12 cm²" → "12 $\\text{cm}^2$".
 - Leave a number that stands alone in prose, or is a whole option by itself, as plain text ("Carbon has 6 protons", option "14") — only wrap numbers that are part of an expression, equation, or formula.
 - Leave prose outside $...$. Leave Greek letters that are part of a name in prose as they are (e.g. "α-helix", "β-decay").
 - Keep option text in the same order. Do not add "A." style labels that were not there.
@@ -158,8 +159,9 @@ function validate(before: Fields, after: Fields): { patch: Fields } | { reason: 
     const a = after[key];
     if (key === "options") {
       const bo = b as string[];
-      const ao = a as string[] | undefined;
-      if (!Array.isArray(ao) || ao.length !== bo.length) return { reason: "option count changed" };
+      const raw = a as string[] | undefined;
+      if (!Array.isArray(raw) || raw.length !== bo.length) return { reason: "option count changed" };
+      const ao = raw.map((o, i) => repairControlChars(o, bo[i]));
       for (let i = 0; i < bo.length; i++) {
         const why = checkRewrite(bo[i], ao[i]);
         if (why) return { reason: `option ${i + 1}: ${why}` };
@@ -168,9 +170,10 @@ function validate(before: Fields, after: Fields): { patch: Fields } | { reason: 
       continue;
     }
     if (typeof a !== "string") return { reason: `${key} missing from rewrite` };
-    const why = checkRewrite(b as string, a);
+    const fixed = repairControlChars(a, b as string);
+    const why = checkRewrite(b as string, fixed);
     if (why) return { reason: `${key}: ${why}` };
-    if (a !== b) patch[key] = a;
+    if (fixed !== b) patch[key] = fixed;
   }
   return { patch: patch as Fields };
 }
