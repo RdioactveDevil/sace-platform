@@ -4,6 +4,7 @@ import katex from 'katex'
 import 'katex/contrib/mhchem/mhchem.js'
 import {
   parseMathText,
+  insertLineBreaks,
   repairControlEscapes,
   collapseOverEscapes,
   convertBracketDelimiters,
@@ -106,4 +107,12 @@ test('empty and non-string input yields no tokens', () => {
   assert.deepEqual(parseMathText(''), [])
   assert.deepEqual(parseMathText(null), [])
   assert.deepEqual(parseMathText(42), [])
+})
+
+test('numbered lists get line breaks, function arguments like T(1) do not', () => {
+  assert.equal(insertLineBreaks('Steps: (1) add 2 (2) subtract 1'), 'Steps:\n(1) add 2\n(2) subtract 1')
+  // From the live bank: splitting "$T(1) = 50$" across lines broke the $...$ pairing.
+  const s = 'With $T(1) = 50$ the rule is $T(n) = 55 - 5n$, so $T(2) = 45$ and T(1) + T(2) = 95.'
+  assert.equal(insertLineBreaks(s), s)
+  assert.deepEqual(math(parseMathText(s)), ['T(1) = 50', 'T(n) = 55 - 5n', 'T(2) = 45'])
 })

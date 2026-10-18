@@ -319,12 +319,17 @@ function hasChemFormula(str) {
 
 /**
  * Detect numbered-list patterns like "(1) ... (2) ..." and insert \n
- * before each item so equations appear on their own lines.
+ * before each item so equations appear on their own lines. A number in
+ * brackets attached to a name ("T(1)", "f(2)") is a function argument, not a
+ * list marker, and text inside $...$ is never split.
  */
+const LIST_MARKER_RE = /\s*(?<![A-Za-z0-9_)\]])(\(\d+\))/g
+
 export function insertLineBreaks(text) {
   if (!text || text.includes('\n')) return text
-  if (!/\(1\)/.test(text) || !/\(2\)/.test(text)) return text
-  return text.replace(/\s*(\(\d+\))/g, '\n$1')
+  const markers = applyOutsideMath(text, (seg) => seg.replace(LIST_MARKER_RE, '\u0000$1'))
+  if (!markers.includes('\u0000(1)') || !markers.includes('\u0000(2)')) return text
+  return markers.replace(/\u0000/g, '\n')
 }
 
 // Unicode superscript characters → ASCII, so "x³" becomes "x^3" before wrapping.
