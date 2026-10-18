@@ -6,10 +6,12 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill:verify-repair": "tsx ./src/backfill-verify-repair.ts",
+    "backfill:unicode-math": "tsx ./src/backfill-unicode-math.ts",
     "migrate": "tsx ./src/apply-migrations.ts",
     "ingest:past-paper": "tsx ./src/ingest-past-paper.ts",
     "seed:hard-graph": "tsx ./src/seed-hard-graph-questions.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/lib/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
@@ -17,8 +19,10 @@
     "tsx": "catalog:"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
     "@hyzyla/pdfium": "^2.1.5",
     "@supabase/supabase-js": "^2.105.1",
+    "katex": "^0.16.45",
     "pg": "^8.13.1",
     "sharp": "^0.33.5"
   }

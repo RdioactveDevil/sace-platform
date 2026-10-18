@@ -1,0 +1,109 @@
+name: Backfill — Unicode maths to LaTeX
+
+# Manually triggered from the GitHub UI (Actions tab → this workflow → "Run workflow").
+# Rewrites questions that write maths with Unicode symbols (σ/√n, ≈, ±, x², H₂O)
+# into $...$ LaTeX so KaTeX renders them. Formatting only: a rewrite that changes
+# any number or word, or that KaTeX can't render, is rejected and left as is.
+#
+# Run "dry-run" first and download the latex-backfill-report artifact to review
+# every before/after pair, then run again with "apply".
+#
+# Requires two repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_SERVICE_KEY        — Supabase service_role key
+#   ANTHROPIC_API_KEY           — Anthropic API key
+# Optional repository variable:
+#   AI_LATEX_MODEL              — overrides the rewrite model (default claude-opus-5-5)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (report only, no writes)"
+          - "apply (write fixes)"
+          - "scan-only (count candidates, no AI calls)"
+        default: "dry-run (report only, no writes)"
+      table:
+        description: "Table"
+        type: choice
+        options:
+          - questions
+          - draft_questions
+        default: questions
+      subject:
+        description: "Limit to one subject (exact name, optional)"
+        type: string
+        default: ""
+      limit:
+        description: "Max questions to rewrite (blank = all)"
+        type: string
+        default: ""
+      concurrency:
+        description: "Parallel AI calls (blank = 4; lower it if you hit rate limits)"
+        type: string
+        default: ""
+
+# Never let two runs write to the bank at once.
+concurrency:
+  group: backfill-unicode-math
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run backfill
+        env:
+          MODE: ${{ inputs.mode }}
+          TABLE: ${{ inputs.table }}
+          SUBJECT: ${{ inputs.subject }}
+          LIMIT: ${{ inputs.limit }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_LATEX_MODEL: ${{ vars.AI_LATEX_MODEL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "::error::SUPABASE_SERVICE_KEY secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          ARGS=("--table" "$TABLE" "--report" "$GITHUB_WORKSPACE/latex-backfill-report.json")
+          case "$MODE" in
+            apply*) ARGS+=("--apply") ;;
+            scan-only*) ARGS+=("--scan-only") ;;
+          esac
+          if [[ "$MODE" != scan-only* && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
+          if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
+          if [ -n "${CONCURRENCY// /}" ]; then ARGS+=("--concurrency" "$CONCURRENCY"); fi
+          echo "Running backfill with args: ${ARGS[*]}"
+          pnpm --filter @workspace/scripts run backfill:unicode-math -- "${ARGS[@]}"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-backfill-report
+          path: latex-backfill-report.json
+          if-no-files-found: ignore

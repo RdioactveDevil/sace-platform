@@ -902,12 +902,18 @@ importers:
 
   scripts:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.134.0
+        version: 0.134.0(zod@4.3.6)
       '@hyzyla/pdfium':
         specifier: ^2.1.5
         version: 2.1.13
       '@supabase/supabase-js':
         specifier: ^2.105.1
         version: 2.105.1
+      katex:
+        specifier: ^0.16.45
+        version: 0.16.45
       pg:
         specifier: ^8.13.1
         version: 8.20.0
