@@ -10,16 +10,28 @@ globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
-/** Fail the build if an entry still runtime-imports @swc/helpers (Vercel omits optional deps → production 500). */
-async function assertNoSwcHelpersRuntimeRef(distDir, ...entryNames) {
-  const swcRef = /["']@swc\/helpers/u;
+/**
+ * Fail the build if an entry still runtime-imports a package that must be bundled.
+ * Vercel's function can't resolve pnpm's un-hoisted transitive deps, so an external
+ * import of one crashes every /api route at load time (production 500).
+ */
+const MUST_BUNDLE = [
+  // Transitive dep of some packages; Vercel omits optional deps.
+  { name: "@swc/helpers", ref: /["']@swc\/helpers/u },
+  // Imported at load time by @anthropic-ai/sdk.
+  { name: "@opentelemetry/api", ref: /(?:from\s*|import\(\s*|require\(\s*)["']@opentelemetry\//u },
+];
+
+async function assertNoUnbundledRuntimeRefs(distDir, ...entryNames) {
   for (const name of entryNames) {
     const p = path.join(distDir, name);
     const text = await readFile(p, "utf8");
-    if (swcRef.test(text)) {
-      throw new Error(
-        `${name} still references @swc/helpers. Do not add "@swc/*" to esbuild external[], or add @swc/helpers to dependencies and verify deploy. Bundle: ${p}`,
-      );
+    for (const pkg of MUST_BUNDLE) {
+      if (pkg.ref.test(text)) {
+        throw new Error(
+          `${name} still references ${pkg.name}. Do not add it to esbuild external[], or add it to dependencies and verify deploy. Bundle: ${p}`,
+        );
+      }
     }
   }
 }
@@ -44,8 +56,9 @@ async function buildAll() {
     // Examples of unbundleable packages:
     // - uses native modules and loads them dynamically (e.g. sharp)
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
-    // Do NOT add "@swc/*" here: some transitive deps use @swc/helpers; keeping them external makes
-    // the serverless bundle runtime-require packages Vercel does not install, causing 500s.
+    // Do NOT add "@swc/*" or "@opentelemetry/*" here: transitive deps (@anthropic-ai/sdk imports
+    // @opentelemetry/api) would then be runtime-required from packages Vercel does not install, so
+    // every /api route 500s.
     external: [
       "*.node",
       "sharp",
@@ -80,7 +93,6 @@ async function buildAll() {
       "@grpc/*",
       "@aws-sdk/*",
       "@azure/*",
-      "@opentelemetry/*",
       "@google-cloud/*",
       "@google/*",
       "googleapis",
@@ -137,7 +149,7 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     },
   });
 
-  await assertNoSwcHelpersRuntimeRef(distDir, "serverless.mjs", "index.mjs");
+  await assertNoUnbundledRuntimeRefs(distDir, "serverless.mjs", "index.mjs");
 }
 
 buildAll().catch((err) => {
