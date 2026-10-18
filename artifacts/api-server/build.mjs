@@ -10,15 +10,21 @@ globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
-/** Fail the build if an entry still runtime-imports @swc/helpers (Vercel omits optional deps → production 500). */
+/**
+ * Fail the build if an entry still runtime-imports a package Vercel does not
+ * install for the function (transitive deps are not there → every request 500s).
+ * @swc/helpers: optional dep of some packages. @opentelemetry/api: dependency
+ * of @anthropic-ai/sdk.
+ */
 async function assertNoSwcHelpersRuntimeRef(distDir, ...entryNames) {
-  const swcRef = /["']@swc\/helpers/u;
+  const missingRef = /(?:from\s*|import\(\s*|require\(\s*)["'](@swc\/helpers|@opentelemetry\/)/u;
   for (const name of entryNames) {
     const p = path.join(distDir, name);
     const text = await readFile(p, "utf8");
-    if (swcRef.test(text)) {
+    const m = text.match(missingRef);
+    if (m) {
       throw new Error(
-        `${name} still references @swc/helpers. Do not add "@swc/*" to esbuild external[], or add @swc/helpers to dependencies and verify deploy. Bundle: ${p}`,
+        `${name} still runtime-imports ${m[1]}. Keep it out of esbuild external[] so it is bundled. Bundle: ${p}`,
       );
     }
   }
@@ -80,7 +86,6 @@ async function buildAll() {
       "@grpc/*",
       "@aws-sdk/*",
       "@azure/*",
-      "@opentelemetry/*",
       "@google-cloud/*",
       "@google/*",
       "googleapis",
