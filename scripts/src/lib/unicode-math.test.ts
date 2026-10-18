@@ -87,13 +87,36 @@ test("leaves Greek letters that name things in prose alone", () => {
   assert.equal(checkRewrite(before, "α-cleavage gives $\\ce{CH3CO+}$ at $m/z = 43$"), null);
 });
 
+test("accepts e-notation and an x multiplication sign written as LaTeX", () => {
+  // s2_023 from the second dry run: "e-4" inside $...$ renders as "e minus 4".
+  assert.equal(
+    checkRewrite(
+      "Moles KMnO4 = 0.0150 x 0.0164 = 2.46e-4 mol; = 6.15e-4/0.025",
+      "Moles $\\ce{KMnO4}$ = $0.0150 \\times 0.0164 = 2.46 \\times 10^{-4}$ mol; = $\\frac{6.15 \\times 10^{-4}}{0.025}$",
+    ),
+    null,
+  );
+  assert.equal(checkRewrite("1.2e5 Pa", "$1.2 \\times 10^{5}$ Pa"), null);
+});
+
 test("still rejects changed, added or moved digits", () => {
-  // e-notation rewritten as scientific notation adds a 10
-  assert.match(checkRewrite("2.46e-4 mol", "$2.46 \\times 10^{-4}$ mol") ?? "", /numbers changed/);
+  // a wrong exponent in the scientific-notation rewrite
+  assert.match(checkRewrite("2.46e-4 mol", "$2.46 \\times 10^{-3}$ mol") ?? "", /numbers changed/);
+  // a 10 that wasn't in the original
+  assert.match(checkRewrite("2.46 mol", "$2.46 \\times 10$ mol") ?? "", /numbers changed/);
   // a moved decimal point keeps the same digits
   assert.match(checkRewrite("√n = 25.76", "$\\sqrt{n} = 2.576$") ?? "", /numbers changed/);
   // swapped digits
   assert.match(checkRewrite("14 − 6 = 8", "$14 - 8 = 6$") ?? "", /numbers changed/);
   // a changed short word the old 3-letter rule ignored
-  assert.match(checkRewrite("x is 5", "$x$ = 5") ?? "", /words changed/);
+  assert.match(checkRewrite("x is 5", "$x$ at 5") ?? "", /words changed/);
+});
+
+test("rejects flipped or dropped signs", () => {
+  assert.match(checkRewrite("14 − 6 = 8", "$14 + 6 = 8$") ?? "", /signs changed/);
+  assert.match(checkRewrite("2.46e-4 mol", "$2.46 \\times 10^{4}$ mol") ?? "", /signs changed/);
+  assert.match(checkRewrite("x ≤ 5 and y > 2", "$x \\leq 5$ and $y < 2$") ?? "", /signs changed/);
+  // arrows and ion charges are notation, not sign changes
+  assert.equal(checkRewrite("CO32− + H+ ⇌ HCO3−", "$\\ce{CO3^2- + H+ <=> HCO3-}$"), null);
+  assert.equal(checkRewrite("SO₄²⁻ and CₙH₂ₙ₊₂", "$\\ce{SO4^2-}$ and $\\ce{C_{n}H_{2n+2}}$"), null);
 });

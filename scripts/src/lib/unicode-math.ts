@@ -54,6 +54,8 @@ const SCRIPT_LETTERS: Record<string, string> = {
   "ₗ": "l", "ₘ": "m", "ₙ": "n", "ₚ": "p", "ₛ": "s", "ₜ": "t",
 };
 
+const SCRIPT_SIGNS: Record<string, string> = { "⁺": "+", "⁻": "-", "₊": "+", "₋": "-", "−": "-", "–": "-", "—": "-" };
+
 // \sin, \log ... carry a word the original wrote in plain text ("sin x").
 const FUNCTION_NAMES = new Set([
   "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan",
@@ -68,9 +70,21 @@ function plain(s: string): string {
       if (sup !== -1) return String(sup);
       const sub = SUBSCRIPTS.indexOf(c);
       if (sub !== -1) return String(sub);
-      return VULGAR[c] ?? SCRIPT_LETTERS[c] ?? c;
+      return VULGAR[c] ?? SCRIPT_LETTERS[c] ?? SCRIPT_SIGNS[c] ?? c;
     })
     .join("");
+}
+
+/**
+ * Rewrite the two plain-text notations the model is asked to modernise, so
+ * they compare equal to their LaTeX form: e-notation ("2.46e-4" →
+ * "2.46 × 10^-4", matching "2.46 \times 10^{-4}") and an "x" between two
+ * numbers used as a multiplication sign ("0.0150 x 0.0164" → "0.0150 × 0.0164").
+ */
+function normaliseNotation(s: string): string {
+  return s
+    .replace(/(\d(?:\.\d+)?)e([-+]?)(\d+)/g, (_, m: string, sign: string, exp: string) => `${m} × 10^${sign === "-" ? "-" : ""}${exp}`)
+    .replace(/(\d)\s*x\s*(?=[\d(])/g, "$1 × ");
 }
 
 /** Drop LaTeX command names, keeping function names like \sin as their word. */
@@ -80,6 +94,8 @@ function stripCommands(s: string): string {
 
 const digitStream = (s: string) => s.replace(/[^0-9]/g, "");
 const letterStream = (s: string) => s.replace(/[^A-Za-z]/g, "").toLowerCase();
+// Arrows ("->" in \ce, "<=>" for ⇌) are notation, not signs.
+const signStream = (s: string) => s.replace(/<=>|<->|<-|->|=>/g, " ").replace(/[^-+=<>]/g, "");
 const decimals = (s: string) => (s.match(/\d+\.\d+/g) ?? []).sort().join(" ");
 
 /** Where two streams first differ, as "…before|after…" context from each side. */
@@ -99,10 +115,13 @@ export function checkRewrite(before: string, after: string): string | null {
   if (/\\[A-Za-z]/.test(outsideMath(after))) return "LaTeX command outside $...$";
   if (hasUnicodeMath(after)) return "Unicode maths left outside $...$";
 
-  const b = stripCommands(plain(before));
+  const b = stripCommands(plain(normaliseNotation(before)));
   const a = stripCommands(plain(after));
   if (digitStream(b) !== digitStream(a) || decimals(b) !== decimals(a)) {
     return `numbers changed (${firstDifference(digitStream(b), digitStream(a))})`;
+  }
+  if (signStream(b) !== signStream(a)) {
+    return `signs changed (${firstDifference(signStream(b), signStream(a))})`;
   }
   if (letterStream(b) !== letterStream(a)) {
     return `words changed (${firstDifference(letterStream(b), letterStream(a))})`;
