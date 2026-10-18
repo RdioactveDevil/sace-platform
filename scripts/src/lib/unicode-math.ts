@@ -76,15 +76,22 @@ function plain(s: string): string {
 }
 
 /**
- * Rewrite the two plain-text notations the model is asked to modernise, so
- * they compare equal to their LaTeX form: e-notation ("2.46e-4" →
- * "2.46 × 10^-4", matching "2.46 \times 10^{-4}") and an "x" between two
- * numbers used as a multiplication sign ("0.0150 x 0.0164" → "0.0150 × 0.0164").
+ * An "x" used as a multiplication sign ("0.0150 x 0.0164", "0.100 mol x 180
+ * g/mol") may become \\times or stay as text; both compare as "×".
  */
-function normaliseNotation(s: string): string {
+function normaliseTimes(s: string): string {
   return s
-    .replace(/(\d(?:\.\d+)?)e([-+]?)(\d+)/g, (_, m: string, sign: string, exp: string) => `${m} × 10^${sign === "-" ? "-" : ""}${exp}`)
-    .replace(/(\d)\s*x\s*(?=[\d(])/g, "$1 × ");
+    .replace(/(\d\$?)\s*x\s*(?=\$?[\d(])/g, "$1 × ")
+    .replace(/([A-Za-z)]\$?)\s+x\s+(?=\$?[\d(])/g, "$1 × ");
+}
+
+/**
+ * E-notation in the original ("2.46e-4") compares equal to scientific
+ * notation ("2.46 \\times 10^{-4}"). Only the original is normalised: e-notation
+ * left inside $...$ renders as "2.46e − 4", so a rewrite that keeps it fails.
+ */
+function normaliseENotation(s: string): string {
+  return s.replace(/(\d(?:\.\d+)?)e([-+]?)(\d+)/g, (_, m: string, sign: string, exp: string) => `${m} × 10^${sign === "-" ? "-" : ""}${exp}`);
 }
 
 /** Drop LaTeX command names, keeping function names like \sin as their word. */
@@ -115,8 +122,8 @@ export function checkRewrite(before: string, after: string): string | null {
   if (/\\[A-Za-z]/.test(outsideMath(after))) return "LaTeX command outside $...$";
   if (hasUnicodeMath(after)) return "Unicode maths left outside $...$";
 
-  const b = stripCommands(plain(normaliseNotation(before)));
-  const a = stripCommands(plain(after));
+  const b = stripCommands(plain(normaliseTimes(normaliseENotation(before))));
+  const a = stripCommands(plain(normaliseTimes(after)));
   if (digitStream(b) !== digitStream(a) || decimals(b) !== decimals(a)) {
     return `numbers changed (${firstDifference(digitStream(b), digitStream(a))})`;
   }

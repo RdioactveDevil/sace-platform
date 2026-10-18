@@ -97,6 +97,14 @@ test("accepts e-notation and an x multiplication sign written as LaTeX", () => {
     null,
   );
   assert.equal(checkRewrite("1.2e5 Pa", "$1.2 \\times 10^{5}$ Pa"), null);
+  // s2_098 from the third dry run: "x" after a unit
+  assert.equal(
+    checkRewrite("salicylic acid is limiting, and 0.100 mol x 180 g/mol = 18.0 g aspirin",
+      "salicylic acid is limiting, and $0.100 \\text{ mol} \\times 180 \\text{ g/mol} = 18.0 \\text{ g}$ aspirin"),
+    null,
+  );
+  // ...or the model may leave that x as text between formulas
+  assert.equal(checkRewrite("0.100 mol x 180 g/mol", "$0.100$ mol x $180$ g/mol"), null);
 });
 
 test("still rejects changed, added or moved digits", () => {
