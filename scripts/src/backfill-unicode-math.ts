@@ -88,6 +88,8 @@ Rules:
 - Write slash fractions of expressions as \\frac{}{} (e.g. σ/√n → \\frac{\\sigma}{\\sqrt{n}}).
 - Write chemical formulas and ions with mhchem: CH₃CH₂OH → $\\ce{CH3CH2OH}$, O₂ → $\\ce{O2}$, NAD⁺ → $\\ce{NAD+}$, SO₄²⁻ → $\\ce{SO4^2-}$.
 - Keep every word, number, and punctuation mark. Do not add, remove, round, or reorder anything, and do not fix the maths even if it looks wrong.
+- Write each number exactly as given, with two exceptions: e-notation becomes scientific notation (2.46e-4 → $2.46 \\times 10^{-4}$), and an "x" used as a multiplication sign becomes \\times (0.0150 x 0.0164 → $0.0150 \\times 0.0164$; 0.100 mol x 180 g/mol → $0.100 \\text{ mol} \\times 180 \\text{ g/mol}$). Never write e-notation inside $...$.
+- Leave a number that stands alone in prose, or is a whole option by itself, as plain text ("Carbon has 6 protons", option "14") — only wrap numbers that are part of an expression, equation, or formula.
 - Leave prose outside $...$. Leave Greek letters that are part of a name in prose as they are (e.g. "α-helix", "β-decay").
 - Keep option text in the same order. Do not add "A." style labels that were not there.
 - A literal dollar sign for money is written \\$.
@@ -261,6 +263,11 @@ async function main() {
   }
 
   writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2));
+
+  if (SUBJECT && stats.scanned === 0) {
+    console.error(`\nERROR: no ${TABLE} rows have subject "${SUBJECT}". Check the exact subject name (or leave it blank).`);
+    process.exitCode = 1;
+  }
 
   console.log("\n── Summary ──");
   console.log(`  scanned:     ${stats.scanned}`);
