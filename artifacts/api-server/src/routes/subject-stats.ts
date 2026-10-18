@@ -28,17 +28,43 @@ async function countForAliases(
   return { live: live ?? 0, pendingDrafts: pendingDrafts ?? 0 };
 }
 
-type InItem = string | { name?: string; subject?: string; levelLabel?: string };
+/**
+ * Count a curriculum's bank the way the Question Bank loads it: questions
+ * linked by curriculum_id, plus any still-unlinked rows whose subject spelling
+ * matches. Spelling alone would count a bare "Chemistry" bank towards every
+ * stage of Chemistry.
+ */
+async function countForCurriculum(
+  admin: SupabaseClient,
+  curriculumId: string,
+  aliases: string[],
+): Promise<{ live: number; pendingDrafts: number }> {
+  const head = { count: "exact" as const, head: true };
+  const [linked, unlinked, linkedDrafts, unlinkedDrafts] = await Promise.all([
+    admin.from("questions").select("*", head).eq("curriculum_id", curriculumId),
+    admin.from("questions").select("*", head).is("curriculum_id", null).in("subject", aliases),
+    admin.from("draft_questions").select("*", head).eq("curriculum_id", curriculumId).eq("status", "pending"),
+    admin.from("draft_questions").select("*", head).is("curriculum_id", null).in("subject", aliases).eq("status", "pending"),
+  ]);
+  const err = linked.error || unlinked.error || linkedDrafts.error || unlinkedDrafts.error;
+  if (err) throw new Error(err.message);
+  return {
+    live: (linked.count ?? 0) + (unlinked.count ?? 0),
+    pendingDrafts: (linkedDrafts.count ?? 0) + (unlinkedDrafts.count ?? 0),
+  };
+}
 
-function normItem(raw: InItem): { key: string; level: string } {
-  if (typeof raw === "string") return { key: raw.trim(), level: "" };
+type InItem = string | { name?: string; subject?: string; levelLabel?: string; curriculumId?: string };
+
+function normItem(raw: InItem): { key: string; level: string; curriculumId: string } {
+  if (typeof raw === "string") return { key: raw.trim(), level: "", curriculumId: "" };
   const key = String(raw.name ?? raw.subject ?? "").trim();
   const level = String(raw.levelLabel ?? "").trim();
-  return { key, level };
+  return { key, level, curriculumId: String(raw.curriculumId ?? "").trim() };
 }
 
 // POST /api/subject-question-counts
-// Body: { subjects: Array<string | { name?: string, subject?: string, levelLabel?: string }> }
+// Body: { subjects: Array<string | { name?: string, subject?: string, levelLabel?: string, curriculumId?: string }> }
 // Returns: { counts: Record<string, number> } keyed by each requested `name`/`subject` string.
 router.post("/subject-question-counts", async (req, res) => {
   const { subjects } = req.body || {};
@@ -56,9 +82,11 @@ router.post("/subject-question-counts", async (req, res) => {
   try {
     const admin = getAdmin();
     const results = await Promise.all(
-      normalized.map(async ({ key, level }) => {
+      normalized.map(async ({ key, level, curriculumId }) => {
         const aliases = expandCurriculumRenameSources(key, level);
-        const { live, pendingDrafts } = await countForAliases(admin, aliases);
+        const { live, pendingDrafts } = curriculumId
+          ? await countForCurriculum(admin, curriculumId, aliases)
+          : await countForAliases(admin, aliases);
         return [key, live + pendingDrafts] as const;
       }),
     );

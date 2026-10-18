@@ -60,7 +60,9 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
       .filter(s => s.available)
       .map(s => [s.id, s.name, s.stage || ''])
     if (!pairs.length) return undefined
-    fetchSubjectBankCounts(pairs.map(([, subject, levelLabel]) => ({ subject, levelLabel })))
+    fetchSubjectBankCounts(pairs.map(([id, subject, levelLabel]) => ({
+      subject, levelLabel, curriculumId: id.startsWith('curriculum_') ? id.slice('curriculum_'.length) : undefined,
+    })))
       .then(counts => {
         if (cancelled) return
         const merged = { ...(readCountsCache() ?? {}), ...Object.fromEntries(pairs.map(([id, sn]) => [id, counts[sn] ?? 0])) }
