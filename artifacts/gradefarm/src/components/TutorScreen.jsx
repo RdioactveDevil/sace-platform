@@ -392,7 +392,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
 
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
@@ -754,7 +754,7 @@ function ProgressTab({ profile, theme, allTutors = false }) {
 
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
   const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
   const cardSecHdr = { padding: '14px 20px', borderBottom: `1px solid ${divider}` }
   const secTitle = { fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }
@@ -1107,7 +1107,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
 
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
@@ -1615,7 +1615,7 @@ function DiagnosticTab({ profile, theme }) {
 
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 18, overflow: 'hidden', marginBottom: 18 }
-    : { background: t.bgNav, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }
+    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 18, overflow: 'hidden', marginBottom: 18, boxShadow: t.shadowCard }
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
   const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
@@ -1637,7 +1637,7 @@ function DiagnosticTab({ profile, theme }) {
           <button
             key={btn.key}
             onClick={() => { if (btn.key === 'form') resetForm(); else setStep('list') }}
-            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${(step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? GOLD : t.border}`, background: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'rgba(241,190,67,0.1)' : 'transparent', color: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? GOLD : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${(step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? GOLD : t.border}`, background: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'rgba(241,190,67,0.1)' : 'transparent', color: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? t.goldText : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
           >
             {btn.label}
           </button>
@@ -1688,7 +1688,7 @@ function DiagnosticTab({ profile, theme }) {
                         <button
                           key={topic}
                           onClick={() => toggleTopic(topic)}
-                          style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.12)' : 'transparent', color: sel ? GOLD : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
+                          style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.12)' : 'transparent', color: sel ? t.goldText : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
                         >
                           {topic}
                         </button>
@@ -1736,7 +1736,7 @@ function DiagnosticTab({ profile, theme }) {
                 </div>
               </div>
 
-              {genError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)' }}>{genError}</div>}
+              {genError && <div style={{ fontSize: 13, color: t.danger, padding: '10px 14px', borderRadius: 8, background: t.dangerBg, border: `1px solid ${t.danger}40` }}>{genError}</div>}
 
               <button
                 onClick={handleGenerate}
@@ -1790,9 +1790,9 @@ function DiagnosticTab({ profile, theme }) {
             {/* Mark summary */}
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               {[
-                { label: 'Section A — Foundation', marks: easyMarks, color: '#4ade80' },
+                { label: 'Section A — Foundation', marks: easyMarks, color: t.success },
                 { label: 'Section B — Core Skills', marks: modMarks,  color: GOLD },
-                { label: 'Section C — Exam Style', marks: examMarks, color: '#f87171' },
+                { label: 'Section C — Exam Style', marks: examMarks, color: t.danger },
                 { label: 'TOTAL', marks: totalMarks, color: t.text },
               ].map(s => (
                 <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1805,7 +1805,7 @@ function DiagnosticTab({ profile, theme }) {
             {/* Questions list */}
             <div style={{ maxHeight: 440, overflowY: 'auto' }}>
               {questions.map((q, i) => {
-                const dc = q.difficulty === 'easy' ? '#4ade80' : q.difficulty === 'moderate' ? GOLD : '#f87171'
+                const dc = q.difficulty === 'easy' ? t.success : q.difficulty === 'moderate' ? GOLD : t.danger
                 return (
                   <div key={q.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                     <div style={{ width: 30, height: 30, borderRadius: 8, background: `${dc}15`, border: `1px solid ${dc}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: dc, flexShrink: 0 }}>
@@ -1822,7 +1822,7 @@ function DiagnosticTab({ profile, theme }) {
                       {q.options && (
                         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
                           {q.options.map(opt => (
-                            <div key={opt} style={{ fontSize: 12, color: opt.startsWith(q.correct_answer) ? '#4ade80' : t.textMuted, paddingLeft: 4 }}>
+                            <div key={opt} style={{ fontSize: 12, color: opt.startsWith(q.correct_answer) ? t.success : t.textMuted, paddingLeft: 4 }}>
                               {opt.startsWith(q.correct_answer) ? '✓ ' : '   '}<MathText text={opt} />
                             </div>
                           ))}
@@ -1851,7 +1851,7 @@ function DiagnosticTab({ profile, theme }) {
                   <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
                 </div>
               </div>
-              {saveError && <div style={{ fontSize: 13, color: '#f87171' }}>{saveError}</div>}
+              {saveError && <div style={{ fontSize: 13, color: t.danger }}>{saveError}</div>}
               <button onClick={handleCreate} disabled={saving}
                 style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start' }}>
                 {saving ? 'Creating…' : '✅ Create & Get Student Link'}
@@ -1866,7 +1866,7 @@ function DiagnosticTab({ profile, theme }) {
         <div style={card}>
           <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✅</div>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}4d`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✅</div>
               <div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>Assessment Created!</div>
                 <div style={{ fontSize: 13, color: t.textMuted }}>Share this link with the student or parent</div>
@@ -1877,7 +1877,7 @@ function DiagnosticTab({ profile, theme }) {
               <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: GOLD, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{createdLink}</div>
               <button
                 onClick={() => handleCopy(createdLink)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${copied ? '#4ade80' : t.border}`, background: copied ? 'rgba(74,222,128,0.1)' : 'transparent', color: copied ? '#4ade80' : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${copied ? t.success : t.border}`, background: copied ? t.successBg : 'transparent', color: copied ? t.success : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
               >
                 {copied ? '✓ Copied!' : 'Copy Link'}
               </button>
@@ -1927,7 +1927,7 @@ function DiagnosticTab({ profile, theme }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.year_level} · {subjectNames}</span>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${completed ? 'rgba(74,222,128,0.35)' : 'rgba(241,190,67,0.35)'}`, background: completed ? 'rgba(74,222,128,0.1)' : 'rgba(241,190,67,0.1)', color: completed ? '#4ade80' : GOLD, fontWeight: 700 }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${completed ? `${t.success}59` : 'rgba(241,190,67,0.35)'}`, background: completed ? t.successBg : 'rgba(241,190,67,0.1)', color: completed ? t.success : t.goldText, fontWeight: 700 }}>
                           {completed ? 'Completed' : 'Pending'}
                         </span>
                       </div>
@@ -1963,12 +1963,12 @@ function DiagnosticTab({ profile, theme }) {
             ← Back to list
           </button>
           {reportLoading && <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading report…</div>}
-          {reportError && <div style={{ fontSize: 13, color: '#f87171', padding: '12px 16px', borderRadius: 8, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)' }}>{reportError}</div>}
+          {reportError && <div style={{ fontSize: 13, color: t.danger, padding: '12px 16px', borderRadius: 8, background: t.dangerBg, border: `1px solid ${t.danger}40` }}>{reportError}</div>}
           {reportData?.report && (() => {
             const r = reportData.report
             const a = reportData.assessment
             const pct = r.percentage
-            const bandColors = { Outstanding: '#4ade80', High: GOLD, Satisfactory: '#60a5fa', Developing: '#fbbf24', Beginning: '#f87171' }
+            const bandColors = { Outstanding: t.success, High: GOLD, Satisfactory: t.blue, Developing: '#fbbf24', Beginning: t.danger }
             const bc = bandColors[r.performance_band] || GOLD
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1996,9 +1996,9 @@ function DiagnosticTab({ profile, theme }) {
                   </div>
                   <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {[
-                      { label: 'Section A — Foundation', score: r.easy_score, max: r.easy_max, color: '#4ade80' },
+                      { label: 'Section A — Foundation', score: r.easy_score, max: r.easy_max, color: t.success },
                       { label: 'Section B — Core Skills', score: r.moderate_score, max: r.moderate_max, color: GOLD },
-                      { label: 'Section C — Exam Style', score: r.exam_score, max: r.exam_max, color: '#f87171' },
+                      { label: 'Section C — Exam Style', score: r.exam_score, max: r.exam_max, color: t.danger },
                     ].filter(s => s.max > 0).map(s => (
                       <div key={s.label}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
@@ -2022,7 +2022,7 @@ function DiagnosticTab({ profile, theme }) {
                     <div>
                       {r.topic_breakdown.map(tb => {
                         const pct = tb.percentage
-                        const c = pct >= 75 ? '#4ade80' : pct >= 50 ? GOLD : '#f87171'
+                        const c = pct >= 75 ? t.success : pct >= 50 ? GOLD : t.danger
                         return (
                           <div key={tb.topic} style={{ padding: '11px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
                             <div style={{ flex: 1, fontSize: 13, color: t.text }}>{tb.topic}</div>
@@ -2040,9 +2040,9 @@ function DiagnosticTab({ profile, theme }) {
 
                 {/* AI Report sections */}
                 {[
-                  { key: 'pain_points',     label: '⚡ Pain Points',      color: '#f87171', items: r.pain_points },
+                  { key: 'pain_points',     label: '⚡ Pain Points',      color: t.danger, items: r.pain_points },
                   { key: 'patterns',        label: '🔍 Patterns Observed', color: GOLD,      items: r.patterns },
-                  { key: 'recommendations', label: '✅ Recommendations',  color: '#4ade80', items: r.recommendations },
+                  { key: 'recommendations', label: '✅ Recommendations',  color: t.success, items: r.recommendations },
                 ].filter(s => s.items?.length > 0).map(section => (
                   <div key={section.key} style={card}>
                     <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
@@ -2079,7 +2079,7 @@ function DiagnosticTab({ profile, theme }) {
                       {r.question_results.map(qr => {
                         const full = qr.marks_awarded === qr.marks_possible
                         const partial = !full && qr.marks_awarded > 0
-                        const col = full ? '#4ade80' : partial ? GOLD : '#f87171'
+                        const col = full ? t.success : partial ? GOLD : t.danger
                         return (
                           <div key={qr.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                             <div style={{ width: 30, height: 30, borderRadius: 8, background: `${col}15`, border: `1px solid ${col}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: col, flexShrink: 0 }}>
@@ -2199,7 +2199,9 @@ export default function TutorScreen({ profile, theme, subject }) {
   const headerBdr   = isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'
   const navGroupLbl = isDark ? 'rgba(255,255,255,0.22)' : '#94a3b8'
   const navItemDflt = isDark ? 'rgba(255,255,255,0.52)' : '#64748b'
-  const navAccent   = isDark ? GOLD : '#6366f1'
+  const navAccent   = isDark ? GOLD : '#0f172a'
+  // Layout is identical in both themes; only these colours change.
+  const goldText    = t.goldText
 
   const sidebar = (
     <aside className={isDark ? '' : 'td-sidebar-light'} style={{
@@ -2219,13 +2221,11 @@ export default function TutorScreen({ profile, theme, subject }) {
           </div>
         ) : (
           <div style={{ width: '100%' }}>
-            {isDark && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.28)', borderRadius: 30, padding: '3px 10px', marginBottom: 6 }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: GOLD, boxShadow: '0 0 8px rgba(241,190,67,0.9)', flexShrink: 0 }} />
-                <span style={{ fontFamily: FONT_D, fontSize: 8, letterSpacing: '0.18em', color: GOLD }}>TUTOR PORTAL</span>
-              </div>
-            )}
-            <div style={{ fontFamily: FONT_D, fontSize: isDark ? 22 : 19, color: isDark ? GOLD : '#0f172a', letterSpacing: '-0.5px', whiteSpace: 'nowrap', lineHeight: 1, textShadow: isDark ? '0 0 28px rgba(241,190,67,0.28)' : 'none' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: isDark ? 'rgba(241,190,67,0.12)' : 'rgba(241,190,67,0.16)', border: `1px solid ${isDark ? 'rgba(241,190,67,0.28)' : 'rgba(241,190,67,0.45)'}`, borderRadius: 30, padding: '3px 10px', marginBottom: 6 }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: GOLD, boxShadow: isDark ? '0 0 8px rgba(241,190,67,0.9)' : 'none', flexShrink: 0 }} />
+              <span style={{ fontFamily: FONT_D, fontSize: 8, letterSpacing: '0.18em', color: goldText }}>TUTOR PORTAL</span>
+            </div>
+            <div style={{ fontFamily: FONT_D, fontSize: 22, color: isDark ? GOLD : '#0f172a', letterSpacing: '-0.5px', whiteSpace: 'nowrap', lineHeight: 1, textShadow: isDark ? '0 0 28px rgba(241,190,67,0.28)' : 'none' }}>
               gradefarm<span style={{ color: isDark ? 'rgba(255,255,255,0.85)' : '#64748b' }}>.</span>
             </div>
           </div>
@@ -2276,19 +2276,15 @@ export default function TutorScreen({ profile, theme, subject }) {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '9px 10px', borderRadius: 12,
-          background: isDark ? 'rgba(255,255,255,0.04)' : 'transparent',
-          border: isDark ? '1px solid rgba(255,255,255,0.07)' : 'none',
-          transition: 'background 0.14s',
+          background: isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'}`,
           cursor: 'default',
-        }}
-          onMouseEnter={e => { if (!isDark) e.currentTarget.style.background = '#f1f5f9' }}
-          onMouseLeave={e => { if (!isDark) e.currentTarget.style.background = 'transparent' }}
-        >
+        }}>
           <div style={{
             width: 34, height: 34, borderRadius: '50%',
-            background: isDark ? `linear-gradient(135deg,${GOLD},${GOLDL})` : '#e0e7ff',
+            background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, color: isDark ? '#0c1037' : '#6366f1', flexShrink: 0, fontSize: 14,
+            fontWeight: 700, color: '#0c1037', flexShrink: 0, fontSize: 14,
             boxShadow: isDark ? '0 0 14px rgba(241,190,67,0.35)' : 'none',
           }}>
             {(profile.display_name || '?')[0].toUpperCase()}
@@ -2296,7 +2292,7 @@ export default function TutorScreen({ profile, theme, subject }) {
           {!collapsed && (
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.92)' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
-              <div style={{ fontSize: 11, color: isDark ? GOLD : '#94a3b8', fontWeight: isDark ? 700 : 500, letterSpacing: isDark ? '0.08em' : 0, textTransform: isDark ? 'uppercase' : 'none' }}>Tutor</div>
+              <div style={{ fontSize: 11, color: goldText, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tutor</div>
             </div>
           )}
         </div>
@@ -2339,13 +2335,12 @@ export default function TutorScreen({ profile, theme, subject }) {
           borderBottom: `1px solid ${headerBdr}`,
           minHeight: 64, height: 64,
         }}>
-          {isDark && <span className="td-header-sep" />}
+          <span className="td-header-sep" />
           <button onClick={() => { window.innerWidth <= 860 ? setMobileNav(v => !v) : setCollapsed(v => !v) }}
             style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: isDark ? 'rgba(255,255,255,0.5)' : '#94a3b8', cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: isDark ? 18 : 15, fontFamily: isDark ? FONT_D : FONT_B, fontWeight: isDark ? 400 : 700, letterSpacing: isDark ? '0.04em' : 0, color: isDark ? t.text : '#0f172a', lineHeight: 1.1 }}>{meta.title}</div>
-            {isDark && <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>}
-            {!isDark && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>{new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}</div>}
+            <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.04em', color: isDark ? t.text : '#0f172a', lineHeight: 1.1 }}>{meta.title}</div>
+            <div style={{ fontSize: 11, color: isDark ? t.textMuted : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {isAdmin && (
@@ -2361,25 +2356,18 @@ export default function TutorScreen({ profile, theme, subject }) {
               </div>
             )}
             <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
-            {!isDark && (
-              <button style={{ position: 'relative', width: 36, height: 36, borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#94a3b8', transition: 'background 0.12s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                title="Notifications"
-              >
-                🔔
-                {overdueCount > 0 && <span style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', border: '2px solid white' }} />}
-              </button>
-            )}
-            {!isDark && (
-              <button onClick={() => go('assignments')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', height: 34, background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', transition: 'background 0.12s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
-                onMouseLeave={e => e.currentTarget.style.background = '#0f172a'}
-              >
-                + New Assignment
-              </button>
-            )}
+            <button onClick={() => go('assignments')}
+              style={{ position: 'relative', width: 36, height: 36, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}
+              title={overdueCount > 0 ? `${overdueCount} overdue assignment${overdueCount !== 1 ? 's' : ''}` : 'No overdue assignments'}
+            >
+              🔔
+              {overdueCount > 0 && <span style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', border: `2px solid ${isDark ? '#06071a' : '#fff'}` }} />}
+            </button>
+            <button onClick={() => go('assignments')} className="btn-gold-shimmer"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', height: 34, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              + New Assignment
+            </button>
           </div>
         </header>
 

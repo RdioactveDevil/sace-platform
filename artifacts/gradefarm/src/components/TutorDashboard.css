@@ -137,7 +137,7 @@
   border-radius: 8px !important;
 }
 .td-sidebar-light .td-nav-item.active::before {
-  background: linear-gradient(180deg, #6366f1, #8b5cf6) !important;
+  background: linear-gradient(180deg, #f1be43, #e0a82e) !important;
   border-radius: 0 3px 3px 0;
 }
 .td-sidebar-light .td-nav-item:not(.active):hover {
@@ -146,7 +146,7 @@
 /* Remove the gold hover shadow from action tiles in light mode */
 .td-sidebar-light ~ * .td-action-tile:hover {
   box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
-  border-color: #c7d2fe !important;
+  border-color: rgba(241,190,67,0.55) !important;
 }
 
 /* ─── Light mode KPI card hover ─────────────────────────────────────────── */

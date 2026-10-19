@@ -7,6 +7,8 @@ const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 const INDIGO = '#6366f1'
+// Brand gold deepened for text on white. Gold is the accent in both themes.
+const GOLD_DEEP = '#a16207'
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -107,11 +109,11 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
   /* ── Design tokens ───────────────────────────────────────────────────── */
   const card = isDark
     ? { background: 'rgba(255,255,255,0.028)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, boxShadow: '0 4px 32px rgba(0,0,0,0.44)' }
-    : { background: '#ffffff', border: '1px solid #e2e6ed', borderRadius: 12, boxShadow: '0 4px 24px -4px rgba(0,0,0,0.03), 0 0 1px rgba(0,0,0,0.08)' }
+    : { background: '#ffffff', border: '1px solid #e2e6ed', borderRadius: 16, boxShadow: '0 4px 24px -4px rgba(0,0,0,0.03), 0 0 1px rgba(0,0,0,0.08)' }
 
   const divider    = isDark ? 'rgba(255,255,255,0.07)' : '#f1f4f9'
-  const accent     = isDark ? GOLD : INDIGO
-  const accentSoft = isDark ? 'rgba(241,190,67,0.14)' : '#eef2ff'
+  const accent     = isDark ? GOLD : GOLD_DEEP
+  const accentSoft = isDark ? 'rgba(241,190,67,0.14)' : '#fef7e0'
   const textPri    = isDark ? 'rgba(255,255,255,0.92)' : '#0f172a'
   const textSub    = isDark ? 'rgba(255,255,255,0.52)' : '#64748b'
   const textMuted  = isDark ? 'rgba(255,255,255,0.35)' : '#94a3b8'
@@ -146,13 +148,13 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
       value: roster.length,
       trend: `${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
       trendUp: true,
-      color: isDark ? GOLD : INDIGO,
-      sparkColor: isDark ? GOLD : INDIGO,
-      sparkFill: isDark ? 'rgba(241,190,67,0.08)' : '#eef2ff',
+      color: isDark ? GOLD : GOLD_DEEP,
+      sparkColor: isDark ? GOLD : GOLD_DEEP,
+      sparkFill: isDark ? 'rgba(241,190,67,0.08)' : '#fef7e0',
       sparkline: (
         <svg viewBox="0 0 100 30" style={{ width: '100%', height: 32 }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none">
-          <path d="M0,25 L15,20 L30,22 L45,15 L60,18 L75,10 L90,12 L100,5" stroke={isDark ? GOLD : INDIGO} />
-          <path d="M0,25 L15,20 L30,22 L45,15 L60,18 L75,10 L90,12 L100,5 L100,30 L0,30 Z" fill={isDark ? 'rgba(241,190,67,0.08)' : '#eef2ff'} />
+          <path d="M0,25 L15,20 L30,22 L45,15 L60,18 L75,10 L90,12 L100,5" stroke={isDark ? GOLD : GOLD_DEEP} />
+          <path d="M0,25 L15,20 L30,22 L45,15 L60,18 L75,10 L90,12 L100,5 L100,30 L0,30 Z" fill={isDark ? 'rgba(241,190,67,0.08)' : '#fef7e0'} />
         </svg>
       ),
     },
@@ -311,7 +313,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: textMuted }}>
                         <span>👤 {s.other_party_name || 'Student'}</span>
-                        <span>📹 {s.type === 'group' ? 'Group' : '1-on-1'}</span>
+                        <span>📹 {s.session_type === 'group' ? 'Group' : '1-on-1'}</span>
                         {s.record_session && <span style={{ color: '#f87171' }}>🔴 Recording</span>}
                       </div>
                     </div>
@@ -319,7 +321,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                     <div style={{ flexShrink: 0 }}>
                       {soon ? (
                         <button onClick={() => onJoinSession(s.id)}
-                          style={{ padding: '7px 16px', background: isDark ? `linear-gradient(135deg,${GOLD},${GOLDL})` : INDIGO, color: isDark ? '#0c1037' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                          style={{ padding: '7px 16px', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                           Join
                         </button>
                       ) : (
@@ -372,7 +374,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                         {s.count} task{s.count !== 1 ? 's' : ''}
                       </span>
                       <button onClick={() => handleNudge(s.id)} disabled={!!nudged[s.id]}
-                        style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(241,190,67,0.30)' : '#c7d2fe'}`, background: nudged[s.id] === 'sent' ? 'rgba(74,222,128,0.12)' : isDark ? 'rgba(241,190,67,0.10)' : '#eef2ff', color: nudged[s.id] === 'sent' ? '#4ade80' : isDark ? GOLD : INDIGO, fontSize: 12, fontWeight: 700, cursor: nudged[s.id] ? 'default' : 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
+                        style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(241,190,67,0.30)' : '#f5d27a'}`, background: nudged[s.id] === 'sent' ? (isDark ? 'rgba(74,222,128,0.12)' : '#ecfdf5') : isDark ? 'rgba(241,190,67,0.10)' : '#fef7e0', color: nudged[s.id] === 'sent' ? (isDark ? '#4ade80' : '#059669') : isDark ? GOLD : GOLD_DEEP, fontSize: 12, fontWeight: 700, cursor: nudged[s.id] ? 'default' : 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
                         {nudged[s.id] === 'sending' ? '…' : nudged[s.id] === 'sent' ? '✓ Sent' : nudged[s.id] === 'fail' ? 'Retry' : 'Nudge'}
                       </button>
                     </div>
@@ -428,7 +430,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                     padding: '16px 12px', ...card, cursor: 'pointer', textAlign: 'center', fontFamily: FONT_B,
                     transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : a.color; e.currentTarget.style.borderColor = isDark ? 'rgba(241,190,67,0.30)' : '#c7d2fe' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : a.color; e.currentTarget.style.borderColor = isDark ? 'rgba(241,190,67,0.30)' : '#f5d27a' }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.background = card.background; e.currentTarget.style.borderColor = card.border.replace('1px solid ', '') }}
                 >
                   <div style={{ width: 40, height: 40, borderRadius: '50%', background: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, fontSize: 18, transition: 'transform 0.15s' }}>
