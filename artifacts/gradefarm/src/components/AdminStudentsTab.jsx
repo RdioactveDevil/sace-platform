@@ -693,7 +693,11 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   setGrantBusy(false)
                 }}
                 onRevoke={async (subId) => {
-                  if (!window.confirm('Remove this subscription?')) return
+                  const sub = subscriptions.find(s => s.id === subId)
+                  const msg = sub?.source === 'stripe'
+                    ? 'This student is paying for this subject. Removing it cancels their Stripe subscription now. Continue?'
+                    : 'Remove this subject?'
+                  if (!window.confirm(msg)) return
                   setSubsError('')
                   try {
                     await adminRevokeSubscription(selected.id, subId)
@@ -833,6 +837,9 @@ function SubjectAccessSection({
             >
               {sub.subject_name}
               {sub.stage && <span style={{ opacity: 0.65, fontSize: 11 }}>{sub.stage}</span>}
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.08)', color: sub.source === 'stripe' ? '#34d399' : '#94a3b8' }}>
+                {sub.source === 'stripe' ? (sub.status === 'trialing' ? 'TRIAL' : sub.status === 'past_due' ? 'PAST DUE' : 'PAID') : sub.source === 'admin' ? 'GRANTED' : 'BETA'}
+              </span>
               <button
                 onClick={() => onRevoke(sub.id)}
                 title="Remove subscription"

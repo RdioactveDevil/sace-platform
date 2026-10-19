@@ -571,33 +571,30 @@ export async function getSubscriptions(userId) {
   return data || []
 }
 
-export async function saveSubscriptions(userId, subjects) {
-  // subjects = [{ subject_name, stage }]
-  // Delete all existing subscriptions first so de-selected subjects don't persist
-  const { error: delError } = await supabase
-    .from('user_subscriptions')
-    .delete()
-    .eq('user_id', userId)
-  if (delError) throw delError
-  if (subjects.length === 0) return
-  const rows = subjects.map(s => ({
-    user_id: userId,
-    subject_name: s.subject_name,
-    stage: s.stage,
-    active: true,
-    beta: true,
-  }))
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .insert(rows)
-  if (error) throw error
+// ─── BILLING ($/week per subject, Stripe) ───────────────────────────────────
+// Students can't write user_subscriptions; access comes from an admin grant
+// or a Stripe subscription created through these endpoints.
+
+/** { enabled, weekly, currency, trialDays } — trialDays is 0 once a student has had their trial. */
+export async function getBillingConfig() {
+  return tutorFetch('/api/billing/config')
 }
 
-export async function addSubscription(userId, subjectName, stage) {
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .upsert({ user_id: userId, subject_name: subjectName, stage, active: true, beta: true }, { onConflict: 'user_id,subject_name,stage' })
-  if (error) throw error
+/** Start Stripe Checkout for a subject; resolves to the Checkout URL. */
+export async function startSubjectCheckout(curriculumId) {
+  const json = await tutorFetch('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ curriculumId }) })
+  return json.url
+}
+
+/** After returning from Checkout: make sure the new subscription is recorded. */
+export async function syncCheckout(sessionId) {
+  return tutorFetch('/api/billing/sync', { method: 'POST', body: JSON.stringify({ sessionId }) })
+}
+
+/** Stripe customer portal (cards, invoices, cancel); resolves to its URL. */
+export async function openBillingPortal() {
+  const json = await tutorFetch('/api/billing/portal', { method: 'POST' })
+  return json.url
 }
 
 export async function completeOnboarding(userId, profileUpdates) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { addSubscription, getPlatformSettings } from '../lib/db'
+import { getBillingConfig, startSubjectCheckout } from '../lib/db'
 import { formatSubjectLabel } from '../lib/subjects'
 import { SubjectIcon } from './SubjectIcons'
 
@@ -17,19 +17,18 @@ function hex(color, alpha) {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
-export default function GetAccessScreen({ profile, onAccessGranted }) {
+/** A locked subject: start its free trial / weekly subscription through Stripe Checkout. */
+export default function GetAccessScreen() {
   const { state } = useLocation()
   const navigate  = useNavigate()
   const subj      = state?.subject
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
 
-  // Free-tier settings from DB (fallback to beta defaults)
-  const [freeTier, setFreeTier] = useState({ is_beta: true, beta_label: 'Free during Beta' })
+  // { enabled, weekly, trialDays } — trialDays is 0 once the student has had a trial.
+  const [billing, setBilling] = useState(null)
   useEffect(() => {
-    getPlatformSettings('free_tier').then(val => {
-      if (val) setFreeTier(prev => ({ ...prev, ...val }))
-    }).catch(() => {})
+    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, weekly: 5, trialDays: 0 }))
   }, [])
 
   if (!subj) {
@@ -39,15 +38,17 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
 
   const color = subj.color ?? GOLD
 
-  const handleUnlock = async () => {
+  const weekly = billing?.weekly ?? 5
+  const trialDays = billing?.trialDays ?? 0
+  const curriculumId = String(subj.id || '').replace(/^curriculum_/, '')
+
+  const handleSubscribe = async () => {
     setLoading(true)
     setError(null)
     try {
-      await addSubscription(profile.id, subj.name, subj.stage)
-      await onAccessGranted()
-      navigate('/subject-picker', { replace: true })
-    } catch {
-      setError('Something went wrong. Please try again.')
+      window.location.assign(await startSubjectCheckout(curriculumId))
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.')
       setLoading(false)
     }
   }
@@ -161,18 +162,18 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
         }}>
           {/* Price */}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 44, color: '#fff', lineHeight: 1 }}>{freeTier.is_beta ? '$0' : '$7'}</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 7 }}>{freeTier.is_beta ? '/ forever' : '/ month'}</span>
+            <span style={{ fontFamily: FONT_D, fontSize: 44, color: '#fff', lineHeight: 1 }}>${weekly}</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 7 }}>/ week · AUD</span>
           </div>
-          {freeTier.is_beta && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: hex(GOLD, 0.14), border: `1px solid ${hex(GOLD, 0.35)}`,
-              borderRadius: 99, padding: '4px 12px', marginBottom: 22,
-            }}>
-              <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>{freeTier.beta_label || 'Free during Beta'}</span>
-            </div>
-          )}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            background: hex(GOLD, 0.14), border: `1px solid ${hex(GOLD, 0.35)}`,
+            borderRadius: 99, padding: '4px 12px', marginBottom: 22,
+          }}>
+            <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>
+              {trialDays > 0 ? `First ${trialDays} days free` : 'Per subject · cancel any time'}
+            </span>
+          </div>
 
           {/* What's included */}
           <div style={{
@@ -214,8 +215,8 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
         {/* CTA */}
         <button
           className="ga-btn"
-          onClick={handleUnlock}
-          disabled={loading}
+          onClick={handleSubscribe}
+          disabled={loading || !billing || billing.enabled === false}
           style={{
             width: '100%', padding: '15px', borderRadius: 14, border: 'none',
             background: loading ? 'rgba(255,255,255,0.06)' : '#ffffff',
@@ -227,11 +228,17 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
             transition: 'all 0.2s ease',
           }}
         >
-          {loading ? 'Unlocking…' : `Unlock ${formatSubjectLabel(subj)} — Free →`}
+          {loading ? 'Opening secure checkout…'
+            : billing?.enabled === false ? 'Payments are coming soon'
+            : trialDays > 0 ? `Start ${trialDays}-day free trial →`
+            : `Subscribe to ${formatSubjectLabel(subj)} — $${weekly}/week →`}
         </button>
 
         <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 14 }}>
-          No payment required · Instant access · Cancel anytime
+          {trialDays > 0
+            ? `You won't be charged today. $${weekly}/week from day ${trialDays + 1} · cancel any time before then`
+            : `Billed weekly · cancel any time from your account`}
+          {' · '}Secure payment by Stripe
         </p>
       </div>
     </div>

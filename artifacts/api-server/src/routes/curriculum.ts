@@ -56,11 +56,11 @@ async function renameUserSubscriptionsSafely(
   oldSubjects: string[],
   newSubject: string,
 ): Promise<void> {
-  const rows: { id: string; user_id: string; stage: string; active: boolean | null }[] = [];
+  const rows: { id: string; user_id: string; stage: string; active: boolean | null; stripe_subscription_id: string | null }[] = [];
   for (const grp of chunk(oldSubjects, 50)) {
     const { data, error } = await admin
       .from("user_subscriptions")
-      .select("id, user_id, stage, active")
+      .select("id, user_id, stage, active, stripe_subscription_id")
       .in("subject_name", grp);
     if (error) throw new Error(error.message);
     if (data?.length) rows.push(...(data as typeof rows));
@@ -70,7 +70,7 @@ async function renameUserSubscriptionsSafely(
   for (const row of rows) {
     const { data: existing, error: exErr } = await admin
       .from("user_subscriptions")
-      .select("id, active")
+      .select("id, active, stripe_subscription_id")
       .eq("user_id", row.user_id)
       .eq("subject_name", newSubject)
       .eq("stage", row.stage)
@@ -83,6 +83,19 @@ async function renameUserSubscriptionsSafely(
         .update({ subject_name: newSubject })
         .eq("id", row.id);
       if (upErr) throw new Error(upErr.message);
+      continue;
+    }
+
+    // A live paid row (linked to a Stripe subscription) wins over an unpaid
+    // duplicate: drop the duplicate and move the paid row onto the new name.
+    if (row.stripe_subscription_id && !existing.stripe_subscription_id && (row.active || !existing.active)) {
+      const { error: dropErr } = await admin.from("user_subscriptions").delete().eq("id", existing.id);
+      if (dropErr) throw new Error(dropErr.message);
+      const { error: mvErr } = await admin
+        .from("user_subscriptions")
+        .update({ subject_name: newSubject })
+        .eq("id", row.id);
+      if (mvErr) throw new Error(mvErr.message);
       continue;
     }
 

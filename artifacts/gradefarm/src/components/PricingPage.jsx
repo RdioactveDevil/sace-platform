@@ -42,7 +42,7 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_monthly: 7, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+const DEFAULT_PRICING = { student_weekly: 5, trial_days: 7, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -63,45 +63,41 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
   const annualDiscount = dbPricing.annual_discount ?? 0.2
 
+  const studentWeekly = dbPricing.student_weekly ?? 5
+  const trialDays = dbPricing.trial_days ?? 7
+  const everything = [
+    { text: 'Full access to the subject', included: true },
+    { text: 'Unlimited questions', included: true },
+    { text: 'Unlimited Titan AI tutoring', included: true },
+    { text: 'Struggle tracking & readiness score', included: true },
+    { text: 'Personalised study plan', included: true },
+    { text: 'Essay / writing module', included: true },
+    { text: 'Weekly leaderboard', included: true },
+  ]
+  // Students pay weekly per subject; the monthly/annual toggle is for tutor plans.
   const studentPlans = [
     {
-      name: 'Free',
+      name: 'Free trial',
       price: 0,
-      sub: 'No credit card required',
+      fixed: true,
+      sub: `${trialDays} days free on your first subject · then $${studentWeekly}/week`,
       badge: null,
       hi: false,
       accentColor: MUTED,
-      cta: 'Get started free',
-      features: [
-        { text: '1 subject (limited access)', included: true },
-        { text: '10 questions per day', included: true },
-        { text: 'Titan AI help (3 per day)', included: true },
-        { text: 'Weekly leaderboard', included: true },
-        { text: 'Struggle tracking', included: true },
-        { text: 'Readiness score', included: false },
-        { text: 'Unlimited questions', included: false },
-        { text: 'Study plan', included: false },
-        { text: 'Essay / writing module', included: false },
-      ],
+      cta: 'Start free trial',
+      features: everything,
     },
     {
       name: 'Per Subject',
-      price: dbPricing.student_monthly ?? 7,
-      sub: 'per subject · per month',
+      price: studentWeekly,
+      fixed: true,
+      unit: '/wk',
+      sub: 'per subject · per week · AUD · cancel any time',
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: GOLD,
       cta: 'Start learning →',
-      features: [
-        { text: 'Full access to that subject', included: true },
-        { text: 'Unlimited questions', included: true },
-        { text: 'Unlimited Titan AI tutoring', included: true },
-        { text: 'Weekly leaderboard', included: true },
-        { text: 'Struggle tracking', included: true },
-        { text: 'Readiness score', included: true },
-        { text: 'Personalised study plan', included: true },
-        { text: 'Essay / writing module', included: true },
-      ],
+      features: everything,
     },
   ]
 
@@ -175,8 +171,9 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
     },
   ]
 
-  const displayPrice = (p) => {
+  const displayPrice = (p, fixed = false) => {
     if (p === 0) return 'Free'
+    if (fixed) return `$${p}`
     const monthly = billing === 'annual' ? Math.round(p * (1 - annualDiscount)) : p
     return `$${monthly}`
   }
@@ -259,8 +256,8 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
               ))}
             </div>
 
-            {/* Billing toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 8 }}>
+            {/* Billing toggle (tutor plans only) */}
+            {tab === 'tutors' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 8 }}>
               <button onClick={() => setBilling('monthly')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: billing === 'monthly' ? 700 : 400, color: billing === 'monthly' ? '#f1f5f9' : MUTED }}>Monthly</button>
               <div
                 onClick={() => setBilling(b => b === 'monthly' ? 'annual' : 'monthly')}
@@ -271,7 +268,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
               <button onClick={() => setBilling('annual')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: billing === 'annual' ? 700 : 400, color: billing === 'annual' ? '#f1f5f9' : MUTED }}>
                 Annual <span style={{ fontSize: 11, color: GREEN, fontWeight: 800, marginLeft: 4 }}>–20%</span>
               </button>
-            </div>
+            </div>}
           </div>
         </section>
       </FadeUp>
@@ -301,12 +298,12 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                     <div style={{ fontSize: 11, fontWeight: 800, color: plan.hi ? GOLD : 'rgba(255,255,255,0.28)', marginBottom: 10, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{plan.name}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
                       <div style={{ fontFamily: FONT_D, fontSize: 52, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.45)', letterSpacing: 1, lineHeight: 1 }}>
-                        {displayPrice(plan.price)}
+                        {displayPrice(plan.price, plan.fixed)}
                       </div>
-                      {plan.price > 0 && <span style={{ fontSize: 13, color: MUTED, marginBottom: 2 }}>/mo</span>}
+                      {plan.price > 0 && <span style={{ fontSize: 13, color: MUTED, marginBottom: 2 }}>{plan.unit || '/mo'}</span>}
                     </div>
                     <div style={{ fontSize: 12, color: MUTED, marginBottom: 28, lineHeight: 1.5 }}>
-                      {billing === 'annual' && plan.price > 0
+                      {billing === 'annual' && plan.price > 0 && !plan.fixed
                         ? `$${Math.round(plan.price * (1 - annualDiscount) * 12)}/year · billed annually`
                         : plan.sub}
                     </div>
@@ -340,7 +337,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Mix &amp; match subjects</div>
                     <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
-                      Add Chemistry, Maths Methods, and Physics for just <strong style={{ color: '#f1f5f9' }}>$21/month</strong>. Each subject is billed separately — add or cancel any time. Annual billing saves you 20% on every subject.
+                      Add Chemistry, Maths Methods, and Physics for just <strong style={{ color: '#f1f5f9' }}>${studentWeekly * 3}/week</strong>. Each subject is billed separately each week — add or cancel any time. Your first subject starts with a {trialDays}-day free trial.
                     </div>
                   </div>
                 </div>
@@ -462,10 +459,10 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
             <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(22px,3.5vw,36px)', margin: '0 0 44px', color: '#fff', letterSpacing: 1 }}>COMMON QUESTIONS</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
               {[
-                { q: 'Can I try before I pay?', a: "Yes — the Free plan gives you real access to one subject with no credit card required. You'll see exactly what you get before subscribing." },
-                { q: 'Can I cancel anytime?', a: "Absolutely. Cancel your subscription from your account settings at any time. You keep access until the end of your billing period." },
-                { q: 'Do I pay per subject or for all subjects at once?', a: "Student plans are per-subject, so you only pay for what you use. Want Chemistry + Maths Methods? That's $14/month — two separate $7 subscriptions." },
-                { q: 'How does annual billing work?', a: "Annual billing charges you for 12 months upfront at a 20% discount. For example, Chemistry at $7/mo becomes $67.20/year instead of $84/year." },
+                { q: 'Can I try before I pay?', a: `Yes — your first subject comes with a ${trialDays}-day free trial with full access. You add a card to start, but you won't be charged until the trial ends, and you can cancel before then.` },
+                { q: 'Can I cancel anytime?', a: "Absolutely. Go to My Account → Manage billing to cancel any subject. You keep access until the end of the week you've paid for." },
+                { q: 'Do I pay per subject or for all subjects at once?', a: `Student plans are per subject, so you only pay for what you use. Want Chemistry + Maths Methods? That's $${studentWeekly * 2}/week — two separate $${studentWeekly} subscriptions.` },
+                { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student subscriptions are always weekly." },
                 { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },
               ].map(({ q, a }, i) => (

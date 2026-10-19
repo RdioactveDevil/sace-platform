@@ -26,7 +26,15 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json({ limit: "15mb" }));
+app.use(
+  express.json({
+    limit: "15mb",
+    // Stripe signs the exact request bytes, so keep them for its webhook.
+    verify: (req, _res, buf) => {
+      if (req.url?.includes("/billing/webhook")) (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 // Mount at both paths so Vercel's Express adapter (which often strips the `/api` prefix

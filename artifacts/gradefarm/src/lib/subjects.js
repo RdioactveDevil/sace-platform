@@ -258,3 +258,14 @@ export function questionsBankSubjectKeys(subjectTile) {
   }
   return [subjectTile.name || 'Chemistry']
 }
+
+/**
+ * Whether a user_subscriptions row gives access to a subject tile. A row
+ * without a stage covers every stage of that subject.
+ */
+export function subscriptionCoversSubject(sub, subject) {
+  if (!sub || !subject) return false
+  if (sub.subject_name === subject.name && (sub.stage === subject.stage || !sub.stage)) return true
+  if (subject.curriculumName && sub.subject_name === subject.curriculumName) return true
+  return false
+}

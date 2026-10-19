@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, RANKS, XP_LEVELS } from '../lib/engine'
-import { updateProfile } from '../lib/db'
+import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal } from '../lib/db'
+import { formatSubjectLabel } from '../lib/subjects'
 import { supabase } from '../lib/supabase'
 import RankIcon from './RankIcon'
 
@@ -9,6 +10,76 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
+
+const shortDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '')
+
+/** What a subject's access row means for the student, in one line. */
+function accessLine(sub, weekly) {
+  if (sub.source === 'beta') return { text: 'Free — beta member', tone: 'success' }
+  if (sub.source !== 'stripe') return { text: 'Included by Titanium Tutoring', tone: 'success' }
+  if (sub.status === 'past_due') return { text: 'Payment failed — update your card', tone: 'danger' }
+  if (sub.cancel_at_period_end) return { text: `Cancelled — access until ${shortDate(sub.current_period_end)}`, tone: 'muted' }
+  if (sub.status === 'trialing') return { text: `Free trial — $${weekly}/week from ${shortDate(sub.trial_end || sub.current_period_end)}`, tone: 'gold' }
+  return { text: `$${weekly}/week — renews ${shortDate(sub.current_period_end)}`, tone: 'muted' }
+}
+
+/** Subjects the student has, how each is paid for, and the Stripe portal. */
+function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
+  const t = THEMES[theme]
+  const [subs, setSubs] = useState(null)
+  const [weekly, setWeekly] = useState(5)
+  const [opening, setOpening] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    getSubscriptions(profile.id).then(setSubs).catch(() => setSubs([]))
+    getBillingConfig().then(c => c?.weekly && setWeekly(c.weekly)).catch(() => {})
+  }, [profile.id])
+
+  const paid = (subs || []).some(s => s.source === 'stripe')
+  const openPortal = async () => {
+    setOpening(true); setError('')
+    try { window.location.assign(await openBillingPortal()) }
+    catch (e) { setError(e.message || 'Could not open billing.'); setOpening(false) }
+  }
+  const toneColour = { success: t.success, danger: t.danger, gold: t.goldText, muted: t.textMuted }
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Subjects & billing</div>
+        <span style={{ fontSize: 12, color: t.textMuted }}>${weekly}/week per subject</span>
+      </div>
+      {subs === null ? (
+        <div style={{ fontSize: 13, color: t.textMuted }}>Loading…</div>
+      ) : subs.length === 0 ? (
+        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>You haven't unlocked any subjects yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
+          {subs.map((s, i) => {
+            const line = accessLine(s, weekly)
+            return (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: i ? `1px solid ${t.border}` : 'none' }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{formatSubjectLabel({ name: s.subject_name, stage: s.stage })}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: toneColour[line.tone], textAlign: 'right' }}>{line.text}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onChangeSubject} style={btn('primary')}>+ Add a subject</button>
+        {paid && (
+          <button type="button" onClick={openPortal} disabled={opening} style={btn('secondary', opening)}>
+            {opening ? 'Opening…' : 'Manage billing'}
+          </button>
+        )}
+      </div>
+      {paid && <div style={{ fontSize: 11.5, color: t.textFaint, marginTop: 10 }}>Update your card, see receipts or cancel a subject in Manage billing.</div>}
+      {error && <div style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{error}</div>}
+    </div>
+  )
+}
 
 export default function AccountScreen({ profile, theme, onSignOut, onChangeSubject, onReplayFeatureTour }) {
   const t = THEMES[theme]
@@ -141,6 +212,10 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
           {next - profile.xp} XP to {RANKS[Math.min(level + 1, RANKS.length - 1)]}
         </div>
       </div>
+
+      {!profile.is_tutor && !profile.is_admin && (
+        <BillingCard profile={profile} theme={theme} card={card} btn={btn} onChangeSubject={onChangeSubject} />
+      )}
 
       {/* ── Display name ── */}
       <div style={card}>

@@ -426,3 +426,45 @@
   color: rgba(255, 255, 255, 0.3);
   font-size: 14px;
 }
+
+/* ── Paid access ── */
+.sp-tile-price {
+  margin-top: 8px;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #f1be43;
+  background: rgba(241, 190, 67, 0.12);
+}
+
+.sp-tile[data-locked="true"] {
+  opacity: 0.8;
+}
+
+.sp-tile[data-locked="true"] .sp-tile-name {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.sp-intro {
+  margin-bottom: 24px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(241, 190, 67, 0.3);
+  background: linear-gradient(135deg, rgba(241, 190, 67, 0.1), rgba(241, 190, 67, 0.02));
+}
+
+.sp-intro-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.sp-intro-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}
