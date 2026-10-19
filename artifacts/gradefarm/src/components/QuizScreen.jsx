@@ -51,6 +51,9 @@ const GOLDL = '#f9d87a'
 // 125% zoom only have ~890px here, and stacking the passage inside the 600px
 // question card there left wide empty margins.
 const SIDE_PASSAGE_MIN_WIDTH = 760
+// The explanation panel only opens once a question is answered (before that
+// it was a mostly empty column taking a third of the screen).
+const EXPLAIN_PANEL_W = 340
 // Start generating more questions in the background once this few questions
 // new to the student are left in the session.
 const PREFETCH_LOW_WATER = 8
@@ -74,6 +77,9 @@ const FONT_D = "'Sifonn Pro', sans-serif"
  *   recent accuracy ≤ 40% → ease one level below the ceiling
  *   otherwise             → hold at the demonstrated ceiling
  */
+// Session XP can go negative (wrong answers cost XP): show "-12", not "+-12".
+const signedXP = (n) => (n < 0 ? String(n) : `+${n}`)
+
 function getTargetDifficulty(sessionResults, questions) {
   const mainResults = (sessionResults || []).filter(r => !r.remediation)
   if (mainResults.length < 1) return null
@@ -1502,7 +1508,7 @@ export default function QuizScreen({
             {[
               { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor, isXP: false },
               { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: t.text, isXP: false },
-              { label: 'XP Earned', val: `+${sessionXP}`,         color: GOLD, isXP: true },
+              { label: 'XP Earned', val: signedXP(sessionXP),         color: GOLD, isXP: true },
             ].map(s => (
               <div key={s.label} style={{
                 background: s.isXP ? t.accentGlow : t.bgCard,
@@ -1638,7 +1644,11 @@ export default function QuizScreen({
       ? 'Next Similar Question →'
       : 'Next Question →'
 
-  const sidePassage = !isMobile && questionAreaWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
+  const explainOpen = !isMobile && showAns
+  // Decide the passage layout on the width left once the explanation panel is
+  // open, so answering doesn't flip the passage from beside to above the question.
+  const layoutWidth = explainOpen ? questionAreaWidth : questionAreaWidth - EXPLAIN_PANEL_W
+  const sidePassage = !isMobile && layoutWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, overflow: isMobile ? 'visible' : 'hidden' }}>
@@ -1646,6 +1656,7 @@ export default function QuizScreen({
         @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
         @keyframes popIn   { 0%{transform:scale(0.95);opacity:0} 100%{transform:scale(1);opacity:1} }
+        @keyframes explainIn { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
         .qopt { transition: all 0.13s ease; cursor: pointer; }
         .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
       `}</style>
@@ -1685,7 +1696,7 @@ export default function QuizScreen({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
           {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
-          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{signedXP(sessionXP)} XP</span>
           {examMode && timerSeconds > 0 && (() => {
             const m = Math.floor(timeLeft / 60)
             const s = timeLeft % 60
@@ -1710,7 +1721,7 @@ export default function QuizScreen({
         <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>This session</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.success }}>{sessionCorrect}</span> correct</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</span> wrong</span>
-        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>+{sessionXP}</span> XP</span>
+        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>{signedXP(sessionXP)}</span> XP</span>
         {streak > 0 && <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}>🔥 {streak}</span>}
         {remediationMode && (
           <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow2, fontSize: 11, fontWeight: 700, color: GOLD }}>
@@ -2021,15 +2032,9 @@ export default function QuizScreen({
           </div>
           </div>
 
-          {!isMobile && (
-            <div style={{ width: 340, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column' }}>
-              {!showAns ? (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-                  <div style={{ width: 52, height: 52, borderRadius: 14, background: t.bgCard, border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>💡</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.65, maxWidth: 200 }}>Select an answer to see the explanation</div>
-                </div>
-              ) : (
-                <div style={{ animation: 'popIn 0.25s ease', maxWidth: 500 }}>
+          {explainOpen && (
+            <div style={{ width: EXPLAIN_PANEL_W, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column', animation: 'explainIn 0.25s ease' }}>
+                <div style={{ maxWidth: 500 }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 20, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 13, fontWeight: 700, color: correct ? t.success : t.danger }}>
                     {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · ${earnedXP >= 0 ? '+' : ''}${earnedXP} XP`}
                   </div>
@@ -2098,7 +2103,6 @@ export default function QuizScreen({
                     )
                   })()}
                 </div>
-              )}
             </div>
           )}
         </div>
