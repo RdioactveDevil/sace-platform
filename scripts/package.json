@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "backfill:verify-repair": "tsx ./src/backfill-verify-repair.ts",
     "backfill:unicode-math": "tsx ./src/backfill-unicode-math.ts",
+    "backfill:literal-newlines": "tsx ./src/backfill-literal-newlines.ts",
     "migrate": "tsx ./src/apply-migrations.ts",
     "ingest:past-paper": "tsx ./src/ingest-past-paper.ts",
     "seed:hard-graph": "tsx ./src/seed-hard-graph-questions.ts",
