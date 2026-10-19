@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { verifyQuestionPayload, withStimulus, type Verdict } from "../lib/verify-question";
 import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
+import { generateForTopic } from "./generate-questions";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -66,6 +67,17 @@ async function resolveReport(reportId: string, questionId: string) {
   try {
     await adminDb.from("question_reports").update({ ai_status: "processing" }).eq("id", reportId);
 
+    // Already removed (e.g. an earlier run deleted it) — nothing left to verify.
+    const { data: existing } = await adminDb.from("questions").select("id").eq("id", questionId).maybeSingle();
+    if (!existing) {
+      await adminDb.from("question_reports").update({
+        ai_status: "deleted",
+        resolved_at: new Date().toISOString(),
+        resolution_note: "Question no longer exists in the bank",
+      }).eq("id", reportId);
+      return;
+    }
+
     const verdict = await verifyQuestion(questionId);
 
     if (verdict.verdict === "correct") {
@@ -97,19 +109,21 @@ async function resolveReport(reportId: string, questionId: string) {
         const topicCode = await getTopicCode(adminDb, q.subject, q.subtopic);
         if (topicCode) {
           await adminDb.from("questions").delete().eq("id", questionId);
-          const port = process.env.PORT || 3001;
-          const genRes = await fetch(`http://localhost:${port}/api/generate-questions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
-            },
-            body: JSON.stringify({
-              subject: q.subject, topicCode, count: 1,
+          // Generate in-process: a localhost HTTP call to /api/generate-questions
+          // isn't routable on Vercel and failed with "fetch failed" after the
+          // question had already been deleted.
+          let regenerated = false;
+          try {
+            const gen = await generateForTopic({
+              adminDb, resolvedSubject: q.subject, topicCode, count: 1,
               difficulty: q.difficulty || 3, autoApprove: true,
-            }),
-          });
-          const note = genRes.ok ? "Question deleted and 1 replacement generated" : "Question deleted; regeneration failed";
+            });
+            regenerated = gen.status === 200;
+            if (!regenerated) logger.warn({ reportId, questionId, body: gen.body }, "[report-question] regeneration failed");
+          } catch (err) {
+            logger.error({ err, reportId, questionId }, "[report-question] regeneration failed");
+          }
+          const note = regenerated ? "Question deleted and 1 replacement generated" : "Question deleted; regeneration failed";
           await adminDb.from("question_reports").update({
             ai_status: "regenerated",
             ai_verdict: verdict,

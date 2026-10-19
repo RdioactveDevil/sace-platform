@@ -163,7 +163,7 @@ const LEARNING_OBJECTIVES: Record<string, string> = {
   "Probability distributions \u2014 discrete random variables": "VC2M10AP02: define a discrete random variable X and its probability distribution P(X=x); verify that probabilities sum to 1; calculate E(X)=\u03a3x\u00b7P(X=x) (expected value) and Var(X)=\u03a3(x\u2212\u03bc)\u00b2P(X=x); apply to decision-making and games of chance; compare theoretical expected values with experimental results from simulations",
 };
 
-type GenResult = { status: number; body: Record<string, unknown> };
+export type GenResult = { status: number; body: Record<string, unknown> };
 
 // Question formats the generator understands. 'mcq' is the legacy default.
 export const ALLOWED_QUESTION_TYPES = ["mcq", "multi_select", "numeric", "short_text", "order", "hotspot", "image_label"];
@@ -243,7 +243,7 @@ export function mcqColumns(q: GeneratedQuestion): { options: string[] | null; an
 // so callers can either forward it directly (single-topic request) or inspect
 // it when aggregating a batch (multi-topic request) — all in-process, with no
 // self-referential HTTP calls.
-async function generateForTopic(opts: {
+export async function generateForTopic(opts: {
   adminDb: SupabaseClient;
   resolvedSubject: string;
   topicCode: string;

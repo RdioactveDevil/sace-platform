@@ -1890,7 +1890,7 @@ export default function QuizScreen({
               {isMobile && showAns && (
                 <div style={{ marginTop: 14, background: t.bgCard, borderRadius: 14, padding: '18px', border: `1px solid ${t.border}`, animation: 'popIn 0.25s ease' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 12, fontWeight: 700, color: correct ? t.success : t.danger }}>
-                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · ${earnedXP >= 0 ? '+' : ''}${earnedXP} XP`}
                   </div>
                   <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>
@@ -1962,7 +1962,7 @@ export default function QuizScreen({
               ) : (
                 <div style={{ animation: 'popIn 0.25s ease', maxWidth: 500 }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 20, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 13, fontWeight: 700, color: correct ? t.success : t.danger }}>
-                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · +${earnedXP} XP`}
+                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · ${earnedXP >= 0 ? '+' : ''}${earnedXP} XP`}
                   </div>
 
                   <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Explanation</div>
