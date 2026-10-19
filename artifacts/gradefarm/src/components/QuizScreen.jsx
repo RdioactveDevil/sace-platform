@@ -77,6 +77,9 @@ const FONT_D = "'Sifonn Pro', sans-serif"
  *   recent accuracy ≤ 40% → ease one level below the ceiling
  *   otherwise             → hold at the demonstrated ceiling
  */
+// Session XP can go negative (wrong answers cost XP): show "-12", not "+-12".
+const signedXP = (n) => (n < 0 ? String(n) : `+${n}`)
+
 function getTargetDifficulty(sessionResults, questions) {
   const mainResults = (sessionResults || []).filter(r => !r.remediation)
   if (mainResults.length < 1) return null
@@ -1505,7 +1508,7 @@ export default function QuizScreen({
             {[
               { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor, isXP: false },
               { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: t.text, isXP: false },
-              { label: 'XP Earned', val: `+${sessionXP}`,         color: GOLD, isXP: true },
+              { label: 'XP Earned', val: signedXP(sessionXP),         color: GOLD, isXP: true },
             ].map(s => (
               <div key={s.label} style={{
                 background: s.isXP ? t.accentGlow : t.bgCard,
@@ -1693,7 +1696,7 @@ export default function QuizScreen({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
           {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
-          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>+{sessionXP} XP</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{signedXP(sessionXP)} XP</span>
           {examMode && timerSeconds > 0 && (() => {
             const m = Math.floor(timeLeft / 60)
             const s = timeLeft % 60
@@ -1718,7 +1721,7 @@ export default function QuizScreen({
         <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>This session</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.success }}>{sessionCorrect}</span> correct</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</span> wrong</span>
-        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>+{sessionXP}</span> XP</span>
+        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>{signedXP(sessionXP)}</span> XP</span>
         {streak > 0 && <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}>🔥 {streak}</span>}
         {remediationMode && (
           <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow2, fontSize: 11, fontWeight: 700, color: GOLD }}>
