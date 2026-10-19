@@ -9,6 +9,7 @@ import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exe
 import { latexPromptRule } from "../lib/math-prompt";
 import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireUser } from "../lib/auth";
+import { isMathSubject, topicWantsFigures, figureInstructions, diagramColumn } from "../lib/figure";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -178,6 +179,7 @@ export type GeneratedQuestion = {
   graph?: Record<string, unknown> | null;
   table_data?: Record<string, unknown> | null;
   diagram?: { svg?: string; caption?: string } | null;
+  figure?: unknown;
   question_type?: string;
   answer_indices?: number[];
   answer?: number | string;
@@ -379,6 +381,10 @@ export async function generateForTopic(opts: {
   const flagGraphs = !!flags.graphs || !!opts.includeGraphs;
   const flagTables = !!flags.tables;
   const flagLatex  = flags.latex !== false; // default true
+  // Maths gets structured figures (drawn to scale by the app) instead of raw
+  // SVG, always offered and required for shape/measurement/data topics.
+  const mathFigures = isMathSubject(normalizedSubject);
+  const figuresRequired = mathFigures && topicWantsFigures(topicName, parentTopicName);
 
   const latexExample = flagGraphs
     ? "$\\frac{d}{dx}f(x)$, $$\\int_0^1 f(x)\\,dx$$"
@@ -445,7 +451,7 @@ export async function generateForTopic(opts: {
     "difficulty (integer 1\u20135)",
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
-    ...(includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
+    ...(mathFigures ? figureInstructions(figuresRequired) : includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
     ...(flagLatex ? [latexPromptRule(latexExample)] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
@@ -504,7 +510,7 @@ export async function generateForTopic(opts: {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 6000,
+        max_tokens: mathFigures ? 9000 : 6000,
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -560,7 +566,7 @@ export async function generateForTopic(opts: {
         solution: normalizeMathText(q.solution || "") as string,
         graph: q.graph || null,
         table_data: q.table_data || null,
-        diagram: q.diagram || null,
+        diagram: diagramColumn(q),
         tip: null,
         created_at: now,
       }));
@@ -594,7 +600,7 @@ export async function generateForTopic(opts: {
     solution: q.solution ? (normalizeMathText(q.solution) as string) : null,
     graph: q.graph || null,
     table_data: q.table_data || null,
-    diagram: q.diagram || null,
+    diagram: diagramColumn(q),
     difficulty: q.difficulty || null,
     status: "pending",
   }));
