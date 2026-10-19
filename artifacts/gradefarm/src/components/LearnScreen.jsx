@@ -159,6 +159,17 @@ export default function LearnScreen({
 
   const subjectTopicConfig = useCurriculumTopicConfig(subject)
 
+  // Example topics for the input, taken from this subject (one per strand),
+  // shortened to their name before any ":" / "," detail.
+  const topicPlaceholder = useMemo(() => {
+    const names = (subjectTopicConfig?.macroGroups || []).map(m => m.topics?.[0]).filter(Boolean)
+    const pool = names.length ? names : (subject?.topics || [])
+    const examples = pool.slice(0, 3)
+      .map(n => String(n).split(/[:,(]/)[0].trim())
+      .filter(Boolean)
+    return examples.length ? `e.g. ${examples.join(', ')}…` : 'e.g. a topic you’re stuck on…'
+  }, [subjectTopicConfig, subject])
+
   const struggleTopics = useMemo(() => {
     const bySubtopic = new Map()
     Object.entries(struggleMap || {}).forEach(([qid, s]) => {
@@ -619,7 +630,7 @@ export default function LearnScreen({
                 value={topic}
                 onChange={e => setTopic(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && startLesson()}
-                placeholder="e.g. pH calculations, ionic bonding, the mole…"
+                placeholder={topicPlaceholder}
                 style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: `1px solid ${t.borderMid}`, background: t.bgCard, color: t.text, fontSize: 15, fontFamily: FONT_B, boxSizing: 'border-box', transition: 'border 0.15s, box-shadow 0.15s' }}
               />
             </div>
