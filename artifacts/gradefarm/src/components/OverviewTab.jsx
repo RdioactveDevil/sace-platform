@@ -313,7 +313,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: textMuted }}>
                         <span>👤 {s.other_party_name || 'Student'}</span>
-                        <span>📹 {s.type === 'group' ? 'Group' : '1-on-1'}</span>
+                        <span>📹 {s.session_type === 'group' ? 'Group' : '1-on-1'}</span>
                         {s.record_session && <span style={{ color: '#f87171' }}>🔴 Recording</span>}
                       </div>
                     </div>
