@@ -440,6 +440,69 @@ router.delete("/admin/students/:id", async (req, res) => {
   }
 });
 
+// Subject access. user_subscriptions RLS only lets a user write their own
+// rows, so an admin granting or revoking another student's access goes
+// through here with the service role.
+
+// GET /admin/students/:id/subscriptions — the student's active subject access.
+router.get("/admin/students/:id/subscriptions", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { data, error } = await ctx.admin
+      .from("user_subscriptions")
+      .select("*")
+      .eq("user_id", req.params.id)
+      .eq("active", true);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ subscriptions: data || [] });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// POST /admin/students/:id/subscriptions — grant a subject. Body: { curriculumId }.
+router.post("/admin/students/:id/subscriptions", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const curriculumId = req.body?.curriculumId;
+    if (!curriculumId) return res.status(400).json({ error: "curriculumId required" });
+
+    const { data: cur, error: cErr } = await admin
+      .from("curricula").select("id, name, level_label").eq("id", curriculumId).maybeSingle();
+    if (cErr) return res.status(500).json({ error: cErr.message });
+    if (!cur) return res.status(404).json({ error: "Subject not found" });
+
+    const { error } = await admin.from("user_subscriptions").upsert(
+      { user_id: req.params.id, subject_name: cur.name, stage: (cur.level_label || "").trim(), active: true, beta: true },
+      { onConflict: "user_id,subject_name,stage" },
+    );
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// DELETE /admin/students/:id/subscriptions/:subId — revoke a subject.
+router.delete("/admin/students/:id/subscriptions/:subId", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { error } = await ctx.admin
+      .from("user_subscriptions")
+      .delete()
+      .eq("id", req.params.subId)
+      .eq("user_id", req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
 // GET /admin/students/:id/stats — activity stats for one student (totals, accuracy, sessions this week, top 3 weak topics)
 router.get("/admin/students/:id/stats", async (req, res) => {
   try {

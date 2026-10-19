@@ -102,6 +102,26 @@ export async function adminGetStudentStats(studentId) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/stats`)
 }
 
+// Subject access for another student goes through the API: user_subscriptions
+// RLS only lets a user write their own rows.
+export async function adminListSubscriptions(studentId) {
+  const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions`)
+  return json.subscriptions || []
+}
+
+export async function adminGrantSubscription(studentId, curriculumId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions`, {
+    method: 'POST',
+    body: JSON.stringify({ curriculumId }),
+  })
+}
+
+export async function adminRevokeSubscription(studentId, subscriptionId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: 'DELETE',
+  })
+}
+
 // Soft-delete: active:false deactivates (blocks sign-in, keeps data), active:true reactivates.
 export async function adminSetStudentActive(studentId, active) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/deactivate`, {
