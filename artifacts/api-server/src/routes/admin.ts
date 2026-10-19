@@ -440,6 +440,69 @@ router.delete("/admin/students/:id", async (req, res) => {
   }
 });
 
+// Subject access. user_subscriptions RLS only lets a user write their own
+// rows, so an admin granting or revoking another student's access goes
+// through here with the service role.
+
+// GET /admin/students/:id/subscriptions — the student's active subject access.
+router.get("/admin/students/:id/subscriptions", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { data, error } = await ctx.admin
+      .from("user_subscriptions")
+      .select("*")
+      .eq("user_id", req.params.id)
+      .eq("active", true);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ subscriptions: data || [] });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// POST /admin/students/:id/subscriptions — grant a subject. Body: { curriculumId }.
+router.post("/admin/students/:id/subscriptions", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const curriculumId = req.body?.curriculumId;
+    if (!curriculumId) return res.status(400).json({ error: "curriculumId required" });
+
+    const { data: cur, error: cErr } = await admin
+      .from("curricula").select("id, name, level_label").eq("id", curriculumId).maybeSingle();
+    if (cErr) return res.status(500).json({ error: cErr.message });
+    if (!cur) return res.status(404).json({ error: "Subject not found" });
+
+    const { error } = await admin.from("user_subscriptions").upsert(
+      { user_id: req.params.id, subject_name: cur.name, stage: (cur.level_label || "").trim(), active: true, beta: true },
+      { onConflict: "user_id,subject_name,stage" },
+    );
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// DELETE /admin/students/:id/subscriptions/:subId — revoke a subject.
+router.delete("/admin/students/:id/subscriptions/:subId", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { error } = await ctx.admin
+      .from("user_subscriptions")
+      .delete()
+      .eq("id", req.params.subId)
+      .eq("user_id", req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
 // GET /admin/students/:id/stats — activity stats for one student (totals, accuracy, sessions this week, top 3 weak topics)
 router.get("/admin/students/:id/stats", async (req, res) => {
   try {
@@ -619,6 +682,85 @@ router.get("/admin/tutors", async (req, res) => {
 });
 
 // GET /admin/tutors/:id — tutor detail (roster + assignment history)
+// Tutor ↔ student links (the tutor_students roster). A tutor sees a student's
+// progress through this link, so it's how a manager assigns tutors.
+
+// GET /admin/tutor-links?studentId=… | ?tutorId=… — links with names.
+router.get("/admin/tutor-links", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const studentId = typeof req.query.studentId === "string" ? req.query.studentId : "";
+    const tutorId = typeof req.query.tutorId === "string" ? req.query.tutorId : "";
+    if (!studentId && !tutorId) return res.status(400).json({ error: "studentId or tutorId required" });
+
+    let query = admin.from("tutor_students").select("tutor_id, student_id, invited_at");
+    if (studentId) query = query.eq("student_id", studentId);
+    if (tutorId) query = query.eq("tutor_id", tutorId);
+    const { data: links, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const ids = [...new Set((links ?? []).flatMap((l: { tutor_id: string; student_id: string }) => [l.tutor_id, l.student_id]))];
+    const names: Record<string, string | null> = {};
+    if (ids.length > 0) {
+      const { data: profs } = await admin.from("profiles").select("id, display_name").in("id", ids);
+      for (const p of (profs ?? []) as { id: string; display_name: string | null }[]) names[p.id] = p.display_name;
+    }
+    return res.json({
+      links: (links ?? []).map((l: { tutor_id: string; student_id: string; invited_at: string }) => ({
+        ...l,
+        tutor_name: names[l.tutor_id] ?? null,
+        student_name: names[l.student_id] ?? null,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// POST /admin/tutor-links — assign a tutor to a student. Body: { tutorId, studentId }.
+router.post("/admin/tutor-links", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { tutorId, studentId } = (req.body || {}) as { tutorId?: string; studentId?: string };
+    if (!tutorId || !studentId) return res.status(400).json({ error: "tutorId and studentId required" });
+    if (tutorId === studentId) return res.status(400).json({ error: "A tutor can't be their own student" });
+
+    const { data: tutor } = await admin
+      .from("profiles").select("id, is_tutor, is_admin").eq("id", tutorId)
+      .maybeSingle<{ id: string; is_tutor: boolean | null; is_admin: boolean | null }>();
+    if (!tutor || !(tutor.is_tutor || tutor.is_admin)) return res.status(400).json({ error: "That person isn't a tutor" });
+
+    const { error } = await admin
+      .from("tutor_students")
+      .upsert({ tutor_id: tutorId, student_id: studentId }, { onConflict: "tutor_id,student_id", ignoreDuplicates: true });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// DELETE /admin/tutor-links?tutorId=…&studentId=… — unassign.
+router.delete("/admin/tutor-links", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const tutorId = typeof req.query.tutorId === "string" ? req.query.tutorId : "";
+    const studentId = typeof req.query.studentId === "string" ? req.query.studentId : "";
+    if (!tutorId || !studentId) return res.status(400).json({ error: "tutorId and studentId required" });
+    const { error } = await ctx.admin
+      .from("tutor_students").delete().eq("tutor_id", tutorId).eq("student_id", studentId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
 router.get("/admin/tutors/:id", async (req, res) => {
   try {
     const ctx = await requireAdmin(req, res);

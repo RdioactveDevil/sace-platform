@@ -102,6 +102,44 @@ export async function adminGetStudentStats(studentId) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/stats`)
 }
 
+// Subject access for another student goes through the API: user_subscriptions
+// RLS only lets a user write their own rows.
+export async function adminListSubscriptions(studentId) {
+  const json = await adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions`)
+  return json.subscriptions || []
+}
+
+export async function adminGrantSubscription(studentId, curriculumId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions`, {
+    method: 'POST',
+    body: JSON.stringify({ curriculumId }),
+  })
+}
+
+export async function adminRevokeSubscription(studentId, subscriptionId) {
+  return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: 'DELETE',
+  })
+}
+
+// Tutor ↔ student links (tutor_students), managed by admins.
+export async function adminListTutorLinks({ studentId, tutorId } = {}) {
+  const qs = new URLSearchParams()
+  if (studentId) qs.set('studentId', studentId)
+  if (tutorId) qs.set('tutorId', tutorId)
+  const json = await adminFetch(`/api/admin/tutor-links?${qs}`)
+  return json.links || []
+}
+
+export async function adminLinkTutor(tutorId, studentId) {
+  return adminFetch('/api/admin/tutor-links', { method: 'POST', body: JSON.stringify({ tutorId, studentId }) })
+}
+
+export async function adminUnlinkTutor(tutorId, studentId) {
+  const qs = new URLSearchParams({ tutorId, studentId })
+  return adminFetch(`/api/admin/tutor-links?${qs}`, { method: 'DELETE' })
+}
+
 // Soft-delete: active:false deactivates (blocks sign-in, keeps data), active:true reactivates.
 export async function adminSetStudentActive(studentId, active) {
   return adminFetch(`/api/admin/students/${encodeURIComponent(studentId)}/deactivate`, {
@@ -836,15 +874,36 @@ export async function incrementQuestionVariantUsage(variantId) {
 
 // ── TUTOR DASHBOARD ───────────────────────────────────────────────────────────
 
-/** Fetch the roster of students for a tutor. Returns joined profile data. */
-export async function fetchRoster(tutorId) {
-  const { data, error } = await supabase
+/**
+ * Fetch the roster of students for a tutor. Returns joined profile data.
+ * With `allTutors` (admins), every tutor's students, one row per student with
+ * `tutors: [{ id, display_name }]`.
+ */
+export async function fetchRoster(tutorId, { allTutors = false } = {}) {
+  let query = supabase
     .from('tutor_students')
-    .select('student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak)')
-    .eq('tutor_id', tutorId)
+    .select('tutor_id, student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak)')
     .order('invited_at', { ascending: false })
+  if (!allTutors) query = query.eq('tutor_id', tutorId)
+  const { data, error } = await query
   if (error) throw error
-  return (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
+  const rows = (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
+  if (!allTutors) return rows
+
+  const tutorIds = [...new Set(rows.map(r => r.tutor_id))]
+  const names = {}
+  if (tutorIds.length) {
+    const { data: profs } = await supabase.from('profiles').select('id, display_name').in('id', tutorIds)
+    ;(profs || []).forEach(p => { names[p.id] = p.display_name })
+  }
+  const byStudent = new Map()
+  for (const r of rows) {
+    const tutor = { id: r.tutor_id, display_name: names[r.tutor_id] || null }
+    const existing = byStudent.get(r.student_id)
+    if (existing) existing.tutors.push(tutor)
+    else byStudent.set(r.student_id, { ...r, tutors: [tutor] })
+  }
+  return [...byStudent.values()]
 }
 
 /** Add a student to a tutor's roster by email.
@@ -948,13 +1007,14 @@ export async function createAssignment(tutorId, studentId, { type, subject, topi
   return data
 }
 
-/** Fetch all assignments created by a tutor, with student profile data. */
-export async function fetchAssignmentsForTutor(tutorId) {
-  const { data, error } = await supabase
+/** Fetch all assignments created by a tutor (every tutor's with `allTutors`), with student profile data. */
+export async function fetchAssignmentsForTutor(tutorId, { allTutors = false } = {}) {
+  let query = supabase
     .from('assignments')
     .select('*, profiles!assignments_student_id_fkey(display_name)')
-    .eq('tutor_id', tutorId)
     .order('created_at', { ascending: false })
+  if (!allTutors) query = query.eq('tutor_id', tutorId)
+  const { data, error } = await query
   if (error) throw error
   return (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
 }
@@ -978,10 +1038,30 @@ async function tutorFetch(path, opts = {}) {
   return json
 }
 
-/** Fetch tutor classes with their members. */
-export async function fetchTutorClasses() {
-  const json = await tutorFetch('/api/tutor/classes')
+/** Fetch the classes the tutor owns or co-teaches (every class with `allTutors`), with members and tutors. */
+export async function fetchTutorClasses({ allTutors = false } = {}) {
+  const json = await tutorFetch(`/api/tutor/classes${allTutors ? '?scope=all' : ''}`)
   return json.classes || []
+}
+
+/** Tutors and admins, for choosing a class's co-tutors. */
+export async function fetchTutorList() {
+  const json = await tutorFetch('/api/tutor/tutors')
+  return json.tutors || []
+}
+
+/** Add a co-tutor to a class; they get its students on their roster. */
+export async function addClassTutor(classId, tutorId) {
+  return tutorFetch(`/api/tutor/classes/${encodeURIComponent(classId)}/tutors`, {
+    method: 'POST',
+    body: JSON.stringify({ tutorId }),
+  })
+}
+
+export async function removeClassTutor(classId, tutorId) {
+  return tutorFetch(`/api/tutor/classes/${encodeURIComponent(classId)}/tutors/${encodeURIComponent(tutorId)}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function createTutorClass({ name, subject, color, description } = {}) {
@@ -1064,8 +1144,8 @@ export async function fetchTutorStudentWritingAttempts(studentId) {
 // ── Roster details: year level + tutor-scoped tutored subjects ────────────────
 
 /** { byStudent: { [id]: { year_level, subjects:[{id,subject_name,stage}] } } } */
-export async function fetchRosterDetails() {
-  const json = await tutorFetch('/api/tutor/roster-details')
+export async function fetchRosterDetails({ allTutors = false } = {}) {
+  const json = await tutorFetch(`/api/tutor/roster-details${allTutors ? '?scope=all' : ''}`)
   return json.byStudent || {}
 }
 
@@ -1188,15 +1268,18 @@ export async function fetchStudentResources() {
  * Fetch a student's full progress summary for a tutor's view.
  * Returns: xp, streak, accuracy, totalAttempts, topicBreakdown[], assignments[], recentActivity[]
  */
-export async function fetchStudentProgressForTutor(tutorId, studentId) {
-  // Verify this student is on the tutor's roster
-  const { data: rosterRow, error: rosterError } = await supabase
-    .from('tutor_students')
-    .select('student_id')
-    .eq('tutor_id', tutorId)
-    .eq('student_id', studentId)
-    .single()
-  if (rosterError || !rosterRow) throw new Error('Student not on your roster.')
+export async function fetchStudentProgressForTutor(tutorId, studentId, { allTutors = false } = {}) {
+  // Verify this student is on the tutor's roster (admins viewing every
+  // tutor's students can open anyone).
+  if (!allTutors) {
+    const { data: rosterRow, error: rosterError } = await supabase
+      .from('tutor_students')
+      .select('student_id')
+      .eq('tutor_id', tutorId)
+      .eq('student_id', studentId)
+      .single()
+    if (rosterError || !rosterRow) throw new Error('Student not on your roster.')
+  }
 
   // Fetch profile stats (xp, streak)
   const { data: prof, error: profError } = await supabase
@@ -1238,13 +1321,14 @@ export async function fetchStudentProgressForTutor(tutorId, studentId) {
   })
   const topicBreakdown = Object.values(topicMap).sort((a, b) => b.attempts - a.attempts)
 
-  // Fetch assignments for this student (from this tutor)
-  const { data: assignments, error: aError } = await supabase
+  // Fetch assignments for this student (from this tutor, or from anyone with allTutors)
+  let assignmentsQuery = supabase
     .from('assignments')
     .select('*')
-    .eq('tutor_id', tutorId)
     .eq('student_id', studentId)
     .order('created_at', { ascending: false })
+  if (!allTutors) assignmentsQuery = assignmentsQuery.eq('tutor_id', tutorId)
+  const { data: assignments, error: aError } = await assignmentsQuery
   if (aError) throw aError
 
   // Fetch recent activity (last 10 answers)

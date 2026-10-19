@@ -20,6 +20,9 @@ import {
   sendAssignmentNotification,
   notifyStudent,
   fetchTutorClasses,
+  fetchTutorList,
+  addClassTutor,
+  removeClassTutor,
   createTutorClass,
   updateTutorClass,
   deleteTutorClass,
@@ -237,7 +240,7 @@ function _LegacyStudentsTab({ profile, theme }) {
 const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed']
 
 // ── Assignments Tab ───────────────────────────────────────────────────────────
-function AssignmentsTab({ profile, theme, subject }) {
+function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
@@ -283,9 +286,9 @@ function AssignmentsTab({ profile, theme, subject }) {
     setLoading(true)
     try {
       const [asgns, ros, cls] = await Promise.all([
-        fetchAssignmentsForTutor(profile.id),
-        fetchRoster(profile.id),
-        fetchTutorClasses().catch(() => []),
+        fetchAssignmentsForTutor(profile.id, { allTutors }),
+        fetchRoster(profile.id, { allTutors }),
+        fetchTutorClasses({ allTutors }).catch(() => []),
       ])
       setAssignments(asgns)
       setRoster(ros)
@@ -293,7 +296,7 @@ function AssignmentsTab({ profile, theme, subject }) {
     } catch {}
     setLoading(false)
   }
-  useEffect(() => { load() }, [profile.id])
+  useEffect(() => { load() }, [profile.id, allTutors])
   // Keep form.subject in sync when the active subject changes in SubjectPicker
   useEffect(() => {
     if (subject?.name) setForm(f => ({ ...f, subject: subject.name, topics: [] }))
@@ -717,7 +720,7 @@ function AssignmentsTab({ profile, theme, subject }) {
 }
 
 // ── Progress Tab ──────────────────────────────────────────────────────────────
-function ProgressTab({ profile, theme }) {
+function ProgressTab({ profile, theme, allTutors = false }) {
   const t = THEMES[theme]
   const [roster, setRoster]           = useState([])
   const [selectedStudentId, setSelectedStudentId] = useState('')
@@ -729,8 +732,8 @@ function ProgressTab({ profile, theme }) {
   const [pdfBusyId, setPdfBusyId] = useState(null)
 
   useEffect(() => {
-    fetchRoster(profile.id).then(r => { setRoster(r); setRosterLoading(false) }).catch(() => setRosterLoading(false))
-  }, [profile.id])
+    fetchRoster(profile.id, { allTutors }).then(r => { setRoster(r); setRosterLoading(false) }).catch(() => setRosterLoading(false))
+  }, [profile.id, allTutors])
 
   useEffect(() => {
     if (!selectedStudentId) {
@@ -739,7 +742,7 @@ function ProgressTab({ profile, theme }) {
       return
     }
     setLoading(true)
-    fetchStudentProgressForTutor(profile.id, selectedStudentId)
+    fetchStudentProgressForTutor(profile.id, selectedStudentId, { allTutors })
       .then(p => { setProgress(p); setLoading(false) })
       .catch(() => setLoading(false))
 
@@ -747,7 +750,7 @@ function ProgressTab({ profile, theme }) {
     fetchTutorStudentWritingAttempts(selectedStudentId)
       .then(rows => { setWritingAttempts(rows); setWritingLoading(false) })
       .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
-  }, [selectedStudentId, profile.id])
+  }, [selectedStudentId, profile.id, allTutors])
 
   const card = theme === 'dark'
     ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
@@ -961,7 +964,7 @@ function ProgressTab({ profile, theme }) {
 }
 
 // ── Classes Tab ───────────────────────────────────────────────────────────────
-function ClassesTab({ profile, theme }) {
+function ClassesTab({ profile, theme, allTutors = false }) {
   const t = THEMES[theme]
   const [classes, setClasses]       = useState([])
   const [roster, setRoster]         = useState([])
@@ -980,13 +983,18 @@ function ClassesTab({ profile, theme }) {
   const [pickerForClass, setPickerForClass] = useState(null)
   const [pickerSelected, setPickerSelected] = useState([])
   const [pickerSaving, setPickerSaving] = useState(false)
+  // Co-tutors: the tutor list (loaded when first needed) and which class's
+  // "add tutor" picker is open.
+  const [tutorList, setTutorList] = useState(null)
+  const [tutorPickerFor, setTutorPickerFor] = useState(null)
+  const [tutorError, setTutorError] = useState('')
 
   const load = async () => {
     setLoading(true)
     try {
       const [cls, ros] = await Promise.all([
-        fetchTutorClasses(),
-        fetchRoster(profile.id),
+        fetchTutorClasses({ allTutors }),
+        fetchRoster(profile.id, { allTutors }),
       ])
       setClasses(cls)
       setRoster(ros)
@@ -995,7 +1003,36 @@ function ClassesTab({ profile, theme }) {
     }
     setLoading(false)
   }
-  useEffect(() => { load() }, [profile.id])
+  useEffect(() => { load() }, [profile.id, allTutors])
+
+  // The class owner and admins decide who teaches a class.
+  const canManageTutors = (cls) => cls.tutor_id === profile.id || !!profile.is_admin
+
+  const openTutorPicker = async (cls) => {
+    setTutorError('')
+    setTutorPickerFor(cls.id)
+    if (!tutorList) {
+      try { setTutorList(await fetchTutorList()) } catch (err) { setTutorError(err.message || 'Could not load tutors.') }
+    }
+  }
+
+  const handleAddTutor = async (cls, tutorId) => {
+    if (!tutorId) return
+    setTutorError('')
+    try {
+      await addClassTutor(cls.id, tutorId)
+      setTutorPickerFor(null)
+      await load()
+    } catch (err) { setTutorError(err.message || 'Could not add tutor.') }
+  }
+
+  const handleRemoveTutor = async (cls, tutorId) => {
+    setTutorError('')
+    try {
+      await removeClassTutor(cls.id, tutorId)
+      await load()
+    } catch (err) { setTutorError(err.message || 'Could not remove tutor.') }
+  }
 
   const rosterById = {}
   roster.forEach(r => { rosterById[r.student_id] = r })
@@ -1146,6 +1183,7 @@ function ClassesTab({ profile, theme }) {
                           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.name}</div>
                           <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
                             {cls.members.length} student{cls.members.length !== 1 ? 's' : ''}
+                            {(cls.tutors || []).length > 0 ? ` · ${cls.tutors.map(tu => tu.display_name || 'Unnamed').join(', ')}` : ''}
                             {cls.subject ? ` · ${cls.subject}` : ''}
                             {cls.description ? ` · ${cls.description}` : ''}
                           </div>
@@ -1164,13 +1202,35 @@ function ClassesTab({ profile, theme }) {
                             {expanded ? '▾ Hide' : '▸ View'}
                           </button>
                           <button onClick={() => { setRenamingId(cls.id); setRenameValue(cls.name) }} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Rename</button>
-                          <button onClick={() => setConfirmDelete(cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Delete</button>
+                          {canManageTutors(cls) && <button onClick={() => setConfirmDelete(cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Delete</button>}
                         </>
                       )}
                     </div>
                   </div>
                   {expanded && (
                     <div style={{ padding: '0 20px 16px 38px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Tutors</span>
+                        {(cls.tutors || []).map(tu => (
+                          <span key={tu.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999, border: `1px solid ${t.border}`, background: t.bg, fontSize: 12, color: t.text }}>
+                            {tu.display_name || 'Unnamed'}{tu.role === 'owner' && <span style={{ fontSize: 10, color: t.textMuted }}>owner</span>}
+                            {tu.role === 'co' && canManageTutors(cls) && (
+                              <button onClick={() => handleRemoveTutor(cls, tu.id)} title="Remove tutor" style={{ border: 'none', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+                            )}
+                          </span>
+                        ))}
+                        {canManageTutors(cls) && (tutorPickerFor === cls.id ? (
+                          <select autoFocus defaultValue="" onChange={e => handleAddTutor(cls, e.target.value)} onBlur={() => setTutorPickerFor(null)} style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: 12 }}>
+                            <option value="" disabled>{tutorList ? 'Choose a tutor…' : 'Loading…'}</option>
+                            {(tutorList || []).filter(tu => !(cls.tutors || []).some(x => x.id === tu.id)).map(tu => (
+                              <option key={tu.id} value={tu.id}>{tu.display_name || 'Unnamed'}{tu.is_admin ? ' (admin)' : ''}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button onClick={() => openTutorPicker(cls)} style={{ padding: '3px 10px', borderRadius: 999, border: `1px dashed ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>+ Add tutor</button>
+                        ))}
+                      </div>
+                      {tutorError && expanded && <div style={{ fontSize: 12, color: '#f87171' }}>{tutorError}</div>}
                       {memberRows.length === 0 ? (
                         <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 0' }}>No students in this class yet.</div>
                       ) : (
@@ -2086,6 +2146,17 @@ export default function TutorScreen({ profile, theme, subject }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
 
+  // Admins (managers) can switch the portal between their own students and
+  // every tutor's. Remembered per browser.
+  const isAdmin = !!profile.is_admin
+  const [allTutors, setAllTutorsState] = useState(() => {
+    try { return isAdmin && localStorage.getItem('gf-tutor-scope') === 'all' } catch { return false }
+  })
+  const setAllTutors = (v) => {
+    setAllTutorsState(v)
+    try { localStorage.setItem('gf-tutor-scope', v ? 'all' : 'mine') } catch {}
+  }
+
   // Shell-level data — powers Overview, the global search and sidebar badges.
   const [roster, setRoster] = useState([])
   const [classes, setClasses] = useState([])
@@ -2096,9 +2167,9 @@ export default function TutorScreen({ profile, theme, subject }) {
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      fetchRoster(profile.id).catch(() => []),
-      fetchTutorClasses().catch(() => []),
-      fetchAssignmentsForTutor(profile.id).catch(() => []),
+      fetchRoster(profile.id, { allTutors }).catch(() => []),
+      fetchTutorClasses({ allTutors }).catch(() => []),
+      fetchAssignmentsForTutor(profile.id, { allTutors }).catch(() => []),
       fetchTutorResources().catch(() => []),
       fetchTutoringSessions({ limit: 50 }).catch(() => []),
     ]).then(([r, c, a, res, s]) => {
@@ -2106,7 +2177,7 @@ export default function TutorScreen({ profile, theme, subject }) {
       setRoster(r); setClasses(c); setAssignments(a); setResources(res); setSessions(s || [])
     })
     return () => { cancelled = true }
-  }, [profile.id])
+  }, [profile.id, allTutors])
 
   const overdueCount = useMemo(
     () => assignments.filter(a => !a.completed_at && a.due_date && new Date(a.due_date).setHours(23,59,59,999) < Date.now()).length,
@@ -2275,6 +2346,18 @@ export default function TutorScreen({ profile, theme, subject }) {
             {!isDark && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>{new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {isAdmin && (
+              <div role="group" aria-label="Whose students" style={{ display: 'flex', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`, overflow: 'hidden', flexShrink: 0 }}>
+                {[{ v: false, label: 'My students' }, { v: true, label: 'All tutors' }].map(opt => (
+                  <button key={opt.label} onClick={() => setAllTutors(opt.v)} aria-pressed={allTutors === opt.v}
+                    style={{ padding: '0 12px', height: 32, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                      background: allTutors === opt.v ? (isDark ? 'rgba(241,190,67,0.16)' : '#0f172a') : 'transparent',
+                      color: allTutors === opt.v ? (isDark ? GOLD : '#fff') : (isDark ? 'rgba(255,255,255,0.55)' : '#64748b') }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
             {!isDark && (
               <button style={{ position: 'relative', width: 36, height: 36, borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#94a3b8', transition: 'background 0.12s' }}
@@ -2300,14 +2383,14 @@ export default function TutorScreen({ profile, theme, subject }) {
 
         {/* Section content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
-          <div key={activeTab} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+          <div key={`${activeTab}-${allTutors ? 'all' : 'mine'}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
             {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
-            {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} />}
-            {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} />}
-            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} />}
+            {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} allTutors={allTutors} />}
+            {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} allTutors={allTutors} />}
+            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} />}
             {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
             {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
-            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} />}
+            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} allTutors={allTutors} />}
             {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
           </div>
         </div>

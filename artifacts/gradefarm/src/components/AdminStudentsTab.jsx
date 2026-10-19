@@ -10,6 +10,13 @@ import {
   adminRejectTutor,
   adminSetStudentActive,
   adminDeleteStudent,
+  adminListSubscriptions,
+  adminGrantSubscription,
+  adminRevokeSubscription,
+  adminListTutorLinks,
+  adminLinkTutor,
+  adminUnlinkTutor,
+  fetchTutorList,
   downloadWritingReportPdf,
 } from '../lib/db'
 import { supabase } from '../lib/supabase'
@@ -119,13 +126,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
     setSubsLoading(true)
     setSubsError('')
     try {
-      const { data, error } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-      if (error) throw error
-      setSubscriptions(data || [])
+      setSubscriptions(await adminListSubscriptions(userId))
     } catch (e) {
       setSubsError(e.message)
     }
@@ -530,12 +531,9 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 )}
               </Section>
 
-              {/* Assigned tutor */}
-              <Section title="Assigned Tutor">
-                {selected.tutor_name
-                  ? <div style={{ fontSize: 13, color: '#e2e8f0' }}>{selected.tutor_name}</div>
-                  : <div style={{ fontSize: 12, color: '#475569' }}>No tutor assigned.</div>
-                }
+              {/* Assigned tutors */}
+              <Section title="Tutors">
+                <TutorLinksSection studentId={selected.id} onChange={() => load(true)} />
               </Section>
 
               {/* Activity summary */}
@@ -685,13 +683,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   setGrantBusy(true)
                   setSubsError('')
                   try {
-                    const cur = liveCurricula.find(c => c.id === grantSubject)
-                    if (!cur) throw new Error('Subject not found')
-                    const { error } = await supabase.from('user_subscriptions').upsert(
-                      { user_id: selected.id, subject_name: cur.name, stage: cur.level_label || '', active: true, beta: true },
-                      { onConflict: 'user_id,subject_name,stage' }
-                    )
-                    if (error) throw error
+                    await adminGrantSubscription(selected.id, grantSubject)
                     setGrantSubject('')
                     await loadSubscriptions(selected.id)
                   } catch (e) {
@@ -703,8 +695,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   if (!window.confirm('Remove this subscription?')) return
                   setSubsError('')
                   try {
-                    const { error } = await supabase.from('user_subscriptions').delete().eq('id', subId)
-                    if (error) throw error
+                    await adminRevokeSubscription(selected.id, subId)
                     await loadSubscriptions(selected.id)
                   } catch (e) {
                     setSubsError(e.message)
@@ -887,6 +878,59 @@ function SubjectAccessSection({
         </Btn>
       </div>
     </Section>
+  )
+}
+
+// A student's tutors: who can see their progress and set them work.
+function TutorLinksSection({ studentId, onChange }) {
+  const [links, setLinks] = useState(null)
+  const [tutors, setTutors] = useState([])
+  const [adding, setAdding] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const reload = useCallback(async () => {
+    setError('')
+    try { setLinks(await adminListTutorLinks({ studentId })) } catch (e) { setError(e.message); setLinks([]) }
+  }, [studentId])
+  useEffect(() => { reload() }, [reload])
+  useEffect(() => { fetchTutorList().then(setTutors).catch(() => setTutors([])) }, [])
+
+  const run = async (fn) => {
+    setBusy(true); setError('')
+    try { await fn(); await reload(); onChange?.() } catch (e) { setError(e.message) }
+    setBusy(false)
+  }
+
+  const linkedIds = new Set((links || []).map(l => l.tutor_id))
+  const available = tutors.filter(t => !linkedIds.has(t.id) && t.id !== studentId)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+      {links === null ? (
+        <div style={{ fontSize: 12, color: '#475569' }}>Loading…</div>
+      ) : links.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#475569' }}>No tutor assigned.</div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {links.map(l => (
+            <span key={l.tutor_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.1)', fontSize: 12, color: '#e2e8f0' }}>
+              {l.tutor_name || 'Unnamed tutor'}
+              <button onClick={() => run(() => adminUnlinkTutor(l.tutor_id, studentId))} disabled={busy} title="Unassign tutor"
+                style={{ border: 'none', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <select value={adding} onChange={e => setAdding(e.target.value)} disabled={busy}
+          style={{ flex: 1, padding: '7px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#f1f5f9', fontSize: 12, fontFamily: FONT_B }}>
+          <option value="">Assign a tutor…</option>
+          {available.map(t => <option key={t.id} value={t.id}>{t.display_name || 'Unnamed'}{t.is_admin ? ' (admin)' : ''}</option>)}
+        </select>
+        <Btn onClick={() => run(async () => { await adminLinkTutor(adding, studentId); setAdding('') })} disabled={!adding || busy} variant="primary">Assign</Btn>
+      </div>
+    </div>
   )
 }
 

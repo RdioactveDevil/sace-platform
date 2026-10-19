@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { adminListTutors, adminGetTutor } from '../lib/db'
+import { adminListTutors, adminGetTutor, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -35,6 +35,10 @@ export default function AdminTutorsTab() {
   const [detail, setDetail]   = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailTab, setDetailTab] = useState('roster') // 'roster' | 'assignments'
+  // Assigning students to the open tutor.
+  const [allStudents, setAllStudents] = useState(null)
+  const [addStudentId, setAddStudentId] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
 
   const load = async () => {
     setLoading(true); setError('')
@@ -53,7 +57,23 @@ export default function AdminTutorsTab() {
       .then(d => { setDetail(d); setDetailLoading(false) })
       .catch(e => { setError(e.message); setDetailLoading(false) })
   }
-  const closeDetail = () => { setSelected(null); setDetail(null) }
+  const closeDetail = () => { setSelected(null); setDetail(null); setAddStudentId('') }
+
+  useEffect(() => {
+    if (!selected || allStudents) return
+    adminListStudents().then(json => setAllStudents(json.students || [])).catch(() => setAllStudents([]))
+  }, [selected, allStudents])
+
+  // Assign / unassign a student, then refresh the panel and the tutor list counts.
+  const changeLink = async (fn) => {
+    setLinkBusy(true); setError('')
+    try {
+      await fn()
+      setDetail(await adminGetTutor(selected.id))
+      load()
+    } catch (e) { setError(e.message) }
+    setLinkBusy(false)
+  }
 
   useEffect(() => {
     if (!selected) return
@@ -180,7 +200,22 @@ export default function AdminTutorsTab() {
               ) : !detail ? (
                 <div style={{ color: '#64748b', fontSize: 13 }}>Could not load tutor details.</div>
               ) : detailTab === 'roster' ? (
-                detail.roster.length === 0 ? (
+                <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <select value={addStudentId} onChange={e => setAddStudentId(e.target.value)} disabled={linkBusy}
+                    style={{ ...inputStyle, minWidth: 0, maxWidth: 'none', fontSize: 12 }}>
+                    <option value="">{allStudents ? 'Assign a student to this tutor…' : 'Loading students…'}</option>
+                    {(allStudents || [])
+                      .filter(st => st.id !== selected.id && !detail.roster.some(r => r.student_id === st.id))
+                      .map(st => <option key={st.id} value={st.id}>{st.display_name || st.email || st.id}</option>)}
+                  </select>
+                  <button onClick={() => changeLink(async () => { await adminLinkTutor(selected.id, addStudentId); setAddStudentId('') })}
+                    disabled={!addStudentId || linkBusy}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: !addStudentId || linkBusy ? 'rgba(255,255,255,0.06)' : GOLD, color: !addStudentId || linkBusy ? '#64748b' : '#0c1037', fontSize: 12, fontWeight: 800, cursor: !addStudentId || linkBusy ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                    Assign
+                  </button>
+                </div>
+                {detail.roster.length === 0 ? (
                   <div style={emptyBox}>This tutor has no students on their roster yet.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -201,11 +236,14 @@ export default function AdminTutorsTab() {
                             value={s.accuracy == null ? '—' : `${s.accuracy}%`}
                             color={s.accuracy == null ? '#475569' : s.accuracy >= 70 ? '#4ade80' : s.accuracy >= 50 ? GOLD : '#f87171'}
                           />
+                          <button onClick={() => changeLink(() => adminUnlinkTutor(selected.id, s.student_id))} disabled={linkBusy} title="Unassign from this tutor"
+                            style={{ alignSelf: 'center', border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>×</button>
                         </div>
                       </div>
                     ))}
                   </div>
-                )
+                )}
+                </>
               ) : (
                 detail.assignments.length === 0 ? (
                   <div style={emptyBox}>This tutor has not issued any assignments yet.</div>
