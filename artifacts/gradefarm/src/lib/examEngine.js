@@ -135,6 +135,29 @@ export function countQuestions(paper) {
  * Unanswered questions count as incorrect. Returns an overall + per-section
  * breakdown plus the time spent (if `timeSpent` map of sectionId→sec given).
  */
+/**
+ * One record per question on a finished paper, for the student's answer
+ * history, so exam questions count as answered and aren't served again in
+ * practice. A question left blank counts as attempted and wrong: the student
+ * has seen it. `selected` is the chosen option index for MCQs, else null.
+ */
+export function examAnswerRecords(paper, answers = {}) {
+  const records = []
+  for (const sec of paper?.sections || []) {
+    for (const q of sec.questions || []) {
+      if (!q?.id) continue
+      const resp = answers[q.id]
+      const answered = resp !== undefined && resp !== null && !(Array.isArray(resp) && resp.length === 0)
+      records.push({
+        questionId: q.id,
+        correct: answered && gradeResponse(q, resp),
+        selected: Number.isInteger(resp) ? resp : null,
+      })
+    }
+  }
+  return records
+}
+
 export function gradePaper(paper, answers = {}, timeSpent = {}) {
   let totalCorrect = 0
   let totalQuestions = 0

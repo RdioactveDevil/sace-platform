@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatClock, buildPaper, buildSubjectExam, countQuestions, gradePaper, DEFAULT_EXAM_QUESTIONS } from './examEngine.js'
+import { formatClock, buildPaper, buildSubjectExam, countQuestions, gradePaper, examAnswerRecords, DEFAULT_EXAM_QUESTIONS } from './examEngine.js'
 
 describe('formatClock', () => {
   test('M:SS under an hour', () => {
@@ -125,5 +125,21 @@ describe('buildSubjectExam', () => {
 
   test('empty bank gives an empty paper', () => {
     assert.equal(countQuestions(buildSubjectExam({ features: {} }, [])), 0)
+  })
+})
+
+describe('examAnswerRecords', () => {
+  test('records every question on the paper, blanks as wrong', () => {
+    const paper = { sections: [{ id: 's', questions: [
+      { id: 'q1', options: ['a', 'b'], answer_index: 1 },
+      { id: 'q2', options: ['a', 'b'], answer_index: 0 },
+      { id: 'q3', options: ['a', 'b'], answer_index: 0 },
+    ] }] }
+    assert.deepEqual(examAnswerRecords(paper, { q1: 1, q2: 1 }), [
+      { questionId: 'q1', correct: true, selected: 1 },
+      { questionId: 'q2', correct: false, selected: 1 },
+      { questionId: 'q3', correct: false, selected: null },
+    ])
+    assert.deepEqual(examAnswerRecords(null), [])
   })
 })

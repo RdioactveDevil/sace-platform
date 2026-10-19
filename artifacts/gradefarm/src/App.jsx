@@ -975,7 +975,7 @@ function AppInner() {
       {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
       <Route path="/exam" element={
         subjectHasFeature(selectedSubject, 'exam_mode')
-          ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
+          ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
           : <Navigate to="/question-bank" replace />
       } />
 
