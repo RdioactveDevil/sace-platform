@@ -44,6 +44,9 @@ interface TutorContext {
   admin: SupabaseClient & { auth: SupabaseAdminAuth };
   callerUserId: string;
   tutorName: string;
+  // Admins manage every tutor: they can open the portal, see any student and
+  // work with any class.
+  isAdmin: boolean;
 }
 
 async function requireTutor(req: Request, res: Response): Promise<TutorContext | null> {
@@ -63,11 +66,11 @@ async function requireTutor(req: Request, res: Response): Promise<TutorContext |
 
   const { data: callerProfile, error: profErr } = await admin
     .from("profiles")
-    .select("id, is_tutor, display_name")
+    .select("id, is_tutor, is_admin, display_name")
     .eq("id", callerUser.user.id)
-    .single<{ id: string; is_tutor: boolean; display_name: string | null }>();
+    .single<{ id: string; is_tutor: boolean; is_admin: boolean | null; display_name: string | null }>();
 
-  if (profErr || !callerProfile?.is_tutor) {
+  if (profErr || !(callerProfile?.is_tutor || callerProfile?.is_admin)) {
     res.status(403).json({ error: "Forbidden: caller is not a tutor" });
     return null;
   }
@@ -75,6 +78,7 @@ async function requireTutor(req: Request, res: Response): Promise<TutorContext |
     admin,
     callerUserId: callerUser.user.id,
     tutorName: callerProfile.display_name ?? "Your tutor",
+    isAdmin: !!callerProfile.is_admin,
   };
 }
 
@@ -82,14 +86,17 @@ async function getStudentEmail(
   admin: SupabaseClient & { auth: SupabaseAdminAuth },
   tutorId: string,
   studentId: string,
+  isAdmin = false,
 ): Promise<string | null> {
-  const { data: rosterRow, error: rosterErr } = await admin
-    .from("tutor_students")
-    .select("student_id")
-    .eq("tutor_id", tutorId)
-    .eq("student_id", studentId)
-    .single<{ student_id: string }>();
-  if (rosterErr || !rosterRow) return null;
+  if (!isAdmin) {
+    const { data: rosterRow, error: rosterErr } = await admin
+      .from("tutor_students")
+      .select("student_id")
+      .eq("tutor_id", tutorId)
+      .eq("student_id", studentId)
+      .single<{ student_id: string }>();
+    if (rosterErr || !rosterRow) return null;
+  }
 
   const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
   if (listError) return null;
@@ -158,14 +165,18 @@ router.post("/tutor/student-emails", async (req: Request, res: Response) => {
       return res.json({ emails: {} });
     }
 
-    const { data: rosterRows, error: rosterErr } = await admin
-      .from("tutor_students")
-      .select("student_id")
-      .eq("tutor_id", callerUserId)
-      .in("student_id", ids);
-
-    if (rosterErr) return res.status(500).json({ error: rosterErr.message });
-    const allowed = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
+    let allowed: Set<string>;
+    if (ctx.isAdmin) {
+      allowed = new Set(ids);
+    } else {
+      const { data: rosterRows, error: rosterErr } = await admin
+        .from("tutor_students")
+        .select("student_id")
+        .eq("tutor_id", callerUserId)
+        .in("student_id", ids);
+      if (rosterErr) return res.status(500).json({ error: rosterErr.message });
+      allowed = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
+    }
 
     const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (listError) return res.status(500).json({ error: listError.message });
@@ -195,7 +206,7 @@ router.post("/tutor/notify-assignment", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "student_id and assignment are required" });
     }
 
-    const studentEmail = await getStudentEmail(admin, callerUserId, student_id);
+    const studentEmail = await getStudentEmail(admin, callerUserId, student_id, ctx.isAdmin);
     if (!studentEmail) {
       return res.status(404).json({ error: "Student not found on your roster or has no email." });
     }
@@ -282,7 +293,7 @@ router.post("/tutor/notify-student", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "student_id is required" });
     }
 
-    const studentEmail = await getStudentEmail(admin, callerUserId, student_id);
+    const studentEmail = await getStudentEmail(admin, callerUserId, student_id, ctx.isAdmin);
     if (!studentEmail) {
       return res.status(404).json({ error: "Student not found on your roster or has no email." });
     }
@@ -353,28 +364,108 @@ interface MemberRow {
   added_at: string;
 }
 
+type AdminClient = SupabaseClient & { auth: SupabaseAdminAuth };
+
+interface ClassTutor {
+  id: string;
+  display_name: string | null;
+  role: "owner" | "co";
+}
+
+// What the caller may do with a class: owners and admins manage everything;
+// co-tutors teach it (edit details, members, assignments) but can't delete it
+// or change who teaches it. Returns null when the caller has no access.
+async function classAccess(
+  ctx: TutorContext,
+  classId: string,
+): Promise<{ ownerId: string; canManageTutors: boolean } | null> {
+  const { data: cls, error } = await ctx.admin
+    .from("tutor_classes")
+    .select("id, tutor_id")
+    .eq("id", classId)
+    .maybeSingle<{ id: string; tutor_id: string }>();
+  if (error || !cls) return null;
+  const isOwner = cls.tutor_id === ctx.callerUserId;
+  if (isOwner || ctx.isAdmin) return { ownerId: cls.tutor_id, canManageTutors: true };
+  const { data: co } = await ctx.admin
+    .from("tutor_class_tutors")
+    .select("tutor_id")
+    .eq("class_id", classId)
+    .eq("tutor_id", ctx.callerUserId)
+    .maybeSingle<{ tutor_id: string }>();
+  return co ? { ownerId: cls.tutor_id, canManageTutors: false } : null;
+}
+
+// Before the tutor_class_tutors migration is applied, reads of it fail; treat
+// that as "no co-tutors" so classes keep working.
+function missingCoTutorTable(err: { message?: string } | null): boolean {
+  return !!err && /tutor_class_tutors/.test(err.message || "");
+}
+
+// Owner plus co-tutors of a class.
+async function classTutorIds(admin: AdminClient, classId: string, ownerId: string): Promise<string[]> {
+  const { data } = await admin.from("tutor_class_tutors").select("tutor_id").eq("class_id", classId);
+  return [...new Set([ownerId, ...((data ?? []) as { tutor_id: string }[]).map((r) => r.tutor_id)])];
+}
+
+// Put every student on every tutor's roster. Tutors see a student's progress
+// through the roster link, so this is what gives a class's tutors access to
+// its members. Existing roster rows are left untouched.
+async function linkStudentsToTutors(admin: AdminClient, tutorIds: string[], studentIds: string[]) {
+  const rows = tutorIds.flatMap((tutor_id) => studentIds.map((student_id) => ({ tutor_id, student_id })));
+  if (rows.length === 0) return null;
+  const { error } = await admin
+    .from("tutor_students")
+    .upsert(rows, { onConflict: "tutor_id,student_id", ignoreDuplicates: true });
+  return error;
+}
+
+// GET /tutor/classes — classes the caller owns or co-teaches. Admins can pass
+// ?scope=all for every tutor's classes.
 router.get("/tutor/classes", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
     const { admin, callerUserId } = ctx;
+    const scopeAll = ctx.isAdmin && req.query.scope === "all";
 
-    const { data: classes, error: cErr } = await admin
+    let query = admin
       .from("tutor_classes")
       .select("id, tutor_id, name, subject, color, description, created_at")
-      .eq("tutor_id", callerUserId)
       .order("created_at", { ascending: false });
+    if (!scopeAll) {
+      const { data: coRows, error: coErr } = await admin
+        .from("tutor_class_tutors")
+        .select("class_id")
+        .eq("tutor_id", callerUserId);
+      if (coErr && !missingCoTutorTable(coErr)) return res.status(500).json({ error: coErr.message });
+      const coIds = ((coRows ?? []) as { class_id: string }[]).map((r) => r.class_id);
+      query = coIds.length > 0
+        ? query.or(`tutor_id.eq.${callerUserId},id.in.(${coIds.join(",")})`)
+        : query.eq("tutor_id", callerUserId);
+    }
+    const { data: classes, error: cErr } = await query;
     if (cErr) return res.status(500).json({ error: cErr.message });
 
     const ids = (classes ?? []).map((c: ClassRow) => c.id);
     let members: MemberRow[] = [];
+    let coTutors: { class_id: string; tutor_id: string }[] = [];
     if (ids.length > 0) {
-      const { data: memberRows, error: mErr } = await admin
-        .from("tutor_class_members")
-        .select("class_id, student_id, added_at")
-        .in("class_id", ids);
-      if (mErr) return res.status(500).json({ error: mErr.message });
-      members = (memberRows ?? []) as MemberRow[];
+      const [memberRes, coRes] = await Promise.all([
+        admin.from("tutor_class_members").select("class_id, student_id, added_at").in("class_id", ids),
+        admin.from("tutor_class_tutors").select("class_id, tutor_id").in("class_id", ids),
+      ]);
+      if (memberRes.error) return res.status(500).json({ error: memberRes.error.message });
+      if (coRes.error && !missingCoTutorTable(coRes.error)) return res.status(500).json({ error: coRes.error.message });
+      members = (memberRes.data ?? []) as MemberRow[];
+      coTutors = (coRes.data ?? []) as { class_id: string; tutor_id: string }[];
+    }
+
+    const tutorIds = [...new Set([...(classes ?? []).map((c: ClassRow) => c.tutor_id), ...coTutors.map((c) => c.tutor_id)])];
+    const names: Record<string, string | null> = {};
+    if (tutorIds.length > 0) {
+      const { data: profs } = await admin.from("profiles").select("id, display_name").in("id", tutorIds);
+      for (const p of (profs ?? []) as { id: string; display_name: string | null }[]) names[p.id] = p.display_name;
     }
 
     const byClass: Record<string, MemberRow[]> = {};
@@ -383,10 +474,15 @@ router.get("/tutor/classes", async (req: Request, res: Response) => {
       byClass[m.class_id].push(m);
     }
 
-    const result = (classes ?? []).map((c: ClassRow) => ({
-      ...c,
-      members: byClass[c.id] ?? [],
-    }));
+    const result = (classes ?? []).map((c: ClassRow) => {
+      const tutors: ClassTutor[] = [
+        { id: c.tutor_id, display_name: names[c.tutor_id] ?? null, role: "owner" },
+        ...coTutors
+          .filter((r) => r.class_id === c.id && r.tutor_id !== c.tutor_id)
+          .map((r) => ({ id: r.tutor_id, display_name: names[r.tutor_id] ?? null, role: "co" as const })),
+      ];
+      return { ...c, members: byClass[c.id] ?? [], tutors };
+    });
     return res.json({ classes: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -421,7 +517,8 @@ router.post("/tutor/classes", async (req: Request, res: Response) => {
       .select("id, tutor_id, name, subject, color, description, created_at")
       .single<ClassRow>();
     if (error) return res.status(500).json({ error: error.message });
-    return res.json({ class: { ...data, members: [] } });
+    const tutors: ClassTutor[] = [{ id: callerUserId, display_name: ctx.tutorName, role: "owner" }];
+    return res.json({ class: { ...data, members: [], tutors } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -432,15 +529,10 @@ router.patch("/tutor/classes/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    const { admin, callerUserId } = ctx;
-    const classId = req.params.id;
+    const { admin } = ctx;
+    const classId = String(req.params.id);
 
-    const { data: existing, error: exErr } = await admin
-      .from("tutor_classes")
-      .select("id, tutor_id")
-      .eq("id", classId)
-      .single<{ id: string; tutor_id: string }>();
-    if (exErr || !existing || existing.tutor_id !== callerUserId) {
+    if (!(await classAccess(ctx, classId))) {
       return res.status(404).json({ error: "Class not found." });
     }
 
@@ -478,16 +570,13 @@ router.delete("/tutor/classes/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    const { admin, callerUserId } = ctx;
-    const classId = req.params.id;
+    const { admin } = ctx;
+    const classId = String(req.params.id);
 
-    const { data: existing, error: exErr } = await admin
-      .from("tutor_classes")
-      .select("id, tutor_id")
-      .eq("id", classId)
-      .single<{ id: string; tutor_id: string }>();
-    if (exErr || !existing || existing.tutor_id !== callerUserId) {
-      return res.status(404).json({ error: "Class not found." });
+    const access = await classAccess(ctx, classId);
+    if (!access) return res.status(404).json({ error: "Class not found." });
+    if (!access.canManageTutors) {
+      return res.status(403).json({ error: "Only the class owner or an admin can delete this class." });
     }
 
     const { error } = await admin.from("tutor_classes").delete().eq("id", classId);
@@ -499,19 +588,6 @@ router.delete("/tutor/classes/:id", async (req: Request, res: Response) => {
   }
 });
 
-async function assertOwnedClass(
-  admin: SupabaseClient & { auth: SupabaseAdminAuth },
-  callerUserId: string,
-  classId: string,
-): Promise<boolean> {
-  const { data, error } = await admin
-    .from("tutor_classes")
-    .select("id, tutor_id")
-    .eq("id", classId)
-    .single<{ id: string; tutor_id: string }>();
-  return !error && !!data && data.tutor_id === callerUserId;
-}
-
 router.post("/tutor/classes/:id/members", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
@@ -519,26 +595,28 @@ router.post("/tutor/classes/:id/members", async (req: Request, res: Response) =>
     const { admin, callerUserId } = ctx;
     const classId = String(req.params.id);
 
-    if (!(await assertOwnedClass(admin, callerUserId, classId))) {
-      return res.status(404).json({ error: "Class not found." });
-    }
+    const access = await classAccess(ctx, classId);
+    if (!access) return res.status(404).json({ error: "Class not found." });
 
     const { studentIds } = req.body as { studentIds?: string[] };
     if (!Array.isArray(studentIds) || studentIds.length === 0) {
       return res.status(400).json({ error: "studentIds is required." });
     }
 
-    // Validate all students are on the tutor's roster
-    const { data: rosterRows, error: rErr } = await admin
-      .from("tutor_students")
-      .select("student_id")
-      .eq("tutor_id", callerUserId)
-      .in("student_id", studentIds);
-    if (rErr) return res.status(500).json({ error: rErr.message });
-    const allowed = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
-    const filtered = studentIds.filter((id) => allowed.has(id));
-    if (filtered.length === 0) {
-      return res.status(400).json({ error: "None of the supplied students are on your roster." });
+    // Tutors add students from their own roster; admins can add anyone.
+    let filtered = studentIds;
+    if (!ctx.isAdmin) {
+      const { data: rosterRows, error: rErr } = await admin
+        .from("tutor_students")
+        .select("student_id")
+        .eq("tutor_id", callerUserId)
+        .in("student_id", studentIds);
+      if (rErr) return res.status(500).json({ error: rErr.message });
+      const allowed = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
+      filtered = studentIds.filter((id) => allowed.has(id));
+      if (filtered.length === 0) {
+        return res.status(400).json({ error: "None of the supplied students are on your roster." });
+      }
     }
 
     const rows = filtered.map((sid) => ({ class_id: classId, student_id: sid }));
@@ -546,6 +624,9 @@ router.post("/tutor/classes/:id/members", async (req: Request, res: Response) =>
       .from("tutor_class_members")
       .upsert(rows, { onConflict: "class_id,student_id" });
     if (error) return res.status(500).json({ error: error.message });
+
+    const linkErr = await linkStudentsToTutors(admin, await classTutorIds(admin, classId, access.ownerId), filtered);
+    if (linkErr) return res.status(500).json({ error: linkErr.message });
     return res.json({ ok: true, added: filtered.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -557,11 +638,11 @@ router.delete("/tutor/classes/:id/members/:studentId", async (req: Request, res:
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    const { admin, callerUserId } = ctx;
+    const { admin } = ctx;
     const classId = String(req.params.id);
     const studentId = String(req.params.studentId);
 
-    if (!(await assertOwnedClass(admin, callerUserId, classId))) {
+    if (!(await classAccess(ctx, classId))) {
       return res.status(404).json({ error: "Class not found." });
     }
 
@@ -570,6 +651,96 @@ router.delete("/tutor/classes/:id/members/:studentId", async (req: Request, res:
       .delete()
       .eq("class_id", classId)
       .eq("student_id", studentId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /tutor/tutors — tutors and admins, for picking a class's co-tutors.
+router.get("/tutor/tutors", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { data, error } = await ctx.admin
+      .from("profiles")
+      .select("id, display_name, is_tutor, is_admin")
+      .or("is_tutor.eq.true,is_admin.eq.true")
+      .order("display_name");
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ tutors: data ?? [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /tutor/classes/:id/tutors — add a co-tutor. Body: { tutorId }.
+// The new tutor gets every current member on their roster.
+router.post("/tutor/classes/:id/tutors", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const classId = String(req.params.id);
+    const tutorId = String((req.body as { tutorId?: string })?.tutorId || "");
+    if (!tutorId) return res.status(400).json({ error: "tutorId is required." });
+
+    const access = await classAccess(ctx, classId);
+    if (!access) return res.status(404).json({ error: "Class not found." });
+    if (!access.canManageTutors) {
+      return res.status(403).json({ error: "Only the class owner or an admin can add tutors." });
+    }
+    if (tutorId === access.ownerId) return res.json({ ok: true });
+
+    const { data: target } = await admin
+      .from("profiles").select("id, is_tutor, is_admin").eq("id", tutorId)
+      .maybeSingle<{ id: string; is_tutor: boolean | null; is_admin: boolean | null }>();
+    if (!target || !(target.is_tutor || target.is_admin)) {
+      return res.status(400).json({ error: "That person isn't a tutor." });
+    }
+
+    const { error } = await admin
+      .from("tutor_class_tutors")
+      .upsert({ class_id: classId, tutor_id: tutorId }, { onConflict: "class_id,tutor_id", ignoreDuplicates: true });
+    if (error) return res.status(500).json({ error: error.message });
+
+    const { data: memberRows, error: mErr } = await admin
+      .from("tutor_class_members").select("student_id").eq("class_id", classId);
+    if (mErr) return res.status(500).json({ error: mErr.message });
+    const linkErr = await linkStudentsToTutors(
+      admin, [tutorId], ((memberRows ?? []) as { student_id: string }[]).map((m) => m.student_id),
+    );
+    if (linkErr) return res.status(500).json({ error: linkErr.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /tutor/classes/:id/tutors/:tutorId — remove a co-tutor. Their roster
+// is kept: who tutors which student is managed separately.
+router.delete("/tutor/classes/:id/tutors/:tutorId", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const classId = String(req.params.id);
+    const tutorId = String(req.params.tutorId);
+
+    const access = await classAccess(ctx, classId);
+    if (!access) return res.status(404).json({ error: "Class not found." });
+    if (!access.canManageTutors) {
+      return res.status(403).json({ error: "Only the class owner or an admin can remove tutors." });
+    }
+    if (tutorId === access.ownerId) {
+      return res.status(400).json({ error: "The class owner can't be removed." });
+    }
+
+    const { error } = await ctx.admin
+      .from("tutor_class_tutors").delete().eq("class_id", classId).eq("tutor_id", tutorId);
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ ok: true });
   } catch (err) {
@@ -620,34 +791,29 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       for (const id of rosterSet) resolved.add(id);
     }
 
+    // Admins (managers) can set work for any student; it's recorded as from them.
     if (Array.isArray(studentIds)) {
       for (const id of studentIds) {
-        if (rosterSet.has(id)) resolved.add(id);
+        if (ctx.isAdmin || rosterSet.has(id)) resolved.add(id);
       }
     }
 
     let usedClassIds: string[] = [];
     if (Array.isArray(classIds) && classIds.length > 0) {
-      // Verify all classes belong to this tutor
-      const { data: ownedClasses, error: ocErr } = await admin
-        .from("tutor_classes")
-        .select("id")
-        .eq("tutor_id", callerUserId)
-        .in("id", classIds);
-      if (ocErr) return res.status(500).json({ error: ocErr.message });
-      usedClassIds = (ownedClasses ?? []).map((c: { id: string }) => c.id);
-      if (usedClassIds.length !== classIds.length) {
-        return res.status(403).json({ error: "One or more classes do not belong to you." });
+      // Every class must be one the caller owns or co-teaches (any class for admins).
+      for (const classId of classIds) {
+        if (!(await classAccess(ctx, String(classId)))) {
+          return res.status(403).json({ error: "One or more classes do not belong to you." });
+        }
       }
+      usedClassIds = classIds.map(String);
 
       const { data: memberRows, error: memErr } = await admin
         .from("tutor_class_members")
         .select("student_id")
         .in("class_id", usedClassIds);
       if (memErr) return res.status(500).json({ error: memErr.message });
-      for (const m of (memberRows ?? []) as { student_id: string }[]) {
-        if (rosterSet.has(m.student_id)) resolved.add(m.student_id);
-      }
+      for (const m of (memberRows ?? []) as { student_id: string }[]) resolved.add(m.student_id);
     }
 
     if (resolved.size === 0) {
@@ -759,13 +925,15 @@ router.get("/tutor/students/:studentId/writing-attempts", async (req: Request, r
     const { studentId } = req.params;
     if (!studentId) return res.status(400).json({ error: "studentId required" });
 
-    const { data: rosterRow, error: rosterErr } = await admin
-      .from("tutor_students")
-      .select("student_id")
-      .eq("tutor_id", callerUserId)
-      .eq("student_id", studentId)
-      .maybeSingle<{ student_id: string }>();
-    if (rosterErr || !rosterRow) return res.status(403).json({ error: "Student not on your roster." });
+    if (!ctx.isAdmin) {
+      const { data: rosterRow, error: rosterErr } = await admin
+        .from("tutor_students")
+        .select("student_id")
+        .eq("tutor_id", callerUserId)
+        .eq("student_id", studentId)
+        .maybeSingle<{ student_id: string }>();
+      if (rosterErr || !rosterRow) return res.status(403).json({ error: "Student not on your roster." });
+    }
 
     const { data, error } = await admin
       .from("writing_attempts")
@@ -807,16 +975,17 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, callerUserId } = ctx;
 
-    const { data: roster, error: rErr } = await admin
-      .from("tutor_students")
-      .select("student_id, year_level")
-      .eq("tutor_id", callerUserId);
+    const scopeAll = ctx.isAdmin && req.query.scope === "all";
+    let rosterQuery = admin.from("tutor_students").select("student_id, year_level");
+    if (!scopeAll) rosterQuery = rosterQuery.eq("tutor_id", callerUserId);
+    const { data: roster, error: rErr } = await rosterQuery;
     if (rErr) return res.status(500).json({ error: rErr.message });
 
     const studentIds = (roster ?? []).map((r: { student_id: string }) => r.student_id);
 
     const byStudent: Record<string, StudentDetail> = {};
     for (const r of (roster ?? []) as { student_id: string; year_level: string | null }[]) {
+      if (byStudent[r.student_id]) continue; // a student with several tutors
       byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [] };
     }
 
@@ -838,10 +1007,11 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     }
 
     // Tutor's selection of which subjects they tutor
-    const { data: tutored, error: sErr } = await admin
-      .from("tutor_student_subjects")
-      .select("id, student_id, subject_name, stage")
-      .eq("tutor_id", callerUserId);
+    let tutoredQuery = admin.from("tutor_student_subjects").select("id, student_id, subject_name, stage");
+    tutoredQuery = scopeAll ? tutoredQuery.in("student_id", studentIds) : tutoredQuery.eq("tutor_id", callerUserId);
+    const { data: tutored, error: sErr } = scopeAll && studentIds.length === 0
+      ? { data: [], error: null }
+      : await tutoredQuery;
     if (sErr) return res.status(500).json({ error: sErr.message });
     for (const s of (tutored ?? []) as SubjectRow[]) {
       if (byStudent[s.student_id]) byStudent[s.student_id].tutored.push(s);

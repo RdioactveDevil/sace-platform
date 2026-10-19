@@ -45,7 +45,7 @@ const GROUPS = [
   { id: 'class', label: 'Class' },
 ]
 
-export default function StudentsTab({ profile, theme }) {
+export default function StudentsTab({ profile, theme, allTutors = false }) {
   const t = THEMES[theme]
 
   const [roster, setRoster] = useState([])
@@ -80,19 +80,19 @@ export default function StudentsTab({ profile, theme }) {
     setLoading(true)
     try {
       const [r, cls, asg] = await Promise.all([
-        fetchRoster(profile.id),
-        fetchTutorClasses().catch(() => []),
-        fetchAssignmentsForTutor(profile.id).catch(() => []),
+        fetchRoster(profile.id, { allTutors }),
+        fetchTutorClasses({ allTutors }).catch(() => []),
+        fetchAssignmentsForTutor(profile.id, { allTutors }).catch(() => []),
       ])
       setRoster(r); setClasses(cls); setAssignments(asg)
       if (r.length) {
         fetchStudentEmails(r.map(x => x.student_id)).then(setEmails).catch(() => {})
       } else setEmails({})
-      fetchRosterDetails().then(setDetails).catch(() => {})
+      fetchRosterDetails({ allTutors }).then(setDetails).catch(() => {})
     } catch {}
     setLoading(false)
   }
-  useEffect(() => { load() }, [profile.id])
+  useEffect(() => { load() }, [profile.id, allTutors])
 
   const classesByStudent = useMemo(() => {
     const m = {}
@@ -127,6 +127,7 @@ export default function StudentsTab({ profile, theme }) {
     return {
       id: r.student_id,
       name: r.profiles?.display_name || 'Unknown',
+      tutors: r.tutors || [],
       email: emails[r.student_id] || '',
       xp: r.profiles?.xp ?? 0,
       streak: r.profiles?.streak ?? 0,
@@ -238,6 +239,9 @@ export default function StudentsTab({ profile, theme }) {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{s.name}</div>
               {s.email && <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{s.email}</div>}
+              {allTutors && s.tutors.length > 0 && (
+                <div style={{ fontSize: 11, color: t.textSub, marginTop: 2 }}>Tutor{s.tutors.length > 1 ? 's' : ''}: {s.tutors.map(tu => tu.display_name || 'Unnamed').join(', ')}</div>
+              )}
             </div>
           </div>
         </td>
@@ -257,9 +261,10 @@ export default function StudentsTab({ profile, theme }) {
           {s.overdue > 0 ? tag(`${s.overdue} overdue`, t.danger) : s.pending > 0 ? tag(`${s.pending} open`, GOLD) : tag('Up to date', t.success)}
         </td>
         <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-          <button onClick={() => { setEditId(editId === s.id ? null : s.id) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${editId === s.id ? GOLD : t.border}`, background: editId === s.id ? 'rgba(241,190,67,0.12)' : 'transparent', color: editId === s.id ? GOLD : t.textSub, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }}>Edit</button>
+          {/* Year level, subjects and removal are per-tutor roster settings. */}
+          {!allTutors && <button onClick={() => { setEditId(editId === s.id ? null : s.id) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${editId === s.id ? GOLD : t.border}`, background: editId === s.id ? 'rgba(241,190,67,0.12)' : 'transparent', color: editId === s.id ? GOLD : t.textSub, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }}>Edit</button>}
           <button onClick={() => { setNotifyId(notifyId === s.id ? null : s.id); setNotifyMsg(''); setNotifyState(null) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }}>✉</button>
-          <button onClick={() => setConfirmRemove(s.id)} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>✕</button>
+          {!allTutors && <button onClick={() => setConfirmRemove(s.id)} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>✕</button>}
         </td>
       </tr>
 
