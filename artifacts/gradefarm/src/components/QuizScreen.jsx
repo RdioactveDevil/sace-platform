@@ -47,8 +47,10 @@ import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
 // Question-area width from which a reading passage sits beside the question
-// (600px question + gap + a comfortable reading column).
-const SIDE_PASSAGE_MIN_WIDTH = 1000
+// (a ~340px question column + gap + a comfortable reading column). Laptops at
+// 125% zoom only have ~890px here, and stacking the passage inside the 600px
+// question card there left wide empty margins.
+const SIDE_PASSAGE_MIN_WIDTH = 760
 // Start generating more questions in the background once this few questions
 // new to the student are left in the session.
 const PREFETCH_LOW_WATER = 8
@@ -1726,7 +1728,7 @@ export default function QuizScreen({
               <PassageView passage={currentQ.passage} theme={theme} fill />
             </div>
           )}
-          <div style={{ flex: sidePassage ? '2 1 0' : '0 1 600px', minWidth: 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
+          <div style={{ flex: sidePassage ? '2 1 0' : '0 1 600px', minWidth: sidePassage ? 340 : 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
             {consolidateSubtopic && (
               <div style={{
                 marginBottom: 14,
