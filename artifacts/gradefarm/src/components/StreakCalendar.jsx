@@ -73,7 +73,7 @@ export default function StreakCalendar({ answerLog, onStartSession, theme }) {
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 12, color: t.textMuted }}>Study today to keep your streak alive.</div>
           <button
-            onClick={() => onStartSession?.({ mode: 'all' })}
+            onClick={() => onStartSession?.({ mode: 'new' })}
             style={{ padding: '7px 12px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}
           >
             Start session →

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import { buildSubjectExam, countQuestions, formatClock } from '../lib/examEngine'
+import { seenQuestionChecker } from '../lib/engine'
 import { saveExamAttempt, fetchExamPercentile, fetchMyExamAttempts } from '../lib/db'
 import ExamSimulator from './ExamSimulator'
 
@@ -9,7 +10,7 @@ const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
-export default function ExamModeScreen({ theme = 'dark', questions = [], subject, profile, onExit }) {
+export default function ExamModeScreen({ theme = 'dark', questions = [], struggleMap = {}, subject, profile, onExit }) {
   const t = THEMES[theme]
   const [paper, setPaper] = useState(null)
   const [activeTrack, setActiveTrack] = useState(null)
@@ -43,10 +44,12 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], subject
   }
 
   // Preview the paper shape for the card; a fresh random draw happens on Start.
-  const preview = buildSubjectExam(subject, questions)
+  // Papers prefer questions the student hasn't answered yet.
+  const isSeen = seenQuestionChecker(questions, struggleMap)
+  const preview = buildSubjectExam(subject, questions, isSeen)
   const previewCount = countQuestions(preview)
   const subjectAttempts = recent.filter((a) => a.track_id === preview.id).slice(0, 5)
-  const start = () => { const exam = buildSubjectExam(subject, questions); setActiveTrack(exam); setPaper(exam) }
+  const start = () => { const exam = buildSubjectExam(subject, questions, isSeen); setActiveTrack(exam); setPaper(exam) }
 
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, padding: '40px 20px 80px' }}>

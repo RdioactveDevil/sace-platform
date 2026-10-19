@@ -327,7 +327,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                     {overdue ? 'Overdue' : daysLeft === 0 ? 'Due today' : daysLeft !== null ? `${daysLeft}d left` : 'No due date'}
                   </div>
                   <button
-                    onClick={() => onStartSession({ mode: 'all', subtopics: a.topics || [], assignmentId: a.id, assignmentSubject: a.subject })}
+                    onClick={() => onStartSession({ mode: 'new', subtopics: a.topics || [], assignmentId: a.id, assignmentSubject: a.subject })}
                     style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
                   >
                     Start

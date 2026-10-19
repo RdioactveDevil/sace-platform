@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeWeights, selectNextQuestion, nextPassageSibling } from './engine.js'
+import { computeWeights, selectNextQuestion, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts } from './engine.js'
 
 // A spread of unseen questions across the full difficulty range.
 const bank = [
@@ -67,4 +67,46 @@ test('continues the current reading passage before picking elsewhere', () => {
   }
   assert.equal(nextPassageSibling(qs, [qs[2]], ['a', 'b']), null)
   assert.equal(nextPassageSibling(qs, qs, ['c']), null)
+})
+
+const seen = { attempts: 1, wrong: 0, last_seen: new Date().toISOString() }
+
+test('new mode never serves a question the student already answered, even under another id', () => {
+  const qs = [
+    { id: 'a', question: 'What is $2 + 2$?', options: ['3', '4'], difficulty: 2, subtopic: 'x' },
+    // Word-for-word duplicate of "a" stored under a different id.
+    { id: 'a-copy', question: 'What is 2 + 2?', options: ['3', '4'], difficulty: 2, subtopic: 'x' },
+    { id: 'b', question: 'What is 3 + 3?', options: ['5', '6'], difficulty: 2, subtopic: 'x' },
+  ]
+  for (let i = 0; i < 30; i++) {
+    assert.equal(selectNextQuestion(qs, { a: seen }, [], 'new')?.id, 'b')
+  }
+  // Answered earlier this session (not yet in the struggle map) counts too.
+  for (let i = 0; i < 30; i++) {
+    assert.equal(selectNextQuestion(qs, {}, ['a'], 'new')?.id, 'b')
+  }
+  assert.equal(selectNextQuestion(qs, { a: seen, b: seen }, [], 'new'), null)
+})
+
+test('same stem with different options or passages is a different question', () => {
+  const isSeen = seenQuestionChecker([
+    { id: 'p1', question: 'Which statement is true?', options: ['A', 'B'] },
+    { id: 'r1', question: 'What is the main idea?', passage_id: 'passage-1' },
+  ], { p1: seen, r1: seen })
+  assert.equal(isSeen({ id: 'p2', question: 'Which statement is true?', options: ['C', 'D'] }), false)
+  assert.equal(isSeen({ id: 'r2', question: 'What is the main idea?', passage_id: 'passage-2' }), false)
+  assert.equal(isSeen({ id: 'p3', question: 'Which  statement is TRUE?', options: ['A', 'B'] }), true)
+  assert.equal(questionContentKey({ id: 'x' }), null)
+})
+
+test('unseen counts ignore answered questions and count duplicates once', () => {
+  const qs = [
+    { id: 'a', question: 'Q1', options: ['1', '2'], subtopic: 'x' },
+    { id: 'a-copy', question: 'Q1', options: ['1', '2'], subtopic: 'x' },
+    { id: 'b', question: 'Q2', options: ['1', '2'], subtopic: 'x' },
+    { id: 'c', question: 'Q3', options: ['1', '2'], subtopic: 'x' },
+  ]
+  assert.equal(getQuestionCounts(qs, {}).unseen, 3)
+  assert.equal(getQuestionCounts(qs, { b: seen }).unseen, 2)
+  assert.equal(getQuestionCounts(qs, { a: seen }).unseen, 2)
 })

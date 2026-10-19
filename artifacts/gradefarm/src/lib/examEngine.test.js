@@ -85,6 +85,17 @@ describe('buildSubjectExam', () => {
     assert.equal(exam.id, 'subject-curriculum_x')
   })
 
+  test('uses questions the student has not answered before answered ones', () => {
+    const answered = new Set(pool.slice(0, 25).map(q => q.id))
+    const qs = buildSubjectExam({ features: { exam_questions: 6 } }, pool, q => answered.has(q.id)).sections[0].questions
+    assert.equal(qs.length, 6)
+    assert.equal(qs.filter(q => answered.has(q.id)).length, 0)
+    // Not enough new questions: answered ones fill the rest.
+    const full = buildSubjectExam({ features: { exam_questions: 10 } }, pool, q => answered.has(q.id)).sections[0].questions
+    assert.equal(full.length, 10)
+    assert.equal(full.filter(q => !answered.has(q.id)).length, 7)
+  })
+
   test('covers every topic before repeating one', () => {
     const exam = buildSubjectExam({ features: { exam_questions: 3 } }, pool)
     const topics = new Set(exam.sections[0].questions.map(q => q.topic))

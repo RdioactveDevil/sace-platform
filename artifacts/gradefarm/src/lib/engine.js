@@ -56,6 +56,47 @@ export function computeWeights(questions, struggleMap, targetDifficulty = null) 
 }
 
 /**
+ * Identity of a question's content, so the same question stored under two ids
+ * (word-for-word duplicates in the bank, or an AI variant saved both as a
+ * variant and as a bank row) counts as one. Whitespace, case and `$` are
+ * ignored; the options are included because generic stems ("Which statement
+ * is true?") recur across different questions, as is the passage for reading
+ * questions ("What is the main idea of the passage?").
+ */
+export function questionContentKey(q) {
+  if (!q?.question) return null
+  const norm = (s) => String(s ?? '').toLowerCase().replace(/\$/g, '').replace(/\s+/g, '')
+  let options = q.options
+  if (typeof options === 'string') {
+    try { options = JSON.parse(options) } catch { options = [options] }
+  }
+  const opts = Array.isArray(options) ? options.map(norm).join('|') : ''
+  return `${q.passage_id || ''}::${norm(q.question)}::${opts}`
+}
+
+/**
+ * Returns a predicate telling whether the student has already attempted a
+ * question — by id, or by content when the same question exists under
+ * another id. A student should never be served a seen question unless they
+ * asked to review (the 'wrong' and 'all' modes).
+ */
+export function seenQuestionChecker(questions, struggleMap) {
+  const attempted = (id) => (struggleMap?.[id]?.attempts ?? 0) > 0
+  const seenKeys = new Set()
+  for (const q of questions || []) {
+    if (!attempted(q.id)) continue
+    const key = questionContentKey(q)
+    if (key) seenKeys.add(key)
+  }
+  return (q) => {
+    if (!q) return false
+    if (attempted(q.id)) return true
+    const key = questionContentKey(q)
+    return !!key && seenKeys.has(key)
+  }
+}
+
+/**
  * Pick the next question using weighted random selection.
  *
  * mode:
@@ -75,10 +116,13 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
 
   let pool
   if (mode === 'new') {
-    pool = questionPool.filter(q => {
-      const s = struggleMap[q.id]
-      return (!s || s.attempts === 0) && !sessionAnsweredIds.includes(q.id)
-    })
+    const isSeen = seenQuestionChecker(questions, struggleMap)
+    const answeredKeys = new Set(
+      questions.filter(q => sessionAnsweredIds.includes(q.id)).map(questionContentKey).filter(Boolean),
+    )
+    pool = questionPool.filter(q =>
+      !isSeen(q) && !sessionAnsweredIds.includes(q.id) && !answeredKeys.has(questionContentKey(q)),
+    )
   } else if (mode === 'wrong') {
     pool = questionPool.filter(q => {
       const s = struggleMap[q.id]
@@ -129,7 +173,10 @@ export function getQuestionCounts(questions, struggleMap, subtopics = []) {
     ? questions.filter(q => subtopics.includes(q.subtopic))
     : questions
 
-  const unseen = pool.filter(q => !struggleMap[q.id] || struggleMap[q.id].attempts === 0).length
+  const isSeen = seenQuestionChecker(questions, struggleMap)
+  // Duplicates of one unseen question only count once.
+  const unseenKeys = new Set(pool.filter(q => !isSeen(q)).map(q => questionContentKey(q) || q.id))
+  const unseen = unseenKeys.size
   const wrong = pool.filter(q => struggleMap[q.id]?.wrong > 0).length
 
   return { unseen, wrong, total: pool.length }
