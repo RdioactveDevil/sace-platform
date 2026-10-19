@@ -6,12 +6,12 @@ import { initObservability } from './lib/analytics'
 import { notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import SubjectPicker     from './components/SubjectPicker'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor } from './lib/subjects'
@@ -24,6 +24,7 @@ import ProfileScreen     from './components/ProfileScreen'
 import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
+import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
@@ -68,6 +69,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 // top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
 // appear for subjects that switch it on (Admin → Curricula → Features); Exam
 // Mode and Essay Marker are full-screen, so their tabs open those screens.
+// Sections marked `tutoring` only show for students with a tutor or a lesson.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
@@ -76,6 +78,11 @@ const NAV_SECTIONS = [
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
     { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
+  ]},
+  { icon: 'video', label: 'Lessons', id: 'lessons', tutoring: true, pages: [
+    { id: 'lessons',    label: 'Online Lessons', path: '/lessons' },
+    { id: 'recordings', label: 'Recordings',     path: '/recordings' },
+    { id: 'class-res',  label: 'Resources',      path: '/class-resources' },
   ]},
   { icon: 'pen', label: 'Writing', id: 'writing', feature: 'writing', pages: [
     { id: 'w-essay',   label: 'Write an Essay', path: '/writing/essay' },
@@ -90,7 +97,19 @@ const NAV_SECTIONS = [
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ]},
 ]
-const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature }))
+const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature, tutoring: sec.tutoring }))
+const LESSON_PATHS = ['/lessons', '/recordings', '/class-resources']
+
+/** Whether this student has a tutor or a lesson (shows the Lessons section). */
+function useHasTutoring(userId) {
+  const [has, setHas] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    hasTutoringAccess(userId).then(v => { if (!cancelled) setHas(v) })
+    return () => { cancelled = true }
+  }, [userId])
+  return has
+}
 
 /** A section's pages that the current subject has switched on. */
 function visiblePages(section, subject) {
@@ -116,6 +135,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'tutor'       && <><circle cx="9" cy="6.25" r="3" {...S} /><path d="M3.25 15.5a5.75 5.75 0 0 1 11.5 0" {...S} /></>}
       {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
+      {name === 'video'       && <><rect x="2" y="4.5" width="10" height="9" rx="1.5" {...S} /><path d="m12 8 4-2.25v6.5L12 10" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
     </svg>
   )
@@ -131,7 +151,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const go = (path) => { navigate(path); onClose?.() }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
-  const primaryNav = NAV_ITEMS.filter(item => !item.feature || subjectHasFeature(subject, item.feature))
+  const hasTutoring = useHasTutoring(profile?.id)
+  const primaryNav = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const navItems = [
     ...primaryNav,
     ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
@@ -356,6 +377,47 @@ function SectionTabs({ theme, subject }) {
   )
 }
 
+/** Banner across student pages while one of their lessons can be joined. */
+function LiveLessonBanner({ profile, theme }) {
+  const t = THEMES[theme]
+  const navigate = useNavigate()
+  const location = useLocation()
+  const hasTutoring = useHasTutoring(profile?.id)
+  const [sessions, setSessions] = useState([])
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!hasTutoring) return undefined
+    let cancelled = false
+    const poll = () => {
+      setNow(Date.now())
+      fetchTutoringSessions({ from: Date.now() - 6 * 3600_000, to: Date.now() + 3600_000, limit: 20 })
+        .then(rows => { if (!cancelled) setSessions(rows || []) })
+        .catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 60_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [hasTutoring])
+
+  const lesson = sessions.find(s => isJoinable(s, now))
+  if (!lesson || location.pathname === '/lessons') return null
+  const started = lesson.status === 'active' || now >= new Date(lesson.scheduled_at).getTime()
+  return (
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.10)' : '#fff8e6' }}>
+      <Radio size={17} color={t.goldText} aria-hidden="true" style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <strong>{lesson.title || 'Your lesson'}</strong>
+        <span style={{ color: t.textMuted }}> {started ? 'is happening now' : 'is about to start'} · with {lesson.other_party_name || 'your tutor'}</span>
+      </div>
+      <button type="button" onClick={() => navigate(`/session/${lesson.id}`)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 14px', borderRadius: 9, border: 'none', background: GOLD, color: '#171724', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+        <Video size={15} aria-hidden="true" /> Join
+      </button>
+    </div>
+  )
+}
+
 function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, tutorialOverlay = null }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
@@ -414,6 +476,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
+        <LiveLessonBanner profile={profile} theme={theme} />
         <SectionTabs theme={theme} subject={subject} />
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
@@ -445,6 +508,7 @@ function AppShellScreens({
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
+  const onLessons = LESSON_PATHS.includes(location.pathname)
   const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'visible' } : { display: 'none' }
 
   // Writing workspace — only for subjects with Writing switched on.
@@ -492,6 +556,9 @@ function AppShellScreens({
           profile={profile} questions={questions} struggleMap={struggleMap}
           theme={theme} onStartSession={onStartSession} subject={subject}
           lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
+      </div>
+      <div style={onLessons ? show(screen) : { display: 'none' }}>
+        <StudentLessonsScreen theme={theme} active={onLessons} />
       </div>
       <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />

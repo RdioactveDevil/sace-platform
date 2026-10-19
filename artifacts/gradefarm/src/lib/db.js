@@ -1463,18 +1463,41 @@ export async function createTutoringSession({ session_type = 'individual', stude
 }
 
 /** List tutoring sessions for the current user (tutor or student). */
-export async function fetchTutoringSessions({ status, limit = 20, offset = 0 } = {}) {
+export async function fetchTutoringSessions({ status, limit = 20, offset = 0, from, to, order } = {}) {
   const session = await getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not authenticated.')
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
   if (status) params.set('status', status)
+  if (from) params.set('from', new Date(from).toISOString())
+  if (to) params.set('to', new Date(to).toISOString())
+  if (order) params.set('order', order)
   const res = await fetch(`/api/sessions?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.error || 'Failed to fetch sessions.')
   return json.sessions
+}
+
+const tutoringAccessCache = new Map()
+
+/**
+ * Whether a student has a tutor or has been invited to a lesson — decides
+ * whether the Lessons section shows in their sidebar. Cached per user.
+ */
+export function hasTutoringAccess(userId) {
+  if (!userId) return Promise.resolve(false)
+  if (!tutoringAccessCache.has(userId)) {
+    const check = Promise.all([
+      supabase.from('tutor_students').select('tutor_id', { count: 'exact', head: true }).eq('student_id', userId),
+      supabase.from('session_participants').select('session_id', { count: 'exact', head: true }).eq('student_id', userId),
+    ])
+      .then(([roster, lessons]) => (roster.count ?? 0) > 0 || (lessons.count ?? 0) > 0)
+      .catch(() => false)
+    tutoringAccessCache.set(userId, check)
+  }
+  return tutoringAccessCache.get(userId)
 }
 
 /** Get a single tutoring session by ID. */
