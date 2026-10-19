@@ -42,7 +42,7 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_tiers: [5, 4, 3], free_daily_questions: 20, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+const DEFAULT_PRICING = { student_tiers: [5, 4, 3], free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -66,6 +66,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   const tiers = Array.isArray(dbPricing.student_tiers) && dbPricing.student_tiers.length ? dbPricing.student_tiers : [5, 4, 3]
   const studentWeekly = tiers[0]
   const freeDaily = dbPricing.free_daily_questions ?? 20
+  const freeAi = dbPricing.free_daily_ai_messages ?? 10
   const extraLadder = tiers.length > 1 ? `$${tiers.slice(1).join(', then $')}` : `$${studentWeekly}`
   const threeSubjects = [0, 1, 2].map(i => tiers[Math.min(i, tiers.length - 1)]).reduce((a, b) => a + b, 0)
   // Students pay weekly per subject; the monthly/annual toggle is for tutor plans.
@@ -82,6 +83,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       features: [
         { text: '1 subject of your choice (swap any time)', included: true },
         { text: `${freeDaily} questions per day`, included: true },
+        { text: `${freeAi} Titan AI messages per day`, included: true },
         { text: 'Instant feedback & struggle tracking', included: true },
         { text: 'Weekly leaderboard', included: true },
         { text: 'Unlimited questions', included: false },

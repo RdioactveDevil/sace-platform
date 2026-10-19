@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
@@ -134,6 +135,21 @@ export default function LearnScreen({
   docName,     setDocName,
   questionContext, setQuestionContext, onConsolidate,
 }) {
+  const navigate = useNavigate()
+  // Free-tier Titan AI allowance for today: { chat_used, chat_limit } (chat_limit null = unlimited).
+  const [aiQuota, setAiQuota] = useState(null)
+  useEffect(() => {
+    supabase.rpc('ai_chat_usage_today').then(({ data }) => { if (data) setAiQuota(data) }, () => {})
+  }, [profile?.id])
+  const aiLeft = aiQuota?.chat_limit != null ? Math.max(0, aiQuota.chat_limit - aiQuota.chat_used) : null
+  const outOfAi = aiLeft === 0
+  /** The assistant's reply text, or the daily-limit notice; also records the latest quota. */
+  const readChatReply = (res, data) => {
+    if (data?.quota) setAiQuota(data.quota)
+    if (res.status === 429) return data?.error || "You've reached today's Titan AI limit. It resets tomorrow."
+    return data?.content?.[0]?.text
+  }
+
   const t = THEMES[theme]
 
   const [input, setInput]               = useState('')
@@ -436,7 +452,7 @@ export default function LearnScreen({
   }
 
   const sendMessage = async () => {
-    if (loading || processingImages) return
+    if (loading || processingImages || outOfAi) return
     if (!input.trim() && attachedImages.length === 0) return
 
     const outgoingImages = attachedImages
@@ -460,6 +476,7 @@ export default function LearnScreen({
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
+          purpose: 'titan_chat',
           subject: subject || '',
           topic: topic || '',
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests),
@@ -467,8 +484,9 @@ export default function LearnScreen({
         })
       })
       const data = await res.json()
+      const reply = readChatReply(res, data)
       setMessages(prev => {
-        const updated = [...prev, { role: 'assistant', content: data.content?.[0]?.text || "Let me try a different approach..." }]
+        const updated = [...prev, { role: 'assistant', content: reply || "Let me try a different approach..." }]
         if (sessionId) {
           supabase.from('learn_sessions')
             .update({ messages: updated, updated_at: new Date().toISOString() })
@@ -485,7 +503,7 @@ export default function LearnScreen({
   }
 
   const sendPresetMessage = async (text) => {
-    if (loading || processingImages) return
+    if (loading || processingImages || outOfAi) return
     // Quick replies don't carry photos; skip them so the student doesn't lose attached images by accident.
     if (attachedImages.length > 0) return
     const userMsg = { role: 'user', content: text }
@@ -503,6 +521,7 @@ export default function LearnScreen({
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
+          purpose: 'titan_chat',
           subject: subject || '',
           topic: topic || '',
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests),
@@ -510,8 +529,9 @@ export default function LearnScreen({
         })
       })
       const data = await res.json()
+      const reply = readChatReply(res, data)
       setMessages(prev => {
-        const updated = [...prev, { role: 'assistant', content: data.content?.[0]?.text || 'Let me try differently...' }]
+        const updated = [...prev, { role: 'assistant', content: reply || 'Let me try differently...' }]
         if (sessionId) {
           supabase.from('learn_sessions')
             .update({ messages: updated, updated_at: new Date().toISOString() })
@@ -1074,7 +1094,8 @@ export default function LearnScreen({
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder={attachedImages.length > 0 ? 'Add a note for Titan (optional)…' : 'Type your answer or question…'}
+                disabled={outOfAi}
+                placeholder={outOfAi ? "You've used today's free Titan AI messages" : attachedImages.length > 0 ? 'Add a note for Titan (optional)…' : 'Type your answer or question…'}
                 rows={1}
                 style={{
                   flex: 1,
@@ -1092,7 +1113,7 @@ export default function LearnScreen({
 
               <button
                 onClick={sendMessage}
-                disabled={(!input.trim() && attachedImages.length === 0) || loading || processingImages}
+                disabled={(!input.trim() && attachedImages.length === 0) || loading || processingImages || outOfAi}
                 aria-label="Send message"
                 style={{
                   width: 42, height: 42, borderRadius: 11, border: 'none',
@@ -1109,6 +1130,21 @@ export default function LearnScreen({
                 ↑
               </button>
             </div>
+            {aiLeft != null && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8, fontSize: 12, color: outOfAi ? t.danger : t.textMuted }}>
+                <span>
+                  {outOfAi
+                    ? 'No free Titan AI messages left today — they reset tomorrow.'
+                    : `${aiLeft} of ${aiQuota.chat_limit} free Titan AI messages left today`}
+                </span>
+                {subject && (
+                  <button type="button" onClick={() => navigate('/get-access', { state: { subject } })}
+                    style={{ border: 'none', background: 'none', padding: 0, color: t.goldText, fontFamily: FONT_B, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                    Go unlimited →
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1117,13 +1153,13 @@ export default function LearnScreen({
             <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>Quick replies</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {["I don't get it", 'Give me an example', 'I think I get it!', 'Different analogy'].map(s => {
-                const blocked = attachedImages.length > 0
+                const blocked = attachedImages.length > 0 || outOfAi
                 return (
                   <button
                     key={s}
                     onClick={() => sendPresetMessage(s)}
                     disabled={blocked}
-                    title={blocked ? 'Send your photo first, or remove it to use a quick reply' : undefined}
+                    title={outOfAi ? "You've used today's free Titan AI messages" : blocked ? 'Send your photo first, or remove it to use a quick reply' : undefined}
                     className="ls-quickreply"
                     style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12.5, cursor: blocked ? 'not-allowed' : 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%', opacity: blocked ? 0.45 : 1 }}
                   >

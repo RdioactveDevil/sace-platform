@@ -58,7 +58,7 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: [5, 4, 3], free_daily_questions: 20, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
+const DEFAULT_PRICING   = { student_tiers: [5, 4, 3], free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
   // Pricing state
@@ -140,6 +140,16 @@ export default function AdminSettingsTab() {
               />
             </Field>
           ))}
+          <Field label="Free tier: Titan AI messages per day" hint="Students with no paid subject">
+            <input
+              style={inputStyle}
+              type="number"
+              min={0}
+              value={pr.free_daily_ai_messages ?? ''}
+              onChange={e => setPr(p => ({ ...p, free_daily_ai_messages: e.target.value === '' ? '' : Number(e.target.value) }))}
+              placeholder="10"
+            />
+          </Field>
           <Field label="Free subject: questions per day">
             <input
               style={inputStyle}

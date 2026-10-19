@@ -197,6 +197,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
             {[
               'Unlimited practice questions',
+              'Unlimited Titan AI tutoring',
               'Exam Mode and full topic coverage',
               'Instant feedback and spaced repetition',
             ].map(item => (

@@ -190,11 +190,51 @@ function logOffTopicAttempt(verifiedUserId: string, subject: string, topic: stri
   })();
 }
 
+type Quota = { chat_used: number; chat_limit: number | null };
+
+/**
+ * Count this AI call against the student's daily limits (ai_usage). Students
+ * with no paid/granted/beta subject get a few Titan AI messages a day
+ * (`purpose: "titan_chat"`); every AI call also counts toward a hidden safety
+ * cap. Tutors, admins and server scripts aren't limited. Fails open if the
+ * quota check itself errors, so a database hiccup never takes chat down.
+ */
+async function checkAiQuota(
+  caller: NonNullable<Awaited<ReturnType<typeof requireUser>>>,
+  isChat: boolean,
+): Promise<{ blocked: { scope: string; quota: Quota } } | { quota: Quota | null }> {
+  if (caller.isAdmin || caller.isTutor) return { quota: null };
+  const { data, error } = await caller.admin.rpc("use_ai_quota", { p_user: caller.userId, p_chat: isChat });
+  if (error || !data) {
+    logger.warn({ err: error }, "AI quota check failed — allowing the call");
+    return { quota: null };
+  }
+  const r = data as { allowed: boolean; chat_used: number; chat_limit: number | null; limit_hit?: string };
+  const quota = { chat_used: r.chat_used ?? 0, chat_limit: r.chat_limit ?? null };
+  return r.allowed ? { quota } : { blocked: { scope: r.limit_hit || "calls", quota } };
+}
+
 router.post("/chat", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
   try {
     const { messages, system, max_tokens, subject, topic, exemplarsFor } = req.body;
+
+    const isChat = req.body?.purpose === "titan_chat";
+    const check = await checkAiQuota(caller, isChat);
+    if ("blocked" in check) {
+      const { scope, quota } = check.blocked;
+      res.status(429).json({
+        code: "ai_daily_limit",
+        scope,
+        quota,
+        error: scope === "chat"
+          ? `You've used your ${quota.chat_limit} free Titan AI messages for today. They reset tomorrow, or subscribe to a subject for unlimited Titan AI.`
+          : "You've reached today's AI limit. It resets tomorrow.",
+      });
+      return;
+    }
+    const quota = isChat ? check.quota : null;
 
     // Optional: fold reference-resource exemplars into the system prompt so
     // server-side callers (e.g. remediation's "similar question" generation)
@@ -278,6 +318,7 @@ router.post("/chat", async (req, res) => {
           res.status(200).json({
             content: [{ type: "text", text: redirectFn(topic) }],
             off_topic: true,
+            ...(quota ? { quota } : {}),
           });
           return;
         }
@@ -292,8 +333,8 @@ router.post("/chat", async (req, res) => {
       return;
     }
 
-    const data = await response.json();
-    res.status(200).json(data);
+    const data = (await response.json()) as Record<string, unknown>;
+    res.status(200).json(quota ? { ...data, quota } : data);
   } catch (err) {
     logger.error({ err }, "Chat API error");
     res.status(500).json({ error: "Internal server error" });
