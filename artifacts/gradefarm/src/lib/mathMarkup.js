@@ -106,6 +106,28 @@ export function collapseOverEscapes(text) {
   return text.replace(OVER_ESCAPED_RE, '\\$1')
 }
 
+// ── 2b. Literal "\n" line breaks ────────────────────────────────────────────
+
+// LaTeX commands starting with "n". Any other "\n" + letters is a line break.
+// Keep in sync with LATEX_N_COMMANDS in api-server/src/lib/json-latex.ts.
+const LATEX_N_COMMANDS = new Set(`
+  ne neq neg nabla nu ni not notin newline nleq ngeq nless ngtr nmid nexists natural
+  nearrow nwarrow nolimits nsubseteq nsupseteq nparallel nsim ncong nleftarrow nrightarrow
+  nLeftarrow nRightarrow nleftrightarrow nLeftrightarrow nvdash nVdash nprec nsucc
+`.trim().split(/\s+/))
+
+/**
+ * Older generated questions stored a model's JSON newline as a literal
+ * backslash-n ("...15, ...\n\nWhich rule..."). Turn those back into line
+ * breaks, leaving real commands (\neq, \nabla, \nu) and `\\` row breaks alone.
+ */
+export function restoreLiteralNewlines(text) {
+  if (!text.includes('\\n')) return text
+  return text.replace(/(?<!\\)\\(n[A-Za-z]*)/g, (whole, name) =>
+    LATEX_N_COMMANDS.has(name) ? whole : `\n${name.slice(1)}`,
+  )
+}
+
 // ── 3. \( \) and \[ \] delimiters ────────────────────────────────────────────
 
 function findUnescaped(s, needle, from) {
@@ -468,7 +490,7 @@ function preprocessPlain(text) {
 
 /** Apply the source-level repairs (1–3) to a raw string. */
 export function normalizeMathSource(text) {
-  return convertBracketDelimiters(collapseOverEscapes(repairControlEscapes(text)))
+  return convertBracketDelimiters(restoreLiteralNewlines(collapseOverEscapes(repairControlEscapes(text))))
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   repairControlEscapes,
   collapseOverEscapes,
   convertBracketDelimiters,
+  restoreLiteralNewlines,
 } from './mathMarkup.js'
 
 const math = (tokens) => tokens.filter((t) => t.type === 'math').map((t) => t.content)
@@ -115,4 +116,16 @@ test('numbered lists get line breaks, function arguments like T(1) do not', () =
   const s = 'With $T(1) = 50$ the rule is $T(n) = 55 - 5n$, so $T(2) = 45$ and T(1) + T(2) = 95.'
   assert.equal(insertLineBreaks(s), s)
   assert.deepEqual(math(parseMathText(s)), ['T(1) = 50', 'T(n) = 55 - 5n', 'T(2) = 45'])
+})
+
+test('literal backslash-n from old generated questions becomes a line break', () => {
+  // From the live bank: the question rendered "...\n\nWhich rule..." verbatim.
+  const q = 'Look at this sequence: $3, 6, 9, 12, 15, \\ldots$\\n\\nWhich rule describes the $n$th term?'
+  assert.deepEqual(texts(parseMathText(q)), ['Look at this sequence: ', '\n\nWhich rule describes the ', 'th term?'])
+  assert.deepEqual(math(parseMathText(q)), ['3, 6, 9, 12, 15, \\ldots', 'n'])
+  assert.equal(restoreLiteralNewlines('Step 1\\n2x = 4'), 'Step 1\n2x = 4')
+  // Real \n-commands and \\ row breaks are left alone.
+  assert.equal(restoreLiteralNewlines('$x \\neq 0$, $\\nabla f$, $\\nu$'), '$x \\neq 0$, $\\nabla f$, $\\nu$')
+  assert.equal(restoreLiteralNewlines('$\\begin{matrix} a \\\\ b \\end{matrix}$'), '$\\begin{matrix} a \\\\ b \\end{matrix}$')
+  assertRenders(parseMathText('$x \\neq 0$\\nso $x^2 > 0$'))
 })
