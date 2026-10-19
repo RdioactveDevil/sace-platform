@@ -1919,7 +1919,7 @@ export default function QuizScreen({
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        🎓 Get Titan's Help
+                        Get Titan's Help
                       </button>
                     )}
                   </div>
