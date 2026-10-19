@@ -255,9 +255,14 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
         <div style={{ width: '100%', maxWidth: 600 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 700 }}>{cur.sectionName} · Q{reviewIdx + 1}/{flat.length}</span>
-            <span style={{ padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: correct ? t.successBg : t.dangerBg, color: correct ? t.success : t.danger, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}` }}>
-              {correct ? '✓ Correct' : '✗ Incorrect'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: correct ? t.successBg : t.dangerBg, color: correct ? t.success : t.danger, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}` }}>
+                {correct ? '✓ Correct' : '✗ Incorrect'}
+              </span>
+              <button onClick={onExit} style={{ padding: '4px 12px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                ✕ Exit review
+              </button>
+            </div>
           </div>
           <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: 24, marginBottom: 14 }}>
             <ExamQuestion q={cur.q} answers={answers} setAnswer={() => {}} review theme={theme} />
