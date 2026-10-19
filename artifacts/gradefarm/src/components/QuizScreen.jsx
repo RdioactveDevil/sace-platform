@@ -44,6 +44,9 @@ import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
+// Question-area width from which a reading passage sits beside the question
+// (600px question + gap + a comfortable reading column).
+const SIDE_PASSAGE_MIN_WIDTH = 1000
 const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
@@ -361,6 +364,9 @@ export default function QuizScreen({
   const [floatXP, setFloatXP] = useState(null)
   const [showExit, setShowExit] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
+  // Width of the question area, to decide whether a passage fits beside the question.
+  const [questionAreaEl, setQuestionAreaEl] = useState(null)
+  const [questionAreaWidth, setQuestionAreaWidth] = useState(0)
   const [generatingMore, setGeneratingMore] = useState(false)
   // Human-readable reason the last auto-generation attempt failed, shown on the
   // session summary so a silent empty/errored top-up is diagnosable.
@@ -398,6 +404,13 @@ export default function QuizScreen({
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
+
+  useEffect(() => {
+    if (!questionAreaEl || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([entry]) => setQuestionAreaWidth(entry.contentRect.width))
+    ro.observe(questionAreaEl)
+    return () => ro.disconnect()
+  }, [questionAreaEl])
 
   // Reset timer when a new exam session starts
   useEffect(() => { setTimeLeft(timerSeconds) }, [timerSeconds])
@@ -1579,6 +1592,8 @@ export default function QuizScreen({
       ? 'Next Similar Question →'
       : 'Next Question →'
 
+  const sidePassage = !isMobile && questionAreaWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
+
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, overflow: isMobile ? 'visible' : 'hidden' }}>
       <style>{`
@@ -1659,8 +1674,14 @@ export default function QuizScreen({
       </div>
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
-        <div style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
+        <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : 600, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+          {sidePassage && (
+            <div style={{ flex: '1 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
+              <PassageView passage={currentQ.passage} theme={theme} fill />
+            </div>
+          )}
+          <div style={{ flex: '0 1 600px', minWidth: 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
             {consolidateSubtopic && (
               <div style={{
                 marginBottom: 14,
@@ -1696,7 +1717,7 @@ export default function QuizScreen({
             />
 
             <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: t.shadowCard, marginBottom: showAns ? 14 : 0 }}>
-              {currentQ.passage && <PassageView passage={currentQ.passage} theme={theme} />}
+              {currentQ.passage && !sidePassage && <PassageView passage={currentQ.passage} theme={theme} />}
               {currentQ.graph && (
                 <GraphView graph={currentQ.graph} theme={theme} />
               )}
@@ -1950,6 +1971,7 @@ export default function QuizScreen({
                 </div>
               )}
             </div>
+          </div>
           </div>
 
           {!isMobile && (
