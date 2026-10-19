@@ -615,13 +615,14 @@ export async function markTutorialComplete(userId) {
 }
 
 // â”€â”€â”€ LEADERBOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export async function getLeaderboard(limit = 20) {
-  const { data, error } = await supabase
-    .from('leaderboard')
-    .select('*')
-    .limit(limit)
-  if (error) throw error
-  return data
+/**
+ * One leaderboard per class the user is in (tutors: also classes they teach;
+ * admins: every class), each ranked by XP:
+ * [{ id, name, subject, color, is_member, board: [{ id, display_name, xp, level, streak, position }] }]
+ */
+export async function fetchClassLeaderboards() {
+  const json = await tutorFetch('/api/leaderboard/classes')
+  return json.classes || []
 }
 
 // â”€â”€â”€ REMEDIATION VARIANTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

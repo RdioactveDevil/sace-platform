@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getLeaderboard } from '../lib/db'
+import { fetchClassLeaderboards } from '../lib/db'
 import { RANK_ICONS, getLevel } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
@@ -8,27 +8,38 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 const GOLD = '#f1be43'
 
+const CLASS_KEY = 'gf-leaderboard-class'
+
+// Leaderboards are per class: students compete with their classmates, not
+// everyone on the platform.
 export default function LeaderboardScreen({ profile, theme, embedded }) {
-  const [board, setBoard] = useState([])
+  const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('all')
+  const [error, setError] = useState('')
+  const [classId, setClassId] = useState(() => {
+    try { return localStorage.getItem(CLASS_KEY) || '' } catch { return '' }
+  })
   const t = THEMES[theme]
 
   useEffect(() => {
-    getLeaderboard(50).then((data) => {
-      setBoard(data)
-      setLoading(false)
-    })
+    fetchClassLeaderboards()
+      .then(setClasses)
+      .catch(err => setError(err.message || 'Could not load the leaderboard.'))
+      .finally(() => setLoading(false))
   }, [])
 
-  const hasSchool = !!profile.school
-  const visibleBoard = useMemo(() => {
-    if (tab === 'school' && hasSchool) return board.filter(r => r.school === profile.school)
-    return board.slice(0, 20)
-  }, [board, tab, hasSchool, profile.school])
+  // The remembered class, else the first class the user is in, else the first.
+  const active = useMemo(
+    () => classes.find(c => c.id === classId) || classes.find(c => c.is_member) || classes[0] || null,
+    [classes, classId],
+  )
+  const pickClass = (id) => {
+    setClassId(id)
+    try { localStorage.setItem(CLASS_KEY, id) } catch {}
+  }
 
-  const myPosition = visibleBoard.findIndex((r) => r.id === profile.id) + 1
-  const myGlobalPosition = board.findIndex((r) => r.id === profile.id) + 1
+  const visibleBoard = active?.board || []
+  const me = visibleBoard.find(r => r.id === profile.id)
 
   return (
     <div style={{ height: embedded ? '100%' : '100vh', minHeight: 0, background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: FONT_B, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -45,22 +56,24 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
             <div>
               <h1 style={{ fontSize: 26, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, margin: 0, color: t.text }}>Leaderboard</h1>
-              <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6 }}>Top players by XP</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6 }}>
+                {active ? `${active.name} · ranked by XP` : 'Ranked by XP within your class'}
+              </div>
             </div>
-            {hasSchool && (
-              <div style={{ display: 'flex', gap: 6, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10, padding: 4 }}>
-                {['all', 'school'].map(id => (
+            {classes.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10, padding: 4, maxWidth: '100%' }}>
+                {classes.map(c => (
                   <button
-                    key={id}
-                    onClick={() => setTab(id)}
+                    key={c.id}
+                    onClick={() => pickClass(c.id)}
                     style={{
                       padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: FONT_B,
-                      background: tab === id ? GOLD : 'transparent',
-                      color:      tab === id ? '#080d28' : t.textMuted,
+                      background: active?.id === c.id ? GOLD : 'transparent',
+                      color:      active?.id === c.id ? '#080d28' : t.textMuted,
                       transition: 'background 0.15s, color 0.15s',
                     }}
                   >
-                    {id === 'all' ? 'Global' : 'My School'}
+                    {c.name}
                   </button>
                 ))}
               </div>
@@ -70,6 +83,20 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} theme={theme} />)}
+            </div>
+          ) : error ? (
+            <div style={{ padding: '28px 20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center', fontSize: 13, color: t.danger }}>{error}</div>
+          ) : !active ? (
+            <div style={{ padding: '36px 24px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 30, marginBottom: 10 }}>🏆</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 6 }}>You're not in a class yet</div>
+              <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+                When your tutor adds you to a class, you'll see how you rank against your classmates here.
+              </div>
+            </div>
+          ) : visibleBoard.length === 0 ? (
+            <div style={{ padding: '28px 20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center', fontSize: 13, color: t.textMuted }}>
+              No students in {active.name} yet.
             </div>
           ) : (
             <>
@@ -95,8 +122,9 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {visibleBoard.map((p, i) => {
+                {visibleBoard.map((p) => {
                   const isMe = p.id === profile.id
+                  const i = p.position - 1
                   const lvl = getLevel(p.xp)
                   const rIcon = RANK_ICONS[Math.min(lvl, RANK_ICONS.length - 1)]
                   return (
@@ -105,13 +133,11 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                       <div style={{ fontSize: 18 }}>{rIcon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: isMe ? GOLD : t.text }}>{p.display_name}{isMe ? ' (You)' : ''}</div>
-                        {p.school && tab !== 'school' && <div style={{ fontSize: 11, color: t.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.school}</div>}
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: GOLD }}>{p.xp.toLocaleString()} XP</div>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }}>
                           {p.streak > 0 && <span style={{ fontSize: 11, color: t.danger }}>🔥 {p.streak}</span>}
-                          {p.best_streak > 0 && <span style={{ fontSize: 11, color: t.textFaint }}>best {p.best_streak}</span>}
                         </div>
                       </div>
                     </div>
@@ -119,15 +145,9 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                 })}
               </div>
 
-              {myGlobalPosition > 0 && myPosition === 0 && (
-                <div style={{ marginTop: 16, padding: '12px 18px', background: 'rgba(241,190,67,0.06)', border: '1px solid rgba(241,190,67,0.25)', borderRadius: 10, fontSize: 13, color: t.textMuted, textAlign: 'center' }}>
-                  Your global rank: <strong style={{ color: GOLD }}>#{myGlobalPosition}</strong>
-                </div>
-              )}
-              {myPosition > 0 && (
+              {me && (
                 <div style={{ marginTop: 16, padding: '12px 18px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 13, color: t.textMuted, textAlign: 'center' }}>
-                  {tab === 'school' ? 'Your school rank:' : 'Your rank:'} <strong style={{ color: t.text }}>#{myPosition}</strong>
-                  {tab === 'school' && myGlobalPosition > 0 && <span> · Global: <strong style={{ color: GOLD }}>#{myGlobalPosition}</strong></span>}
+                  Your rank in {active.name}: <strong style={{ color: t.text }}>#{me.position}</strong> of {visibleBoard.length}
                 </div>
               )}
             </>
