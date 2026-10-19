@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
 import { notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
+import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
@@ -26,27 +27,35 @@ import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebratio
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
 
+// Vite fires this when a chunk's preloaded dependencies are gone after a
+// deploy; reload to pick up the new build instead of erroring.
+if (typeof window !== 'undefined') {
+  window.addEventListener('vite:preloadError', (event) => {
+    if (reloadForNewVersion()) event.preventDefault()
+  })
+}
+
 // Heavy / route-only screens are lazy-loaded so their dependencies (Excalidraw,
 // LiveKit, MathLive, the entire admin bundle, marketing pages, etc.) are split
 // out of the initial app bundle and only fetched when the route is visited.
-const LandingPage           = lazy(() => import('./components/LandingPage'))
-const AuthScreen            = lazy(() => import('./components/AuthScreen'))
-const OnboardingScreen      = lazy(() => import('./components/OnboardingScreen'))
-const TutorOnboardingScreen = lazy(() => import('./components/TutorOnboardingScreen'))
-const TutorSignupScreen     = lazy(() => import('./components/TutorSignupScreen'))
-const GetAccessScreen       = lazy(() => import('./components/GetAccessScreen'))
-const TermsScreen           = lazy(() => import('./components/TermsScreen'))
-const PrivacyScreen         = lazy(() => import('./components/PrivacyScreen'))
-const AdminScreen           = lazy(() => import('./components/AdminScreen'))
-const TutorScreen           = lazy(() => import('./components/TutorScreen'))
-const WritingScreen         = lazy(() => import('./components/WritingScreen'))
-const DiagnosticScreen      = lazy(() => import('./components/DiagnosticScreen'))
-const PricingPage           = lazy(() => import('./components/PricingPage'))
-const QuestionLabScreen     = lazy(() => import('./components/QuestionLabScreen'))
-const ExamModeScreen        = lazy(() => import('./components/ExamModeScreen'))
-const EssayMarkerScreen     = lazy(() => import('./components/EssayMarkerScreen'))
-const SessionRoom           = lazy(() => import('./components/SessionRoom'))
-const RecurringRoomPage     = lazy(() => import('./components/RecurringRoomPage'))
+const LandingPage           = lazyWithReload(() => import('./components/LandingPage'))
+const AuthScreen            = lazyWithReload(() => import('./components/AuthScreen'))
+const OnboardingScreen      = lazyWithReload(() => import('./components/OnboardingScreen'))
+const TutorOnboardingScreen = lazyWithReload(() => import('./components/TutorOnboardingScreen'))
+const TutorSignupScreen     = lazyWithReload(() => import('./components/TutorSignupScreen'))
+const GetAccessScreen       = lazyWithReload(() => import('./components/GetAccessScreen'))
+const TermsScreen           = lazyWithReload(() => import('./components/TermsScreen'))
+const PrivacyScreen         = lazyWithReload(() => import('./components/PrivacyScreen'))
+const AdminScreen           = lazyWithReload(() => import('./components/AdminScreen'))
+const TutorScreen           = lazyWithReload(() => import('./components/TutorScreen'))
+const WritingScreen         = lazyWithReload(() => import('./components/WritingScreen'))
+const DiagnosticScreen      = lazyWithReload(() => import('./components/DiagnosticScreen'))
+const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
+const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
+const ExamModeScreen        = lazyWithReload(() => import('./components/ExamModeScreen'))
+const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMarkerScreen'))
+const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
+const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
