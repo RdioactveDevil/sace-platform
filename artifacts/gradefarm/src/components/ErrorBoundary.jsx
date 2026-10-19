@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { reportError } from '../lib/analytics'
+import { isChunkLoadError } from '../lib/chunkReload'
 
 const GOLD   = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -36,6 +37,9 @@ export default class ErrorBoundary extends Component {
   }
 
   handleRetry = () => {
+    // A failed lazy import is cached, so re-rendering can't recover from a
+    // stale chunk; only a reload fetches the new build.
+    if (isChunkLoadError(this.state.error)) { window.location.reload(); return }
     try { this.props.onReset?.() } catch (_) {}
     this.setState({ error: null })
   }
