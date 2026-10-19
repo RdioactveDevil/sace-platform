@@ -1,3 +1,4 @@
+import { Flame } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 const GOLD = '#f1be43'
@@ -48,7 +49,7 @@ export default function StreakCalendar({ answerLog, onStartSession, theme }) {
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Last 30 Days</div>
-        <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>{streak} 🔥 streak</div>
+        <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{streak} <Flame size={14} aria-hidden="true" /> streak</div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gap: 4 }}>

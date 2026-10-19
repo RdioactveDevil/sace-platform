@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { PenLine, RefreshCw, Sparkles, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 const GOLD = '#f1be43'
@@ -118,7 +119,8 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
         )}
         <div style={{ textAlign: 'center', marginBottom: 26 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: GOLD, fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            ✍️ AI Essay Marker
+            <PenLine size={13} aria-hidden="true" />
+            AI Essay Marker
           </div>
           <div style={{ fontFamily: FONT_D, fontSize: 28, color: t.text, letterSpacing: 1 }}>Get your writing marked instantly</div>
           <div style={{ fontSize: 14, color: t.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 540, margin: '8px auto 0' }}>
@@ -144,8 +146,8 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: prompt ? 12 : 0 }}>
             <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Prompt</span>
             <button onClick={generatePrompt} disabled={loadingPrompt}
-              style={{ padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.borderAccent}`, background: t.accentGlow, color: GOLD, fontSize: 12, fontWeight: 700, cursor: loadingPrompt ? 'default' : 'pointer', fontFamily: FONT_B }}>
-              {loadingPrompt ? 'Generating…' : prompt ? '↻ New prompt' : '✨ Generate prompt'}
+              style={{ padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.borderAccent}`, background: t.accentGlow, color: GOLD, fontSize: 12, fontWeight: 700, cursor: loadingPrompt ? 'default' : 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {loadingPrompt ? 'Generating…' : prompt ? <><RefreshCw size={14} aria-hidden="true" />New prompt</> : <><Sparkles size={14} aria-hidden="true" />Generate prompt</>}
             </button>
           </div>
           {prompt && <div style={{ fontSize: 14, color: t.text, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{prompt}</div>}
@@ -158,8 +160,8 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>{words} words</span>
               {timed
-                ? <span style={{ fontSize: 12, fontWeight: 800, color: timeLeft <= 60 ? t.danger : GOLD, background: t.accentGlow, padding: '3px 10px', borderRadius: 999, fontVariantNumeric: 'tabular-nums' }}>⏱ {clock(timeLeft)}</span>
-                : <button onClick={startTimer} style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>⏱ Start {type.timed}-min timer</button>}
+                ? <span style={{ fontSize: 12, fontWeight: 800, color: timeLeft <= 60 ? t.danger : GOLD, background: t.accentGlow, padding: '3px 10px', borderRadius: 999, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Timer size={14} aria-hidden="true" />{clock(timeLeft)}</span>
+                : <button onClick={startTimer} style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Timer size={14} aria-hidden="true" />Start {type.timed}-min timer</button>}
               {timed && <button onClick={stopTimer} style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Stop</button>}
             </div>
           </div>

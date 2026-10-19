@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { adminApiPost } from '../lib/adminApi'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { supabase } from '../lib/supabase'
+import { FileText } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -121,7 +122,7 @@ export default function AdminUploadScreen() {
           onChange={e => handleFile(e.target.files[0])}
         />
         {file
-          ? <span style={{ color: GOLD, fontWeight: 700, fontSize: 14 }}>📄 {file.name}</span>
+          ? <span style={{ color: GOLD, fontWeight: 700, fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}><FileText size={16} aria-hidden="true" /> {file.name}</span>
           : <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14 }}>Drop a PDF here or click to browse</span>
         }
       </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FlaskConical, Lightbulb } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 import MathText from './MathText'
@@ -195,7 +196,7 @@ export default function QuestionLabScreen({ theme = 'dark', onExit }) {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: GOLD, fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            🧪 Question Lab
+            <FlaskConical size={13} aria-hidden="true" /> Question Lab
           </div>
           <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text, letterSpacing: 1 }}>Multi-format question engine</div>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6, lineHeight: 1.6 }}>
@@ -261,7 +262,7 @@ export default function QuestionLabScreen({ theme = 'dark', onExit }) {
             <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.8 }}><MathText text={q.solution} /></div>
             {q.tip && (
               <div style={{ marginTop: 14, padding: '12px 14px', background: t.accentGlow2, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65 }}>
-                💡 <MathText text={q.tip} />
+                <Lightbulb size={15} aria-hidden="true" style={{ verticalAlign: '-3px' }} /> <MathText text={q.tip} />
               </div>
             )}
             <button onClick={() => pick((idx + 1) % SAMPLES.length)}

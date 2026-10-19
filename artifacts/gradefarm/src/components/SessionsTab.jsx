@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { Calendar, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
@@ -45,15 +46,15 @@ function StatusBadge({ status, t }) {
 /** Recording status pill — reflects LiveKit Egress state for a session. */
 function RecordingBadge({ session, t }) {
   const rs = session.recording_status
-  let label, bg, text
-  if (rs === 'recording')          { label = '🔴 Recording';       bg = t.dangerBg;  text = t.danger }
-  else if (rs === 'ready')         { label = '🎬 Recorded';        bg = t.blueBg;    text = t.blue }
-  else if (rs === 'failed')        { label = '⚠ Recording failed'; bg = t.dangerBg;  text = t.danger }
+  let label, bg, text, icon = null
+  if (rs === 'recording')          { label = 'Recording';          bg = t.dangerBg;  text = t.danger; icon = <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.danger, display: 'inline-block' }} /> }
+  else if (rs === 'ready')         { label = 'Recorded';           bg = t.blueBg;    text = t.blue;   icon = <Video size={12} aria-hidden="true" /> }
+  else if (rs === 'failed')        { label = 'Recording failed';   bg = t.dangerBg;  text = t.danger; icon = <TriangleAlert size={12} aria-hidden="true" /> }
   else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = t.goldText }
   else return null
   return (
-    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B }}>
-      {label}
+    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      {icon}{label}
     </span>
   )
 }
@@ -171,7 +172,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     return createPortal(
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
         <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center', backdropFilter: 'blur(16px)' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><CircleCheck size={48} color={t.success} aria-hidden="true" /></div>
           <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: t.text }}>Meeting Created</h2>
           <p style={{ margin: '0 0 24px', fontSize: 14, color: t.textMuted }}>
             Share this link with anyone you want in the session.
@@ -205,7 +206,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
       <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
-        <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, letterSpacing: '0.04em', color: t.text }}>📅 New Meeting</h2>
+        <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, letterSpacing: '0.04em', color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={17} aria-hidden="true" />New Meeting</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Session type toggle */}
@@ -213,10 +214,10 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             <label style={labelStyle}>Session Type</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" style={typeBtn('individual')} onClick={() => setSessionType('individual')}>
-                👤 1-on-1
+                <User size={16} aria-hidden="true" style={{ verticalAlign: '-3px' }} /> 1-on-1
               </button>
               <button type="button" style={typeBtn('group')} onClick={() => setSessionType('group')}>
-                👥 Group
+                <Users size={16} aria-hidden="true" style={{ verticalAlign: '-3px' }} /> Group
               </button>
 
             </div>
@@ -225,7 +226,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           {/* Recurring toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: toggleBg, border: toggleBdr, borderRadius: 10, padding: '12px 16px' }}>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔁 Recurring session</div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: t.text, display: 'flex', alignItems: 'center', gap: 6 }}><Repeat size={15} aria-hidden="true" />Recurring session</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Same link every week — students bookmark it once</div>
             </div>
             <button
@@ -390,7 +391,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           {/* Record toggle — works for one-off sessions and recurring series */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: toggleBg, border: toggleBdr, borderRadius: 10, padding: '12px 16px' }}>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: t.text }}>🔴 Record {isRecurring ? 'these sessions' : 'this session'}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: t.danger, display: 'inline-block' }} />Record {isRecurring ? 'these sessions' : 'this session'}</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
                 {isRecurring
                   ? 'Every session in the series is saved to Resources automatically'
@@ -464,13 +465,13 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
           <RecordingBadge session={session} t={t} />
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <span>
-            {session.session_type === 'group' ? '👥' : '👤'}{' '}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            {session.session_type === 'group' ? <Users size={14} aria-hidden="true" /> : <User size={14} aria-hidden="true" />}
             {session.other_party_name || 'Student'}
             {session.session_type === 'group' && session.participant_count > 0 && ` (${session.participant_count})`}
           </span>
-          <span>📅 {fmtDateTime(session.scheduled_at)}</span>
-          <span>⏱ {session.duration_minutes} min</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Calendar size={14} aria-hidden="true" />{fmtDateTime(session.scheduled_at)}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Timer size={14} aria-hidden="true" />{session.duration_minutes} min</span>
         </div>
         {session.notes && (
           <p style={{ margin: '8px 0 0', fontSize: 13, color: t.textMuted, fontStyle: 'italic' }}>
@@ -484,14 +485,16 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
           style={{ background: copied ? t.successBg : t.bgSubtle, color: copied ? t.success : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
           title="Copy meeting link"
         >
-          {copied ? '✓' : '🔗'}
+          {copied ? '✓' : <Link size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />}
         </button>
         {canJoin && (
           <button
             onClick={() => onJoin(session.id)}
-            style={{ background: GOLD, color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer' }}
+            style={{ background: GOLD, color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
-            {session.status === 'active' ? '🔴 Rejoin' : '▶ Join'}
+            {session.status === 'active'
+              ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />Rejoin</>
+              : <><Play size={13} fill="currentColor" aria-hidden="true" />Join</>}
           </button>
         )}
         {canCancel && (
@@ -536,22 +539,22 @@ function SeriesCard({ series, theme, onCancel }) {
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{series.title || 'Recurring Session'}</span>
-            <span style={{ background: series.status === 'active' ? t.successBg : t.dangerBg, color: series.status === 'active' ? t.success : t.danger, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
-              🔁 {series.status}
+            <span style={{ background: series.status === 'active' ? t.successBg : t.dangerBg, color: series.status === 'active' ? t.success : t.danger, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Repeat size={12} aria-hidden="true" />{series.status}
             </span>
           </div>
           <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
-            <span>📅 {series.schedule_label}</span>
-            <span>⏱ {series.duration_minutes} min</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Calendar size={14} aria-hidden="true" />{series.schedule_label}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Timer size={14} aria-hidden="true" />{series.duration_minutes} min</span>
             {series.participant_count > 0 && (
-              <span>{series.session_type === 'group' ? '👥' : '👤'} {series.participant_names.join(', ')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{series.session_type === 'group' ? <Users size={14} aria-hidden="true" /> : <User size={14} aria-hidden="true" />}{series.participant_names.join(', ')}</span>
             )}
-            {series.record_session && <span style={{ color: t.goldText, fontWeight: 600 }}>🔴 Auto-records</span>}
+            {series.record_session && <span style={{ color: t.goldText, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: t.danger, display: 'inline-block' }} />Auto-records</span>}
           </div>
           {/* Permanent link */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '8px 12px' }}>
             <span style={{ fontSize: 12, color: t.textMuted, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              🔗 {series.permanent_link}
+              <Link size={13} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 4 }} />{series.permanent_link}
             </span>
             <button
               onClick={handleCopy}
@@ -666,7 +669,7 @@ export default function SessionsTab({ profile, theme }) {
           Sessions {sessions.length > 0 && `(${sessions.length})`}
         </button>
         <button style={tabBtn('recurring', 'Recurring')} onClick={() => setView('recurring')}>
-          🔁 Recurring {seriesList.length > 0 && `(${seriesList.length})`}
+          <Repeat size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Recurring {seriesList.length > 0 && `(${seriesList.length})`}
         </button>
         <button
           onClick={() => setShowModal(true)}
@@ -681,7 +684,7 @@ export default function SessionsTab({ profile, theme }) {
         <div>
           {seriesList.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: t.textMuted }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔁</div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Repeat size={40} aria-hidden="true" /></div>
               <p style={{ fontSize: 15, margin: 0 }}>No recurring series yet. Create one with the "Schedule Session" button and toggle Recurring on.</p>
             </div>
           ) : (
@@ -714,7 +717,7 @@ export default function SessionsTab({ profile, theme }) {
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: t.textMuted }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Inbox size={40} aria-hidden="true" /></div>
               <p style={{ fontSize: 15, margin: 0 }}>
                 {filter === 'upcoming' ? 'No upcoming sessions. Schedule one to get started.' : `No ${filter} sessions.`}
               </p>

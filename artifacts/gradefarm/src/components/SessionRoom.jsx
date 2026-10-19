@@ -12,6 +12,7 @@ import {
   useConnectionState,
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
+import { TriangleAlert } from 'lucide-react'
 import '@livekit/components-styles'
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
@@ -213,7 +214,7 @@ function StatusScreen({ message, isError, onBack }) {
     }}>
       {isError ? (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: '#f87171' }}><TriangleAlert size={40} aria-hidden="true" /></div>
           <p style={{ color: '#f87171', fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>{message}</p>
           <button
             onClick={onBack}

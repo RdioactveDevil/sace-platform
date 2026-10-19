@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { signIn, signUp } from '../lib/db'
+import { Zap, GraduationCap, ChartColumn, Trophy } from 'lucide-react'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -10,10 +11,10 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const TRUST_ITEMS = [
-  { icon: '⚡', label: 'Adaptive algorithm learns your weak spots' },
-  { icon: '🎓', label: 'Titan AI explains using your own class notes' },
-  { icon: '📊', label: 'Real-time exam readiness score after every session' },
-  { icon: '🏆', label: 'XP, streaks & leaderboards built in' },
+  { icon: Zap, label: 'Adaptive algorithm learns your weak spots' },
+  { icon: GraduationCap, label: 'Titan AI explains using your own class notes' },
+  { icon: ChartColumn, label: 'Real-time exam readiness score after every session' },
+  { icon: Trophy, label: 'XP, streaks & leaderboards built in' },
 ]
 
 export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
@@ -91,7 +92,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
           <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
             {TRUST_ITEMS.map((item, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:14 }}>
-                <div style={{ width:34, height:34, borderRadius:9, background:'rgba(241,190,67,0.10)', border:'1px solid rgba(241,190,67,0.18)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>{item.icon}</div>
+                <div style={{ width:34, height:34, borderRadius:9, background:'rgba(241,190,67,0.10)', border:'1px solid rgba(241,190,67,0.18)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}><item.icon size={18} color={GOLD} aria-hidden="true" /></div>
                 <div style={{ fontSize:13, color:'rgba(255,255,255,0.55)', lineHeight:1.5 }}>{item.label}</div>
               </div>
             ))}

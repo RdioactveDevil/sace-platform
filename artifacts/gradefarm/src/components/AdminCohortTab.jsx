@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { ChartColumn } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -107,7 +108,7 @@ export default function AdminCohortTab() {
         textAlign: 'center', padding: '64px 24px',
         border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 14, color: '#64748b',
       }}>
-        <div style={{ fontSize: 30, marginBottom: 12 }}>📊</div>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: GOLD }}><ChartColumn size={30} aria-hidden="true" /></div>
         <div style={{ fontSize: 15, color: '#cbd5e1', fontWeight: 700, marginBottom: 6 }}>No answer data yet</div>
         <div style={{ fontSize: 13, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
           Once students start answering questions, class-wide topic performance and error rates will appear here.

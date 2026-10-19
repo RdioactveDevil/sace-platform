@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
+import { Flame, Mail, Search, TriangleAlert } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
@@ -256,14 +257,14 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
             {s.classes.length ? s.classes.map(c => tag(c.name, c.color || t.blue, c.id)) : <span style={{ color: t.textFaint, fontSize: 13 }}>—</span>}
           </div>
         </td>
-        <td style={{ padding: '12px 16px', fontSize: 13, color: t.textSub, whiteSpace: 'nowrap' }}>{s.xp.toLocaleString()} · 🔥{s.streak}</td>
+        <td style={{ padding: '12px 16px', fontSize: 13, color: t.textSub, whiteSpace: 'nowrap' }}>{s.xp.toLocaleString()} · <Flame size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />{s.streak}</td>
         <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
           {s.overdue > 0 ? tag(`${s.overdue} overdue`, t.danger) : s.pending > 0 ? tag(`${s.pending} open`, GOLD) : tag('Up to date', t.success)}
         </td>
         <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
           {/* Year level, subjects and removal are per-tutor roster settings. */}
           {!allTutors && <button onClick={() => { setEditId(editId === s.id ? null : s.id) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${editId === s.id ? GOLD : t.border}`, background: editId === s.id ? 'rgba(241,190,67,0.12)' : 'transparent', color: editId === s.id ? GOLD : t.textSub, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }}>Edit</button>}
-          <button onClick={() => { setNotifyId(notifyId === s.id ? null : s.id); setNotifyMsg(''); setNotifyState(null) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }}>✉</button>
+          <button onClick={() => { setNotifyId(notifyId === s.id ? null : s.id); setNotifyMsg(''); setNotifyState(null) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }} aria-label="Notify student"><Mail size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} /></button>
           {!allTutors && <button onClick={() => setConfirmRemove(s.id)} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>✕</button>}
         </td>
       </tr>
@@ -302,7 +303,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, ...ctrl, padding: '8px 12px', flex: '1 1 220px', minWidth: 180 }}>
-          <span style={{ color: t.textMuted, fontSize: 13 }}>🔎</span>
+          <Search size={14} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0 }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search this roster…" style={{ border: 'none', background: 'transparent', outline: 'none', color: t.text, fontFamily: FONT_B, fontSize: 13, width: '100%' }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -328,7 +329,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         <select value={fClass} onChange={e => setFClass(e.target.value)} style={{ ...ctrl, color: fClass ? GOLD : t.textMuted, borderColor: fClass ? GOLD : t.border }}>
           <option value="">All classes</option>{classOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button onClick={() => setAttentionOnly(v => !v)} style={chipStyle(attentionOnly)}>⚠ Needs attention</button>
+        <button onClick={() => setAttentionOnly(v => !v)} style={{ ...chipStyle(attentionOnly), display: 'inline-flex', alignItems: 'center', gap: 5 }}><TriangleAlert size={13} aria-hidden="true" />Needs attention</button>
         {(fYear || fStage || fClass || attentionOnly || search) && (
           <button onClick={() => { setFYear(''); setFStage(''); setFClass(''); setAttentionOnly(false); setSearch('') }} style={{ ...chipStyle(false), color: t.textFaint }}>Clear</button>
         )}

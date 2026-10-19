@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { saveSubscriptions, completeOnboarding } from '../lib/db'
 import { curriculumToSubjectTile, formatSubjectLabel } from '../lib/subjects'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
+import { Trophy, Star, Target, TrendingUp, ThumbsUp, User, BookOpen, CircleCheck } from 'lucide-react'
+import { SubjectIcon } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -14,11 +16,11 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const YEAR_LEVELS = [6, 7, 8, 9, 10, 11, 12]
 
 const ATAR_TARGETS = [
-  { value: 99.5, label: '99.5+', emoji: '🏆', sub: 'Top 0.5%' },
-  { value: 95,   label: '95+',   emoji: '⭐', sub: 'Top 5%' },
-  { value: 90,   label: '90+',   emoji: '🎯', sub: 'Top 10%' },
-  { value: 80,   label: '80+',   emoji: '📈', sub: 'Above average' },
-  { value: 70,   label: '70+',   emoji: '👍', sub: 'Comfortable pass' },
+  { value: 99.5, label: '99.5+', icon: Trophy, sub: 'Top 0.5%' },
+  { value: 95,   label: '95+',   icon: Star,   sub: 'Top 5%' },
+  { value: 90,   label: '90+',   icon: Target, sub: 'Top 10%' },
+  { value: 80,   label: '80+',   icon: TrendingUp, sub: 'Above average' },
+  { value: 70,   label: '70+',   icon: ThumbsUp, sub: 'Comfortable pass' },
 ]
 
 const STUDY_HOURS = [1, 2, 3, 5, 7, 10]
@@ -218,7 +220,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const stepDetails = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>👤</div>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><User size={26} color={NAVY} aria-hidden="true" /></div>
       </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR DETAILS</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>Tell us a bit about yourself.</p>
@@ -288,7 +290,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const stepGoals = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>🎯</div>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><Target size={26} color={NAVY} aria-hidden="true" /></div>
       </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR GOALS</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>This helps us calibrate your study plan.</p>
@@ -304,7 +306,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
                 cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', transition: 'all 0.2s',
                 boxShadow: atarTarget === a.value ? `0 0 12px ${GOLD}25` : 'none',
               }}>
-                <span style={{ fontSize: 18, width: 24 }}>{a.emoji}</span>
+                <span style={{ width: 24, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><a.icon size={20} color={atarTarget === a.value ? GOLD : '#e2e8f0'} aria-hidden="true" /></span>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: atarTarget === a.value ? GOLD : '#e2e8f0' }}>{a.label}</span>
                   <span style={{ fontSize: 12, color: '#475569', marginLeft: 8 }}>{a.sub}</span>
@@ -342,12 +344,12 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const stepSubjects = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>📚</div>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><BookOpen size={26} color={NAVY} aria-hidden="true" /></div>
       </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR SUBJECTS</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 6 }}>Select the subjects you're studying.</p>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <span style={{ fontSize: 11, background: 'rgba(241,190,67,0.15)', color: GOLD, border: `1px solid ${GOLD}30`, borderRadius: 20, padding: '3px 10px', fontWeight: 700 }}>🎉 FREE during Beta</span>
+        <span style={{ fontSize: 11, background: 'rgba(241,190,67,0.15)', color: GOLD, border: `1px solid ${GOLD}30`, borderRadius: 20, padding: '3px 10px', fontWeight: 700 }}>FREE during Beta</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {AVAILABLE_SUBJECTS.map((subj, i) => {
@@ -361,7 +363,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
               boxShadow: sel ? `0 0 16px ${GOLD}20` : 'none',
               animation: `slideIn 0.4s ${i * 0.06}s cubic-bezier(0.34,1.1,0.64,1) both`,
             }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}22`, border: `1px solid ${subj.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{subj.icon}</div>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}22`, border: `1px solid ${subj.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}><SubjectIcon subj={subj} color={subj.color} size={20} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: sel ? '#f1f5f9' : '#e2e8f0' }}>{subj.name}</div>
                 <div style={{ fontSize: 11, color: subj.color, fontWeight: 600, marginTop: 1 }}>{subj.stage}</div>
@@ -379,7 +381,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: 0.45, marginBottom: 8 }}>
             {COMING_SUBJECTS.map(subj => (
               <div key={subj.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
-                <div style={{ fontSize: 16 }}>{subj.icon}</div>
+                <SubjectIcon subj={subj} color="#94a3b8" size={18} />
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>{subj.name}</span>
                   <span style={{ fontSize: 11, color: '#475569', marginLeft: 8 }}>{subj.stage}</span>
@@ -397,7 +399,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const stepConfirm = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}>✅</div>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><CircleCheck size={26} color={NAVY} aria-hidden="true" /></div>
       </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>ALMOST THERE</h2>
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20 }}>Review your setup and accept terms to get started.</p>
@@ -428,7 +430,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           . I confirm I am 13 years or older, or have parental consent.
         </span>
       </div>
-      {navButtons({ onNext: finish, nextLabel: saving ? 'Setting up…' : "Let's start! 🚀", nextDisabled: !termsAccepted || saving })}
+      {navButtons({ onNext: finish, nextLabel: saving ? 'Setting up…' : "Let's start!", nextDisabled: !termsAccepted || saving })}
     </div>
   )
 

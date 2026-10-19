@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ClipboardList, User, Users, Video, ChartColumn, TriangleAlert, Inbox, CircleCheck, PenLine, FileText, Folder, Link, School } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { notifyStudent } from '../lib/db'
 
@@ -212,10 +213,10 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
   ]
 
   const actions = [
-    { icon: '📋', label: 'New Assignment', to: 'assignments', color: isDark ? 'rgba(165,180,252,0.18)' : '#eef2ff', iconColor: isDark ? '#a5b4fc' : INDIGO },
-    { icon: '👤', label: 'Add Student',    to: 'students',    color: isDark ? 'rgba(241,190,67,0.14)' : '#fffbeb', iconColor: isDark ? GOLD : '#f59e0b' },
-    { icon: '📹', label: 'Schedule',       to: 'sessions',    color: isDark ? 'rgba(110,231,183,0.12)' : '#ecfdf5', iconColor: isDark ? '#6ee7b7' : '#10b981' },
-    { icon: '📊', label: 'Diagnostic',     to: 'diagnostic',  color: isDark ? 'rgba(248,113,113,0.12)' : '#fff1f2', iconColor: isDark ? '#f87171' : '#ef4444' },
+    { icon: ClipboardList, label: 'New Assignment', to: 'assignments', color: isDark ? 'rgba(165,180,252,0.18)' : '#eef2ff', iconColor: isDark ? '#a5b4fc' : INDIGO },
+    { icon: User, label: 'Add Student',    to: 'students',    color: isDark ? 'rgba(241,190,67,0.14)' : '#fffbeb', iconColor: isDark ? GOLD : '#f59e0b' },
+    { icon: Video, label: 'Schedule',       to: 'sessions',    color: isDark ? 'rgba(110,231,183,0.12)' : '#ecfdf5', iconColor: isDark ? '#6ee7b7' : '#10b981' },
+    { icon: ChartColumn, label: 'Diagnostic',     to: 'diagnostic',  color: isDark ? 'rgba(248,113,113,0.12)' : '#fff1f2', iconColor: isDark ? '#f87171' : '#ef4444' },
   ]
 
   return (
@@ -232,7 +233,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
         </div>
         {overdue.length > 0 && (
           <button onClick={() => onNavigate('assignments')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: isDark ? 'rgba(248,113,113,0.10)' : '#fff1f2', border: isDark ? '1px solid rgba(248,113,113,0.25)' : '1px solid #fecaca', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontFamily: FONT_B }}>
-            <span style={{ fontSize: 14 }}>⚠️</span>
+            <TriangleAlert size={16} color="#ef4444" aria-hidden="true" style={{ flexShrink: 0 }} />
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>{overdue.length} overdue task{overdue.length !== 1 ? 's' : ''}</div>
               <div style={{ fontSize: 11, color: textMuted }}>Tap to review</div>
@@ -255,7 +256,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
             <div style={{ fontSize: 28, fontWeight: 800, color: k.color, lineHeight: 1, marginBottom: 12, letterSpacing: '-0.5px' }}>{k.value}</div>
             <div style={{ marginBottom: 10 }}>{k.sparkline}</div>
             <div style={{ fontSize: 12, color: k.alert ? '#f59e0b' : k.trendUp ? (isDark ? '#6ee7b7' : '#10b981') : textMuted, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
-              {k.alert ? <span>⚠</span> : k.trendUp ? <span>↑</span> : null}
+              {k.alert ? <TriangleAlert size={13} aria-hidden="true" /> : k.trendUp ? <span>↑</span> : null}
               {k.trend}
             </div>
           </div>
@@ -278,7 +279,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
             <div style={card}>
               {upcoming.length === 0 ? (
                 <div style={{ padding: '36px 24px', textAlign: 'center', color: textMuted, fontSize: 13 }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                  <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}><Inbox size={32} aria-hidden="true" /></div>
                   No upcoming sessions scheduled.
                 </div>
               ) : upcoming.map((s, idx) => {
@@ -312,9 +313,9 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                         )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: textMuted }}>
-                        <span>👤 {s.other_party_name || 'Student'}</span>
-                        <span>📹 {s.session_type === 'group' ? 'Group' : '1-on-1'}</span>
-                        {s.record_session && <span style={{ color: '#f87171' }}>🔴 Recording</span>}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><User size={13} aria-hidden="true" />{s.other_party_name || 'Student'}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Video size={13} aria-hidden="true" />{s.session_type === 'group' ? 'Group' : '1-on-1'}</span>
+                        {s.record_session && <span style={{ color: '#f87171', display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f87171', display: 'inline-block' }} />Recording</span>}
                       </div>
                     </div>
                     {/* Action */}
@@ -346,7 +347,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
             <div style={card}>
               {needsAttention.length === 0 ? (
                 <div style={{ padding: '36px 24px', textAlign: 'center', color: textMuted, fontSize: 13 }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
+                  <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center' }}><CircleCheck size={32} aria-hidden="true" /></div>
                   All students are on track.
                 </div>
               ) : (
@@ -406,7 +407,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                       <div style={{ height: '100%', background: b.color, borderRadius: 10, width: `${b.pct}%`, minWidth: b.value ? 6 : 0, transition: 'width 0.5s ease' }} />
                     </div>
                     {b.warn && b.value > 0 && (
-                      <div style={{ fontSize: 11, color: '#f87171', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Needs attention</div>
+                      <div style={{ fontSize: 11, color: '#f87171', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}><TriangleAlert size={12} aria-hidden="true" />Needs attention</div>
                     )}
                   </div>
                 ))}
@@ -433,8 +434,8 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                   onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : a.color; e.currentTarget.style.borderColor = isDark ? 'rgba(241,190,67,0.30)' : '#f5d27a' }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.background = card.background; e.currentTarget.style.borderColor = card.border.replace('1px solid ', '') }}
                 >
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, fontSize: 18, transition: 'transform 0.15s' }}>
-                    {a.icon}
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, transition: 'transform 0.15s' }}>
+                    <a.icon size={20} color={a.iconColor} aria-hidden="true" />
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 600, color: textPri }}>{a.label}</span>
                 </button>
@@ -451,14 +452,15 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
               </div>
               <div style={card}>
                 {resources.slice(0, 4).map((r, idx) => {
-                  const icon = { notes: '📝', worksheet: '📄', recording: '🎥', slides: '📊', resource: '📁', link: '🔗' }[r.type] || '📁'
-                  const target = r.student_name ? `👤 ${r.student_name}` : r.class_name ? `🏫 ${r.class_name}` : '👥 Roster'
+                  const Icon = { notes: PenLine, worksheet: FileText, recording: Video, slides: ChartColumn, resource: Folder, link: Link }[r.type] || Folder
+                  const TargetIcon = r.student_name ? User : r.class_name ? School : Users
+                  const target = <><TargetIcon size={12} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> {r.student_name || r.class_name || 'Roster'}</>
                   return (
                     <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderBottom: idx < Math.min(resources.length, 4) - 1 ? `1px solid ${divider}` : 'none', transition: 'background 0.12s' }}
                       onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.025)' : '#fafbff'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <span style={{ fontSize: 18 }}>{icon}</span>
+                      <Icon size={18} color={textSub} aria-hidden="true" style={{ flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: textPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
                         <div style={{ fontSize: 11, color: textMuted, marginTop: 1 }}>{target} · {fmtDate(r.created_at)}</div>

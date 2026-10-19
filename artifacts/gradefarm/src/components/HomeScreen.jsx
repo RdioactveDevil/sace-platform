@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Flame, ClipboardList, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
@@ -289,7 +290,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text, marginBottom: 12 }}>Your Stats</div>
       {[
         { label: 'Total XP',       val: profile.xp.toLocaleString(),         color: GOLD },
-        { label: 'Best streak',    val: `${profile.best_streak||0} days 🔥`, color: GOLD },
+        { label: 'Best streak',    val: <>{profile.best_streak||0} days <Flame size={16} style={{ verticalAlign: '-3px' }} aria-hidden="true" /></>, color: GOLD },
         { label: 'Questions done', val: totalAttempts,                        color: t.text },
         { label: 'Accuracy',       val: `${accuracy}%`,                      color: accuracy > 70 ? t.success : accuracy > 40 ? GOLD : t.danger },
       ].map(s => (
@@ -305,7 +306,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     if (assignments.length === 0) return null
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2 }}>📋 Assigned Tasks</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><ClipboardList size={16} aria-hidden="true" />Assigned Tasks</div>
         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>From your tutor</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {assignments.slice(0, 5).map(a => {
@@ -344,15 +345,17 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     )
   }
 
-  const RESOURCE_ICONS = { notes: '📝', worksheet: '📄', recording: '🎥', slides: '📊', resource: '📁', link: '🔗' }
+  const RESOURCE_ICONS = { notes: PenLine, worksheet: FileText, recording: Video, slides: ChartColumn, resource: Folder, link: LinkIcon }
   const ClassResourcesCard = () => {
     if (resources.length === 0) return null
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2 }}>📁 Class Resources</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><Folder size={16} aria-hidden="true" />Class Resources</div>
         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Notes, files & recordings from your tutor</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {resources.slice(0, 6).map(r => (
+          {resources.slice(0, 6).map(r => {
+            const ResIcon = RESOURCE_ICONS[r.type] || Folder
+            return (
             <a
               key={r.id}
               href={r.download_url || '#'}
@@ -360,7 +363,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               rel="noopener noreferrer"
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}`, textDecoration: 'none' }}
             >
-              <div style={{ fontSize: 18, flexShrink: 0 }}>{RESOURCE_ICONS[r.type] || '📁'}</div>
+              <div style={{ flexShrink: 0, display: 'flex', color: GOLD }}><ResIcon size={18} aria-hidden="true" /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
                 <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -369,7 +372,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               </div>
               <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, flexShrink: 0 }}>{r.kind === 'link' ? 'Open' : 'Download'}</div>
             </a>
-          ))}
+            )
+          })}
         </div>
         {resources.length > 6 && (
           <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{resources.length - 6} more</div>
@@ -380,7 +384,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const SprintCard = () => (
     <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📚 Study Plan</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}><BookOpen size={16} aria-hidden="true" />Study Plan</div>
       <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>See your personalised review schedule and topic mastery.</div>
       <button
         onClick={() => navigate('/study-plan')}
@@ -394,9 +398,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   // ── Daily Missions ────────────────────────────────────────────────────────
   const daysActiveThisWeek = weekActivity.filter(c => c > 0).length
   const missions = [
-    { icon: '⚡', label: 'Answer 10 questions', progress: Math.min(todayStats.total, 10), target: 10 },
-    { icon: '🎯', label: 'Get 8 correct today',  progress: Math.min(todayStats.correct, 8), target: 8 },
-    { icon: '📅', label: 'Study 5 days this week', progress: Math.min(daysActiveThisWeek, 5), target: 5 },
+    { icon: Zap, label: 'Answer 10 questions', progress: Math.min(todayStats.total, 10), target: 10 },
+    { icon: Target, label: 'Get 8 correct today',  progress: Math.min(todayStats.correct, 8), target: 8 },
+    { icon: Calendar, label: 'Study 5 days this week', progress: Math.min(daysActiveThisWeek, 5), target: 5 },
   ]
   const allMissionsDone = missions.every(m => m.progress >= m.target)
 
@@ -414,8 +418,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           return (
             <div key={m.label}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: done ? '#4ade80' : t.text, fontWeight: 600 }}>
-                  {m.icon} {m.label}
+                <span style={{ fontSize: 12, color: done ? '#4ade80' : t.text, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <m.icon size={14} aria-hidden="true" />{m.label}
                 </span>
                 <span style={{ fontSize: 11, color: done ? '#4ade80' : t.textMuted, fontWeight: 700 }}>
                   {m.progress}/{m.target}
@@ -446,7 +450,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
     if (!next) return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6 }}>📅 Exam Countdown</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={16} aria-hidden="true" />Exam Countdown</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Add assessments in My Progress to track upcoming exams and tests.</div>
         <button onClick={() => navigate('/my-progress')} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
           Add assessment →
@@ -461,12 +465,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       : daysLeft > 21 ? 'Crunch mode. Focus on weak topics first.'
       : daysLeft > 7  ? 'Final stretch — revise, revise, revise.'
       : daysLeft > 0  ? 'This week! Review key formulas and past patterns.'
-      : 'Today! Best of luck! 🏆'
+      : 'Today! Best of luck!'
 
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid ${color}30`, background: `${color}08` }}>
-        <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-          {isExam ? '📅 SACE Exam' : `📋 ${next.type}`}
+        <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {isExam ? <><Calendar size={13} aria-hidden="true" />SACE Exam</> : <><ClipboardList size={13} aria-hidden="true" />{next.type}</>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
           <div style={{ textAlign: 'center', flexShrink: 0 }}>
@@ -573,7 +577,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           {showComeback && (
             <div style={{ marginBottom: 16, padding: '14px 18px', borderRadius: 14, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 3 }}>👋 Welcome back!</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 3 }}>Welcome back!</div>
                 <div style={{ fontSize: 12, color: t.textMuted }}>You've been away a while. Pick up where you left off — your study plan is waiting.</div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -640,7 +644,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                   onClick={() => setExamMode(v => !v)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
                 >
-                  ⏱ {examMode ? 'Exam On' : 'Exam Mode'}
+                  <Timer size={14} aria-hidden="true" />{examMode ? 'Exam On' : 'Exam Mode'}
                 </button>}
               </div>
             </div>
@@ -685,7 +689,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             {hasNoTopicsSelected ? (
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>Tick All Topics, or pick topics below, to start a session.</div>
             ) : filteredCounts.unseen === 0 && selectedQuestionTotal > 0 && (
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>🎉 You've attempted every question in this selection. Re-attempt or repeat them to keep practising.</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>You've attempted every question in this selection. Re-attempt or repeat them to keep practising.</div>
             )}
           </div>
 

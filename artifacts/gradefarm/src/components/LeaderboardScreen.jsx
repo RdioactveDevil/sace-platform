@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { fetchClassLeaderboards } from '../lib/db'
-import { RANK_ICONS, getLevel } from '../lib/engine'
+import { getLevel } from '../lib/engine'
+import { Trophy, Medal, Flame } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
+import RankIcon from './RankIcon'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
@@ -88,7 +90,7 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
             <div style={{ padding: '28px 20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center', fontSize: 13, color: t.danger }}>{error}</div>
           ) : !active ? (
             <div style={{ padding: '36px 24px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center' }}>
-              <div style={{ fontSize: 30, marginBottom: 10 }}>🏆</div>
+              <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: GOLD }}><Trophy size={30} aria-hidden="true" /></div>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 6 }}>You're not in a class yet</div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
                 When your tutor adds you to a class, you'll see how you rank against your classmates here.
@@ -105,12 +107,11 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                   {[visibleBoard[1], visibleBoard[0], visibleBoard[2]].map((p, pos) => {
                     if (!p) return <div key={pos} style={{ width: 88 }} />
                     const heights = [96, 124, 78]
-                    const medals = ['🥈', '🥇', '🥉']
                     const colors = [t.textMuted, t.xp, '#cd7c2f']
                     const isMe = p.id === profile.id
                     return (
                       <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                        <div style={{ fontSize: 24 }}>{medals[pos]}</div>
+                        <div style={{ display: 'flex' }}><Medal size={24} color={colors[pos]} aria-hidden="true" /></div>
                         <div style={{ width: 84, height: heights[pos], background: isMe ? 'rgba(241,190,67,0.12)' : t.bgCard, border: `2px solid ${isMe ? GOLD : colors[pos]}`, borderRadius: '12px 12px 6px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, boxShadow: theme === 'light' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
                           <div style={{ fontSize: 11, fontWeight: 800, color: isMe ? GOLD : colors[pos], textAlign: 'center', padding: '0 6px' }}>{p.display_name.split(' ')[0]}</div>
                           <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 600 }}>{p.xp.toLocaleString()}</div>
@@ -126,18 +127,17 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                   const isMe = p.id === profile.id
                   const i = p.position - 1
                   const lvl = getLevel(p.xp)
-                  const rIcon = RANK_ICONS[Math.min(lvl, RANK_ICONS.length - 1)]
                   return (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: isMe ? 'rgba(241,190,67,0.08)' : t.bgCard, border: `1px solid ${isMe ? 'rgba(241,190,67,0.4)' : t.border}`, borderRadius: 12, boxShadow: theme === 'light' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}>
                       <div style={{ fontSize: 14, fontWeight: 800, width: 28, textAlign: 'center', color: i < 3 ? [t.xp, t.textSub, '#cd7c2f'][i] : t.textFaint }}>{i + 1}</div>
-                      <div style={{ fontSize: 18 }}>{rIcon}</div>
+                      <div style={{ display: 'flex', color: GOLD }}><RankIcon level={lvl} size={18} /></div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: isMe ? GOLD : t.text }}>{p.display_name}{isMe ? ' (You)' : ''}</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: GOLD }}>{p.xp.toLocaleString()} XP</div>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }}>
-                          {p.streak > 0 && <span style={{ fontSize: 11, color: t.danger }}>🔥 {p.streak}</span>}
+                          {p.streak > 0 && <span style={{ fontSize: 11, color: t.danger, display: 'inline-flex', alignItems: 'center', gap: 3 }}><Flame size={12} aria-hidden="true" /> {p.streak}</span>}
                         </div>
                       </div>
                     </div>

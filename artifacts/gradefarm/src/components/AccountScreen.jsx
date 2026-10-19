@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { THEMES } from '../lib/theme'
-import { getLevelProgress, RANKS, RANK_ICONS, XP_LEVELS } from '../lib/engine'
+import { getLevelProgress, RANKS, XP_LEVELS } from '../lib/engine'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
+import RankIcon from './RankIcon'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -13,7 +14,6 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
   const t = THEMES[theme]
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank     = RANKS[Math.min(level, RANKS.length - 1)]
-  const icon     = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
 
   const [displayName, setDisplayName]   = useState(profile.display_name || '')
   const [savingName, setSavingName]     = useState(false)
@@ -94,7 +94,7 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
   }
 
   const levelBadges = RANKS.map((r, i) => ({
-    rank: r, icon: RANK_ICONS[i],
+    rank: r, level: i,
     xpRequired: XP_LEVELS[i] || 0,
     unlocked: profile.xp >= (XP_LEVELS[i] || 0),
     current: i === Math.min(level, RANKS.length - 1),
@@ -123,7 +123,7 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
           </div>
           <div>
             <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{profile.display_name}</div>
-            <div style={{ fontSize: 12, color: GOLD, fontWeight: 600, marginTop: 2 }}>{icon} {rank} · Level {level}</div>
+            <div style={{ fontSize: 12, color: GOLD, fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={13} /> {rank} · Level {level}</div>
           </div>
         </div>
 
@@ -196,7 +196,7 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
               background: b.current ? `${GOLD}12` : b.unlocked ? `${t.success}08` : 'transparent',
               opacity: b.unlocked ? 1 : 0.45,
             }}>
-              <div style={{ fontSize: 18, marginBottom: 4 }}>{b.icon}</div>
+              <div style={{ marginBottom: 4, display: 'flex' }}><RankIcon level={b.level} size={18} color={b.unlocked ? GOLD : t.textMuted} /></div>
               <div style={{ fontSize: 12, fontWeight: 700, color: b.current ? GOLD : t.text }}>{b.rank}</div>
               <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{b.xpRequired} XP</div>
               {b.current && <div style={{ fontSize: 9, color: GOLD, fontWeight: 700, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div>}

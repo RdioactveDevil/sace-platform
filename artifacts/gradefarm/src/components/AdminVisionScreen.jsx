@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { Upload } from 'lucide-react'
 import { adminApiPost } from '../lib/adminApi'
 
 const GOLD = '#f1be43'
@@ -90,8 +91,8 @@ export default function AdminVisionScreen() {
       <div style={{ marginBottom: 20 }}>
         <label style={labelStyle}>Image</label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)', color: GOLD, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-            ⬆ Upload image
+          <button onClick={() => fileRef.current?.click()} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)', color: GOLD, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Upload size={14} aria-hidden="true" /> Upload image
           </button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>or</span>

@@ -210,7 +210,7 @@ export function nextReviewTime(attempts, wrong) {
 // ─── XP SYSTEM ───────────────────────────────────────────────────────────────
 export const XP_LEVELS = [0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200, 4000, 5000]
 export const RANKS = ['Rookie', 'Bronze II', 'Bronze I', 'Silver II', 'Silver I', 'Gold', 'Platinum', 'Diamond', 'Master', 'Grandmaster', 'SACE Legend']
-export const RANK_ICONS = ['🌱', '⚔️', '⚔️', '🛡️', '🛡️', '💛', '💎', '💠', '👑', '🔱', '🏆']
+// Rank icons are drawn by components/RankIcon.jsx.
 
 export function getLevel(xp) {
   return XP_LEVELS.findIndex((v, i) => xp >= v && xp < (XP_LEVELS[i + 1] ?? Infinity))

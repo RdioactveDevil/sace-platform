@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
+import { getLevelProgress, RANKS } from '../lib/engine'
+import { Flame, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogLast30Days, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
 import { getTopicConfigForSubject } from '../lib/topicConfig'
@@ -8,6 +9,7 @@ import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import ReadinessCard from './ReadinessCard'
 import StreakCalendar from './StreakCalendar'
 import SubtopicHeatmap from './SubtopicHeatmap'
+import RankIcon from './RankIcon'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -38,7 +40,6 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const { level, pct } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
   const nextRank = RANKS[Math.min(level + 1, RANKS.length - 1)]
-  const rIcon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
 
   const topicStats = {}
   const topicSubtopics = {}
@@ -154,7 +155,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                   <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>Level {level} · {profile.xp.toLocaleString()} XP</div>
                   {nextRank !== rank && <div style={{ fontSize: 11, color: GOLD, marginTop: 6 }}>Next up: {nextRank}</div>}
                 </div>
-                <div style={{ fontSize: 40, lineHeight: 1 }}>{rIcon}</div>
+                <div style={{ display: 'flex', color: GOLD }}><RankIcon level={level} size={40} /></div>
               </div>
             </div>
           </div>
@@ -186,7 +187,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                   { label: 'Total XP', value: profile.xp.toLocaleString(), color: GOLD },
                   { label: 'Accuracy', value: `${accuracy}%`, color: accuracy >= 70 ? t.success : accuracy >= 40 ? GOLD : t.danger },
                   { label: 'Questions', value: totalAttempts, color: t.purple },
-                  { label: 'Best Streak', value: `${profile.best_streak || 0} 🔥`, color: GOLD },
+                  { label: 'Best Streak', value: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{profile.best_streak || 0} <Flame size={20} aria-hidden="true" /></span>, color: GOLD },
                 ].map((item) => (
                   <div key={item.label} style={{ background: t.bgHover, borderRadius: 12, padding: '12px 12px 11px', border: `1px solid ${t.border}`, borderTop: `2px solid ${item.color}`, position: 'relative', overflow: 'hidden' }}>
                     <div style={{ fontSize: 22, fontWeight: 800, color: item.color }}>{item.value}</div>
@@ -252,9 +253,10 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                       )}
                       <button
                         onClick={() => handleDeleteAssessment(a.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, fontSize: 14, padding: '4px 6px', borderRadius: 6, flexShrink: 0 }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, fontSize: 14, padding: '4px 6px', borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center' }}
                         title="Remove"
-                      >🗑</button>
+                        aria-label="Remove"
+                      ><Trash2 size={15} aria-hidden="true" /></button>
                     </div>
                   )
                 }

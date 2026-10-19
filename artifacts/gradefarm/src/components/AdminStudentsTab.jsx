@@ -22,6 +22,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { exportRowsToCsv } from '../lib/csv'
+import { Flame, TriangleAlert } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -400,7 +401,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   <td style={td}>
                     <span style={{ color: GOLD, fontWeight: 700 }}>{u.xp.toLocaleString()}</span>
                     <span style={{ color: '#64748b' }}> · </span>
-                    <span style={{ color: '#f97316' }}>🔥{u.streak}</span>
+                    <span style={{ color: '#f97316' }}><Flame size={13} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 2 }} />{u.streak}</span>
                   </td>
                   <td style={{ ...td, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelative(u.last_active)}</td>
                   <td style={td}>
@@ -502,7 +503,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                 <Row label="School"      value={selected.school || '—'} />
                 <Row label="Joined"      value={fmtDate(selected.created_at)} />
                 <Row label="Last active" value={fmtDate(selected.last_active)} />
-                <Row label="Onboarding"  value={selected.onboarding_completed ? '✓ Complete' : '⚠ Incomplete'} valueColor={selected.onboarding_completed ? '#4ade80' : '#f59e0b'} />
+                <Row label="Onboarding"  value={selected.onboarding_completed ? '✓ Complete' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><TriangleAlert size={13} aria-hidden="true" /> Incomplete</span>} valueColor={selected.onboarding_completed ? '#4ade80' : '#f59e0b'} />
                 {selected.deactivated_at && (
                   <Row label="Status" value="Deactivated" valueColor="#f87171" />
                 )}
