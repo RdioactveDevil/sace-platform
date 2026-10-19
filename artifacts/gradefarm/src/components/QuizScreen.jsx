@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   selectNextQuestion,
   calcXP,
@@ -7,6 +7,8 @@ import {
   getLevelProgress,
   getQuestionCounts,
   getQuestionConceptTag,
+  seenQuestionChecker,
+  questionContentKey,
 } from '../lib/engine'
 import {
   recordAnswer,
@@ -47,6 +49,9 @@ const GOLDL = '#f9d87a'
 // Question-area width from which a reading passage sits beside the question
 // (600px question + gap + a comfortable reading column).
 const SIDE_PASSAGE_MIN_WIDTH = 1000
+// Start generating more questions in the background once this few questions
+// new to the student are left in the session.
+const PREFETCH_LOW_WATER = 8
 const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
@@ -398,6 +403,9 @@ export default function QuizScreen({
   const variantPrefetchRef = useRef(new Map())
   // Concept tags already pre-warmed this session — prevents duplicate work.
   const sessionPrewarmedRef = useRef(new Set())
+  // Subtopics a background top-up returned nothing for; skipped for the rest
+  // of the session so a topic that can't generate isn't retried every answer.
+  const prefetchBarrenSubtopicsRef = useRef(new Set())
 
   useEffect(() => {
     const h = () => { setIsMobile(window.innerWidth < 860) }
@@ -554,8 +562,30 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, _targetDiff); return prev })
   }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, questions, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
 
+  // "Has this student already answered this question?" (by id or by content),
+  // so remediation never re-serves a question from an earlier session. Kept in
+  // a ref too, for async lookups that outlive the render they started in.
+  const isSeenQuestion = useMemo(() => seenQuestionChecker(questions, struggleMap), [questions, struggleMap])
+  const isSeenRef = useRef(isSeenQuestion)
+  isSeenRef.current = isSeenQuestion
+
+  // Bank questions remediation may draw "similar questions" from: not seen
+  // before and not answered this session.
+  const unseenBankQuestions = useMemo(
+    () => questions.filter(q => !isSeenQuestion(q) && !sessionAnswered.includes(q.id)),
+    [questions, isSeenQuestion, sessionAnswered],
+  )
+
+  // Stored remediation variants minus any the student has already answered
+  // (a variant's bank copy shares its content key).
+  const getUnseenRemediationVariants = async (...args) => {
+    const result = await getRemediationVariants(...args)
+    const unseen = (list) => (list || []).filter(v => !isSeenRef.current(v))
+    return { directVariants: unseen(result?.directVariants), conceptVariants: unseen(result?.conceptVariants) }
+  }
+
   const remediationDeps = {
-    getRemediationVariants,
+    getRemediationVariants: getUnseenRemediationVariants,
     generateAIVariants: generateRemediationVariantsViaAI,
     insertVariants: insertGeneratedQuestionVariants,
     insertToBank: insertGeneratedQuestionsToBank,
@@ -570,7 +600,7 @@ export default function QuizScreen({
         sessionAnsweredIds: sessionAnswered,
         difficultyTarget,
         options,
-        questions,
+        questions: unseenBankQuestions,
         deps: remediationDeps,
         setRemediationStatus,
         setRemediationQueue,
@@ -579,7 +609,7 @@ export default function QuizScreen({
         onBankQuestionsAdded,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [questions, sessionAnswered, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
+    [unseenBankQuestions, sessionAnswered, setRemediationQueue, setRemediationSource, setRemediationStatus, onBankQuestionsAdded],
   )
 
   const enterRemediation = useCallback(
@@ -587,7 +617,7 @@ export default function QuizScreen({
       runEnterRemediation({
         parentQuestion,
         prefetched: variantPrefetchRef.current,
-        questions,
+        questions: unseenBankQuestions,
         deps: remediationDeps,
         setRemediationMode,
         setRemediationStreak,
@@ -604,7 +634,7 @@ export default function QuizScreen({
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      questions,
+      unseenBankQuestions,
       generateRemediationQueue,
       setRemediationConcept,
       setRemediationMode,
@@ -666,7 +696,7 @@ export default function QuizScreen({
   // human-readable reason so the caller can surface WHY generation could not
   // even start (most often: the managed-topics cache is empty/stale, or the
   // question's subtopic label doesn't match a curriculum subtopic).
-  const getGenerationTarget = () => {
+  const getGenerationTarget = (subtopicOverride = null) => {
     const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
     const lastQ =
       (lastMain ? questions.find(q => q.id === lastMain.id) : null) ||
@@ -685,9 +715,10 @@ export default function QuizScreen({
       resolveManagedSubjectName(lastQ?.subject || '', stageHint) ||
       rawSubject
     const subtopicName =
-      lastQ?.subtopic && (effectiveSubtopics.length === 0 || effectiveSubtopics.includes(lastQ.subtopic))
+      subtopicOverride ||
+      (lastQ?.subtopic && (effectiveSubtopics.length === 0 || effectiveSubtopics.includes(lastQ.subtopic))
         ? lastQ.subtopic
-        : effectiveSubtopics[0]
+        : effectiveSubtopics[0])
     if (!subject || !subtopicName) {
       return { error: `Could not determine the topic to generate for (subject="${rawSubject ?? ''}", subtopic="${subtopicName ?? ''}").` }
     }
@@ -780,24 +811,23 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished, sessionEpoch])
 
-  // Background prefetch: when the available question pool drops to ≤ 3, silently
-  // generate more questions in the background so the bank is replenished before
-  // the user reaches the end — they never see a loading screen.
+  // Background prefetch: when the questions still new to this student run low,
+  // silently generate more in the background so the bank is replenished well
+  // before they reach the end — they never see a loading screen or a repeat.
   useEffect(() => {
     if (finished || (quizMode !== 'new' && quizMode !== 'all')) return
     if (backgroundPrefetchAttempted.current || generatingMoreRef.current) return
 
     // Count questions still available to pick this session. In 'new' mode that's
-    // unseen questions; in 'all' (Repeat selected) mode every not-yet-answered
-    // question still counts as available to repeat.
+    // questions the student hasn't seen (by id or content); in 'all' (Repeat
+    // selected) mode every not-yet-answered question still counts.
     const pool = effectiveSubtopics.length > 0
       ? questions.filter(q => effectiveSubtopics.includes(q.subtopic))
       : questions
     const available = pool.filter(q => {
       if (sessionAnswered.includes(q.id)) return false
       if (quizMode === 'all') return true
-      const s = struggleMap[q.id]
-      return !s || s.attempts === 0
+      return !isSeenQuestion(q)
     })
     const remaining = available.length
 
@@ -812,11 +842,20 @@ export default function QuizScreen({
       : available.filter(q => Math.abs((q.difficulty || 3) - prefetchDiff) <= 1).length
     const difficultyGap = prefetchDiff != null && prefetchDiff >= 3 && nearTargetCount < 2
 
-    if (remaining > 3 && !difficultyGap) return   // plenty, and harder questions are available
+    // Generation takes tens of seconds, so start while a comfortable buffer
+    // is left rather than on the last few questions.
+    if (remaining > PREFETCH_LOW_WATER && !difficultyGap) return
+
+    // Top up the subtopic in this session that is closest to running out.
+    const unseenBySubtopic = new Map()
+    for (const q of pool) if (q.subtopic && !prefetchBarrenSubtopicsRef.current.has(q.subtopic)) unseenBySubtopic.set(q.subtopic, 0)
+    for (const q of available) if (unseenBySubtopic.has(q.subtopic)) unseenBySubtopic.set(q.subtopic, unseenBySubtopic.get(q.subtopic) + 1)
+    const lowestSubtopic = [...unseenBySubtopic.entries()].sort((a, b) => a[1] - b[1])[0]?.[0] || null
+    if (!lowestSubtopic && pool.some(q => q.subtopic)) return // every subtopic here came back empty
 
     // Background prefetch is silent: if the target can't be resolved, just skip
     // (the exhaustion handler surfaces the reason when the bank actually runs dry).
-    const target = getGenerationTarget()
+    const target = getGenerationTarget(lowestSubtopic)
     if (!target || target.error) return
     const { subject, topicCode } = target
 
@@ -828,11 +867,13 @@ export default function QuizScreen({
         if (newQs.length && typeof onBankQuestionsAdded === 'function') {
           onBankQuestionsAdded(newQs)
         }
+        if (!newQs.length && lowestSubtopic) prefetchBarrenSubtopicsRef.current.add(lowestSubtopic)
         // Reset so the prefetch can fire again when these questions run low.
         backgroundPrefetchAttempted.current = false
       })
       .catch(() => {
         // Silent failure — exhaustion handler will retry when the bank runs dry.
+        if (lowestSubtopic) prefetchBarrenSubtopicsRef.current.add(lowestSubtopic)
         backgroundPrefetchAttempted.current = false
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -882,7 +923,7 @@ export default function QuizScreen({
     ;(async () => {
       try {
         const result = await withTimeout(
-          getRemediationVariants(qid, ctag, []),
+          getUnseenRemediationVariants(qid, ctag, []),
           3000,
           `prefetchVariants(${qid})`
         )
@@ -1052,9 +1093,12 @@ export default function QuizScreen({
     // Track the variant attempt against its real bank id so this question is
     // excluded from future non-'all' sessions. Only when we have a real
     // questions.id — synthetic queue keys would violate the answer_log FK.
+    const contentKey = questionContentKey(currentQ)
     const trackId =
       currentQ.bank_question_id ||
       (currentQ.variant_record_id && pendingBankIdsRef.current.get(currentQ.variant_record_id)) ||
+      // A stored variant's bank copy has the same content under its own id.
+      (contentKey && questions.find(q => questionContentKey(q) === contentKey)?.id) ||
       null
     if (trackId) {
       try {
@@ -1261,7 +1305,7 @@ export default function QuizScreen({
       remediationDifficultyTarget,
       remediationStreak,
       remediationTarget,
-      questions,
+      questions: unseenBankQuestions,
       deps: remediationDeps,
       setRemediationQueue,
       setRemediationSource,

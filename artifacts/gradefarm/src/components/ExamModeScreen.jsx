@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
-import { buildSubjectExam, countQuestions, formatClock } from '../lib/examEngine'
-import { saveExamAttempt, fetchExamPercentile, fetchMyExamAttempts } from '../lib/db'
+import { buildSubjectExam, countQuestions, formatClock, examAnswerRecords } from '../lib/examEngine'
+import { seenQuestionChecker } from '../lib/engine'
+import { saveExamAttempt, fetchExamPercentile, fetchMyExamAttempts, recordAnswer } from '../lib/db'
 import ExamSimulator from './ExamSimulator'
 
 const GOLD = '#f1be43'
@@ -9,7 +10,7 @@ const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
-export default function ExamModeScreen({ theme = 'dark', questions = [], subject, profile, onExit }) {
+export default function ExamModeScreen({ theme = 'dark', questions = [], struggleMap = {}, setStruggleMap, subject, profile, onExit }) {
   const t = THEMES[theme]
   const [paper, setPaper] = useState(null)
   const [activeTrack, setActiveTrack] = useState(null)
@@ -24,8 +25,32 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], subject
     return () => { alive = false }
   }, [paper, profile?.id])
 
+  // Add every question on the paper to the student's answer history, so exam
+  // questions count as answered and aren't served again in practice.
+  const recordExamAnswers = (records) => {
+    if (!profile?.id || !records.length) return
+    const now = new Date().toISOString()
+    setStruggleMap?.((prev) => {
+      const next = { ...prev }
+      for (const r of records) {
+        const old = next[r.questionId] ?? { attempts: 0, wrong: 0 }
+        next[r.questionId] = { ...old, attempts: old.attempts + 1, wrong: old.wrong + (r.correct ? 0 : 1), last_seen: now }
+      }
+      return next
+    })
+    // Background, a few at a time; a failed write only loses that history row.
+    const queue = [...records]
+    const worker = async () => {
+      for (let r = queue.shift(); r; r = queue.shift()) {
+        try { await recordAnswer(profile.id, r.questionId, r.correct, r.selected) } catch { /* non-blocking */ }
+      }
+    }
+    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {})
+  }
+
   // Persist the finished attempt (best-effort) and return the track percentile.
   const handleResult = async (result) => {
+    if (paper) recordExamAnswers(examAnswerRecords(paper, result.answers))
     try { if (profile?.id) await saveExamAttempt(profile.id, result) } catch { /* non-blocking */ }
     try { return await fetchExamPercentile(result.trackId, result.percent) } catch { return null }
   }
@@ -43,10 +68,12 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], subject
   }
 
   // Preview the paper shape for the card; a fresh random draw happens on Start.
-  const preview = buildSubjectExam(subject, questions)
+  // Papers prefer questions the student hasn't answered yet.
+  const isSeen = seenQuestionChecker(questions, struggleMap)
+  const preview = buildSubjectExam(subject, questions, isSeen)
   const previewCount = countQuestions(preview)
   const subjectAttempts = recent.filter((a) => a.track_id === preview.id).slice(0, 5)
-  const start = () => { const exam = buildSubjectExam(subject, questions); setActiveTrack(exam); setPaper(exam) }
+  const start = () => { const exam = buildSubjectExam(subject, questions, isSeen); setActiveTrack(exam); setPaper(exam) }
 
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, padding: '40px 20px 80px' }}>

@@ -60,10 +60,14 @@ const DEFAULT_SECONDS_PER_QUESTION = 90
  * come from the subject's feature settings (exam_questions / exam_minutes).
  *
  * @param {{ id?: string, name?: string, features?: object }} subject
+ * Questions the student has already answered (`isSeen`) are only used when
+ * there aren't enough new ones to fill the paper.
+ *
  * @param {object[]} pool  the subject's bank questions
+ * @param {(q: object) => boolean} [isSeen]  whether the student has answered q
  * @returns {{ id: string, title: string, sections: object[] }}
  */
-export function buildSubjectExam(subject, pool = []) {
+export function buildSubjectExam(subject, pool = [], isSeen = () => false) {
   const features = subject?.features || {}
   const wanted = Math.max(1, Math.round(Number(features.exam_questions) || DEFAULT_EXAM_QUESTIONS))
 
@@ -84,19 +88,24 @@ export function buildSubjectExam(subject, pool = []) {
     }
   }
 
-  const byTopic = new Map()
-  for (const block of blocks) {
-    if (!byTopic.has(block.topic)) byTopic.set(block.topic, [])
-    byTopic.get(block.topic).push(block)
-  }
-  const queues = shuffle([...byTopic.values()].map(shuffle))
   const picked = []
-  while (picked.length < wanted && queues.some(q => q.length)) {
-    for (const queue of queues) {
-      if (picked.length >= wanted) break
-      if (queue.length) picked.push(...queue.shift().questions)
+  const pickRoundRobin = (candidates) => {
+    const byTopic = new Map()
+    for (const block of candidates) {
+      if (!byTopic.has(block.topic)) byTopic.set(block.topic, [])
+      byTopic.get(block.topic).push(block)
+    }
+    const queues = shuffle([...byTopic.values()].map(shuffle))
+    while (picked.length < wanted && queues.some(q => q.length)) {
+      for (const queue of queues) {
+        if (picked.length >= wanted) break
+        if (queue.length) picked.push(...queue.shift().questions)
+      }
     }
   }
+  const isFresh = (block) => !block.questions.some(isSeen)
+  pickRoundRobin(blocks.filter(isFresh))
+  pickRoundRobin(blocks.filter(b => !isFresh(b)))
 
   const minutes = Number(features.exam_minutes)
   const durationSec = minutes > 0
@@ -126,6 +135,29 @@ export function countQuestions(paper) {
  * Unanswered questions count as incorrect. Returns an overall + per-section
  * breakdown plus the time spent (if `timeSpent` map of sectionId→sec given).
  */
+/**
+ * One record per question on a finished paper, for the student's answer
+ * history, so exam questions count as answered and aren't served again in
+ * practice. A question left blank counts as attempted and wrong: the student
+ * has seen it. `selected` is the chosen option index for MCQs, else null.
+ */
+export function examAnswerRecords(paper, answers = {}) {
+  const records = []
+  for (const sec of paper?.sections || []) {
+    for (const q of sec.questions || []) {
+      if (!q?.id) continue
+      const resp = answers[q.id]
+      const answered = resp !== undefined && resp !== null && !(Array.isArray(resp) && resp.length === 0)
+      records.push({
+        questionId: q.id,
+        correct: answered && gradeResponse(q, resp),
+        selected: Number.isInteger(resp) ? resp : null,
+      })
+    }
+  }
+  return records
+}
+
 export function gradePaper(paper, answers = {}, timeSpent = {}) {
   let totalCorrect = 0
   let totalQuestions = 0

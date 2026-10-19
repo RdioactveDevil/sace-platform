@@ -869,7 +869,9 @@ function AppInner() {
     questionContext, setQuestionContext,
     onConsolidate: (subtopic) => {
       setConsolidateSubtopic(subtopic)
-      // Reset quiz session so the filtered practice starts fresh in 'all' mode
+      // Reset quiz session so the filtered practice starts fresh. 'new' mode
+      // serves questions the student hasn't seen, generating more when the
+      // subtopic runs out.
       setQuizQ(null)
       setQuizSelected(null)
       setQuizShowAns(false)
@@ -882,7 +884,7 @@ function AppInner() {
       setQuizQNumber(1)
       setQuizAiTip('')
       setQuizLoadingTip(false)
-      setQuizMode('all')    // 'all' ensures subtopic questions are always available
+      setQuizMode('new')
       setQuizSubtopics([])  // consolidation uses its own state, not quizSubtopics
       setQuizRemediationMode(false)
       setQuizRemediationStreak(0)
@@ -973,7 +975,7 @@ function AppInner() {
       {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
       <Route path="/exam" element={
         subjectHasFeature(selectedSubject, 'exam_mode')
-          ? <ExamModeScreen theme={theme} questions={questions} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
+          ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
           : <Navigate to="/question-bank" replace />
       } />
 

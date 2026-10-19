@@ -107,7 +107,7 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
     const r = gradePaper(paper, answers, secTimes)
     setInsights({ band: predictScore(trackId, r.percent), ready: readiness(r.percent), stats: null, loading: !!onResult })
     if (onResult) {
-      Promise.resolve(onResult({ ...r, trackId, title: paper.title }))
+      Promise.resolve(onResult({ ...r, trackId, title: paper.title, answers }))
         .then((stats) => setInsights((prev) => ({ ...(prev || {}), stats, loading: false })))
         .catch(() => setInsights((prev) => ({ ...(prev || {}), loading: false })))
     }

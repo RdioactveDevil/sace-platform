@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatClock, buildPaper, buildSubjectExam, countQuestions, gradePaper, DEFAULT_EXAM_QUESTIONS } from './examEngine.js'
+import { formatClock, buildPaper, buildSubjectExam, countQuestions, gradePaper, examAnswerRecords, DEFAULT_EXAM_QUESTIONS } from './examEngine.js'
 
 describe('formatClock', () => {
   test('M:SS under an hour', () => {
@@ -85,6 +85,17 @@ describe('buildSubjectExam', () => {
     assert.equal(exam.id, 'subject-curriculum_x')
   })
 
+  test('uses questions the student has not answered before answered ones', () => {
+    const answered = new Set(pool.slice(0, 25).map(q => q.id))
+    const qs = buildSubjectExam({ features: { exam_questions: 6 } }, pool, q => answered.has(q.id)).sections[0].questions
+    assert.equal(qs.length, 6)
+    assert.equal(qs.filter(q => answered.has(q.id)).length, 0)
+    // Not enough new questions: answered ones fill the rest.
+    const full = buildSubjectExam({ features: { exam_questions: 10 } }, pool, q => answered.has(q.id)).sections[0].questions
+    assert.equal(full.length, 10)
+    assert.equal(full.filter(q => !answered.has(q.id)).length, 7)
+  })
+
   test('covers every topic before repeating one', () => {
     const exam = buildSubjectExam({ features: { exam_questions: 3 } }, pool)
     const topics = new Set(exam.sections[0].questions.map(q => q.topic))
@@ -114,5 +125,21 @@ describe('buildSubjectExam', () => {
 
   test('empty bank gives an empty paper', () => {
     assert.equal(countQuestions(buildSubjectExam({ features: {} }, [])), 0)
+  })
+})
+
+describe('examAnswerRecords', () => {
+  test('records every question on the paper, blanks as wrong', () => {
+    const paper = { sections: [{ id: 's', questions: [
+      { id: 'q1', options: ['a', 'b'], answer_index: 1 },
+      { id: 'q2', options: ['a', 'b'], answer_index: 0 },
+      { id: 'q3', options: ['a', 'b'], answer_index: 0 },
+    ] }] }
+    assert.deepEqual(examAnswerRecords(paper, { q1: 1, q2: 1 }), [
+      { questionId: 'q1', correct: true, selected: 1 },
+      { questionId: 'q2', correct: false, selected: 1 },
+      { questionId: 'q3', correct: false, selected: null },
+    ])
+    assert.deepEqual(examAnswerRecords(null), [])
   })
 })
