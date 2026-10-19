@@ -1721,11 +1721,12 @@ export default function QuizScreen({
         <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : 600, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {sidePassage && (
-            <div style={{ flex: '1 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
+            // The passage is what students read closely, so it gets ~60% of the row.
+            <div style={{ flex: '3 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
               <PassageView passage={currentQ.passage} theme={theme} fill />
             </div>
           )}
-          <div style={{ flex: '0 1 600px', minWidth: 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
+          <div style={{ flex: sidePassage ? '2 1 0' : '0 1 600px', minWidth: 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
             {consolidateSubtopic && (
               <div style={{
                 marginBottom: 14,

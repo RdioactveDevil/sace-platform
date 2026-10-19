@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import {
@@ -29,7 +30,7 @@ function statusColor(status, t) {
   if (status === 'active')    return { bg: t.successBg, text: t.success }
   if (status === 'completed') return { bg: t.blueBg, text: t.blue }
   if (status === 'cancelled') return { bg: t.dangerBg, text: t.danger }
-  return { bg: 'rgba(241,190,67,0.14)', text: GOLD }
+  return { bg: 'rgba(241,190,67,0.14)', text: t.goldText }
 }
 
 function StatusBadge({ status, t }) {
@@ -48,7 +49,7 @@ function RecordingBadge({ session, t }) {
   if (rs === 'recording')          { label = '🔴 Recording';       bg = t.dangerBg;  text = t.danger }
   else if (rs === 'ready')         { label = '🎬 Recorded';        bg = t.blueBg;    text = t.blue }
   else if (rs === 'failed')        { label = '⚠ Recording failed'; bg = t.dangerBg;  text = t.danger }
-  else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = GOLD }
+  else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = t.goldText }
   else return null
   return (
     <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B }}>
@@ -148,7 +149,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 8,
     border: isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
-    background: isDark ? 'rgba(255,255,255,0.05)' : t.bgNav,
+    background: isDark ? 'rgba(255,255,255,0.05)' : t.bgCard,
     color: t.text, fontFamily: FONT_B, fontSize: 14, boxSizing: 'border-box', outline: 'none',
   }
   const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B, textTransform: 'uppercase', letterSpacing: '0.06em' }
@@ -157,17 +158,17 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     flex: 1, padding: '10px 12px', borderRadius: 8,
     border: sessionType === type ? 'none' : isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
     cursor: 'pointer', fontFamily: FONT_B, fontSize: 14, fontWeight: 700,
-    background: sessionType === type ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDark ? 'rgba(255,255,255,0.05)' : t.bgNav,
+    background: sessionType === type ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDark ? 'rgba(255,255,255,0.05)' : t.bgCard,
     color: sessionType === type ? '#0c1037' : t.textMuted,
   })
 
-  const modalBg = isDark ? 'rgba(7,9,30,0.97)' : t.bg
+  const modalBg = isDark ? 'rgba(7,9,30,0.97)' : t.bgCard
   const modalBdr = isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`
-  const toggleBg = isDark ? 'rgba(255,255,255,0.04)' : t.bgNav
+  const toggleBg = isDark ? 'rgba(255,255,255,0.04)' : t.bgSubtle
   const toggleBdr = isDark ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`
 
   if (createdLink) {
-    return (
+    return createPortal(
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
         <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center', backdropFilter: 'blur(16px)' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
@@ -181,7 +182,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             </span>
             <button
               onClick={handleCopyLink}
-              style={{ flexShrink: 0, background: copied ? '#1e3a2f' : GOLD, color: copied ? '#4ade80' : '#1a1a2e', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
+              style={{ flexShrink: 0, background: copied ? t.successBg : GOLD, color: copied ? t.success : '#1a1a2e', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>
@@ -194,11 +195,14 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             Done
           </button>
         </div>
-      </div>
+      </div>,
+      document.body,
     )
   }
 
-  return (
+  // Rendered into <body>: the tutor shell animates each tab in with a transform,
+  // which would otherwise pin this "fixed" overlay inside the tab and clip it.
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
       <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
         <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, letterSpacing: '0.04em', color: t.text }}>📅 New Meeting</h2>
@@ -402,7 +406,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             </button>
           </div>
 
-          {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
+          {error && <p style={{ color: t.danger, fontSize: 13, margin: 0 }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 9, border: isDark ? '1px solid rgba(255,255,255,0.12)' : `1px solid ${t.border}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
@@ -414,7 +418,8 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -476,7 +481,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button
           onClick={handleCopyLink}
-          style={{ background: copied ? '#1e3a2f' : t.bgSubtle, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
+          style={{ background: copied ? t.successBg : t.bgSubtle, color: copied ? t.success : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
           title="Copy meeting link"
         >
           {copied ? '✓' : '🔗'}
@@ -493,7 +498,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
           <button
             onClick={handleCancel}
             disabled={cancelling}
-            style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}
+            style={{ background: 'transparent', color: t.danger, border: `1px solid ${t.danger}55`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}
           >
             {cancelling ? '…' : 'Cancel'}
           </button>
@@ -531,7 +536,7 @@ function SeriesCard({ series, theme, onCancel }) {
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{series.title || 'Recurring Session'}</span>
-            <span style={{ background: series.status === 'active' ? '#1e3a2f' : '#2a1a1a', color: series.status === 'active' ? '#4ade80' : '#f87171', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
+            <span style={{ background: series.status === 'active' ? t.successBg : t.dangerBg, color: series.status === 'active' ? t.success : t.danger, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
               🔁 {series.status}
             </span>
           </div>
@@ -541,7 +546,7 @@ function SeriesCard({ series, theme, onCancel }) {
             {series.participant_count > 0 && (
               <span>{series.session_type === 'group' ? '👥' : '👤'} {series.participant_names.join(', ')}</span>
             )}
-            {series.record_session && <span style={{ color: GOLD, fontWeight: 600 }}>🔴 Auto-records</span>}
+            {series.record_session && <span style={{ color: t.goldText, fontWeight: 600 }}>🔴 Auto-records</span>}
           </div>
           {/* Permanent link */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '8px 12px' }}>
@@ -550,14 +555,14 @@ function SeriesCard({ series, theme, onCancel }) {
             </span>
             <button
               onClick={handleCopy}
-              style={{ background: copied ? '#1e3a2f' : t.bgSubtle, color: copied ? '#4ade80' : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+              style={{ background: copied ? t.successBg : t.bgSubtle, color: copied ? t.success : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>
           </div>
         </div>
         {series.status === 'active' && (
-          <button onClick={handleCancel} disabled={cancelling} style={{ background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={handleCancel} disabled={cancelling} style={{ background: 'transparent', color: t.danger, border: `1px solid ${t.danger}55`, borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', flexShrink: 0 }}>
             {cancelling ? '…' : 'Cancel Series'}
           </button>
         )}
@@ -640,14 +645,14 @@ export default function SessionsTab({ profile, theme }) {
   const tabBtn = (id) => ({
     padding: '9px 20px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
     border: view === id ? 'none' : isDarkMain ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
-    background: view === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.05)' : t.bgNav,
+    background: view === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.05)' : t.bgCard,
     color: view === id ? '#0c1037' : t.textMuted,
   })
 
   const filterStyle = (id) => ({
     padding: '7px 16px', borderRadius: 20, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
     border: filter === id ? 'none' : isDarkMain ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`,
-    background: filter === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.04)' : t.bgNav,
+    background: filter === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.04)' : t.bgCard,
     color: filter === id ? '#0c1037' : t.textMuted,
   })
 

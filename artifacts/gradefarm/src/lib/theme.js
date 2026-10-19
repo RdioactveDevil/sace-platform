@@ -37,6 +37,8 @@ export const THEMES = {
 
     // XP & gamification
     xp:           '#f1be43',
+    // Gold for text and small labels (readable on this theme's background)
+    goldText:     '#f1be43',
 
     // Status colours
     danger:       '#f87171',
@@ -85,6 +87,8 @@ export const THEMES = {
 
     // XP slightly deeper in light mode for contrast
     xp:           '#c9970f',
+    // Gold for text and small labels: brand gold is too pale to read on white
+    goldText:     '#a16207',
 
     // Status colours — slightly deeper for contrast on white
     danger:       '#dc2626',

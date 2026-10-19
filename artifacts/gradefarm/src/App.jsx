@@ -331,8 +331,11 @@ function SectionTabs({ theme, subject }) {
   if (pages.length < 2) return null
   const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
   return (
-    <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`}
-      style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: `1px solid ${t.border}`, flexShrink: 0, overflowX: 'auto', fontFamily: FONT_B }}>
+    // The bottom rule is an inset shadow (painted under the tabs) rather than a
+    // border the active underline overlaps with a negative margin: that 1px
+    // overflow gave the strip a scrollbar on Windows.
+    <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`} className="gf-section-tabs"
+      style={{ display: 'flex', gap: 4, padding: '10px 20px 0', boxShadow: `inset 0 -1px 0 ${t.border}`, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', fontFamily: FONT_B }}>
       {pages.map(page => {
         const active = page.path === current
         return (
@@ -342,7 +345,7 @@ function SectionTabs({ theme, subject }) {
               padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
               fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500,
               color: active ? GOLD : t.textMuted,
-              borderBottom: `2px solid ${active ? GOLD : 'transparent'}`, marginBottom: -1,
+              borderBottom: `2px solid ${active ? GOLD : 'transparent'}`,
             }}>
             {page.label}
           </button>

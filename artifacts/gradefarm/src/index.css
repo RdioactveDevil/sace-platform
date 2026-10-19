@@ -347,3 +347,6 @@
     animation: gold-shimmer 3s linear infinite;
   }
 }
+
+/* Section tab strip scrolls sideways on narrow screens without showing a scrollbar. */
+.gf-section-tabs::-webkit-scrollbar { display: none; }
