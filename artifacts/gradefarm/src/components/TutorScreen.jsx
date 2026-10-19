@@ -2214,23 +2214,13 @@ export default function TutorScreen({ profile, theme, subject }) {
       display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
       boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.28)' : 'none',
     }}>
-      {/* Brand */}
-      <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: collapsed ? '0 16px' : '0 20px', borderBottom: `1px solid ${sidebarBdr}` }}>
-        {collapsed ? (
-          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 22, color: isDark ? GOLD : '#1e293b', letterSpacing: '-0.5px', textShadow: isDark ? '0 0 20px rgba(241,190,67,0.45)' : 'none' }}>g.</span>
-          </div>
-        ) : (
-          <div style={{ width: '100%' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: isDark ? 'rgba(241,190,67,0.12)' : 'rgba(241,190,67,0.16)', border: `1px solid ${isDark ? 'rgba(241,190,67,0.28)' : 'rgba(241,190,67,0.45)'}`, borderRadius: 30, padding: '3px 10px', marginBottom: 6 }}>
-              <div style={{ width: 5, height: 5, borderRadius: '50%', background: GOLD, boxShadow: isDark ? '0 0 8px rgba(241,190,67,0.9)' : 'none', flexShrink: 0 }} />
-              <span style={{ fontFamily: FONT_D, fontSize: 8, letterSpacing: '0.18em', color: goldText }}>TUTOR PORTAL</span>
-            </div>
-            <div style={{ fontFamily: FONT_D, fontSize: 22, color: isDark ? GOLD : '#0f172a', letterSpacing: '-0.5px', whiteSpace: 'nowrap', lineHeight: 1, textShadow: isDark ? '0 0 28px rgba(241,190,67,0.28)' : 'none' }}>
-              gradefarm<span style={{ color: isDark ? 'rgba(255,255,255,0.85)' : '#64748b' }}>.</span>
-            </div>
-          </div>
-        )}
+      {/* Portal label. The app sidebar beside this one already shows the
+          gradefarm logo, so it isn't repeated here. */}
+      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0 12px' : '0 20px', borderBottom: `1px solid ${sidebarBdr}` }}>
+        <div title={collapsed ? 'Tutor Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: isDark ? 'rgba(241,190,67,0.12)' : 'rgba(241,190,67,0.16)', border: `1px solid ${isDark ? 'rgba(241,190,67,0.28)' : 'rgba(241,190,67,0.45)'}`, borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: isDark ? '0 0 8px rgba(241,190,67,0.9)' : 'none', flexShrink: 0 }} />
+          {!collapsed && <span style={{ fontFamily: FONT_D, fontSize: 10, letterSpacing: '0.18em', color: goldText, whiteSpace: 'nowrap' }}>TUTOR PORTAL</span>}
+        </div>
       </div>
 
       <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
