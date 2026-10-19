@@ -12,7 +12,8 @@
     "ingest:past-paper": "tsx ./src/ingest-past-paper.ts",
     "seed:hard-graph": "tsx ./src/seed-hard-graph-questions.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/lib/*.test.ts"
+    "test": "tsx --test src/lib/*.test.ts",
+    "backfill:math-figures": "tsx ./src/backfill-math-figures.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

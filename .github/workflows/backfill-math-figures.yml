@@ -1,0 +1,93 @@
+name: Backfill — maths figures
+
+# Manually triggered from the GitHub UI (Actions tab → this workflow → "Run workflow").
+# Adds a figure (shape / number line / bar chart), table or graph to existing
+# maths questions about shapes, measurement and data, and to questions whose
+# text refers to a figure that isn't there. Dry run first; the report is
+# uploaded as an artifact.
+#
+# Requires repository secrets SUPABASE_SERVICE_KEY and ANTHROPIC_API_KEY.
+# Optional repository variable AI_FIGURE_MODEL overrides the model.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (report only, no writes)"
+          - "apply (write figures)"
+        default: "dry-run (report only, no writes)"
+      subject:
+        description: "Limit to one subject (exact name, optional)"
+        type: string
+        default: ""
+      limit:
+        description: "Max questions to process (blank = all)"
+        type: string
+        default: ""
+      concurrency:
+        description: "Parallel AI calls (blank = 4)"
+        type: string
+        default: ""
+
+concurrency:
+  group: backfill-math-figures
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run backfill
+        env:
+          MODE: ${{ inputs.mode }}
+          SUBJECT: ${{ inputs.subject }}
+          LIMIT: ${{ inputs.limit }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_FIGURE_MODEL: ${{ vars.AI_FIGURE_MODEL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "::error::SUPABASE_SERVICE_KEY secret is not set."
+            exit 1
+          fi
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set."
+            exit 1
+          fi
+          ARGS=("--report" "$GITHUB_WORKSPACE/math-figures-report.json")
+          case "$MODE" in
+            apply*) ARGS+=("--apply") ;;
+          esac
+          if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
+          if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
+          if [ -n "${CONCURRENCY// /}" ]; then ARGS+=("--concurrency" "$CONCURRENCY"); fi
+          echo "Running backfill with args: ${ARGS[*]}"
+          pnpm --filter @workspace/scripts run backfill:math-figures -- "${ARGS[@]}"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-figures-report
+          path: math-figures-report.json
+          if-no-files-found: ignore

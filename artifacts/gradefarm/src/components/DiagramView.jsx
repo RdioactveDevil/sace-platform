@@ -1,9 +1,13 @@
-// Renders an AI-authored vector diagram attached to a question.
+// Renders the figure attached to a question: either a structured maths figure
+// ({ figure: {...}, caption }) drawn by FigureView, or an AI-authored vector diagram.
 //
 // The SVG is rendered as a sandboxed `data:` image (an <img> data-URI cannot
 // execute scripts, fetch external resources, or touch the DOM), and we strip
 // the obvious script vectors defensively before encoding. diagram shape:
 //   { svg: "<svg ...>...</svg>", caption?: "..." }   (or a raw SVG string)
+
+import FigureView, { isDrawableFigure } from './FigureView'
+import { THEMES } from '../lib/theme'
 
 function sanitizeSvg(svg) {
   return String(svg)
@@ -14,6 +18,17 @@ function sanitizeSvg(svg) {
 }
 
 export default function DiagramView({ diagram, theme }) {
+  if (diagram && typeof diagram === 'object' && isDrawableFigure(diagram.figure)) {
+    const t = THEMES[theme] || THEMES.dark
+    const caption = diagram.caption || diagram.figure.caption
+    return (
+      <div style={{ margin: '0 0 18px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgSubtle, padding: '12px 12px 10px' }}>
+        <FigureView figure={diagram.figure} theme={theme} />
+        {caption && <div style={{ marginTop: 6, fontSize: 12, color: t.textMuted, textAlign: 'center' }}>{caption}</div>}
+      </div>
+    )
+  }
+
   const raw = typeof diagram === 'string' ? diagram : diagram?.svg
   if (!raw || !/<svg[\s>]/i.test(raw)) return null
 
