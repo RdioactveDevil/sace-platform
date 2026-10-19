@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { GraduationCap, Medal, Zap, Flame, Target, ChartColumn, FileText, Folder, Utensils, RefreshCw, Moon, TrendingUp, Hash, Brain, Repeat, Map as MapIcon, ClipboardList, PenLine, FlaskConical, Atom, Dna, BookOpen, Star } from 'lucide-react'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -91,18 +92,18 @@ function TitanChat() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <div style={{ background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.22)', borderRadius: '14px 14px 4px 14px', padding: '10px 14px', maxWidth: '82%' }}>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.55 }}>I don't get limiting reagents at all 😭</div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.55 }}>I don't get limiting reagents at all</div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 0 16px rgba(167,139,250,0.4)' }}>🎓</div>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 0 16px rgba(167,139,250,0.4)' }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
         <div style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.22)', borderRadius: '4px 14px 14px 14px', padding: '10px 14px', maxWidth: '88%' }}>
           <div style={{ fontSize: 10, color: PURPLE, fontWeight: 800, letterSpacing: '0.08em', marginBottom: 6 }}>TITAN AI</div>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.65 }}>Think of making burgers — 5 buns, 3 patties. You can only make <span style={{ color: GOLD, fontWeight: 700 }}>3 burgers</span>. The patties limit you. That's exactly what happens in a reaction. 🍔</div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.65 }}>Think of making burgers — 5 buns, 3 patties. You can only make <span style={{ color: GOLD, fontWeight: 700 }}>3 burgers</span>. The patties limit you. That's exactly what happens in a reaction.</div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎓</div>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
         <div style={{ display: 'flex', gap: 5, padding: '12px 16px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '4px 14px 14px 14px' }}>
           {[0,1,2].map(i => <div key={i} className={`tdot td${i}`} style={{ width: 6, height: 6, borderRadius: '50%', background: PURPLE }} />)}
         </div>
@@ -113,15 +114,15 @@ function TitanChat() {
 
 function LeaderboardMini() {
   const rows = [
-    { rank: '🥇', name: 'Alex K.', xp: 2450, pct: 100, you: false },
-    { rank: '🥈', name: 'You',     xp: 2180, pct: 89,  you: true  },
-    { rank: '🥉', name: 'Sam L.', xp: 1920, pct: 78,  you: false },
+    { medal: '#fbbf24', name: 'Alex K.', xp: 2450, pct: 100, you: false },
+    { medal: '#cbd5e1', name: 'You',     xp: 2180, pct: 89,  you: true  },
+    { medal: '#d97706', name: 'Sam L.', xp: 1920, pct: 78,  you: false },
   ]
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       {rows.map((r, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: r.you ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.03)', border: r.you ? `1px solid rgba(241,190,67,0.3)` : '1px solid rgba(255,255,255,0.06)' }}>
-          <span style={{ fontSize: 18 }}>{r.rank}</span>
+          <Medal size={20} color={r.medal} aria-hidden="true" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
               <span style={{ fontSize: 13, fontWeight: r.you ? 800 : 500, color: r.you ? GOLD : '#e2e8f0' }}>{r.name}</span>
@@ -140,7 +141,7 @@ function LeaderboardMini() {
 
 function GapsMini() {
   const topics = [
-    { name: 'Equilibrium', pct: 19, color: '#ef4444', label: '⚡ Priority' },
+    { name: 'Equilibrium', pct: 19, color: '#ef4444', label: 'Priority', icon: Zap },
     { name: 'Electrochemistry', pct: 41, color: '#f97316', label: 'Needs work' },
     { name: 'Acids & Bases', pct: 67, color: GOLD, label: 'Improving' },
     { name: 'Atomic Theory', pct: 91, color: GREEN, label: 'Strong' },
@@ -161,14 +162,14 @@ function GapsMini() {
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Exam Readiness</div>
           <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>4 topics flagged</div>
-          <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, marginTop: 4 }}>⚡ Review Equilibrium next</div>
+          <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Review Equilibrium next</div>
         </div>
       </div>
       {topics.map(t => (
         <div key={t.name}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
             <span style={{ fontSize: 12, color: '#e2e8f0' }}>{t.name}</span>
-            <span style={{ fontSize: 10, color: t.color, fontWeight: 700 }}>{t.label}</span>
+            <span style={{ fontSize: 10, color: t.color, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}>{t.icon && <t.icon size={11} aria-hidden="true" />}{t.label}</span>
           </div>
           <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)' }}>
             <div style={{ width: `${t.pct}%`, height: '100%', borderRadius: 3, background: t.color }} />
@@ -192,13 +193,13 @@ function DemoCard() {
     <div style={{ position: 'relative' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, height: 380, borderRadius: '50%', background: `radial-gradient(circle,rgba(241,190,67,0.32) 0%,transparent 70%)`, filter: 'blur(32px)', pointerEvents: 'none', zIndex: 0 }} />
       {/* floating badges */}
-      <div style={{ position: 'absolute', top: -16, left: -20, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GOLD, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 5s ease-in-out infinite' }}>⚡ Priority topic</div>
+      <div style={{ position: 'absolute', top: -16, left: -20, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GOLD, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 5s ease-in-out infinite', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Zap size={14} aria-hidden="true" />Priority topic</div>
       <div style={{ position: 'absolute', bottom: 24, right: -24, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GREEN, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 6s ease-in-out infinite 1s' }}>✓ Correct! +24 XP</div>
-      <div style={{ position: 'absolute', top: '40%', right: -32, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 7s ease-in-out infinite 0.5s' }}>🔥 3 day streak</div>
+      <div style={{ position: 'absolute', top: '40%', right: -32, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 7s ease-in-out infinite 0.5s', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Flame size={14} aria-hidden="true" />3 day streak</div>
       <div style={{ position: 'relative', zIndex: 1, background: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Organic Chemistry</span>
-          <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20 }}>⚡ Priority</span>
+          <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Priority</span>
         </div>
         <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>What is the IUPAC name for CH₃CH₂CH₂COOH?</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -223,13 +224,13 @@ function DemoCard() {
         </div>
         {showAns && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
-            <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP · 🔥 Streak extended</div>
+            <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP · <Flame size={13} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Streak extended</div>
             <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the –COOH carbon. 4 carbons = butanoic acid.</div>
           </div>
         )}
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 11, color: '#9ca3af' }}>gradefarm. · by Titanium Tutoring</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>🔥 3 streak</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={12} aria-hidden="true" />3 streak</span>
         </div>
       </div>
     </div>
@@ -521,7 +522,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               <div className="bc-gold" style={{ background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320, height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:200, height:200, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.12) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
-                  <div style={{ width:48, height:48, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 4px 18px rgba(241,190,67,0.22)', flexShrink:0 }}>🎯</div>
+                  <div style={{ width:48, height:48, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 4px 18px rgba(241,190,67,0.22)', flexShrink:0 }}><Target size={24} color={GOLD} aria-hidden="true" /></div>
                   <div>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Core Technology</div>
                     <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Adaptive Intelligence Engine</div>
@@ -542,7 +543,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               <div className="bc" style={{ background:'rgba(167,139,250,0.04)', border:'1px solid rgba(167,139,250,0.22)', borderRadius:20, padding:28, position:'relative', overflow:'hidden', height:'100%' }}>
                 <div style={{ position:'absolute', top:0, right:0, width:140, height:140, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)`, filter:'blur(16px)', pointerEvents:'none' }} />
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(167,139,250,0.22),rgba(167,139,250,0.08))', border:'1px solid rgba(167,139,250,0.35)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(167,139,250,0.18)', flexShrink:0 }}>🎓</div>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(167,139,250,0.22),rgba(167,139,250,0.08))', border:'1px solid rgba(167,139,250,0.35)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(167,139,250,0.18)', flexShrink:0 }}><GraduationCap size={22} color={PURPLE} aria-hidden="true" /></div>
                   <div>
                     <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>AI Tutor</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Titan AI</div>
@@ -557,7 +558,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <FadeUp delay={140}>
               <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.32)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(241,190,67,0.18)', flexShrink:0 }}>⚡</div>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.32)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(241,190,67,0.18)', flexShrink:0 }}><Zap size={22} color={GOLD} aria-hidden="true" /></div>
                   <div>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gamification</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>XP & Leaderboards</div>
@@ -572,7 +573,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <FadeUp delay={210}>
               <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))', border:'1px solid rgba(16,185,129,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(16,185,129,0.16)', flexShrink:0 }}>📊</div>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))', border:'1px solid rgba(16,185,129,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(16,185,129,0.16)', flexShrink:0 }}><ChartColumn size={22} color={GREEN} aria-hidden="true" /></div>
                   <div>
                     <div style={{ fontSize:10, color:GREEN, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gap Analysis</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Know Your Gaps</div>
@@ -587,7 +588,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <FadeUp delay={280}>
               <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(249,216,122,0.22),rgba(249,216,122,0.08))', border:'1px solid rgba(249,216,122,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(249,216,122,0.16)', flexShrink:0 }}>📄</div>
+                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(249,216,122,0.22),rgba(249,216,122,0.08))', border:'1px solid rgba(249,216,122,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(249,216,122,0.16)', flexShrink:0 }}><FileText size={22} color={GOLDL} aria-hidden="true" /></div>
                   <div>
                     <div style={{ fontSize:10, color:GOLDL, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Smart Upload</div>
                     <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Your Notes, Your Tutor</div>
@@ -596,7 +597,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:24 }}>Upload your teacher's slides or class notes. Titan AI reads them and teaches from your exact school content — not a textbook you've never seen.</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:10 }}>
-                    <span style={{ fontSize:22 }}>📁</span>
+                    <Folder size={24} color={GOLD} aria-hidden="true" style={{ flexShrink:0 }} />
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:12, fontWeight:700, color:'#e2e8f0' }}>Chem_Unit3_Reactions.pdf</div>
                       <div style={{ fontSize:10, color:MUTED }}>Uploading... 84%</div>
@@ -606,7 +607,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     </div>
                   </div>
                   <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(167,139,250,0.07)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:10 }}>
-                    <span style={{ fontSize:18 }}>🎓</span>
+                    <GraduationCap size={20} color={PURPLE} aria-hidden="true" style={{ flexShrink:0 }} />
                     <div style={{ fontSize:12, color:'#e2e8f0' }}>Titan has read your notes — ready to teach from <span style={{ color:GOLD, fontWeight:700 }}>your content</span></div>
                   </div>
                 </div>
@@ -618,7 +619,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               <div className="bc lp-sace-banner" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
                 <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
                 <div className="lp-sace-head" style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
-                  <div className="lp-sace-icon" style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)', flexShrink:0 }}>⭐</div>
+                  <div className="lp-sace-icon" style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)', flexShrink:0 }}><Star size={26} color={GOLD} aria-hidden="true" /></div>
                   <div className="lp-sace-title" style={{ minWidth:0 }}>
                     <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:4 }}>Curriculum</div>
                     <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Backed by Titanium Tutoring</div>
@@ -658,13 +659,13 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most tutors explain things once and move on. Titan explains it differently — using sport, gaming, pop culture — until your brain actually clicks. Then it checks you actually got it.</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
                   {[
-                    { icon:'🍔', text:'Explains with sport, gaming, and everyday analogies — whatever makes it stick for you' },
-                    { icon:'📁', text:'Upload your class notes — Titan reads them and teaches from your exact school content' },
-                    { icon:'🔄', text:'Real-time comprehension checks after every concept — no passive reading' },
-                    { icon:'🌙', text:'Available 24/7 — no scheduling, no waiting, no minimum booking' },
+                    { icon:Utensils, text:'Explains with sport, gaming, and everyday analogies — whatever makes it stick for you' },
+                    { icon:Folder, text:'Upload your class notes — Titan reads them and teaches from your exact school content' },
+                    { icon:RefreshCw, text:'Real-time comprehension checks after every concept — no passive reading' },
+                    { icon:Moon, text:'Available 24/7 — no scheduling, no waiting, no minimum booking' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.07))', border:'1px solid rgba(167,139,250,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(167,139,250,0.15)' }}>{f.icon}</div>
+                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.07))', border:'1px solid rgba(167,139,250,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(167,139,250,0.15)' }}><f.icon size={20} color={PURPLE} aria-hidden="true" /></div>
                       <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
                     </div>
                   ))}
@@ -677,7 +678,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               <div className="spotlight-visual" style={{ flex:1, maxWidth:480 }}>
                 <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(167,139,250,0.25)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)', position:'relative' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20, paddingBottom:16, borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 0 20px rgba(167,139,250,0.4)' }}>🎓</div>
+                    <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 0 20px rgba(167,139,250,0.4)' }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
                     <div>
                       <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>Titan AI</div>
                       <div style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }} /><span style={{ fontSize:11, color:GREEN }}>Online · Organic Chemistry</span></div>
@@ -689,17 +690,17 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                       <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>Why is carbon so special in organic chemistry?</div>
                     </div>
                     <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>🎓</div>
+                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
                       <div style={{ background:'rgba(167,139,250,0.1)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:'4px 14px 14px 14px', padding:'10px 14px', maxWidth:'88%' }}>
                         <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.08em', marginBottom:6 }}>TITAN AI</div>
-                        <div style={{ fontSize:13, color:'#e2e8f0', lineHeight:1.65 }}>Carbon is like a universal LEGO brick — it has 4 bonding "hands" and can connect to almost anything: other carbons, hydrogen, oxygen, nitrogen. That flexibility is why life itself is carbon-based. <span style={{ color:GOLD, fontWeight:700 }}>4 bonds = infinite combinations.</span> 🧱</div>
+                        <div style={{ fontSize:13, color:'#e2e8f0', lineHeight:1.65 }}>Carbon is like a universal LEGO brick — it has 4 bonding "hands" and can connect to almost anything: other carbons, hydrogen, oxygen, nitrogen. That flexibility is why life itself is carbon-based. <span style={{ color:GOLD, fontWeight:700 }}>4 bonds = infinite combinations.</span></div>
                       </div>
                     </div>
                     <div style={{ display:'flex', justifyContent:'flex-end' }}>
                       <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>So what makes a compound "organic"?</div>
                     </div>
                     <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>🎓</div>
+                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
                       <div style={{ display:'flex', gap:5, padding:'12px 16px', background:'rgba(167,139,250,0.07)', border:'1px solid rgba(167,139,250,0.15)', borderRadius:'4px 14px 14px 14px' }}>
                         {[0,1,2].map(i => <div key={i} className={`tdot td${i}`} style={{ width:6, height:6, borderRadius:'50%', background:PURPLE }} />)}
                       </div>
@@ -723,14 +724,14 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   <div style={{ fontSize:12, fontWeight:800, color:GOLD, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:16 }}>Your topic mastery map</div>
                   <TopicGrid />
                   <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
-                    <span style={{ fontSize:22 }}>⚡</span>
+                    <Zap size={24} color="#fca5a5" aria-hidden="true" style={{ flexShrink:0 }} />
                     <div>
                       <div style={{ fontSize:13, fontWeight:700, color:'#fca5a5' }}>Priority queue: Equilibrium (19%)</div>
                       <div style={{ fontSize:12, color:MUTED }}>Next 8 questions will target this topic</div>
                     </div>
                   </div>
                   <div style={{ marginTop:10, padding:'14px 16px', background:'rgba(241,190,67,0.06)', border:'1px solid rgba(241,190,67,0.15)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
-                    <span style={{ fontSize:22 }}>📈</span>
+                    <TrendingUp size={24} color={GOLD} aria-hidden="true" style={{ flexShrink:0 }} />
                     <div>
                       <div style={{ fontSize:13, fontWeight:700, color:GOLD }}>Session progress: +12% on Redox</div>
                       <div style={{ fontSize:12, color:MUTED }}>Difficulty unlocked: Level 3 questions</div>
@@ -749,13 +750,13 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most study apps give you a random bank of questions. gradefarm. tracks your error rate at the topic-and-difficulty level — so every session zeros in on exactly what your exam will punish you for.</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
                   {[
-                    { icon:'📊', text:'Error rate tracked per topic and per difficulty tier — not just "right or wrong"' },
-                    { icon:'🔢', text:'Weighted priority queue updates in real time after every answer you give' },
-                    { icon:'🧠', text:'Difficulty scales automatically — easier when you\'re struggling, harder when you\'re confident' },
-                    { icon:'🔁', text:'Questions you\'ve missed come back in spaced intervals until they stick permanently' },
+                    { icon:ChartColumn, text:'Error rate tracked per topic and per difficulty tier — not just "right or wrong"' },
+                    { icon:Hash, text:'Weighted priority queue updates in real time after every answer you give' },
+                    { icon:Brain, text:'Difficulty scales automatically — easier when you\'re struggling, harder when you\'re confident' },
+                    { icon:Repeat, text:'Questions you\'ve missed come back in spaced intervals until they stick permanently' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(241,190,67,0.2),rgba(241,190,67,0.07))', border:'1px solid rgba(241,190,67,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(241,190,67,0.15)' }}>{f.icon}</div>
+                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(241,190,67,0.2),rgba(241,190,67,0.07))', border:'1px solid rgba(241,190,67,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(241,190,67,0.15)' }}><f.icon size={20} color={GOLD} aria-hidden="true" /></div>
                       <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
                     </div>
                   ))}
@@ -785,13 +786,13 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>After every session, your struggle profile updates. You get a real-time exam readiness score, a topic-by-topic breakdown, and a personalised action plan — not a vague "keep studying" message.</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
                   {[
-                    { icon:'🎯', text:'Exam readiness score shows you the honest number — not a feel-good estimate' },
-                    { icon:'🗺️', text:'Topic heatmap shows which areas are red (danger), yellow (watch), and green (solid)' },
-                    { icon:'📋', text:'Personalised study plan generated after every session with specific next steps' },
-                    { icon:'📈', text:'Progress tracking over time so you can see the gaps actually closing' },
+                    { icon:Target, text:'Exam readiness score shows you the honest number — not a feel-good estimate' },
+                    { icon:MapIcon, text:'Topic heatmap shows which areas are red (danger), yellow (watch), and green (solid)' },
+                    { icon:ClipboardList, text:'Personalised study plan generated after every session with specific next steps' },
+                    { icon:TrendingUp, text:'Progress tracking over time so you can see the gaps actually closing' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(16,185,129,0.2),rgba(16,185,129,0.07))', border:'1px solid rgba(16,185,129,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(16,185,129,0.15)' }}>{f.icon}</div>
+                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(16,185,129,0.2),rgba(16,185,129,0.07))', border:'1px solid rgba(16,185,129,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(16,185,129,0.15)' }}><f.icon size={20} color={GREEN} aria-hidden="true" /></div>
                       <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
                     </div>
                   ))}
@@ -806,7 +807,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   <div style={{ fontSize:12, fontWeight:800, color:GREEN, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:20 }}>Session summary · Oct 28</div>
                   <GapsMini />
                   <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:12 }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:GREEN, marginBottom:8 }}>📋 Your action plan</div>
+                    <div style={{ fontSize:12, fontWeight:800, color:GREEN, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><ClipboardList size={14} aria-hidden="true" />Your action plan</div>
                     {['Review equilibrium Le Chatelier shifts (Titan can help)', '3 more sessions on Electrochemistry needed', 'Redox is improving — keep momentum'].map((a,i) => (
                       <div key={i} style={{ display:'flex', gap:8, fontSize:12, color:MUTED, lineHeight:1.55, marginBottom: i<2?6:0 }}>
                         <span style={{ color:GREEN, flexShrink:0 }}>→</span>{a}
@@ -832,16 +833,16 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           </FadeUp>
           <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
             {[
-              { num:'01', icon:'✍️', color:GOLD,   rgb:'241,190,67',  title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
-              { num:'02', icon:'⚡', color:GOLD,   rgb:'241,190,67',  title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
-              { num:'03', icon:'🎓', color:PURPLE, rgb:'167,139,250', title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
-              { num:'04', icon:'📈', color:GREEN,  rgb:'16,185,129',  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
+              { num:'01', icon:PenLine, color:GOLD,   rgb:'241,190,67',  title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
+              { num:'02', icon:Zap, color:GOLD,   rgb:'241,190,67',  title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
+              { num:'03', icon:GraduationCap, color:PURPLE, rgb:'167,139,250', title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
+              { num:'04', icon:TrendingUp, color:GREEN,  rgb:'16,185,129',  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
             ].map((s,i) => (
               <FadeUp key={i} delay={i * 80}>
                 <div style={{ background:'rgba(255,255,255,0.02)', border:`1px solid rgba(${s.rgb},0.14)`, borderLeft:`3px solid ${s.color}`, borderRadius:18, padding:28, position:'relative', height:'100%', overflow:'hidden' }}>
                   <div style={{ position:'absolute', top:-8, right:-4, fontFamily:FONT_D, fontSize:88, color:`rgba(${s.rgb},0.05)`, letterSpacing:2, lineHeight:1, userSelect:'none', pointerEvents:'none' }}>{s.num}</div>
                   <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
-                    <div style={{ width:48, height:48, borderRadius:14, background:`linear-gradient(135deg,rgba(${s.rgb},0.2),rgba(${s.rgb},0.07))`, border:`1px solid rgba(${s.rgb},0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:`0 4px 16px rgba(${s.rgb},0.18)`, flexShrink:0 }}>{s.icon}</div>
+                    <div style={{ width:48, height:48, borderRadius:14, background:`linear-gradient(135deg,rgba(${s.rgb},0.2),rgba(${s.rgb},0.07))`, border:`1px solid rgba(${s.rgb},0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:`0 4px 16px rgba(${s.rgb},0.18)`, flexShrink:0 }}><s.icon size={24} color={s.color} aria-hidden="true" /></div>
                     <div style={{ fontFamily:FONT_D, fontSize:12, color:s.color, letterSpacing:'0.1em' }}>STEP {s.num}</div>
                   </div>
                   <div style={{ fontFamily:FONT_D, fontSize:16, color:'#fff', marginBottom:10, letterSpacing:0.5, lineHeight:1.2 }}>{s.title.toUpperCase()}</div>
@@ -896,15 +897,15 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             <p style={{ fontSize:16, color:MUTED, marginBottom:44, lineHeight:1.7 }}>More subjects are coming. Stage 1 and Stage 2 covered from day one.</p>
             <div className="subjects-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
               {[
-                { name:'Chemistry',               stage:'Stage 1 & 2', icon:'⚗️', color:GOLD,    available:true,  count:'175+ questions' },
+                { name:'Chemistry',               stage:'Stage 1 & 2', icon:FlaskConical, color:GOLD,    available:true,  count:'175+ questions' },
                 { name:'Mathematical Methods',    stage:'Stage 2',     icon:'∫',  color:'#a78bfa',available:false },
-                { name:'Physics',                 stage:'Stage 2',     icon:'⚛️', color:GOLDL,   available:false },
-                { name:'Biology',                 stage:'Stage 2',     icon:'🧬', color:GREEN,   available:false },
-                { name:'English Literary Studies',stage:'Stage 2',     icon:'📖', color:'#f87171',available:false },
-                { name:'Economics',               stage:'Stage 2',     icon:'📈', color:GOLD,    available:false },
+                { name:'Physics',                 stage:'Stage 2',     icon:Atom, color:GOLDL,   available:false },
+                { name:'Biology',                 stage:'Stage 2',     icon:Dna, color:GREEN,   available:false },
+                { name:'English Literary Studies',stage:'Stage 2',     icon:BookOpen, color:'#f87171',available:false },
+                { name:'Economics',               stage:'Stage 2',     icon:TrendingUp, color:GOLD,    available:false },
               ].map(s => (
                 <div key={s.name} onClick={s.available ? onGetStarted : undefined} style={{ padding:'24px 18px', borderRadius:16, border:`1px solid ${s.available?'rgba(241,190,67,0.32)':'rgba(255,255,255,0.06)'}`, background: s.available?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', textAlign:'center', opacity: s.available?1:0.45, cursor: s.available?'pointer':'default', transition:'all 0.18s', boxShadow: s.available?'0 4px 24px rgba(241,190,67,0.12)':'none' }}>
-                  <div style={{ fontSize:28, marginBottom:10 }}>{s.icon}</div>
+                  <div style={{ fontSize:28, marginBottom:10, color:s.color }}>{typeof s.icon === 'string' ? s.icon : <s.icon size={30} aria-hidden="true" />}</div>
                   <div style={{ fontSize:13, fontWeight:800, color: s.available?'#f1f5f9':'#475569', marginBottom:4 }}>{s.name}</div>
                   <div style={{ fontSize:11, color: s.available?GOLD:'#334155' }}>{s.available ? s.count : s.stage+' · Coming soon'}</div>
                 </div>

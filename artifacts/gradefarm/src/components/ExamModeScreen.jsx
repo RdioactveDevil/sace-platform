@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { buildSubjectExam, countQuestions, formatClock, examAnswerRecords } from '../lib/examEngine'
 import { seenQuestionChecker } from '../lib/engine'
@@ -83,7 +84,8 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
         )}
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: '#f1be43', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            ⏱ Exam Mode
+            <Timer size={13} aria-hidden="true" />
+            Exam Mode
           </div>
           <div style={{ fontFamily: FONT_D, fontSize: 28, color: t.text, letterSpacing: 1 }}>{subject?.name || 'Practice'} exam</div>
           <div style={{ fontSize: 14, color: t.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 520, margin: '8px auto 0' }}>

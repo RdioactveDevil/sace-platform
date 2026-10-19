@@ -6,6 +6,7 @@ import 'katex/dist/katex.min.css'
 import 'mathlive'
 import 'mathlive/fonts.css'
 import MathText from './MathText'
+import { Check, GraduationCap, Hourglass, TriangleAlert, ClipboardList, PenLine, Star, Target, Bot } from 'lucide-react'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -397,8 +398,8 @@ function SubmittedScreen({ preCallFormUrl, onRedirect }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28, padding: '64px 24px', textAlign: 'center' }}>
-      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
-        ✅
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, color: '#4ade80' }}>
+        <Check size={34} aria-hidden="true" />
       </div>
       <div>
         <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 10 }}>Assessment Submitted!</div>
@@ -531,7 +532,7 @@ export default function DiagnosticScreen() {
       {/* Header */}
       <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🎓</div>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: NAVY }}><GraduationCap size={18} aria-hidden="true" /></div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>Diagnostic Assessment</div>
             {assessment && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{assessment.year_level} · {subjectNames}</div>}
@@ -552,7 +553,7 @@ export default function DiagnosticScreen() {
         {/* ─ Loading ─ */}
         {phase === 'loading' && (
           <div style={{ paddingTop: 80, textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
-            <div style={{ fontSize: 32, marginBottom: 16 }}>⏳</div>
+            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}><Hourglass size={32} aria-hidden="true" /></div>
             <div style={{ fontSize: 15 }}>Loading your assessment…</div>
           </div>
         )}
@@ -560,7 +561,7 @@ export default function DiagnosticScreen() {
         {/* ─ Error ─ */}
         {phase === 'error' && (
           <div style={{ paddingTop: 80, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: GOLD }}><TriangleAlert size={40} aria-hidden="true" /></div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 8 }}>Assessment Unavailable</div>
             <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>{error || 'This assessment could not be found.'}</div>
           </div>
@@ -570,7 +571,7 @@ export default function DiagnosticScreen() {
         {phase === 'intro' && assessment && (
           <div style={{ paddingTop: 48, display: 'flex', flexDirection: 'column', gap: 24 }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: GOLD }}><ClipboardList size={36} aria-hidden="true" /></div>
               <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 8 }}>
                 {assessment.year_level} Diagnostic Assessment
               </div>
@@ -579,12 +580,12 @@ export default function DiagnosticScreen() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
               {[
-                { icon: '📝', label: 'Questions', value: `${assessment.questions.length}` },
-                { icon: '⭐', label: 'Total Marks', value: `${assessment.score_max}` },
-                { icon: '🎯', label: 'Sections', value: `${groups.length}` },
+                { icon: PenLine, label: 'Questions', value: `${assessment.questions.length}` },
+                { icon: Star, label: 'Total Marks', value: `${assessment.score_max}` },
+                { icon: Target, label: 'Sections', value: `${groups.length}` },
               ].map(item => (
                 <div key={item.label} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
+                  <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center', color: GOLD }}><item.icon size={22} aria-hidden="true" /></div>
                   <div style={{ fontSize: 22, fontWeight: 800, color: GOLD }}>{item.value}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{item.label}</div>
                 </div>
@@ -707,7 +708,7 @@ export default function DiagnosticScreen() {
         {/* ─ Submitting ─ */}
         {phase === 'submitting' && (
           <div style={{ paddingTop: 80, textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 20 }}>🤖</div>
+            <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center', color: GOLD }}><Bot size={36} aria-hidden="true" /></div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Marking your assessment…</div>
             <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>AI is reviewing your responses. This may take 20–40 seconds.</div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>

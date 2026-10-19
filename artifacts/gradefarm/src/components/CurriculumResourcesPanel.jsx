@@ -4,6 +4,7 @@ import {
   uploadCurriculumResource,
   deleteCurriculumResource,
 } from '../lib/curriculumResources'
+import { FileText } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD = '#f1be43'
@@ -126,7 +127,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}
         >
-          {file ? `📄 ${file.name}` : 'Choose PDF…'}
+          {file ? <><FileText size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 6 }} />{file.name}</> : 'Choose PDF…'}
         </button>
         <input
           ref={fileRef}

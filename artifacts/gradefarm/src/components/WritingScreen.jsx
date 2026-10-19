@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { Timer, PenLine } from 'lucide-react'
 import { saveWritingAttempt, updateWritingAttemptFeedback, getWritingAttempts } from '../lib/writingDb'
 import { downloadWritingReportPdf } from '../lib/db'
 import { THEMES } from '../lib/theme'
@@ -737,7 +738,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
             <span style={s.label}>{isPlanner ? 'Planning timer' : 'Timer'}</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
               <button type="button" aria-pressed={!isTimed} style={s.toggleBtn(!isTimed)} onClick={() => setTimedFn(false)}>Untimed</button>
-              <button type="button" aria-pressed={isTimed} style={s.toggleBtn(isTimed)} onClick={() => setTimedFn(true)}>⏱ Timed</button>
+              <button type="button" aria-pressed={isTimed} style={s.toggleBtn(isTimed)} onClick={() => setTimedFn(true)}><Timer size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} aria-hidden="true" />Timed</button>
               {isTimed && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
                   <input
@@ -785,8 +786,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
         </button>
         <span style={s.pill(t.textSub, t.bgSubtle)}>
           {mode === 'full_essay'
-            ? (essayTimed ? `⏱ ${essayMinutes} min` : 'Untimed')
-            : (plannerTimed ? `⏱ ${plannerMinutes} min planning` : 'Untimed')}
+            ? (essayTimed ? <><Timer size={14} aria-hidden="true" />{essayMinutes} min</> : 'Untimed')
+            : (plannerTimed ? <><Timer size={14} aria-hidden="true" />{plannerMinutes} min planning</> : 'Untimed')}
         </span>
       </div>
       {promptError && <div style={{ ...s.notice(t.danger, t.dangerBg), marginTop: 16 }}>{promptError} — try again.</div>}
@@ -808,7 +809,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
           </div>
           {timed && secondsLeft !== null && (
             <span style={{ ...s.pill(lowTime ? t.danger : t.text, lowTime ? t.dangerBg : t.bgCard), border: `1px solid ${lowTime ? `${t.danger}55` : t.border}`, fontSize: 16, padding: '6px 14px', fontVariantNumeric: 'tabular-nums' }}>
-              ⏱ {secondsLeft === 0 ? 'Time’s up' : formatTime(secondsLeft)}
+              <Timer size={18} aria-hidden="true" />{secondsLeft === 0 ? 'Time’s up' : formatTime(secondsLeft)}
             </span>
           )}
         </div>
@@ -867,7 +868,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
 
       {loadingFeedback && (
         <div style={{ ...s.card, padding: 40, textAlign: 'center', color: t.textMuted, fontSize: 14 }}>
-          <div style={{ fontSize: 36, marginBottom: 14 }}>📝</div>
+          <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}><PenLine size={36} aria-hidden="true" /></div>
           Assessing your writing…
         </div>
       )}

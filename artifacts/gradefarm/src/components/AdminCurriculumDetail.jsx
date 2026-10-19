@@ -12,6 +12,7 @@ import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
+import { TriangleAlert, Sparkles } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -582,7 +583,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)',
           borderRadius: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: 18 }}>⚠️</span>
+          <TriangleAlert size={18} color="#fbbf24" aria-hidden="true" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>
               {orphanInfo.count} question{orphanInfo.count !== 1 ? 's' : ''} not mapped to any current subtopic
@@ -638,9 +639,11 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                     padding: '7px 13px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.3)',
                     background: 'rgba(56,189,248,0.08)', color: remapSuggesting ? '#64748b' : '#38bdf8',
                     fontSize: 12, fontWeight: 700, cursor: remapSuggesting ? 'not-allowed' : 'pointer', fontFamily: FONT_B,
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
                   }}
                 >
-                  {remapSuggesting ? '✨ Suggesting…' : '✨ AI Suggest'}
+                  <Sparkles size={13} aria-hidden="true" />
+                  {remapSuggesting ? 'Suggesting…' : 'AI Suggest'}
                 </button>
                 <button
                   onClick={() => setShowRemap(false)}

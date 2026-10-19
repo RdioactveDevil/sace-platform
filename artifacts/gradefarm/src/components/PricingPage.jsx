@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getPlatformSettings } from '../lib/db'
+import { Lightbulb, GraduationCap, FlaskConical, Atom, Dna, BookOpen, TrendingUp } from 'lucide-react'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -335,7 +336,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
               {/* Per-subject note */}
               <FadeUp delay={120}>
                 <div style={{ marginTop: 28, background: 'rgba(241,190,67,0.04)', border: '1px solid rgba(241,190,67,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: 22, flexShrink: 0 }}>💡</div>
+                  <Lightbulb size={24} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Mix &amp; match subjects</div>
                     <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
@@ -351,14 +352,15 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                   <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 20 }}>Available subjects</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
                     {[
-                      { label: '⚗️  Chemistry S1 & S2', live: true },
-                      { label: '∫  Mathematical Methods S2', live: false },
-                      { label: '⚛️  Physics S2', live: false },
-                      { label: '🧬  Biology S2', live: false },
-                      { label: '📖  English Literary Studies S2', live: false },
-                      { label: '📈  Economics S2', live: false },
+                      { icon: FlaskConical, label: 'Chemistry S1 & S2', live: true },
+                      { icon: '∫', label: 'Mathematical Methods S2', live: false },
+                      { icon: Atom, label: 'Physics S2', live: false },
+                      { icon: Dna, label: 'Biology S2', live: false },
+                      { icon: BookOpen, label: 'English Literary Studies S2', live: false },
+                      { icon: TrendingUp, label: 'Economics S2', live: false },
                     ].map(s => (
                       <div key={s.label} style={{ padding: '8px 16px', borderRadius: 20, background: s.live ? 'rgba(241,190,67,0.08)' : 'rgba(255,255,255,0.02)', border: `1px solid ${s.live ? 'rgba(241,190,67,0.28)' : 'rgba(255,255,255,0.06)'}`, fontSize: 12, fontWeight: 600, color: s.live ? '#f1f5f9' : '#475569', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {typeof s.icon === 'string' ? s.icon : <s.icon size={14} aria-hidden="true" />}
                         {s.label}
                         {s.live
                           ? <span style={{ fontSize: 10, background: 'rgba(16,185,129,0.15)', color: GREEN, border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, padding: '1px 7px', fontWeight: 800 }}>LIVE</span>
@@ -438,7 +440,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
               {/* Tutor note */}
               <FadeUp delay={120}>
                 <div style={{ marginTop: 28, background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: 22, flexShrink: 0 }}>🎓</div>
+                  <GraduationCap size={24} color={PURPLE} aria-hidden="true" style={{ flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: PURPLE, marginBottom: 6 }}>Already a registered tutor?</div>
                     <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>

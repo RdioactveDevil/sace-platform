@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Zap, Trophy, TrendingUp, Dumbbell, TriangleAlert, CircleCheck, Bot, Pause, Flame, Timer, Pin, Lightbulb } from 'lucide-react'
 import {
   selectNextQuestion,
   calcXP,
@@ -224,7 +225,8 @@ function RemediationChip({ remediationMode, remediationStreak, remediationTarget
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
           }}>
-            ⚡ Remediation Mode
+            <Zap size={13} aria-hidden="true" />
+            Remediation Mode
           </span>
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>
             {remediationSource === 'generated' ? 'Generated reinforcement' : 'From question bank'}
@@ -1426,7 +1428,7 @@ export default function QuizScreen({
     const sessTotal     = mainResults.length
     const sessAccuracy  = sessTotal > 0 ? Math.round((sessCorrect / sessTotal) * 100) : 0
     const accColor      = sessAccuracy >= 70 ? '#4ade80' : sessAccuracy >= 40 ? GOLD : '#f87171'
-    const accEmoji      = sessAccuracy >= 70 ? '🏆' : sessAccuracy >= 40 ? '📈' : '💪'
+    const AccIcon       = sessAccuracy >= 70 ? Trophy : sessAccuracy >= 40 ? TrendingUp : Dumbbell
 
     // Per-topic breakdown (main questions only)
     const topicMap = {}
@@ -1465,7 +1467,7 @@ export default function QuizScreen({
 
           {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <div style={{ fontSize: 52, marginBottom: 12 }}>{accEmoji}</div>
+            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: accColor }}><AccIcon size={52} aria-hidden="true" /></div>
             <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text, letterSpacing: 1, marginBottom: 6 }}>
               {headlineText}
             </div>
@@ -1481,7 +1483,7 @@ export default function QuizScreen({
               instead of the session silently ending. */}
           {generationError && (
             <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.dangerBg || 'rgba(248,113,113,0.12)', border: `1px solid ${(t.danger || '#f87171')}55`, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ fontSize: 18, lineHeight: 1.3 }}>⚠️</span>
+              <TriangleAlert size={18} color={t.danger || '#f87171'} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.danger || '#f87171' }}>
                   Couldn’t generate more questions
@@ -1494,7 +1496,7 @@ export default function QuizScreen({
           {/* Assignments completed banner */}
           {assignmentsCompleted.length > 0 && (
             <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}55`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 20 }}>✅</span>
+              <CircleCheck size={20} color={t.success} style={{ flexShrink: 0 }} aria-hidden="true" />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.success }}>
                   {assignmentsCompleted.length === 1 ? 'Assignment completed!' : `${assignmentsCompleted.length} assignments completed!`}
@@ -1565,7 +1567,7 @@ export default function QuizScreen({
               <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>AI Coach</div>
               {sessionTipLoading
                 ? <div style={{ fontSize: 13, color: t.textFaint, fontStyle: 'italic' }}>Getting your coaching tip…</div>
-                : <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.65 }}>🤖 {sessionTip}</div>
+                : <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.65, display: 'flex', alignItems: 'flex-start', gap: 8 }}><Bot size={14} color={t.purple} style={{ flexShrink: 0, marginTop: 4 }} aria-hidden="true" /><span>{sessionTip}</span></div>
               }
             </div>
           )}
@@ -1616,7 +1618,7 @@ export default function QuizScreen({
     return (
       <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textFaint, fontFamily: FONT_B }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>⚡</div>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: NAVY }}><Zap size={22} aria-hidden="true" /></div>
           <div style={{ fontSize: 13 }}>Loading questions…</div>
         </div>
       </div>
@@ -1670,7 +1672,7 @@ export default function QuizScreen({
       {showExit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
           <div style={{ background: t.bgCard, border: `1px solid ${t.borderAccent}`, borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease', boxShadow: t.shadowModal }}>
-            <div style={{ fontSize: 36, marginBottom: 14 }}>⏸</div>
+            <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center', color: GOLD }}><Pause size={36} aria-hidden="true" /></div>
             <div style={{ fontFamily: FONT_D, fontSize: 20, color: t.text, marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.65 }}>
               You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved — you can resume anytime.
@@ -1689,12 +1691,12 @@ export default function QuizScreen({
           <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
           <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
-          {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20 }}>⚡ Priority</span>}
+          {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Priority</span>}
           {inRemediationQuestion && <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: 'rgba(255,255,255,0.2)', padding: '2px 9px', borderRadius: 20 }}>Remediation</span>}
           <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>🔥 {streak} streak</span>}
+          {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={14} aria-hidden="true" />{streak} streak</span>}
           {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
           <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{signedXP(sessionXP)} XP</span>
           {examMode && timerSeconds > 0 && (() => {
@@ -1702,8 +1704,8 @@ export default function QuizScreen({
             const s = timeLeft % 60
             const urgent = timeLeft < 300
             return (
-              <span style={{ fontSize: 12, fontWeight: 800, color: urgent ? '#ef4444' : NAVY, background: urgent ? 'rgba(239,68,68,0.15)' : 'rgba(0,0,0,0.12)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
-                ⏱ {m}:{String(s).padStart(2, '0')}
+              <span style={{ fontSize: 12, fontWeight: 800, color: urgent ? '#ef4444' : NAVY, background: urgent ? 'rgba(239,68,68,0.15)' : 'rgba(0,0,0,0.12)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Timer size={14} aria-hidden="true" />{m}:{String(s).padStart(2, '0')}
               </span>
             )
           })()}
@@ -1722,7 +1724,7 @@ export default function QuizScreen({
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.success }}>{sessionCorrect}</span> correct</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</span> wrong</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>{signedXP(sessionXP)}</span> XP</span>
-        {streak > 0 && <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}>🔥 {streak}</span>}
+        {streak > 0 && <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={14} aria-hidden="true" />{streak}</span>}
         {remediationMode && (
           <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow2, fontSize: 11, fontWeight: 700, color: GOLD }}>
             Remediation · {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
@@ -1754,7 +1756,7 @@ export default function QuizScreen({
                 flexWrap: 'wrap',
               }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: t.purple }}>
-                  📌 Consolidating: <span style={{ color: t.text }}>{consolidateSubtopic}</span>
+                  <Pin size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} aria-hidden="true" />Consolidating: <span style={{ color: t.text }}>{consolidateSubtopic}</span>
                 </span>
                 <button
                   onClick={onClearConsolidate}
@@ -1976,14 +1978,14 @@ export default function QuizScreen({
                     <MathText text={currentQ.solution} />
                   </div>
                   {currentQ.tip && (
-                    <div style={{ marginTop: 10, padding: '9px 12px', background: t.accentGlow2, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65 }}>
-                      💡 <MathText text={currentQ.tip} />
+                    <div style={{ marginTop: 10, padding: '9px 12px', background: t.accentGlow2, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 3 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={currentQ.tip} /></div>
                     </div>
                   )}
                   {loadingTip && <div style={{ fontSize: 12, color: t.textFaint, fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
                   {aiTip && (
-                    <div style={{ marginTop: 8, padding: '9px 12px', background: t.purpleBg, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${t.purple}`, fontSize: 12, color: t.purple, lineHeight: 1.65 }}>
-                      🤖 <MathText text={aiTip} />
+                    <div style={{ marginTop: 8, padding: '9px 12px', background: t.purpleBg, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${t.purple}`, fontSize: 12, color: t.purple, lineHeight: 1.65, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <Bot size={14} style={{ flexShrink: 0, marginTop: 3 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={aiTip} /></div>
                     </div>
                   )}
                   {(() => {
@@ -2043,15 +2045,15 @@ export default function QuizScreen({
                   <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.8, marginBottom: 16 }}><MathText text={currentQ.solution} /></div>
 
                   {currentQ.tip && (
-                    <div style={{ padding: '12px 14px', background: t.accentGlow2, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16 }}>
-                      💡 <MathText text={currentQ.tip} />
+                    <div style={{ padding: '12px 14px', background: t.accentGlow2, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 4 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={currentQ.tip} /></div>
                     </div>
                   )}
 
                   {loadingTip && <div style={{ fontSize: 12, color: t.textFaint, fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
                   {aiTip && (
-                    <div style={{ padding: '12px 14px', background: t.purpleBg, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${t.purple}`, fontSize: 13, color: t.purple, lineHeight: 1.65, marginBottom: 16 }}>
-                      🤖 <MathText text={aiTip} />
+                    <div style={{ padding: '12px 14px', background: t.purpleBg, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${t.purple}`, fontSize: 13, color: t.purple, lineHeight: 1.65, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <Bot size={14} style={{ flexShrink: 0, marginTop: 4 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={aiTip} /></div>
                     </div>
                   )}
 

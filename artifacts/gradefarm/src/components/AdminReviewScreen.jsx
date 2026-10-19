@@ -3,6 +3,7 @@ import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDra
 import { getVariantCountsByConceptTags } from '../lib/db'
 import { getTopicsBySubject } from '../lib/adminTopics'
 import MathText from './MathText'
+import { Zap } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -374,8 +375,9 @@ export default function AdminReviewScreen({ profile }) {
                   fontFamily: FONT_B, cursor: scanning ? 'not-allowed' : 'pointer',
                   border: 'none', background: scanning ? 'rgba(239,68,68,0.4)' : '#f87171',
                   color: '#0c1037',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}
-              >{scanning ? 'Scanning…' : '⚡ Bulk Scan'}</button>
+              >{scanning ? 'Scanning…' : <><Zap size={13} aria-hidden="true" /> Bulk Scan</>}</button>
               <button
                 onClick={handleRetryPending}
                 disabled={retrying}

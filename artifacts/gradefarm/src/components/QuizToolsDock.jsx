@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { Calculator as CalculatorIcon, Atom, Ruler, Repeat, Wrench } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { ELEMENTS, CATEGORIES } from '../lib/periodicTable'
 import { CONSTANTS, FORMULAS } from '../lib/dataSheet'
@@ -13,10 +14,10 @@ const FONT_M = "'JetBrains Mono', monospace"
 
 // ── Tool registry ───────────────────────────────────────────────────────────
 const TOOLS = [
-  { id: 'calc',     icon: '🧮', label: 'Calculator',    w: 300, h: 440 },
-  { id: 'periodic', icon: '⚛',  label: 'Periodic Table', w: 640, h: 480 },
-  { id: 'data',     icon: '📐', label: 'Data Sheet',     w: 360, h: 460 },
-  { id: 'convert',  icon: '🔁', label: 'Unit Converter', w: 320, h: 360 },
+  { id: 'calc',     icon: CalculatorIcon, label: 'Calculator',    w: 300, h: 440 },
+  { id: 'periodic', icon: Atom,       label: 'Periodic Table', w: 640, h: 480 },
+  { id: 'data',     icon: Ruler,      label: 'Data Sheet',     w: 360, h: 460 },
+  { id: 'convert',  icon: Repeat,     label: 'Unit Converter', w: 320, h: 360 },
 ]
 
 // ── Safe calculator evaluator ────────────────────────────────────────────────
@@ -115,7 +116,7 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
         }}
       >
         <span style={{ fontSize: 13, fontWeight: 800, color: NAVY, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 15 }}>{tool.icon}</span>{tool.label}
+          <tool.icon size={15} style={{ flexShrink: 0 }} aria-hidden="true" />{tool.label}
         </span>
         <button
           onClick={onClose}
@@ -483,7 +484,7 @@ export default function QuizToolsDock({ theme = 'dark' }) {
                 animation: 'gf-tooldock-in 0.16s ease',
               }}
             >
-              <span style={{ fontSize: 16 }}>{tool.icon}</span>{tool.label}
+              <tool.icon size={16} style={{ flexShrink: 0 }} aria-hidden="true" />{tool.label}
               {isOpen && <span style={{ fontSize: 10, color: GOLD }}>● open</span>}
             </button>
           )
@@ -501,7 +502,7 @@ export default function QuizToolsDock({ theme = 'dark' }) {
             transform: expanded ? 'rotate(45deg)' : 'none',
           }}
         >
-          {expanded ? '+' : '🧰'}
+          {expanded ? '+' : <Wrench size={24} aria-hidden="true" />}
         </button>
       </div>
       <style>{`@keyframes gf-tooldock-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }`}</style>

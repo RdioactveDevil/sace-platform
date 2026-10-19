@@ -350,3 +350,7 @@
 
 /* Section tab strip scrolls sideways on narrow screens without showing a scrollbar. */
 .gf-section-tabs::-webkit-scrollbar { display: none; }
+
+/* Tailwind's preflight makes every svg display:block, which pushes an icon set
+   inline with text onto its own line. Icons sit in the text flow instead. */
+svg.lucide { display: inline-block; }

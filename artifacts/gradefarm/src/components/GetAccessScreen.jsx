@@ -170,7 +170,7 @@ export default function GetAccessScreen({ profile, onAccessGranted }) {
               background: hex(GOLD, 0.14), border: `1px solid ${hex(GOLD, 0.35)}`,
               borderRadius: 99, padding: '4px 12px', marginBottom: 22,
             }}>
-              <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>🎉 {freeTier.beta_label || 'Free during Beta'}</span>
+              <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>{freeTier.beta_label || 'Free during Beta'}</span>
             </div>
           )}
 

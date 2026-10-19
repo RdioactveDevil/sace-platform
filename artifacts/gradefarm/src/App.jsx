@@ -10,7 +10,9 @@ import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSub
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
-import { getLevelProgress, RANKS, RANK_ICONS } from './lib/engine'
+import { getLevelProgress, RANKS } from './lib/engine'
+import { Sun, Moon, Lock, TriangleAlert } from 'lucide-react'
+import RankIcon from './components/RankIcon'
 import SubjectPicker     from './components/SubjectPicker'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
@@ -125,7 +127,6 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const location  = useLocation()
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
-  const icon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
 
   const go = (path) => { navigate(path); onClose?.() }
 
@@ -182,7 +183,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)'; e.currentTarget.style.background = 'rgba(241,190,67,0.06)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
         >
-          <span style={{ fontSize: 11 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
+          <span style={{ display: 'flex', color: GOLD }}>{theme === 'dark' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}</span>
           <div style={{ width: 26, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.08)', position: 'relative', flexShrink: 0 }}>
             <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 12, width: 10, height: 10, borderRadius: '50%', background: GOLD, transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)', boxShadow: `0 0 6px ${GOLD}80` }} />
           </div>
@@ -220,7 +221,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{profile.display_name}</div>
-              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 2, letterSpacing: '0.04em' }}>{icon} {rank}</div>
+              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 2, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={12} /> {rank}</div>
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', flexShrink: 0 }}>›</div>
           </div>
@@ -305,7 +306,7 @@ function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
   const t = THEMES[theme]
   return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
-      <div style={{ fontSize: 52 }}>🔒</div>
+      <Lock size={48} color={GOLD} aria-hidden="true" />
       <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Subject Not in Your Plan</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 360, lineHeight: 1.6, margin: 0 }}>
         <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
@@ -406,7 +407,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
               <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15 }}>{theme === 'dark' ? '🌙' : '☀️'}</button>
+              <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', color: GOLD }}>{theme === 'dark' ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}</button>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
@@ -538,7 +539,7 @@ function NavBlockerModal({ blocker, theme }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, backdropFilter: 'blur(8px)' }}>
       <div style={{ background: t?.bgCard || '#0c1037', border: `1px solid rgba(241,190,67,0.3)`, borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', fontFamily: FONT_B }}>
-        <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
+        <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}><TriangleAlert size={36} color={GOLD} aria-hidden="true" /></div>
         <div style={{ fontFamily: FONT_D, fontSize: 20, color: t?.text || '#f1f5f9', marginBottom: 8, letterSpacing: 0.5 }}>LEAVE QUIZ?</div>
         <div style={{ fontSize: 14, color: t?.textMuted || '#94a3b8', marginBottom: 28, lineHeight: 1.65 }}>
           Your session progress will be lost if you navigate away now.

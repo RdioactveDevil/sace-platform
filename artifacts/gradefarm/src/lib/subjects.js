@@ -16,7 +16,7 @@ export const WRITING_LEVELS = [
 export function writingSubjectFor(tile) {
   const level = WRITING_LEVELS.find(l => l.id === tile?.features?.writing)
   if (!level) return null
-  return { id: level.id, name: tile.name, stage: level.label, icon: '✏️', type: 'writing' }
+  return { id: level.id, name: tile.name, stage: level.label, type: 'writing' }
 }
 
 /**
@@ -28,7 +28,6 @@ export function curriculumToSubjectTile(c) {
     id: `curriculum_${c.id}`,
     name: c.name,
     stage: effectiveCohortStageForLiveCurriculum(c.name, c.level_label),
-    icon: '📚',
     color: '#6366f1',
     topics: c.topicNames || [],
     questionCount: 0,

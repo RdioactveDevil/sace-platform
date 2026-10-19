@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { reportError } from '../lib/analytics'
 import { isChunkLoadError } from '../lib/chunkReload'
+import { TriangleAlert } from 'lucide-react'
 
 const GOLD   = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -66,7 +67,7 @@ export default class ErrorBoundary extends Component {
         }}
       >
         <div style={{ maxWidth: 420 }}>
-          <div style={{ fontSize: compact ? 32 : 46, marginBottom: 14 }}>⚠️</div>
+          <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}><TriangleAlert size={compact ? 34 : 48} color={GOLD} aria-hidden="true" /></div>
           <div style={{ fontFamily: FONT_D, fontSize: compact ? 18 : 22, color: '#f1f5f9', letterSpacing: 0.5, marginBottom: 8 }}>
             Something went wrong
           </div>

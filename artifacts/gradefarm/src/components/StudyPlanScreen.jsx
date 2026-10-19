@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { THEMES } from '../lib/theme'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
+import { ChartColumn, Sparkles } from 'lucide-react'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -175,7 +176,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
 
           {!hasActivity ? (
             <div style={{ padding: '60px 0', textAlign: 'center' }}>
-              <div style={{ fontSize: 40, marginBottom: 14 }}>📊</div>
+              <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center', color: GOLD }}><ChartColumn size={40} aria-hidden="true" /></div>
               <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 8 }}>No data yet</div>
               <div style={{ fontSize: 13, color: t.textMuted }}>Answer some questions in the Question Bank — your personalised plan will appear here.</div>
             </div>
@@ -188,9 +189,9 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                   <button
                     onClick={generateTodoList}
                     disabled={todoGenerating}
-                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.3)`, background: todoGenerating ? 'transparent' : 'rgba(241,190,67,0.08)', color: GOLD, fontSize: 12, fontWeight: 700, cursor: todoGenerating ? 'default' : 'pointer', fontFamily: FONT_B, opacity: todoGenerating ? 0.6 : 1 }}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.3)`, background: todoGenerating ? 'transparent' : 'rgba(241,190,67,0.08)', color: GOLD, fontSize: 12, fontWeight: 700, cursor: todoGenerating ? 'default' : 'pointer', fontFamily: FONT_B, opacity: todoGenerating ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    {todoGenerating ? 'Generating…' : todoList.length > 0 ? '↺ Regenerate' : '✦ Generate To-Do List'}
+                    {todoGenerating ? 'Generating…' : todoList.length > 0 ? '↺ Regenerate' : <><Sparkles size={13} aria-hidden="true" /> Generate To-Do List</>}
                   </button>
                 </div>
 

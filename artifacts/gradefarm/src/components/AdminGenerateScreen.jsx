@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getTopicsBySubject, refreshManagedTopicsCache, getManagedSubjectNames } from '../lib/adminTopics'
 import { adminApiPost } from '../lib/adminApi'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from '../lib/curriculaDb'
+import { SquareCheck, Square } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -347,7 +348,7 @@ export default function AdminGenerateScreen() {
             color: includeDiagrams ? GOLD : 'rgba(255,255,255,0.6)',
           }}
         >
-          <span style={{ fontSize: 15 }}>{includeDiagrams ? '☑' : '☐'}</span>
+          {includeDiagrams ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
           Auto-draw diagrams (AI vector figures — no upload)
         </button>
       </div>

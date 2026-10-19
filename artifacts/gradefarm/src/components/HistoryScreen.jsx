@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
 import { supabase } from '../lib/supabase'
+import { Zap, GraduationCap, Trophy, TrendingUp, Dumbbell, Gamepad2, Music } from 'lucide-react'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -110,10 +111,11 @@ export default function HistoryScreen({ profile, theme, embedded }) {
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
             {[
-              { id: 'quiz', label: '⚡ Quiz Sessions', count: quizSessions.length },
-              { id: 'learn', label: '🎓 Titan AI Chats', count: learnSessions.length },
+              { id: 'quiz', icon: Zap, label: 'Quiz Sessions', count: quizSessions.length },
+              { id: 'learn', icon: GraduationCap, label: 'Titan AI Chats', count: learnSessions.length },
             ].map((tb) => (
               <button key={tb.id} onClick={() => setTab(tb.id)} style={{ padding: '8px 18px', borderRadius: 999, border: `1px solid ${tab === tb.id ? GOLD : t.border}`, background: tab === tb.id ? 'rgba(241,190,67,0.12)' : 'transparent', color: tab === tb.id ? GOLD : t.textMuted, fontSize: 13, fontWeight: tab === tb.id ? 700 : 600, cursor: 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <tb.icon size={15} aria-hidden="true" />
                 {tb.label}
                 {tb.count > 0 && <span style={{ background: tab === tb.id ? GOLD : t.border, color: tab === tb.id ? '#0c1037' : t.textMuted, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 999 }}>{tb.count}</span>}
               </button>
@@ -125,7 +127,7 @@ export default function HistoryScreen({ profile, theme, embedded }) {
           ) : tab === 'quiz' ? (
             quizSessions.length === 0 ? (
               <div style={{ ...card, padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>⚡</div>
+                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: GOLD }}><Zap size={36} aria-hidden="true" /></div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 6 }}>No quiz sessions yet</div>
                 <div style={{ fontSize: 13, color: t.textMuted }}>Complete a session in Question Bank to see your history here.</div>
               </div>
@@ -135,11 +137,12 @@ export default function HistoryScreen({ profile, theme, embedded }) {
                   const accuracy = session.total > 0 ? Math.round((session.correct / session.total) * 100) : 0
                   const isOpen = expanded === session.id
                   const accColor = accuracy >= 70 ? t.success : accuracy >= 40 ? GOLD : t.danger
+                  const AccIcon = accuracy >= 70 ? Trophy : accuracy >= 40 ? TrendingUp : Dumbbell
                   return (
                     <div key={session.id} style={{ ...card, overflow: 'hidden' }}>
                       <div onClick={() => setExpanded(isOpen ? null : session.id)} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 10, background: `${accColor}15`, border: `1px solid ${accColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                          {accuracy >= 70 ? '🏆' : accuracy >= 40 ? '📈' : '💪'}
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: `${accColor}15`, border: `1px solid ${accColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: accColor }}>
+                          <AccIcon size={20} aria-hidden="true" />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Quiz Session #{quizSessions.length - i}</div>
@@ -179,7 +182,7 @@ export default function HistoryScreen({ profile, theme, embedded }) {
             )
           ) : learnSessions.length === 0 ? (
             <div style={{ ...card, padding: '48px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>🎓</div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: GOLD }}><GraduationCap size={36} aria-hidden="true" /></div>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 6 }}>No Titan AI sessions yet</div>
               <div style={{ fontSize: 13, color: t.textMuted }}>Start a lesson in Learn to see your chat history here.</div>
             </div>
@@ -188,14 +191,14 @@ export default function HistoryScreen({ profile, theme, embedded }) {
               {learnSessions.map((session) => {
                 const isOpen = expanded === `learn-${session.id}`
                 const msgs = Array.isArray(session.messages) ? session.messages : []
-                const modeIcon = session.interests === 'gaming' ? '🎮' : session.interests === 'music' ? '🎵' : '🏈'
+                const ModeIcon = session.interests === 'gaming' ? Gamepad2 : session.interests === 'music' ? Music : Trophy
                 return (
                   <div key={session.id} style={{ ...card, overflow: 'hidden' }}>
                     <div onClick={() => setExpanded(isOpen ? null : `learn-${session.id}`)} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🎓</div>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: GOLD }}><GraduationCap size={20} aria-hidden="true" /></div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.topic}</div>
-                        <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{timeAgo(session.created_at)} · {msgs.length} messages · {modeIcon} {session.interests} mode</div>
+                        <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{timeAgo(session.created_at)} · {msgs.length} messages · <ModeIcon size={13} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> {session.interests} mode</div>
                       </div>
                       <div style={{ color: t.textMuted, transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', fontSize: 11 }}>▼</div>
                     </div>

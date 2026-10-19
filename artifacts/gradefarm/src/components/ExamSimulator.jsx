@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Trophy, TrendingUp, Dumbbell, Timer, Flag } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionType, gradeResponse, describeCorrectAnswer, emptyResponse } from '../lib/questionTypes'
 import { gradePaper, formatClock, countQuestions } from '../lib/examEngine'
@@ -178,11 +179,12 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
   if (phase === 'results') {
     const r = gradePaper(paper, answers, secTimes)
     const accColor = r.percent >= 70 ? t.success : r.percent >= 40 ? GOLD : t.danger
+    const ResultIcon = r.percent >= 70 ? Trophy : r.percent >= 40 ? TrendingUp : Dumbbell
     return (
       <Shell theme={theme} scroll>
         <div style={{ width: '100%', maxWidth: 520 }}>
           <div style={{ textAlign: 'center', marginBottom: 26 }}>
-            <div style={{ fontSize: 46, marginBottom: 8 }}>{r.percent >= 70 ? '🏆' : r.percent >= 40 ? '📈' : '💪'}</div>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center', color: accColor }}><ResultIcon size={46} aria-hidden="true" /></div>
             <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text }}>Exam complete</div>
             <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>{paper.title}</div>
           </div>
@@ -290,8 +292,8 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
       <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>{section.name}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: urgent ? '#b91c1c' : NAVY, background: urgent ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.12)', padding: '3px 12px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
-            ⏱ {formatClock(timeLeft)}
+          <span style={{ fontSize: 13, fontWeight: 800, color: urgent ? '#b91c1c' : NAVY, background: urgent ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.12)', padding: '3px 12px', borderRadius: 20, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Timer size={15} aria-hidden="true" />{formatClock(timeLeft)}
           </span>
           <button onClick={finishSection} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
             {secIdx + 1 < paper.sections.length ? 'Finish section' : 'Finish exam'}
@@ -305,8 +307,8 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
           <div style={{ maxWidth: 620, margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 700 }}>Question {qIdx + 1} of {section.questions.length}</span>
-              <button onClick={() => toggleFlag(q.id)} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, border: `1px solid ${flagged.has(q.id) ? t.borderAccent : t.border}`, background: flagged.has(q.id) ? t.accentGlow : 'transparent', color: flagged.has(q.id) ? GOLD : t.textMuted }}>
-                {flagged.has(q.id) ? '⚑ Flagged' : '⚐ Flag'}
+              <button onClick={() => toggleFlag(q.id)} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, border: `1px solid ${flagged.has(q.id) ? t.borderAccent : t.border}`, background: flagged.has(q.id) ? t.accentGlow : 'transparent', color: flagged.has(q.id) ? GOLD : t.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Flag size={14} fill={flagged.has(q.id) ? 'currentColor' : 'none'} aria-hidden="true" />{flagged.has(q.id) ? 'Flagged' : 'Flag'}
               </button>
             </div>
             <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: 24 }}>
@@ -339,7 +341,7 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
                     color: isCurrent ? GOLD : isAnswered ? t.success : t.textMuted,
                   }}>
                   {i + 1}
-                  {isFlagged && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 10 }}>⚑</span>}
+                  {isFlagged && <span style={{ position: 'absolute', top: -4, right: -4, display: 'flex' }}><Flag size={11} fill="currentColor" aria-hidden="true" /></span>}
                 </button>
               )
             })}

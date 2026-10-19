@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { THEMES, FONTS } from '../lib/theme'
-import { getLevelProgress, RANKS, RANK_ICONS } from '../lib/engine'
+import { getLevelProgress, RANKS } from '../lib/engine'
+import { Zap, GraduationCap, ChartColumn, Trophy, BookOpen, Clock, Sun, Moon } from 'lucide-react'
+import RankIcon from './RankIcon'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -8,12 +10,12 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const NAV_ITEMS = [
-  { icon: '⚡', label: 'Question Bank', id: 'home'        },
-  { icon: '🎓', label: 'Learn',         id: 'learn'       },
-  { icon: '📊', label: 'My Progress',   id: 'profile'     },
-  { icon: '🏆', label: 'Leaderboard',   id: 'leaderboard' },
-  { icon: '📚', label: 'Study Plan',    id: 'study'       },
-  { icon: '🕐', label: 'History',       id: 'history'     },
+  { icon: Zap,           label: 'Question Bank', id: 'home'        },
+  { icon: GraduationCap, label: 'Learn',         id: 'learn'       },
+  { icon: ChartColumn,   label: 'My Progress',   id: 'profile'     },
+  { icon: Trophy,        label: 'Leaderboard',   id: 'leaderboard' },
+  { icon: BookOpen,      label: 'Study Plan',    id: 'study'       },
+  { icon: Clock,         label: 'History',       id: 'history'     },
 ]
 
 export default function Layout({
@@ -39,7 +41,6 @@ export default function Layout({
 
   const { level, pct, next } = getLevelProgress(profile.xp)
   const rank = RANKS[Math.min(level, RANKS.length - 1)]
-  const icon = RANK_ICONS[Math.min(level, RANK_ICONS.length - 1)]
 
   const SidebarInner = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bgNav }}>
@@ -51,7 +52,7 @@ export default function Layout({
         </span>
         {/* Theme toggle */}
         <button onClick={onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 20, border: `1px solid ${t.border}`, background: 'transparent', cursor: 'pointer' }}>
-          <span style={{ fontSize: 11 }}>{theme === 'dark' ? '🌙' : '☀️'}</span>
+          <span style={{ display: 'flex', color: GOLD }}>{theme === 'dark' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}</span>
           <div style={{ width: 28, height: 15, borderRadius: 8, background: theme === 'dark' ? '#1e293b' : '#cbd5e1', position: 'relative' }}>
             <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 14, width: 11, height: 11, borderRadius: '50%', background: GOLD, transition: 'left 0.2s' }} />
           </div>
@@ -71,7 +72,7 @@ export default function Layout({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</div>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 600 }}>{icon} {rank}</div>
+            <div style={{ fontSize: 11, color: GOLD, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={13} /> {rank}</div>
           </div>
         </div>
         <div style={{ background: t.border, borderRadius: 4, height: 4, overflow: 'hidden', marginBottom: 3 }}>
@@ -99,7 +100,7 @@ export default function Layout({
               borderLeft: active ? `2px solid ${GOLD}` : '2px solid transparent',
               transition: 'all 0.15s',
             }}>
-              <span style={{ fontSize: 15 }}>{item.icon}</span>
+              <item.icon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
               {item.label}
             </button>
           )
@@ -159,8 +160,8 @@ export default function Layout({
             </span>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16 }}>
-                {theme === 'dark' ? '🌙' : '☀️'}
+              <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', color: GOLD }}>
+                {theme === 'dark' ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}
               </button>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#0c1037' }}>
                 {profile.display_name[0].toUpperCase()}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { PenLine, FileText, Video, ChartColumn, Folder, Link, User, School, Users, Upload } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
@@ -15,12 +16,12 @@ const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const RESOURCE_TYPES = [
-  { id: 'notes',     label: 'Notes',      icon: '📝' },
-  { id: 'worksheet', label: 'Worksheet',  icon: '📄' },
-  { id: 'recording', label: 'Recording',  icon: '🎥' },
-  { id: 'slides',    label: 'Slides',     icon: '📊' },
-  { id: 'resource',  label: 'Resource',   icon: '📁' },
-  { id: 'link',      label: 'Link',       icon: '🔗' },
+  { id: 'notes',     label: 'Notes',      icon: PenLine },
+  { id: 'worksheet', label: 'Worksheet',  icon: FileText },
+  { id: 'recording', label: 'Recording',  icon: Video },
+  { id: 'slides',    label: 'Slides',     icon: ChartColumn },
+  { id: 'resource',  label: 'Resource',   icon: Folder },
+  { id: 'link',      label: 'Link',       icon: Link },
 ]
 const TYPE_META = Object.fromEntries(RESOURCE_TYPES.map(t => [t.id, t]))
 
@@ -159,9 +160,10 @@ export default function ResourcesTab({ profile, theme }) {
   }
 
   const targetLabel = (r) => {
-    if (r.student_name) return `👤 ${r.student_name}`
-    if (r.class_name) return `🏫 ${r.class_name}`
-    return '👥 Entire roster'
+    const iconStyle = { verticalAlign: '-2px' }
+    if (r.student_name) return <><User size={12} aria-hidden="true" style={iconStyle} /> {r.student_name}</>
+    if (r.class_name) return <><School size={12} aria-hidden="true" style={iconStyle} /> {r.class_name}</>
+    return <><Users size={12} aria-hidden="true" style={iconStyle} /> Entire roster</>
   }
 
   const card = theme === 'dark'
@@ -198,14 +200,14 @@ export default function ResourcesTab({ profile, theme }) {
               <label style={labelStyle}>Source</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[
-                  { id: 'file', label: '⬆ Upload file' },
-                  { id: 'link', label: '🔗 Paste link' },
+                  { id: 'file', label: 'Upload file', icon: Upload },
+                  { id: 'link', label: 'Paste link', icon: Link },
                 ].map(opt => {
                   const active = form.source === opt.id
                   return (
                     <button key={opt.id} type="button" onClick={() => setForm(f => ({ ...f, source: opt.id }))}
                       style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
-                      {opt.label}
+                      <opt.icon size={15} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 6 }} />{opt.label}
                     </button>
                   )
                 })}
@@ -238,7 +240,7 @@ export default function ResourcesTab({ profile, theme }) {
               <div>
                 <label style={labelStyle}>Type</label>
                 <select className="td-input-gold" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
-                  {RESOURCE_TYPES.map(rt => <option key={rt.id} value={rt.id}>{rt.icon} {rt.label}</option>)}
+                  {RESOURCE_TYPES.map(rt => <option key={rt.id} value={rt.id}>{rt.label}</option>)}
                 </select>
               </div>
             </div>
@@ -327,7 +329,7 @@ export default function ResourcesTab({ profile, theme }) {
               const meta = TYPE_META[r.type] || TYPE_META.resource
               return (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 20px', borderBottom: `1px solid ${divider}` }}>
-                  <div style={{ fontSize: 22, flexShrink: 0, lineHeight: 1.2 }}>{meta.icon}</div>
+                  <div style={{ flexShrink: 0, display: 'flex', color: t.textSub }}><meta.icon size={22} aria-hidden="true" /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
                       <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{r.title}</span>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { completeOnboarding } from '../lib/db'
+import { GraduationCap } from 'lucide-react'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -60,7 +61,7 @@ export default function TutorOnboardingScreen({ profile, userEmail, onDone }) {
 
   const stepWelcome = () => (
     <div style={{ textAlign: 'center', animation: 'slideIn 0.45s ease both' }}>
-      <div style={{ width: 64, height: 64, borderRadius: 18, margin: '0 auto 20px', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: `0 12px 32px ${GOLD}40` }}>🎓</div>
+      <div style={{ width: 64, height: 64, borderRadius: 18, margin: '0 auto 20px', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: `0 12px 32px ${GOLD}40` }}><GraduationCap size={32} color={NAVYD} aria-hidden="true" /></div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 22, color: '#f1f5f9', margin: '0 0 12px', letterSpacing: 0.8, lineHeight: 1.3 }}>
         WELCOME,<br /><span style={{ color: GOLD }}>EDUCATOR.</span>
       </h2>
