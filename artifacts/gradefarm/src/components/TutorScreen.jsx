@@ -1088,19 +1088,21 @@ function ClassesTab({ profile, theme, allTutors = false }) {
   const handleAddMembers = async (cls) => {
     if (pickerSelected.length === 0) { setPickerForClass(null); return }
     setPickerSaving(true)
+    setTutorError('')
     try {
       await addStudentsToClass(cls.id, pickerSelected)
       setPickerForClass(null); setPickerSelected([])
       await load()
-    } catch {}
+    } catch (err) { setTutorError(err.message || 'Could not add students to the class.') }
     setPickerSaving(false)
   }
 
   const handleRemoveMember = async (cls, studentId) => {
+    setTutorError('')
     try {
       await removeStudentFromClass(cls.id, studentId)
       await load()
-    } catch {}
+    } catch (err) { setTutorError(err.message || 'Could not remove the student.') }
   }
 
   const card = theme === 'dark'
