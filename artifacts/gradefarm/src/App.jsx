@@ -6,7 +6,7 @@ import { initObservability } from './lib/analytics'
 import { notify, notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, syncCheckout } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, syncCheckout, getFreeQuestionUsage, countFreeQuestion } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
@@ -14,7 +14,7 @@ import { getLevelProgress, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, TriangleAlert, Radio, Video } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import SubjectPicker     from './components/SubjectPicker'
-import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subscriptionCoversSubject } from './lib/subjects'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -323,21 +323,24 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
 
 // ── Locked Subject Screen ─────────────────────────────────────────────────────
-function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
+function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, theme }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
+  const exam = reason === 'exam'
   return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
       <Lock size={48} color={GOLD} aria-hidden="true" />
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Unlock {formatSubjectLabel(subject)}</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>{exam ? 'Exam Mode is for paid subjects' : `Unlock ${formatSubjectLabel(subject)}`}</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
-        You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Subscribe to start practising — you can cancel any time.
+        {exam
+          ? <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
+          : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
       <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         See plans →
       </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        ← Back to subject picker
+        {exam ? '← Back to practice' : '← Back to subject picker'}
       </button>
     </div>
   )
@@ -662,6 +665,27 @@ function AppInner() {
       notifyError(e, 'Could not refresh your subjects. Please try again.', { source: 'refreshSubscriptions' })
     }
   }
+
+  // Tutors and admins see every subject. Students need a grant, a paid subject
+  // or their one free subject (limited questions per day).
+  const hasFullAccess = !!(profile?.is_admin || profile?.is_tutor)
+  const selectedAccess = selectedSubject ? subjectAccess(subscriptions, selectedSubject, hasFullAccess) : 'none'
+  const subjectLocked = subscriptionsLoaded && !!selectedSubject && selectedAccess === 'none'
+
+  // Today's free-question count while the free subject is open: { used, limit }.
+  const [freeQuota, setFreeQuota] = useState(null)
+  useEffect(() => {
+    if (selectedAccess !== 'free') { setFreeQuota(null); return }
+    let cancelled = false
+    getFreeQuestionUsage()
+      .then(q => { if (!cancelled) setFreeQuota(q) })
+      .catch(() => { if (!cancelled) setFreeQuota({ used: 0, limit: 20 }) })
+    return () => { cancelled = true }
+  }, [selectedAccess, selectedSubject?.id, user?.id])
+  const onFreeQuestionAnswered = useCallback(() => {
+    setFreeQuota(q => (q ? { ...q, used: q.used + 1 } : q))
+    countFreeQuestion().then(r => setFreeQuota({ used: r.used, limit: r.limit })).catch(() => {})
+  }, [])
 
   // Back from Stripe Checkout (?checkout=success&session_id=… or ?checkout=cancelled).
   useEffect(() => {
@@ -1050,8 +1074,6 @@ function AppInner() {
 
   const onboardingDest =
     user?.user_metadata?.signup_path === 'tutor' ? '/onboarding/tutor' : '/onboarding'
-  // Tutors and admins see every subject; students need a grant or a subscription.
-  const hasFullAccess = !!(profile?.is_admin || profile?.is_tutor)
 
   return (
     <>
@@ -1070,7 +1092,9 @@ function AppInner() {
 
       {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
       <Route path="/exam" element={
-        subjectHasFeature(selectedSubject, 'exam_mode')
+        subjectLocked || selectedAccess === 'free'
+          ? <LockedSubjectScreen subject={selectedSubject} reason={subjectLocked ? 'locked' : 'exam'} onChangeSubject={() => navigate('/question-bank')} theme={theme} />
+        : subjectHasFeature(selectedSubject, 'exam_mode')
           ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
           : <Navigate to="/question-bank" replace />
       } />
@@ -1179,7 +1203,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <GetAccessScreen />
+          : <GetAccessScreen subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} />
       } />
 
       {/* Quiz — wrapped in AppShell so the shared sidebar appears */}
@@ -1188,8 +1212,11 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
+          : subjectLocked
+            ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} />
           : <AppShell {...shellProps}>
               <QuizScreen {...commonProps} {...quizState}
+              freeQuota={selectedAccess === 'free' && freeQuota ? { ...freeQuota, onAnswered: onFreeQuestionAnswered, onUpgrade: () => navigate('/get-access', { state: { subject: selectedSubject } }) } : null}
               profile={profile} setProfile={setProfile} subjectTile={selectedSubject}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')}
@@ -1266,7 +1293,7 @@ function AppInner() {
         !(user && profile) ? <Navigate to="/home" replace /> :
         !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        (subscriptionsLoaded && !hasFullAccess && !subscriptions.some(s => subscriptionCoversSubject(s, selectedSubject))) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
+        subjectLocked ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}

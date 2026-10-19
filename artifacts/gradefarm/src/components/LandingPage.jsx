@@ -921,11 +921,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <div style={{ maxWidth:820, margin:'0 auto', textAlign:'center' }}>
             <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Pricing</div>
             <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>SIMPLE, TRANSPARENT PRICING.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students pay <strong style={{ color:'#f1f5f9' }}>$5/week per subject</strong>, with a 7-day free trial on their first subject. Tutors choose a plan that fits their roster.</p>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students get <strong style={{ color:'#f1f5f9' }}>one subject free</strong> (20 questions a day) or go unlimited from <strong style={{ color:'#f1f5f9' }}>$5/week</strong> — extra subjects cost less. Tutors choose a plan that fits their roster.</p>
             <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:820, margin:'0 auto 36px' }}>
               {[
-                { label:'Free trial', price:'7 days', desc:'full access to your first subject', color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
-                { label:'Student', price:'$5', desc:'/week per subject · full access', color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
+                { label:'Free', price:'$0', desc:'1 subject · 20 questions/day', color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
+                { label:'Student', price:'$5', desc:'/week · then $4, then $3 per extra subject', color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
                 { label:'Tutor', price:'From $29', desc:'/month · roster & session tools', color:PURPLE, bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.28)' },
               ].map(p => (
                 <div key={p.label} style={{ background:p.bg, border:`1px solid ${p.border}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid ${p.border}`, borderRadius:18, padding:'28px 20px', textAlign:'left' }}>

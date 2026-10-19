@@ -468,3 +468,8 @@
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.6);
 }
+
+.sp-tile-price--free {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+}

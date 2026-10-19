@@ -58,7 +58,7 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_weekly: 5, trial_days: 7, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
+const DEFAULT_PRICING   = { student_tiers: [5, 4, 3], free_daily_questions: 20, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
   // Pricing state
@@ -113,34 +113,41 @@ export default function AdminSettingsTab() {
       {/* ── Student access ── */}
       <Section title="Student access">
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-          Students pay per subject each week through Stripe (price and trial below). Subjects students unlocked during
-          the beta stay free. To give a student a subject for free, grant it from <strong>Students</strong>; revoking a
-          paid subject there also cancels its Stripe subscription. Tutors and admins can use every subject.
+          Every student can pick one free subject (limited questions per day). Paid subjects are one weekly Stripe plan
+          per student, cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
+          give a student a subject for free, grant it from <strong>Students</strong>; removing a paid subject there takes
+          it off their plan. Tutors and admins can use every subject.
         </div>
       </Section>
 
       {/* ── Pricing ── */}
       <Section title="Pricing (shown on pricing page)">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 4 }}>
-          <Field label="Student price per subject ($/week, AUD)" hint="Charged to new subscribers">
-            <input
-              style={inputStyle}
-              type="number"
-              min={1}
-              step={0.5}
-              value={pr.student_weekly ?? ''}
-              onChange={e => setPr(p => ({ ...p, student_weekly: e.target.value === '' ? '' : Number(e.target.value) }))}
-              placeholder="5"
-            />
-          </Field>
-          <Field label="Free trial (days)" hint="First subject only; 0 for none">
+          {['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
+            <Field key={label} label={`${label} ($/week, AUD)`} hint={i === 0 ? 'New plans use these prices' : undefined}>
+              <input
+                style={inputStyle}
+                type="number"
+                min={1}
+                step={0.5}
+                value={(pr.student_tiers || DEFAULT_PRICING.student_tiers)[i] ?? ''}
+                onChange={e => setPr(p => {
+                  const next = [...(p.student_tiers || DEFAULT_PRICING.student_tiers)]
+                  next[i] = e.target.value === '' ? '' : Number(e.target.value)
+                  return { ...p, student_tiers: next }
+                })}
+                placeholder={String(DEFAULT_PRICING.student_tiers[i])}
+              />
+            </Field>
+          ))}
+          <Field label="Free subject: questions per day">
             <input
               style={inputStyle}
               type="number"
               min={0}
-              value={pr.trial_days ?? ''}
-              onChange={e => setPr(p => ({ ...p, trial_days: e.target.value === '' ? '' : Number(e.target.value) }))}
-              placeholder="7"
+              value={pr.free_daily_questions ?? ''}
+              onChange={e => setPr(p => ({ ...p, free_daily_questions: e.target.value === '' ? '' : Number(e.target.value) }))}
+              placeholder="20"
             />
           </Field>
           <Field label="Annual discount %" hint="e.g. 15 for 15%">

@@ -571,30 +571,54 @@ export async function getSubscriptions(userId) {
   return data || []
 }
 
-// ─── BILLING ($/week per subject, Stripe) ───────────────────────────────────
-// Students can't write user_subscriptions; access comes from an admin grant
-// or a Stripe subscription created through these endpoints.
+// ─── ACCESS & BILLING ────────────────────────────────────────────────────────
+// Students can't write user_subscriptions; access comes from an admin grant,
+// their one free subject, or their Stripe plan (one subscription, quantity =
+// paid subjects, $5 / $4 / $3+ per week), all through these endpoints.
 
-/** { enabled, weekly, currency, trialDays } — trialDays is 0 once a student has had their trial. */
+/** { enabled, tiers, paidCount, weeklyTotal, nextPrice, hasPlan, renewsAt, endsAtPeriodEnd, freeDailyQuestions } */
 export async function getBillingConfig() {
   return tutorFetch('/api/billing/config')
 }
 
-/** Start Stripe Checkout for a subject; resolves to the Checkout URL. */
-export async function startSubjectCheckout(curriculumId) {
-  const json = await tutorFetch('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ curriculumId }) })
-  return json.url
+/** Make a subject the student's one free subject (replaces any other). */
+export async function chooseFreeSubject(curriculumId) {
+  return tutorFetch('/api/billing/free-subject', { method: 'POST', body: JSON.stringify({ curriculumId }) })
 }
 
-/** After returning from Checkout: make sure the new subscription is recorded. */
+/** Pay for a subject: resolves to { url } (first subject → Stripe Checkout) or { added, weeklyTotal }. */
+export async function addPaidSubject(curriculumId) {
+  return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumId }) })
+}
+
+/** Stop paying for a subject (by its user_subscriptions row id). */
+export async function removePaidSubject(rowId) {
+  return tutorFetch(`/api/billing/subjects/${encodeURIComponent(rowId)}`, { method: 'DELETE' })
+}
+
+/** After returning from Checkout: make sure the new plan is recorded. */
 export async function syncCheckout(sessionId) {
   return tutorFetch('/api/billing/sync', { method: 'POST', body: JSON.stringify({ sessionId }) })
 }
 
-/** Stripe customer portal (cards, invoices, cancel); resolves to its URL. */
+/** Stripe customer portal (card, receipts, cancel); resolves to its URL. */
 export async function openBillingPortal() {
   const json = await tutorFetch('/api/billing/portal', { method: 'POST' })
   return json.url
+}
+
+/** Free-subject questions answered today: { used, limit }. */
+export async function getFreeQuestionUsage() {
+  const { data, error } = await supabase.rpc('free_questions_today')
+  if (error) throw error
+  return data
+}
+
+/** Count one free-subject question: { used, limit, allowed }. */
+export async function countFreeQuestion() {
+  const { data, error } = await supabase.rpc('use_free_question')
+  if (error) throw error
+  return data
 }
 
 export async function completeOnboarding(userId, profileUpdates) {

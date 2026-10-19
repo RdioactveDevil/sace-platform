@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getBillingConfig, startSubjectCheckout } from '../lib/db'
-import { formatSubjectLabel } from '../lib/subjects'
+import { getBillingConfig, addPaidSubject, chooseFreeSubject } from '../lib/db'
+import { notify } from '../lib/notify'
+import { formatSubjectLabel, subjectAccess } from '../lib/subjects'
 import { SubjectIcon } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
@@ -17,18 +18,21 @@ function hex(color, alpha) {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
-/** A locked subject: start its free trial / weekly subscription through Stripe Checkout. */
-export default function GetAccessScreen() {
+/**
+ * A locked subject: make it the student's free subject (limited questions a
+ * day) or pay for it — Stripe Checkout for the first paid subject, otherwise
+ * added straight onto their weekly plan.
+ */
+export default function GetAccessScreen({ subscriptions = [], onAccessChanged }) {
   const { state } = useLocation()
   const navigate  = useNavigate()
   const subj      = state?.subject
-  const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
 
-  // { enabled, weekly, trialDays } — trialDays is 0 once the student has had a trial.
   const [billing, setBilling] = useState(null)
+  const [busy, setBusy] = useState(null) // 'free' | 'paid'
   useEffect(() => {
-    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, weekly: 5, trialDays: 0 }))
+    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, tiers: [5, 4, 3], nextPrice: 5, weeklyTotal: 0, hasPlan: false, freeDailyQuestions: 20 }))
   }, [])
 
   if (!subj) {
@@ -38,18 +42,39 @@ export default function GetAccessScreen() {
 
   const color = subj.color ?? GOLD
 
-  const weekly = billing?.weekly ?? 5
-  const trialDays = billing?.trialDays ?? 0
   const curriculumId = String(subj.id || '').replace(/^curriculum_/, '')
+  const nextPrice = billing?.nextPrice ?? 5
+  const freeDaily = billing?.freeDailyQuestions ?? 20
+  const currentFree = subscriptions.find(sub => sub.source === 'free')
+  const currentFreeLabel = currentFree ? formatSubjectLabel({ name: currentFree.subject_name, stage: currentFree.stage }) : null
+  const tiers = billing?.tiers ?? [5, 4, 3]
+  // Opened from the free subject's daily limit: only the paid option applies.
+  const isFreeSubject = subjectAccess(subscriptions, subj) === 'free'
 
-  const handleSubscribe = async () => {
-    setLoading(true)
-    setError(null)
+  const handleFree = async () => {
+    setBusy('free'); setError(null)
     try {
-      window.location.assign(await startSubjectCheckout(curriculumId))
+      await chooseFreeSubject(curriculumId)
+      await onAccessChanged?.()
+      notify.success(`${formatSubjectLabel(subj)} is now your free subject.`)
+      navigate('/subject-picker', { replace: true })
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.')
-      setLoading(false)
+      setBusy(null)
+    }
+  }
+
+  const handlePaid = async () => {
+    setBusy('paid'); setError(null)
+    try {
+      const result = await addPaidSubject(curriculumId)
+      if (result.url) { window.location.assign(result.url); return }
+      await onAccessChanged?.()
+      notify.success(`${formatSubjectLabel(subj)} added — your plan is now $${result.weeklyTotal}/week.`)
+      navigate('/subject-picker', { replace: true })
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.')
+      setBusy(null)
     }
   }
 
@@ -154,38 +179,26 @@ export default function GetAccessScreen() {
           )}
         </div>
 
-        {/* Pricing card */}
+        {/* Paid option */}
         <div style={{
           background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.09)',
-          borderRadius: 20, padding: '24px 28px', marginBottom: 12,
+          border: `1px solid ${hex(GOLD, 0.35)}`,
+          borderRadius: 20, padding: '22px 24px', marginBottom: 12,
         }}>
-          {/* Price */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 44, color: '#fff', lineHeight: 1 }}>${weekly}</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 7 }}>/ week · AUD</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontFamily: FONT_D, fontSize: 40, color: '#fff', lineHeight: 1 }}>${nextPrice}</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>/ week · AUD</span>
           </div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            background: hex(GOLD, 0.14), border: `1px solid ${hex(GOLD, 0.35)}`,
-            borderRadius: 99, padding: '4px 12px', marginBottom: 22,
-          }}>
-            <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>
-              {trialDays > 0 ? `First ${trialDays} days free` : 'Per subject · cancel any time'}
-            </span>
+          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginBottom: 16, lineHeight: 1.5 }}>
+            {billing?.hasPlan
+              ? `Added to your plan: $${billing.weeklyTotal} → $${billing.weeklyTotal + nextPrice}/week, prorated from today.`
+              : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${tiers.slice(1).join(', then $')}/week each.`}
           </div>
-
-          {/* What's included */}
-          <div style={{
-            fontSize: 10, fontWeight: 800, letterSpacing: '0.14em',
-            color: 'rgba(255,255,255,0.28)', marginBottom: 12,
-          }}>WHAT'S INCLUDED</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 22 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
             {[
-              `${subj.questionCount || 'Hundreds of'} practice questions`,
-              'Instant feedback on every answer',
-              'Spaced repetition to lock in memory',
-              `Full topic coverage for ${subj.stage}`,
+              'Unlimited practice questions',
+              'Exam Mode and full topic coverage',
+              'Instant feedback and spaced repetition',
             ].map(item => (
               <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
@@ -199,7 +212,52 @@ export default function GetAccessScreen() {
               </div>
             ))}
           </div>
+          <button
+            className="ga-btn"
+            onClick={handlePaid}
+            disabled={!!busy || !billing || billing.enabled === false}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+              background: busy ? 'rgba(255,255,255,0.06)' : '#ffffff',
+              color: busy ? 'rgba(255,255,255,0.3)' : '#06071a',
+              fontSize: 15, fontWeight: 800, cursor: busy ? 'default' : 'pointer',
+              fontFamily: FONT_B, boxShadow: busy ? 'none' : '0 8px 28px rgba(0,0,0,0.3)', transition: 'all 0.2s ease',
+            }}
+          >
+            {busy === 'paid' ? (billing?.hasPlan ? 'Adding…' : 'Opening secure checkout…')
+              : billing?.enabled === false ? 'Payments are coming soon'
+              : billing?.hasPlan ? `Add to my plan — +$${nextPrice}/week`
+              : `Subscribe — $${nextPrice}/week →`}
+          </button>
+          <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '10px 0 0' }}>
+            Billed weekly · cancel any time from My Account · secure payment by Stripe
+          </p>
         </div>
+
+        {/* Free option */}
+        {!isFreeSubject && <div style={{
+          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 20, padding: '18px 24px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#fff', marginBottom: 3 }}>Or use it as your free subject</div>
+            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+              {freeDaily} questions a day, free.{currentFreeLabel ? ` Replaces ${currentFreeLabel} as your free subject.` : ''}
+            </div>
+          </div>
+          <button
+            onClick={handleFree}
+            disabled={!!busy}
+            style={{
+              padding: '10px 18px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)',
+              background: 'transparent', color: '#f1f5f9', fontSize: 13, fontWeight: 700,
+              cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', opacity: busy && busy !== 'free' ? 0.5 : 1,
+            }}
+          >
+            {busy === 'free' ? 'Switching…' : currentFreeLabel ? 'Switch free subject' : 'Use for free'}
+          </button>
+        </div>}
 
         {/* Error */}
         {error && (
@@ -211,35 +269,6 @@ export default function GetAccessScreen() {
             {error}
           </div>
         )}
-
-        {/* CTA */}
-        <button
-          className="ga-btn"
-          onClick={handleSubscribe}
-          disabled={loading || !billing || billing.enabled === false}
-          style={{
-            width: '100%', padding: '15px', borderRadius: 14, border: 'none',
-            background: loading ? 'rgba(255,255,255,0.06)' : '#ffffff',
-            color: loading ? 'rgba(255,255,255,0.3)' : '#06071a',
-            fontSize: 15, fontWeight: 800,
-            cursor: loading ? 'default' : 'pointer',
-            fontFamily: FONT_B, letterSpacing: '0.01em',
-            boxShadow: loading ? 'none' : '0 8px 28px rgba(0,0,0,0.3)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {loading ? 'Opening secure checkout…'
-            : billing?.enabled === false ? 'Payments are coming soon'
-            : trialDays > 0 ? `Start ${trialDays}-day free trial →`
-            : `Subscribe to ${formatSubjectLabel(subj)} — $${weekly}/week →`}
-        </button>
-
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 14 }}>
-          {trialDays > 0
-            ? `You won't be charged today. $${weekly}/week from day ${trialDays + 1} · cancel any time before then`
-            : `Billed weekly · cancel any time from your account`}
-          {' · '}Secure payment by Stripe
-        </p>
       </div>
     </div>
   )

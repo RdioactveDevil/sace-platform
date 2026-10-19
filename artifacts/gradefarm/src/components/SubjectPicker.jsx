@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { curriculumToSubjectTile, subscriptionCoversSubject as subMatchesSubject } from '../lib/subjects'
+import { curriculumToSubjectTile, subjectAccess } from '../lib/subjects'
 import { fetchSubjectBankCounts, getBillingConfig } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIcon } from './SubjectIcons'
@@ -34,8 +34,8 @@ function writeCountsCache(counts) {
 
 /* ─── Component ───────────────────────────────────────────── */
 /**
- * `fullAccess` (tutors/admins) unlocks every subject. Everyone else sees the
- * subjects they have access to, then the rest with their trial / weekly price.
+ * `fullAccess` (tutors/admins) unlocks every subject. Students see their paid
+ * and free subjects first, then the rest with what unlocking them costs.
  */
 export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess }) {
   const [selected, setSelected]         = useState(null)
@@ -78,10 +78,12 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   }, [dynamicSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allSubjects      = dynamicSubjects
-  const hasAccess        = (s) => fullAccess || subscriptions.some(sub => subMatchesSubject(sub, s))
-  const subscribed       = allSubjects.filter(s => s.available && hasAccess(s))
-  const notSubscribed    = allSubjects.filter(s => s.available && !hasAccess(s))
-  const priceLabel       = billing?.trialDays > 0 ? `${billing.trialDays}-day free trial` : `$${billing?.weekly ?? 5}/week`
+  const accessOf         = (s) => subjectAccess(subscriptions, s, fullAccess)
+  const subscribed       = allSubjects.filter(s => s.available && accessOf(s) !== 'none')
+  const notSubscribed    = allSubjects.filter(s => s.available && accessOf(s) === 'none')
+  const hasFreeSubject   = subscriptions.some(sub => sub.source === 'free')
+  const freeDaily        = billing?.freeDailyQuestions ?? 20
+  const priceLabel       = hasFreeSubject ? `$${billing?.nextPrice ?? 5}/week` : 'Try free'
   const comingSoon       = allSubjects.filter(s => !s.available)
 
   const firstName = profile.display_name?.split(' ')[0] ?? 'there'
@@ -117,6 +119,7 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
         <div className="sp-tile-name">{subj.name}</div>
         <div className="sp-tile-stage">{subj.stage}</div>
         {locked && <div className="sp-tile-price">{priceLabel}</div>}
+        {!locked && !fullAccess && accessOf(subj) === 'free' && <div className="sp-tile-price sp-tile-price--free">Free · {freeDaily}/day</div>}
         {isSel && <div className="sp-check">✓</div>}
       </div>
     )
@@ -234,11 +237,10 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
             {/* ── Nothing unlocked yet ── */}
             {subscribed.length === 0 && notSubscribed.length > 0 && (
               <div className="sp-fadein sp-intro">
-                <div className="sp-intro-title">
-                  {billing?.trialDays > 0 ? `Start with a ${billing.trialDays}-day free trial` : 'Unlock a subject to start'}
-                </div>
+                <div className="sp-intro-title">Pick a subject to start</div>
                 <div className="sp-intro-body">
-                  Pick a subject below. It's ${billing?.weekly ?? 5} a week per subject{billing?.trialDays > 0 ? ' after your free trial' : ''}, and you can cancel any time.
+                  Choose one subject to use free ({freeDaily} questions a day), or go unlimited from ${billing?.tiers?.[0] ?? 5}/week
+                  {billing?.tiers?.length > 1 ? ` — extra subjects are cheaper ($${billing.tiers.slice(1).join(', then $')}/week each)` : ''}.
                 </div>
               </div>
             )}

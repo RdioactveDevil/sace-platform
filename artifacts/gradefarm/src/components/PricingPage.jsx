@@ -42,7 +42,7 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_weekly: 5, trial_days: 7, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+const DEFAULT_PRICING = { student_tiers: [5, 4, 3], free_daily_questions: 20, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -63,41 +63,49 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
   const annualDiscount = dbPricing.annual_discount ?? 0.2
 
-  const studentWeekly = dbPricing.student_weekly ?? 5
-  const trialDays = dbPricing.trial_days ?? 7
-  const everything = [
-    { text: 'Full access to the subject', included: true },
-    { text: 'Unlimited questions', included: true },
-    { text: 'Unlimited Titan AI tutoring', included: true },
-    { text: 'Struggle tracking & readiness score', included: true },
-    { text: 'Personalised study plan', included: true },
-    { text: 'Essay / writing module', included: true },
-    { text: 'Weekly leaderboard', included: true },
-  ]
+  const tiers = Array.isArray(dbPricing.student_tiers) && dbPricing.student_tiers.length ? dbPricing.student_tiers : [5, 4, 3]
+  const studentWeekly = tiers[0]
+  const freeDaily = dbPricing.free_daily_questions ?? 20
+  const extraLadder = tiers.length > 1 ? `$${tiers.slice(1).join(', then $')}` : `$${studentWeekly}`
+  const threeSubjects = [0, 1, 2].map(i => tiers[Math.min(i, tiers.length - 1)]).reduce((a, b) => a + b, 0)
   // Students pay weekly per subject; the monthly/annual toggle is for tutor plans.
   const studentPlans = [
     {
-      name: 'Free trial',
+      name: 'Free',
       price: 0,
       fixed: true,
-      sub: `${trialDays} days free on your first subject · then $${studentWeekly}/week`,
+      sub: 'No credit card required',
       badge: null,
       hi: false,
       accentColor: MUTED,
-      cta: 'Start free trial',
-      features: everything,
+      cta: 'Get started free',
+      features: [
+        { text: '1 subject of your choice (swap any time)', included: true },
+        { text: `${freeDaily} questions per day`, included: true },
+        { text: 'Instant feedback & struggle tracking', included: true },
+        { text: 'Weekly leaderboard', included: true },
+        { text: 'Unlimited questions', included: false },
+        { text: 'Exam Mode', included: false },
+      ],
     },
     {
       name: 'Per Subject',
       price: studentWeekly,
       fixed: true,
       unit: '/wk',
-      sub: 'per subject · per week · AUD · cancel any time',
+      sub: `first subject · extra subjects ${extraLadder}/week each · AUD`,
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: GOLD,
       cta: 'Start learning →',
-      features: everything,
+      features: [
+        { text: 'Unlimited questions', included: true },
+        { text: 'Exam Mode', included: true },
+        { text: 'Unlimited Titan AI tutoring', included: true },
+        { text: 'Readiness score & study plan', included: true },
+        { text: 'Essay / writing module', included: true },
+        { text: 'Cancel any time', included: true },
+      ],
     },
   ]
 
@@ -337,7 +345,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Mix &amp; match subjects</div>
                     <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
-                      Add Chemistry, Maths Methods, and Physics for just <strong style={{ color: '#f1f5f9' }}>${studentWeekly * 3}/week</strong>. Each subject is billed separately each week — add or cancel any time. Your first subject starts with a {trialDays}-day free trial.
+                      Each extra subject costs less. Chemistry, Maths Methods and Physics together are just <strong style={{ color: '#f1f5f9' }}>${threeSubjects}/week</strong> (${tiers.slice(0, 3).map(n => `$${n}`).join(' + ')}). One weekly bill — add or remove subjects any time.
                     </div>
                   </div>
                 </div>
@@ -459,9 +467,9 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
             <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(22px,3.5vw,36px)', margin: '0 0 44px', color: '#fff', letterSpacing: 1 }}>COMMON QUESTIONS</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
               {[
-                { q: 'Can I try before I pay?', a: `Yes — your first subject comes with a ${trialDays}-day free trial with full access. You add a card to start, but you won't be charged until the trial ends, and you can cancel before then.` },
-                { q: 'Can I cancel anytime?', a: "Absolutely. Go to My Account → Manage billing to cancel any subject. You keep access until the end of the week you've paid for." },
-                { q: 'Do I pay per subject or for all subjects at once?', a: `Student plans are per subject, so you only pay for what you use. Want Chemistry + Maths Methods? That's $${studentWeekly * 2}/week — two separate $${studentWeekly} subscriptions.` },
+                { q: 'Can I try before I pay?', a: `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
+                { q: 'Can I cancel anytime?', a: "Absolutely. Remove a subject from My Account whenever you like — unused time is credited to your next bill. Removing your last paid subject ends your plan at the end of the week you've paid for." },
+                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one weekly bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraLadder}/week. Chemistry + Maths Methods is $${tiers[0] + tiers[Math.min(1, tiers.length - 1)]}/week.` },
                 { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student subscriptions are always weekly." },
                 { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },

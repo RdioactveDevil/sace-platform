@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe } from "./billing";
+import { getStripe, removePaidSubject } from "./billing";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -482,12 +482,12 @@ router.post("/admin/students/:id/subscriptions", async (req, res) => {
       .eq("user_id", req.params.id).eq("subject_name", cur.name).eq("stage", stage)
       .maybeSingle<{ source: string; active: boolean }>();
     if (existing?.active && existing.source === "stripe") {
-      return res.status(409).json({ error: "This student is paying for this subject. Revoke it first (that cancels their subscription), then grant it." });
+      return res.status(409).json({ error: "This student is paying for this subject. Remove it first (that takes it off their plan), then grant it." });
     }
     const { error } = await admin.from("user_subscriptions").upsert(
       {
         user_id: req.params.id, subject_name: cur.name, stage, active: true, beta: false, source: "admin",
-        status: null, stripe_subscription_id: null, stripe_customer_id: null, current_period_end: null, trial_end: null,
+        status: null, stripe_subscription_id: null, stripe_customer_id: null, current_period_end: null,
         cancel_at_period_end: false, updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,subject_name,stage" },
@@ -504,19 +504,20 @@ router.delete("/admin/students/:id/subscriptions/:subId", async (req, res) => {
   try {
     const ctx = await requireAdmin(req, res);
     if (!ctx) return;
-    // Revoking a paid subject also cancels its Stripe subscription, so the
-    // student isn't charged for access they no longer have.
+    // Revoking a paid subject takes it off the student's Stripe plan (ending
+    // the plan if it was the last one), so they aren't charged for it.
     const { data: row } = await ctx.admin
-      .from("user_subscriptions").select("stripe_subscription_id, active")
+      .from("user_subscriptions").select("id, source, stripe_subscription_id")
       .eq("id", req.params.subId).eq("user_id", req.params.id)
-      .maybeSingle<{ stripe_subscription_id: string | null; active: boolean }>();
-    if (row?.stripe_subscription_id && row.active) {
+      .maybeSingle<{ id: string; source: string; stripe_subscription_id: string | null }>();
+    if (row?.source === "stripe" && row.stripe_subscription_id) {
       const stripe = getStripe();
-      if (!stripe) return res.status(503).json({ error: "Stripe isn't configured, so this paid subscription can't be cancelled here." });
+      if (!stripe) return res.status(503).json({ error: "Stripe isn't configured, so this paid subject can't be removed here." });
       try {
-        await stripe.subscriptions.cancel(row.stripe_subscription_id);
+        await removePaidSubject(ctx.admin, stripe, { id: row.id, stripe_subscription_id: row.stripe_subscription_id }, { endNow: true });
+        return res.json({ ok: true });
       } catch (err) {
-        return res.status(502).json({ error: `Couldn't cancel the Stripe subscription: ${err instanceof Error ? err.message : "unknown error"}` });
+        return res.status(502).json({ error: `Couldn't update the student's Stripe plan: ${err instanceof Error ? err.message : "unknown error"}` });
       }
     }
     const { error } = await ctx.admin
