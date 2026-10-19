@@ -138,15 +138,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const topicsInBankCount = MACRO_GROUPS.reduce((n, m) => n + m.topics.filter(tn => normTopicGroups[tn]).length, 0)
   const hasNoTopicsSelected = selectedSubtopics.length === 0
   const isAllTopicsSelected = allSubtopics.length > 0 && selectedSubtopics.length === allSubtopics.length
-  const effectiveSubtopics = selectedSubtopics
-  const selectedQuestionTotal = hasNoTopicsSelected
-    ? 0
-    : questions.filter(q => selectedSubtopics.includes(q.subtopic)).length
-
-  const fullCounts = getQuestionCounts(questions, currentStruggleMap)
+  // With All Topics ticked, pass an empty filter so the session draws from the
+  // whole bank, including questions that have no subtopic.
+  const effectiveSubtopics = isAllTopicsSelected ? [] : selectedSubtopics
   const filteredCounts = hasNoTopicsSelected
     ? { unseen: 0, wrong: 0, total: 0 }
     : getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
+  const selectedQuestionTotal = filteredCounts.total
 
   const selectedTopicsSummary = hasNoTopicsSelected
     ? 'No topics selected'
@@ -623,14 +621,28 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Quick Start (All Topics)</div>
-              {subjectHasFeature(subject, 'exam_mode') && <button
-                onClick={() => setExamMode(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
-              >
-                ⏱ {examMode ? 'Exam On' : 'Exam Mode'}
-              </button>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Selected for next session</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
+                  {isAllTopicsSelected
+                    ? `${topicsInBankCount} topic${topicsInBankCount !== 1 ? 's' : ''} selected`
+                    : `${selectedNormTopicCount} topic${selectedNormTopicCount !== 1 ? 's' : ''} selected`}
+                </div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{selectedTopicsSummary}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: GOLD }}>{selectedQuestionTotal}</div>
+                  <div style={{ fontSize: 12, color: t.textMuted }}>questions included</div>
+                </div>
+                {subjectHasFeature(subject, 'exam_mode') && <button
+                  onClick={() => setExamMode(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                >
+                  ⏱ {examMode ? 'Exam On' : 'Exam Mode'}
+                </button>}
+              </div>
             </div>
 
             {examMode && (
@@ -648,32 +660,33 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {fullCounts.unseen > 0 ? (
-                renderActionButton({
-                  label: examMode ? `Start ${examDuration}-min Exam · All topics →` : `Start Session · ${fullCounts.unseen} new question${fullCounts.unseen !== 1 ? 's' : ''} →`,
-                  variant: 'primary',
-                  onClick: () => onStartSession({ mode: 'new', subtopics: [], examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-                })
-              ) : (
-                <div style={{ borderRadius: 12, padding: '20px 16px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f6f7fc', border: `1px solid ${t.border}`, textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, marginBottom: 6 }}>🎉</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>All questions attempted!</div>
-                  <div style={{ fontSize: 12, color: t.textMuted }}>Use the options below to review and repeat.</div>
-                </div>
-              )}
-
-              {fullCounts.wrong > 0 && renderActionButton({
-                label: `Re-attempt ${fullCounts.wrong} wrong answer${fullCounts.wrong !== 1 ? 's' : ''}`,
-                variant: 'danger',
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: [], examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
+            <div className="hs-selected-actions">
+              {renderActionButton({
+                label: examMode
+                  ? `Start ${examDuration}-min exam · ${filteredCounts.unseen} new`
+                  : `Start session · ${filteredCounts.unseen} new`,
+                variant: 'primary',
+                disabled: hasNoTopicsSelected || filteredCounts.unseen === 0,
+                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
-
-              {fullCounts.attempted > 0 && renderActionButton({
-                label: 'Repeat all questions',
-                onClick: () => onStartSession({ mode: 'all', subtopics: [], examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
+              {renderActionButton({
+                label: `Re-attempt wrong · ${filteredCounts.wrong}`,
+                variant: 'danger',
+                disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
+                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
+              })}
+              {renderActionButton({
+                label: 'Repeat selected',
+                disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
+                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
               })}
             </div>
+
+            {hasNoTopicsSelected ? (
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>Tick All Topics, or pick topics below, to start a session.</div>
+            ) : filteredCounts.unseen === 0 && selectedQuestionTotal > 0 && (
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>🎉 You've attempted every question in this selection. Re-attempt or repeat them to keep practising.</div>
+            )}
           </div>
 
           <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
@@ -753,48 +766,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 )
               })}
             </div>
-          </div>
-
-          <div style={{ ...card, padding: '16px 20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Selected for next session</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
-                  {isAllTopicsSelected
-                    ? `${topicsInBankCount} topic${topicsInBankCount !== 1 ? 's' : ''} selected`
-                    : `${selectedNormTopicCount} topic${selectedNormTopicCount !== 1 ? 's' : ''} selected`}
-                </div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{selectedTopicsSummary}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: GOLD }}>{selectedQuestionTotal}</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>questions included</div>
-              </div>
-            </div>
-
-            <div className="hs-selected-actions">
-              {renderActionButton({
-                label: `Start selected session · ${filteredCounts.unseen} new`,
-                variant: 'primary',
-                disabled: hasNoTopicsSelected || filteredCounts.unseen === 0,
-                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-              })}
-              {renderActionButton({
-                label: `Re-attempt wrong · ${filteredCounts.wrong}`,
-                variant: 'danger',
-                disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-              })}
-              {renderActionButton({
-                label: 'Repeat selected',
-                disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
-                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-              })}
-            </div>
-
-            {hasNoTopicsSelected && (
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>Select at least one topic to start a session.</div>
-            )}
           </div>
 
           <div className="hs-mobile-cards">
