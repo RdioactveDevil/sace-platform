@@ -128,6 +128,38 @@ export function restoreLiteralNewlines(text) {
   )
 }
 
+/**
+ * Re-escape single-backslash LaTeX inside the string literals of a model's
+ * JSON ("\frac{1}{2}" -> "\\frac{1}{2}") so JSON.parse neither rejects it
+ * (\sqrt, \pi) nor turns it into control characters (\frac, \times). Keeps
+ * \" \\ \/ \uXXXX, and \n unless it starts a LaTeX command (\neq, \nabla).
+ * Mirrors repairLatexJson in api-server/src/lib/json-latex.ts.
+ */
+export function repairLatexJson(s) {
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (c === '"') { out += c; inStr = !inStr; continue }
+    if (c === '\\' && inStr) {
+      const n = s[i + 1]
+      if (n === '"' || n === '\\' || n === '/') { out += c + n; i++; continue }
+      if (n === 'u' && /^[0-9a-fA-F]{4}$/.test(s.slice(i + 2, i + 6))) { out += c + n; continue }
+      if (n === 'n' && !LATEX_N_COMMANDS.has(s.slice(i + 1).match(/^[A-Za-z]+/)[0])) { out += c + n; i++; continue }
+      out += '\\\\'
+      continue
+    }
+    out += c
+  }
+  return out
+}
+
+/** JSON.parse that tries the LaTeX-repaired text first, then the raw text. */
+export function parseLatexJson(text) {
+  try { return JSON.parse(repairLatexJson(text)) } catch {}
+  return JSON.parse(text)
+}
+
 // ── 3. \( \) and \[ \] delimiters ────────────────────────────────────────────
 
 function findUnescaped(s, needle, from) {

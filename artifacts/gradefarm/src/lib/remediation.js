@@ -9,6 +9,7 @@
 // remediationStatus AWAY from 'generating' — never leaves it stuck.
 
 import { buildRemediationQueue, getQuestionConceptTag } from './engine.js'
+import { parseLatexJson } from './mathMarkup.js'
 
 export const REMEDIATION_DB_TIMEOUT_MS = 5000
 export const AI_TIMEOUT_MS = 8000
@@ -47,7 +48,7 @@ export async function fetchRemediationVariantsSafe(
 
 export function extractJsonArray(text = '') {
   try {
-    const parsed = JSON.parse(text)
+    const parsed = parseLatexJson(text)
     return Array.isArray(parsed) ? parsed : []
   } catch {}
 
@@ -56,7 +57,7 @@ export function extractJsonArray(text = '') {
   if (start === -1 || end === -1 || end <= start) return []
 
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1))
+    const parsed = parseLatexJson(text.slice(start, end + 1))
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
