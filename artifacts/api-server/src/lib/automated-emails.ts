@@ -1,0 +1,552 @@
+/**
+ * Automated emails, sent by the /api/cron/emails job:
+ *   • welcome               – once, after a new account confirms its email
+ *   • session_reminder_24h  – students, about a day before a booked session
+ *   • session_reminder_1h   – students and the tutor, about an hour before
+ *   • assignment_due        – the day before an unfinished assignment is due
+ *   • assignment_overdue    – the day after, if it is still unfinished
+ *
+ * The job is safe to run at any cadence: each email is claimed in email_log
+ * (claim_email RPC) before it is sent, so it goes out at most once. Reminders
+ * respect profiles.emails_unsubscribed_at.
+ */
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Resend } from "resend";
+import { logger } from "./logger";
+import { appUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
+
+export const TIME_ZONE = "Australia/Adelaide";
+
+export type EmailKind =
+  | "welcome"
+  | "session_reminder_24h"
+  | "session_reminder_1h"
+  | "assignment_due"
+  | "assignment_overdue";
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+/** Only welcome accounts created this recently, so launch doesn't email everyone. */
+const WELCOME_WINDOW = 48 * HOUR;
+/** A session within this lead time gets the 1-hour reminder. */
+const SOON_WINDOW = 75 * MINUTE;
+/** The day-before reminder is only sent while the session is at least this far off. */
+const DAY_REMINDER_MIN_LEAD = 2 * HOUR;
+/**
+ * Skip a reminder when the booking itself was recent: the booking email
+ * already told them. 24h reminder: booked ≥ 36h ahead. 1h: booked ≥ 2h ahead.
+ */
+const DAY_REMINDER_MIN_BOOKING_LEAD = 36 * HOUR;
+const SOON_REMINDER_MIN_BOOKING_LEAD = 2 * HOUR;
+/** Assignment reminders only go out during the day, Adelaide time. */
+const ASSIGNMENT_SEND_HOURS = { from: 8, to: 20 };
+
+export interface RunOptions {
+  now?: Date;
+  /** Report what would be sent without sending or recording anything. */
+  dryRun?: boolean;
+  /** Stop after this many emails; the rest go out on the next run. */
+  maxEmails?: number;
+}
+
+export interface RunSummary {
+  dryRun: boolean;
+  sent: Partial<Record<EmailKind, number>>;
+  failed: Partial<Record<EmailKind, number>>;
+  /** Dry run only: the emails a real run would send now. */
+  planned?: Array<{ kind: EmailKind; to: string; subject: string }>;
+  budgetExhausted: boolean;
+}
+
+interface Recipient {
+  id: string;
+  email: string;
+  name: string;
+  unsubscribed: boolean;
+}
+
+interface Job {
+  admin: SupabaseClient;
+  resend: Resend | null;
+  now: Date;
+  dryRun: boolean;
+  budget: number;
+  summary: RunSummary;
+  emailCache: Map<string, { email: string | null; confirmed: boolean }>;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function bump(map: Partial<Record<EmailKind, number>>, kind: EmailKind) {
+  map[kind] = (map[kind] ?? 0) + 1;
+}
+
+/** YYYY-MM-DD for `date` in Adelaide. */
+export function localDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+export function localHour(date: Date): number {
+  return Number(new Intl.DateTimeFormat("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", hourCycle: "h23" }).format(date));
+}
+
+export function addDays(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString("en-AU", {
+    weekday: "long", day: "numeric", month: "long",
+    hour: "numeric", minute: "2-digit", timeZone: TIME_ZONE, timeZoneName: "short",
+  });
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-AU", {
+    hour: "numeric", minute: "2-digit", timeZone: TIME_ZONE, timeZoneName: "short",
+  });
+}
+
+function formatDueDate(ymd: string): string {
+  return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-AU", {
+    weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
+  });
+}
+
+async function authEmail(job: Job, userId: string): Promise<{ email: string | null; confirmed: boolean }> {
+  const cached = job.emailCache.get(userId);
+  if (cached) return cached;
+  const { data } = await job.admin.auth.admin.getUserById(userId);
+  const entry = {
+    email: data?.user?.email ?? null,
+    confirmed: !!(data?.user?.email_confirmed_at ?? data?.user?.confirmed_at),
+  };
+  job.emailCache.set(userId, entry);
+  return entry;
+}
+
+/** Profiles + emails for active users; deactivated or email-less users are dropped. */
+async function loadRecipients(job: Job, ids: string[]): Promise<Map<string, Recipient>> {
+  const out = new Map<string, Recipient>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return out;
+  const { data, error } = await job.admin
+    .from("profiles")
+    .select("id, display_name, deactivated_at, emails_unsubscribed_at")
+    .in("id", unique);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  for (const p of (data ?? []) as Array<{ id: string; display_name: string | null; deactivated_at: string | null; emails_unsubscribed_at: string | null }>) {
+    if (p.deactivated_at) continue;
+    const { email } = await authEmail(job, p.id);
+    if (!email) continue;
+    out.set(p.id, { id: p.id, email, name: p.display_name || "there", unsubscribed: !!p.emails_unsubscribed_at });
+  }
+  return out;
+}
+
+/**
+ * `${refId}:${recipientId}` pairs claim_email would refuse: sent, out of
+ * retries, or being sent by another run right now. Saves a claim per email.
+ */
+async function loadDone(job: Job, kind: EmailKind, refIds: string[]): Promise<Set<string>> {
+  const done = new Set<string>();
+  if (refIds.length === 0) return done;
+  const { data, error } = await job.admin
+    .from("email_log")
+    .select("ref_id, recipient_id, status, attempts, updated_at")
+    .eq("kind", kind)
+    .in("ref_id", [...new Set(refIds)]);
+  if (error) throw new Error(`email_log: ${error.message}`);
+  const staleBefore = job.now.getTime() - 10 * MINUTE;
+  for (const r of (data ?? []) as Array<{ ref_id: string; recipient_id: string; status: string; attempts: number; updated_at: string }>) {
+    const inFlight = r.status === "pending" && new Date(r.updated_at).getTime() >= staleBefore;
+    if (r.status === "sent" || r.attempts >= 3 || inFlight) done.add(`${r.ref_id}:${r.recipient_id}`);
+  }
+  return done;
+}
+
+/**
+ * Claim, send and record one email covering `refIds` (several assignments can
+ * share one email). `build` receives the refs actually claimed, so a ref
+ * another run already sent is left out.
+ */
+async function deliver(
+  job: Job,
+  kind: EmailKind,
+  recipient: Recipient,
+  refIds: string[],
+  build: (claimed: string[]) => { subject: string; content: EmailContent },
+): Promise<void> {
+  if (job.budget <= 0) {
+    job.summary.budgetExhausted = true;
+    return;
+  }
+
+  if (job.dryRun) {
+    const { subject } = build(refIds);
+    job.summary.planned!.push({ kind, to: recipient.email, subject });
+    job.budget--;
+    return;
+  }
+
+  const claimed: string[] = [];
+  for (const refId of refIds) {
+    const { data, error } = await job.admin.rpc("claim_email", {
+      p_kind: kind, p_ref_id: refId, p_recipient_id: recipient.id,
+    });
+    if (error) throw new Error(`claim_email: ${error.message}`);
+    if (data === true) claimed.push(refId);
+  }
+  if (claimed.length === 0) return;
+
+  const { subject, content } = build(claimed);
+  job.budget--;
+  const result = await sendEmail(job.resend!, {
+    to: recipient.email,
+    subject,
+    content,
+    idempotencyKey: `${kind}:${recipient.id}:${claimed.slice().sort().join(",")}`,
+  });
+
+  const { error: logErr } = await job.admin
+    .from("email_log")
+    .update(
+      result.error
+        ? { status: "failed", error: result.error.slice(0, 500), updated_at: new Date().toISOString() }
+        : { status: "sent", provider_id: result.id, updated_at: new Date().toISOString() },
+    )
+    .eq("kind", kind)
+    .eq("recipient_id", recipient.id)
+    .in("ref_id", claimed);
+  if (logErr) logger.error({ err: logErr, kind }, "emails: could not record send result");
+
+  if (result.error) {
+    bump(job.summary.failed, kind);
+    logger.warn({ kind, recipient: recipient.id, error: result.error }, "emails: send failed");
+  } else {
+    bump(job.summary.sent, kind);
+  }
+}
+
+// ── Welcome ─────────────────────────────────────────────────────────────────
+
+async function runWelcome(job: Job) {
+  const since = new Date(job.now.getTime() - WELCOME_WINDOW).toISOString();
+  const { data, error } = await job.admin
+    .from("profiles")
+    .select("id, is_tutor, tutor_application_status")
+    .gte("created_at", since)
+    .is("deactivated_at", null)
+    .limit(500);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  const rows = (data ?? []) as Array<{ id: string; is_tutor: boolean; tutor_application_status: string | null }>;
+  if (rows.length === 0) return;
+
+  const done = await loadDone(job, "welcome", rows.map((r) => r.id));
+  const pending = rows.filter((r) => !done.has(`${r.id}:${r.id}`));
+  const recipients = await loadRecipients(job, pending.map((r) => r.id));
+
+  for (const row of pending) {
+    const r = recipients.get(row.id);
+    if (!r || r.unsubscribed) continue;
+    // Wait until the address is confirmed so we don't mail typos.
+    if (!(await authEmail(job, row.id)).confirmed) continue;
+    const isTutor = row.is_tutor || (row.tutor_application_status ?? "none") !== "none";
+    await deliver(job, "welcome", r, [row.id], () => welcomeEmail(r, isTutor));
+  }
+}
+
+function welcomeEmail(r: Recipient, isTutor: boolean): { subject: string; content: EmailContent } {
+  if (isTutor) {
+    return {
+      subject: "Welcome to gradefarm.",
+      content: {
+        heading: `Welcome to gradefarm., ${r.name}`,
+        paragraphs: [
+          "Thanks for signing up as a tutor. Once your account is approved you'll have the Tutor portal, where you can:",
+        ],
+        details: [
+          ["Students", "Add students and classes to your roster"],
+          ["Assignments", "Set quizzes and homework with due dates"],
+          ["Sessions", "Book one-off or weekly video sessions"],
+          ["Progress", "See each student's accuracy and weak topics"],
+        ],
+        cta: { label: "Open gradefarm.", url: `${appUrl()}/tutor` },
+        footer: "You're receiving this because you created a gradefarm. tutor account.",
+      },
+    };
+  }
+  return {
+    subject: "Welcome to gradefarm.",
+    content: {
+      heading: `Welcome to gradefarm., ${r.name}`,
+      paragraphs: [
+        "Your account is ready. Here's how to get the most out of it:",
+      ],
+      details: [
+        ["1. Pick a subject", "Choose the SACE subjects you're studying"],
+        ["2. Practise", "Questions adapt to you, and you get similar ones to retry when you miss one"],
+        ["3. Ask Titan", "Get step-by-step help on any question you're stuck on"],
+        ["4. Keep a streak", "A few questions a day builds XP and keeps your streak going"],
+      ],
+      cta: { label: "Start practising", url: `${appUrl()}/home` },
+      footer: "You're receiving this because you created a gradefarm. account.",
+    },
+  };
+}
+
+// ── Session reminders ───────────────────────────────────────────────────────
+
+interface SessionRow {
+  id: string;
+  tutor_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  title: string | null;
+  session_type: string;
+  series_id: string | null;
+  livekit_room_name: string;
+  created_at: string | null;
+}
+
+async function runSessionReminders(job: Job) {
+  const nowMs = job.now.getTime();
+  const { data, error } = await job.admin
+    .from("tutoring_sessions")
+    .select("id, tutor_id, scheduled_at, duration_minutes, title, session_type, series_id, livekit_room_name, created_at")
+    .eq("status", "scheduled")
+    .gt("scheduled_at", job.now.toISOString())
+    .lte("scheduled_at", new Date(nowMs + 24 * HOUR).toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(`tutoring_sessions: ${error.message}`);
+  const sessions = (data ?? []) as SessionRow[];
+  if (sessions.length === 0) return;
+
+  const day: SessionRow[] = [];
+  const soon: SessionRow[] = [];
+  for (const s of sessions) {
+    const start = new Date(s.scheduled_at).getTime();
+    const bookedAhead = s.created_at ? start - new Date(s.created_at).getTime() : Infinity;
+    const lead = start - nowMs;
+    if (lead <= SOON_WINDOW) {
+      if (bookedAhead >= SOON_REMINDER_MIN_BOOKING_LEAD) soon.push(s);
+    } else if (lead >= DAY_REMINDER_MIN_LEAD) {
+      if (bookedAhead >= DAY_REMINDER_MIN_BOOKING_LEAD) day.push(s);
+    }
+  }
+  const relevant = [...day, ...soon];
+  if (relevant.length === 0) return;
+
+  const { data: parts, error: partErr } = await job.admin
+    .from("session_participants")
+    .select("session_id, student_id")
+    .in("session_id", relevant.map((s) => s.id));
+  if (partErr) throw new Error(`session_participants: ${partErr.message}`);
+  const studentsBySession = new Map<string, string[]>();
+  for (const p of (parts ?? []) as Array<{ session_id: string; student_id: string }>) {
+    const list = studentsBySession.get(p.session_id) ?? [];
+    list.push(p.student_id);
+    studentsBySession.set(p.session_id, list);
+  }
+
+  const people = await loadRecipients(job, [
+    ...relevant.map((s) => s.tutor_id),
+    ...[...studentsBySession.values()].flat(),
+  ]);
+
+  const send = async (kind: EmailKind, list: SessionRow[], includeTutor: boolean) => {
+    if (list.length === 0) return;
+    const done = await loadDone(job, kind, list.map((s) => s.id));
+    for (const s of list) {
+      const studentIds = studentsBySession.get(s.id) ?? [];
+      const tutor = people.get(s.tutor_id);
+      const tutorName = tutor?.name ?? "your tutor";
+      for (const sid of studentIds) {
+        const r = people.get(sid);
+        if (!r || r.unsubscribed || done.has(`${s.id}:${sid}`)) continue;
+        await deliver(job, kind, r, [s.id], () => sessionReminderEmail(job, kind, s, r, { tutorName }));
+      }
+      if (includeTutor && tutor && !tutor.unsubscribed && studentIds.length > 0 && !done.has(`${s.id}:${tutor.id}`)) {
+        const names = studentIds.map((id) => people.get(id)?.name).filter((n): n is string => !!n);
+        await deliver(job, kind, tutor, [s.id], () => sessionReminderEmail(job, kind, s, tutor, { studentNames: names, studentCount: studentIds.length }));
+      }
+    }
+  };
+
+  await send("session_reminder_24h", day, false);
+  await send("session_reminder_1h", soon, true);
+}
+
+function sessionReminderEmail(
+  job: Job,
+  kind: EmailKind,
+  s: SessionRow,
+  r: Recipient,
+  who: { tutorName?: string; studentNames?: string[]; studentCount?: number },
+): { subject: string; content: EmailContent } {
+  const link = s.series_id ? `${appUrl()}/room/${encodeURIComponent(s.livekit_room_name)}` : `${appUrl()}/session/${s.id}`;
+  const label = s.title?.trim() || (s.session_type === "group" ? "Group tutoring session" : "Tutoring session");
+  const minutes = Math.max(1, Math.round((new Date(s.scheduled_at).getTime() - job.now.getTime()) / MINUTE));
+  const isTutorCopy = who.studentNames !== undefined;
+  const withWhom = isTutorCopy
+    ? who.studentNames!.length === 1 && who.studentCount === 1
+      ? who.studentNames![0]
+      : `${who.studentCount} students`
+    : who.tutorName!;
+
+  const soon = kind === "session_reminder_1h";
+  return {
+    subject: soon
+      ? `Starting at ${formatTime(s.scheduled_at)}: ${label}`
+      : `Reminder: ${label} on ${formatWhen(s.scheduled_at)}`,
+    content: {
+      heading: soon ? `Your session starts in ${minutes} minutes` : "Your session is coming up",
+      paragraphs: [
+        `Hi ${r.name}, this is a reminder about your ${s.session_type === "group" ? "group " : ""}session with ${withWhom}.`,
+      ],
+      details: [
+        ["When", formatWhen(s.scheduled_at)],
+        ["Duration", `${s.duration_minutes} minutes`],
+        ...(s.title?.trim() ? ([["Topic", s.title.trim()]] as Array<[string, string]>) : []),
+      ],
+      cta: { label: "Join session", url: link },
+      footer: "Sessions open in your browser, so there's nothing to install. You're receiving this because you have a session booked on gradefarm.",
+      unsubscribe: unsubscribeUrl(r.id),
+    },
+  };
+}
+
+// ── Assignment reminders ────────────────────────────────────────────────────
+
+interface AssignmentRow {
+  id: string;
+  tutor_id: string;
+  student_id: string;
+  type: string;
+  subject: string;
+  topics: string[] | null;
+  due_date: string;
+  created_at: string;
+}
+
+async function runAssignmentReminders(job: Job) {
+  const hour = localHour(job.now);
+  if (hour < ASSIGNMENT_SEND_HOURS.from || hour >= ASSIGNMENT_SEND_HOURS.to) return;
+
+  const today = localDate(job.now);
+  const tomorrow = addDays(today, 1);
+  const yesterday = addDays(today, -1);
+
+  const { data, error } = await job.admin
+    .from("assignments")
+    .select("id, tutor_id, student_id, type, subject, topics, due_date, created_at")
+    .is("completed_at", null)
+    .in("due_date", [tomorrow, yesterday])
+    .limit(2000);
+  if (error) throw new Error(`assignments: ${error.message}`);
+  const rows = (data ?? []) as AssignmentRow[];
+  if (rows.length === 0) return;
+
+  const recentCutoff = job.now.getTime() - 12 * HOUR;
+  const due = rows.filter((a) => a.due_date === tomorrow && new Date(a.created_at).getTime() <= recentCutoff);
+  const overdue = rows.filter((a) => a.due_date === yesterday);
+
+  const people = await loadRecipients(job, [...rows.map((a) => a.student_id), ...rows.map((a) => a.tutor_id)]);
+
+  const send = async (kind: EmailKind, list: AssignmentRow[]) => {
+    if (list.length === 0) return;
+    const done = await loadDone(job, kind, list.map((a) => a.id));
+    const byStudent = new Map<string, AssignmentRow[]>();
+    for (const a of list) {
+      if (done.has(`${a.id}:${a.student_id}`)) continue;
+      const l = byStudent.get(a.student_id) ?? [];
+      l.push(a);
+      byStudent.set(a.student_id, l);
+    }
+    for (const [studentId, items] of byStudent) {
+      const r = people.get(studentId);
+      if (!r || r.unsubscribed) continue;
+      await deliver(job, kind, r, items.map((a) => a.id), (claimed) =>
+        assignmentEmail(kind, r, items.filter((a) => claimed.includes(a.id)), people),
+      );
+    }
+  };
+
+  await send("assignment_due", due);
+  await send("assignment_overdue", overdue);
+}
+
+function assignmentEmail(
+  kind: EmailKind,
+  r: Recipient,
+  items: AssignmentRow[],
+  people: Map<string, Recipient>,
+): { subject: string; content: EmailContent } {
+  const overdue = kind === "assignment_overdue";
+  const first = items[0];
+  const many = items.length > 1;
+  const details = items.map((a): [string, string] => {
+    const topics = (a.topics ?? []).filter(Boolean).join(", ");
+    const tutor = people.get(a.tutor_id)?.name;
+    return [a.type, [a.subject, topics, tutor ? `from ${tutor}` : ""].filter(Boolean).join(" · ")];
+  });
+  const dueText = formatDueDate(first.due_date);
+  return {
+    subject: overdue
+      ? many ? `${items.length} assignments are overdue` : `Overdue: ${first.type} for ${first.subject}`
+      : many ? `${items.length} assignments due tomorrow` : `Due tomorrow: ${first.type} for ${first.subject}`,
+    content: {
+      heading: overdue ? (many ? "These assignments are overdue" : "This assignment is overdue") : `Due tomorrow, ${dueText}`,
+      paragraphs: [
+        overdue
+          ? `Hi ${r.name}, ${many ? "these were" : "this was"} due on ${dueText} and ${many ? "aren't" : "isn't"} finished yet. It's not too late to get ${many ? "them" : "it"} done.`
+          : `Hi ${r.name}, just a heads up that ${many ? "these are" : "this is"} due tomorrow and not finished yet.`,
+      ],
+      details,
+      cta: { label: overdue ? "Finish now" : "Start now", url: `${appUrl()}/home` },
+      footer: "You're receiving this because your tutor set you work on gradefarm.",
+      unsubscribe: unsubscribeUrl(r.id),
+    },
+  };
+}
+
+// ── Entry point ─────────────────────────────────────────────────────────────
+
+export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend | null, opts: RunOptions = {}): Promise<RunSummary> {
+  const dryRun = !!opts.dryRun;
+  if (!dryRun && !resend) throw new Error("RESEND_API_KEY is not configured");
+  const summary: RunSummary = { dryRun, sent: {}, failed: {}, budgetExhausted: false, ...(dryRun ? { planned: [] } : {}) };
+  const job: Job = {
+    admin,
+    resend,
+    now: opts.now ?? new Date(),
+    dryRun,
+    budget: opts.maxEmails ?? 300,
+    summary,
+    emailCache: new Map(),
+  };
+
+  // Time-sensitive reminders first, so a busy run spends its budget on them.
+  const steps: Array<[string, (j: Job) => Promise<void>]> = [
+    ["session reminders", runSessionReminders],
+    ["assignment reminders", runAssignmentReminders],
+    ["welcome", runWelcome],
+  ];
+  const errors: string[] = [];
+  for (const [name, step] of steps) {
+    try {
+      await step(job);
+    } catch (err) {
+      // One failing step shouldn't stop the others.
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err, step: name }, "emails: step failed");
+      errors.push(`${name}: ${message}`);
+    }
+  }
+  if (errors.length) throw Object.assign(new Error(errors.join("; ")), { summary });
+  return summary;
+}

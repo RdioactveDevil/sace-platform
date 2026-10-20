@@ -1,0 +1,68 @@
+name: Automated emails
+
+# Every 15 minutes, asks the API to send any automated emails that are due:
+# welcome emails, session reminders (≈24h and ≈1h before) and assignment
+# due / overdue reminders. The API records every email it sends, so a late,
+# skipped or repeated run never sends one twice.
+#
+# Also runnable from the Actions tab → this workflow → "Run workflow", where
+# dry-run lists what would be sent without sending anything.
+#
+# Requires (Settings → Secrets and variables → Actions):
+#   secret   CRON_SECRET — same value as the CRON_SECRET env var on Vercel
+#   variable APP_URL     — https://www.gradefarm.com.au (the www address: the
+#                          bare domain redirects, and curl won't follow that
+#                          redirect with the Authorization header)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (list only, no emails)"
+          - "send"
+        default: "dry-run (list only, no emails)"
+
+concurrency:
+  group: automated-emails
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Run email job
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+          MODE: ${{ inputs.mode || 'send' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${APP_URL:-}" ]; then
+            echo "::warning::CRON_SECRET secret or APP_URL variable is not set; skipping. See the header of this workflow."
+            exit 0
+          fi
+          QUERY=""
+          case "$MODE" in
+            dry-run*) QUERY="?dry_run=1" ;;
+          esac
+          STATUS=$(curl -sS --max-time 300 -o response.txt -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL%/}/api/cron/emails${QUERY}")
+          cat response.txt
+          echo
+          # Anything but 200 means the job didn't run (or failed), including a
+          # redirect, which curl doesn't follow and wouldn't otherwise fail on.
+          if [ "$STATUS" != "200" ]; then
+            case "$STATUS" in
+              3*) echo "::error::HTTP $STATUS redirect: set the APP_URL variable to the address the site redirects to (https://www.gradefarm.com.au)." ;;
+              401) echo "::error::HTTP 401: CRON_SECRET here doesn't match CRON_SECRET on Vercel." ;;
+              *) echo "::error::Email job returned HTTP $STATUS." ;;
+            esac
+            exit 1
+          fi

@@ -11,6 +11,7 @@ import {
 } from "livekit-server-sdk";
 import { Resend } from "resend";
 import { getR2Config } from "../lib/r2";
+import { EMAIL_FROM } from "../lib/email";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -281,7 +282,7 @@ async function sendSessionInvite(
     : "";
 
   await resend.emails.send({
-    from: "GradeFarm <sessions@gradefarm.com.au>",
+    from: EMAIL_FROM,
     to: [opts.studentEmail],
     subject: `${opts.isGroup ? "Group session" : "Session"} booked: ${safeTitle} on ${safeDate}`,
     html: `
