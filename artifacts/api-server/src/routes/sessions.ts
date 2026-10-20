@@ -6,9 +6,11 @@ import {
   EgressClient,
   EncodedFileOutput,
   EncodedFileType,
+  EncodingOptions,
   S3Upload,
 } from "livekit-server-sdk";
 import { Resend } from "resend";
+import { getR2Config } from "../lib/r2";
 import { EMAIL_FROM } from "../lib/email";
 
 export const RECORDING_BUCKET = "tutor-resources";
@@ -59,11 +61,39 @@ function getEgressS3Config() {
   return { accessKey, secret, region, endpoint };
 }
 
-/** Whether session recording can run (LiveKit + S3 destination both configured). */
+export type RecordingBackend = "r2" | "supabase";
+
+/**
+ * Where Egress uploads recordings: Cloudflare R2 when configured (no 50 MB
+ * upload cap, free playback bandwidth), else the Supabase S3 gateway.
+ */
+function getRecordingDestination(): { backend: RecordingBackend; upload: S3Upload } | null {
+  const r2 = getR2Config();
+  if (r2) {
+    return {
+      backend: "r2",
+      upload: new S3Upload({
+        accessKey: r2.accessKeyId,
+        secret: r2.secretAccessKey,
+        region: "auto",
+        endpoint: r2.endpoint,
+        bucket: r2.bucket,
+        forcePathStyle: true,
+      }),
+    };
+  }
+  const { accessKey, secret, region, endpoint } = getEgressS3Config();
+  if (!accessKey || !secret || !region) return null;
+  return {
+    backend: "supabase",
+    upload: new S3Upload({ accessKey, secret, region, endpoint, bucket: RECORDING_BUCKET, forcePathStyle: true }),
+  };
+}
+
+/** Whether session recording can run (LiveKit + an upload destination both configured). */
 function recordingEnabled(): boolean {
   const { apiKey, apiSecret } = getLiveKitConfig();
-  const { accessKey, secret, region } = getEgressS3Config();
-  return !!(apiKey && apiSecret && accessKey && secret && region);
+  return !!(apiKey && apiSecret && getRecordingDestination());
 }
 
 /**
@@ -81,18 +111,31 @@ function recordingLayoutOptions(): { customBaseUrl: string } | { layout: string 
 }
 
 /**
- * Start a Room Composite Egress that writes an MP4 into the tutor-resources
- * bucket. Returns the egress id + the storage key the file will land at, or
- * null if recording is not configured / fails to start.
+ * 720p at 24 fps / 1.5 Mbps — about 0.7 GB an hour, half of LiveKit's default
+ * preset (720p30 at 3 Mbps). Faces and a whiteboard don't need more.
+ */
+const RECORDING_ENCODING = new EncodingOptions({
+  width: 1280,
+  height: 720,
+  framerate: 24,
+  videoBitrate: 1500,
+  audioBitrate: 96,
+});
+
+/**
+ * Start a Room Composite Egress that writes an MP4 to the recording
+ * destination. Returns the egress id, the storage key the file will land at
+ * and which backend holds it, or null if recording is not configured / fails
+ * to start.
  */
 export async function startSessionRecording(
   roomName: string,
   tutorId: string,
   sessionId: string,
-): Promise<{ egressId: string; storagePath: string } | null> {
+): Promise<{ egressId: string; storagePath: string; backend: RecordingBackend } | null> {
   const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
-  const { accessKey, secret, region, endpoint } = getEgressS3Config();
-  if (!apiKey || !apiSecret || !accessKey || !secret || !region) return null;
+  const destination = getRecordingDestination();
+  if (!apiKey || !apiSecret || !destination) return null;
 
   // Egress connects to LiveKit's HTTPS API, not the wss endpoint.
   const httpUrl = wsUrl.replace(/^ws/, "http");
@@ -103,24 +146,18 @@ export async function startSessionRecording(
     fileType: EncodedFileType.MP4,
     filepath: storagePath,
     disableManifest: true,
-    output: {
-      case: "s3",
-      value: new S3Upload({
-        accessKey,
-        secret,
-        region,
-        endpoint,
-        bucket: RECORDING_BUCKET,
-        forcePathStyle: true,
-      }),
-    },
+    output: { case: "s3", value: destination.upload },
   });
 
   try {
-    const info = await egressClient.startRoomCompositeEgress(roomName, output, recordingLayoutOptions());
+    const info = await egressClient.startRoomCompositeEgress(roomName, output, {
+      ...recordingLayoutOptions(),
+      encodingOptions: RECORDING_ENCODING,
+    });
     if (!info?.egressId) return null;
-    return { egressId: info.egressId, storagePath };
-  } catch {
+    return { egressId: info.egressId, storagePath, backend: destination.backend };
+  } catch (err) {
+    console.warn("[recording] could not start egress:", err instanceof Error ? err.message : err);
     return null;
   }
 }
