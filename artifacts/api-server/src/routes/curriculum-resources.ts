@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { PDFDocument } from "pdf-lib";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { extractJsonArray } from "../lib/json-latex";
 import { requireAdmin } from "../lib/auth";
@@ -131,7 +131,8 @@ async function distillExemplars(opts: {
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 8000,
+      thinking: CLAUDE_THINKING,
+      max_tokens: 10500,
       system,
       messages: [
         {

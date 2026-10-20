@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { requireUser } from "../lib/auth";
@@ -157,7 +157,8 @@ async function classifyMessage(subject: string, topic: string, userMessage: stri
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 10,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 16,
         system: classifierSystem,
         messages: [
           {
@@ -290,7 +291,11 @@ router.post("/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
+        thinking: CLAUDE_THINKING,
         max_tokens: Math.min(Number(max_tokens) || 1000, 4000),
+        // Each turn re-sends the same system prompt + history, so cache it up
+        // to the last message; later turns read that prefix at ~0.1x price.
+        cache_control: { type: "ephemeral" },
         system: effectiveSystem,
         messages: typedMessages,
       }),

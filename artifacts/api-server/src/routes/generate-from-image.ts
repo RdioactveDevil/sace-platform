@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
 import { extractJsonArray } from "../lib/json-latex";
@@ -117,7 +117,8 @@ router.post("/generate-from-image", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 6000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 8000,
         system,
         messages: [
           {
