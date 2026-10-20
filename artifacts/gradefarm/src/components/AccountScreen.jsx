@@ -140,7 +140,6 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
     borderRadius: 16,
     boxShadow: theme === 'light' ? '0 2px 12px rgba(12,16,55,0.07)' : '0 2px 12px rgba(0,0,0,0.25)',
     padding: '20px 24px',
-    marginBottom: 16,
   }
 
   const inputStyle = {
@@ -211,136 +210,153 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
   }))
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 48px', fontFamily: FONT_B, color: t.text, maxWidth: 680 }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
-      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Settings</div>
-      <h1 style={{ fontSize: 22, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.2, marginBottom: 6, color: t.text }}>My Account</h1>
-      <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>Manage your profile and preferences.</p>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', fontFamily: FONT_B, color: t.text }}>
+      <style>{`
+        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
+        .acct-wrap { max-width: 1080px; margin: 0 auto; padding: 32px 32px 48px; }
+        .acct-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 16px; }
+        .acct-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+        @media (min-width: 1100px) { .acct-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+        @media (max-width: 640px) { .acct-wrap { padding: 20px 16px 40px; } }
+      `}</style>
+      <div className="acct-wrap">
+          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Settings</div>
+          <h1 style={{ fontSize: 22, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.2, marginBottom: 6, color: t.text }}>My Account</h1>
+          <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>Manage your profile and preferences.</p>
 
-      {/* Tutor application status — surfaced here now that the global RoleSwitcherBar has been removed. */}
-      {profile.tutor_application_status === 'pending' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', marginBottom: 16, borderRadius: 12, background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.28)', color: t.text, fontSize: 13 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}`, flexShrink: 0 }} />
-          <span><strong style={{ color: GOLD, fontWeight: 700 }}>Tutor application pending</strong> — an admin will review your application shortly.</span>
-        </div>
-      )}
-
-      {/* ── Profile card ── */}
-      <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#080d28', flexShrink: 0 }}>
-            {(profile.display_name || '?')[0].toUpperCase()}
-          </div>
-          <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{profile.display_name}</div>
-            <div style={{ fontSize: 12, color: GOLD, fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={13} /> {rank} · Level {level}</div>
-          </div>
-        </div>
-
-        {/* XP bar */}
-        <div style={{ marginBottom: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-            <span style={{ fontSize: 11, color: t.textMuted }}>Level {level}</span>
-            <span style={{ fontSize: 11, color: t.textMuted }}>{profile.xp} / {next} XP</span>
-          </div>
-          <div style={{ background: t.border, borderRadius: 999, height: 6, overflow: 'hidden' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, borderRadius: 999, transition: 'width 0.8s' }} />
-          </div>
-        </div>
-        <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
-          {next - profile.xp} XP to {RANKS[Math.min(level + 1, RANKS.length - 1)]}
-        </div>
-      </div>
-
-      {!profile.is_tutor && !profile.is_admin && (
-        <BillingCard profile={profile} theme={theme} card={card} btn={btn} onChangeSubject={onChangeSubject} />
-      )}
-
-      {/* ── Display name ── */}
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Display Name</div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <input
-            value={displayName}
-            onChange={e => setDisplayName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSaveName()}
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <button
-            onClick={handleSaveName}
-            disabled={savingName || !displayName.trim() || displayName.trim() === profile.display_name}
-            style={btn('primary', savingName || !displayName.trim() || displayName.trim() === profile.display_name)}
-          >
-            {savingName ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-        {nameMsg && <div style={{ fontSize: 12, color: nameMsg === 'Saved!' ? t.success : t.danger, marginTop: 8 }}>{nameMsg}</div>}
-      </div>
-
-      {/* ── Password ── */}
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Change Password</div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <input
-            type="password"
-            placeholder="New password (min 6 chars)"
-            value={newPw}
-            onChange={e => setNewPw(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <button
-            onClick={handleChangePassword}
-            disabled={savingPw || newPw.length < 6}
-            style={btn('primary', savingPw || newPw.length < 6)}
-          >
-            {savingPw ? 'Saving…' : 'Update'}
-          </button>
-        </div>
-        {pwMsg && <div style={{ fontSize: 12, color: pwMsg === 'Password updated!' ? t.success : t.danger, marginTop: 8 }}>{pwMsg}</div>}
-      </div>
-
-      {/* ── Rank progression ── */}
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Rank Progression</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
-          {levelBadges.map(b => (
-            <div key={b.rank} style={{
-              padding: '10px 12px', borderRadius: 10, border: `1px solid ${b.current ? GOLD : b.unlocked ? t.success + '44' : t.border}`,
-              background: b.current ? `${GOLD}12` : b.unlocked ? `${t.success}08` : 'transparent',
-              opacity: b.unlocked ? 1 : 0.45,
-            }}>
-              <div style={{ marginBottom: 4, display: 'flex' }}><RankIcon level={b.level} size={18} color={b.unlocked ? GOLD : t.textMuted} /></div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: b.current ? GOLD : t.text }}>{b.rank}</div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{b.xpRequired} XP</div>
-              {b.current && <div style={{ fontSize: 9, color: GOLD, fontWeight: 700, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div>}
+          {/* Tutor application status — surfaced here now that the global RoleSwitcherBar has been removed. */}
+          {profile.tutor_application_status === 'pending' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', marginBottom: 16, borderRadius: 12, background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.28)', color: t.text, fontSize: 13 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}`, flexShrink: 0 }} />
+              <span><strong style={{ color: GOLD, fontWeight: 700 }}>Tutor application pending</strong> — an admin will review your application shortly.</span>
             </div>
-          ))}
-        </div>
-      </div>
+          )}
 
-      {/* ── Feature tour (replay from Settings) ── */}
-      {typeof onReplayFeatureTour === 'function' && (
-        <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8 }}>Feature tour</div>
-          <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
-            Replay the guided walkthrough of the sidebar — Question Bank, Learn, History, Study Plan, and more.
-          </p>
-          <button
-            type="button"
-            onClick={handleReplayFeatureTour}
-            disabled={replayTourBusy}
-            style={btn('secondary', replayTourBusy)}
-          >
-            {replayTourBusy ? 'Preparing…' : 'Replay feature tour'}
-          </button>
-        </div>
-      )}
 
-      {/* ── Actions ── */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={onChangeSubject} style={btn('secondary')}>⇄ Change Subject</button>
-        <button onClick={onSignOut} style={btn('danger')}>Sign Out</button>
+        <div className="acct-grid">
+          <div className="acct-col">
+              {/* ── Profile card ── */}
+              <div style={card}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+                  <div style={{ width: 52, height: 52, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#080d28', flexShrink: 0 }}>
+                    {(profile.display_name || '?')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{profile.display_name}</div>
+                    <div style={{ fontSize: 12, color: GOLD, fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={13} /> {rank} · Level {level}</div>
+                  </div>
+                </div>
+
+                {/* XP bar */}
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 11, color: t.textMuted }}>Level {level}</span>
+                    <span style={{ fontSize: 11, color: t.textMuted }}>{profile.xp} / {next} XP</span>
+                  </div>
+                  <div style={{ background: t.border, borderRadius: 999, height: 6, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, borderRadius: 999, transition: 'width 0.8s' }} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
+                  {next - profile.xp} XP to {RANKS[Math.min(level + 1, RANKS.length - 1)]}
+                </div>
+              </div>
+
+              {!profile.is_tutor && !profile.is_admin && (
+                <BillingCard profile={profile} theme={theme} card={card} btn={btn} onChangeSubject={onChangeSubject} />
+              )}
+
+          </div>
+          <div className="acct-col">
+              {/* ── Display name ── */}
+              <div style={card}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Display Name</div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <input
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveName()}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={savingName || !displayName.trim() || displayName.trim() === profile.display_name}
+                    style={btn('primary', savingName || !displayName.trim() || displayName.trim() === profile.display_name)}
+                  >
+                    {savingName ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+                {nameMsg && <div style={{ fontSize: 12, color: nameMsg === 'Saved!' ? t.success : t.danger, marginTop: 8 }}>{nameMsg}</div>}
+              </div>
+
+              {/* ── Password ── */}
+              <div style={card}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Change Password</div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <input
+                    type="password"
+                    placeholder="New password (min 6 chars)"
+                    value={newPw}
+                    onChange={e => setNewPw(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={savingPw || newPw.length < 6}
+                    style={btn('primary', savingPw || newPw.length < 6)}
+                  >
+                    {savingPw ? 'Saving…' : 'Update'}
+                  </button>
+                </div>
+                {pwMsg && <div style={{ fontSize: 12, color: pwMsg === 'Password updated!' ? t.success : t.danger, marginTop: 8 }}>{pwMsg}</div>}
+              </div>
+
+              {/* ── Feature tour (replay from Settings) ── */}
+              {typeof onReplayFeatureTour === 'function' && (
+                <div style={card}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8 }}>Feature tour</div>
+                  <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
+                    Replay the guided walkthrough of the sidebar — Question Bank, Learn, History, Study Plan, and more.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleReplayFeatureTour}
+                    disabled={replayTourBusy}
+                    style={btn('secondary', replayTourBusy)}
+                  >
+                    {replayTourBusy ? 'Preparing…' : 'Replay feature tour'}
+                  </button>
+                </div>
+              )}
+
+              {/* ── Actions ── */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button onClick={onChangeSubject} style={btn('secondary')}>⇄ Change Subject</button>
+                <button onClick={onSignOut} style={btn('danger')}>Sign Out</button>
+              </div>
+          </div>
+        </div>
+
+          {/* ── Rank progression ── */}
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Rank Progression</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+              {levelBadges.map(b => (
+                <div key={b.rank} style={{
+                  padding: '10px 12px', borderRadius: 10, border: `1px solid ${b.current ? GOLD : b.unlocked ? t.success + '44' : t.border}`,
+                  background: b.current ? `${GOLD}12` : b.unlocked ? `${t.success}08` : 'transparent',
+                  opacity: b.unlocked ? 1 : 0.45,
+                }}>
+                  <div style={{ marginBottom: 4, display: 'flex' }}><RankIcon level={b.level} size={18} color={b.unlocked ? GOLD : t.textMuted} /></div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: b.current ? GOLD : t.text }}>{b.rank}</div>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{b.xpRequired} XP</div>
+                  {b.current && <div style={{ fontSize: 9, color: GOLD, fontWeight: 700, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
       </div>
     </div>
   )
