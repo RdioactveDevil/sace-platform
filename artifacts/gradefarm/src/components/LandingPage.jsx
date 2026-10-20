@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GraduationCap, Medal, Zap, Flame, Target, ChartColumn, FileText, Folder, Utensils, RefreshCw, Moon, TrendingUp, Hash, Brain, Repeat, Map as MapIcon, ClipboardList, PenLine, FlaskConical, Atom, Dna, BookOpen, Star } from 'lucide-react'
+import { GraduationCap, Medal, Zap, Flame, Target, ChartColumn, FileText, Folder, Utensils, RefreshCw, Moon, TrendingUp, Hash, Brain, Repeat, Map as MapIcon, ClipboardList, PenLine, Star, Infinity as InfinityIcon, Sparkles, ShieldCheck, Gauge } from 'lucide-react'
+import { usePublicSubjects } from '../lib/publicSubjects'
+import { SubjectIconByName } from './SubjectIcons'
+import { formatSubjectLabel } from '../lib/subjects'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -64,9 +67,9 @@ function FadeUp({ children, delay = 0, style = {}, className = '' }) {
 
 function TopicGrid() {
   const topics = [
-    { name: 'Atomic Theory', s: 91 }, { name: 'Chemical Bonds', s: 78 }, { name: 'Organic Naming', s: 45 },
-    { name: 'Equilibrium', s: 19 },   { name: 'Acids & Bases', s: 67 }, { name: 'Redox Reactions', s: 34 },
-    { name: 'Electrochemistry', s: 58 }, { name: 'Solutions', s: 82 },  { name: 'Kinetics', s: 23 },
+    { name: 'Place Value', s: 91 }, { name: 'Decimals', s: 78 },  { name: 'Percentages', s: 45 },
+    { name: 'Probability', s: 19 }, { name: 'Fractions', s: 67 }, { name: 'Algebra', s: 34 },
+    { name: 'Geometry', s: 58 },    { name: 'Measurement', s: 82 }, { name: 'Statistics', s: 23 },
   ]
   const col = s => s > 75 ? GREEN : s > 48 ? GOLD : '#ef4444'
   const bg  = s => s > 75 ? 'rgba(16,185,129,0.12)' : s > 48 ? 'rgba(241,190,67,0.12)' : 'rgba(239,68,68,0.12)'
@@ -92,14 +95,14 @@ function TitanChat() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <div style={{ background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.22)', borderRadius: '14px 14px 4px 14px', padding: '10px 14px', maxWidth: '82%' }}>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.55 }}>I don't get limiting reagents at all</div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.55 }}>I don't get dividing by a fraction at all</div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 0 16px rgba(167,139,250,0.4)' }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
         <div style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.22)', borderRadius: '4px 14px 14px 14px', padding: '10px 14px', maxWidth: '88%' }}>
           <div style={{ fontSize: 10, color: PURPLE, fontWeight: 800, letterSpacing: '0.08em', marginBottom: 6 }}>TITAN AI</div>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.65 }}>Think of making burgers — 5 buns, 3 patties. You can only make <span style={{ color: GOLD, fontWeight: 700 }}>3 burgers</span>. The patties limit you. That's exactly what happens in a reaction.</div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.65 }}>Think pizza — 3 pizzas ÷ ½ asks "how many half-slices are in 3 pizzas?" That's <span style={{ color: GOLD, fontWeight: 700 }}>6</span>. Dividing by ½ doubles it, which is why you flip and multiply.</div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -134,17 +137,17 @@ function LeaderboardMini() {
           </div>
         </div>
       ))}
-      <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', paddingTop: 4 }}>Weekly · Chemistry Stage 2</div>
+      <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', paddingTop: 4 }}>Weekly · Your class</div>
     </div>
   )
 }
 
 function GapsMini() {
   const topics = [
-    { name: 'Equilibrium', pct: 19, color: '#ef4444', label: 'Priority', icon: Zap },
-    { name: 'Electrochemistry', pct: 41, color: '#f97316', label: 'Needs work' },
-    { name: 'Acids & Bases', pct: 67, color: GOLD, label: 'Improving' },
-    { name: 'Atomic Theory', pct: 91, color: GREEN, label: 'Strong' },
+    { name: 'Probability', pct: 19, color: '#ef4444', label: 'Priority', icon: Zap },
+    { name: 'Algebra', pct: 41, color: '#f97316', label: 'Needs work' },
+    { name: 'Fractions', pct: 67, color: GOLD, label: 'Improving' },
+    { name: 'Place Value', pct: 91, color: GREEN, label: 'Strong' },
   ]
   const r = 26, C = 2 * Math.PI * r
   return (
@@ -162,7 +165,7 @@ function GapsMini() {
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Exam Readiness</div>
           <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>4 topics flagged</div>
-          <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Review Equilibrium next</div>
+          <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Review Probability next</div>
         </div>
       </div>
       {topics.map(t => (
@@ -185,7 +188,7 @@ function GapsMini() {
 function DemoCard() {
   const [selected, setSelected] = useState(null)
   const [showAns, setShowAns]   = useState(false)
-  const opts    = ['Butanoic acid', 'Propanoic acid', 'Pentanoic acid', 'Ethanoic acid']
+  const opts    = ['36', '32', '24', '12']
   const correct = 0
   const handle  = i => { if (showAns) return; setSelected(i); setShowAns(true) }
 
@@ -198,10 +201,10 @@ function DemoCard() {
       <div style={{ position: 'absolute', top: '40%', right: -32, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 7s ease-in-out infinite 0.5s', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Flame size={14} aria-hidden="true" />3 day streak</div>
       <div style={{ position: 'relative', zIndex: 1, background: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Organic Chemistry</span>
+          <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Fractions</span>
           <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Priority</span>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>What is the IUPAC name for CH₃CH₂CH₂COOH?</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>What is ¾ of 48?</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {opts.map((opt, i) => {
             let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lC = '#0c1037'
@@ -225,7 +228,7 @@ function DemoCard() {
         {showAns && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
             <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP · <Flame size={13} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Streak extended</div>
-            <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Count ALL carbons including the –COOH carbon. 4 carbons = butanoic acid.</div>
+            <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Find a quarter first: 48 ÷ 4 = 12. Three quarters is 3 × 12 = 36.</div>
           </div>
         )}
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -296,6 +299,7 @@ function MobileMenu({ open, onClose, onNavigate }) {
 
 export default function LandingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
+  const subjects = usePublicSubjects()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => {
@@ -349,6 +353,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .spotlight-row { flex-direction:column !important; }
           .spotlight-visual { display:none !important; }
           .steps-grid { grid-template-columns:1fr !important; }
+          .unl-grid { grid-template-columns:1fr !important; }
           .tgrid { flex-direction:column !important; }
           .subjects-grid { grid-template-columns:repeat(2,1fr) !important; }
           .pricing-grid { grid-template-columns:1fr !important; }
@@ -361,6 +366,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .lp-pad-hero { padding-top:88px !important; padding-bottom:48px !important; }
           .lp-pad-cta { padding-top:72px !important; padding-bottom:72px !important; }
           .lp-pad-section { padding-top:60px !important; padding-bottom:60px !important; }
+          .unl-card { padding:28px 20px !important; }
           /* hide the "by Titanium Tutoring" tagline in the nav so the hamburger fits */
           .lp-tag { display:none !important; }
           /* drop forced line breaks inside display headlines so words can wrap naturally */
@@ -447,7 +453,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             </h1>
 
             <p style={{ fontSize:18, color:MUTED, lineHeight:1.75, margin:'0 0 36px', maxWidth:500 }}>
-              gradefarm. uses AI to track every question you get wrong and keeps drilling until you nail it — then moves to your next weakness. Backed by Titanium Tutoring.
+              gradefarm. tracks every question you get wrong and keeps drilling until you nail it — then moves to your next weakness. And you'll never run out: when you've worked through the bank, Titan writes fresh questions on the spot.
             </p>
 
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:40 }}>
@@ -467,8 +473,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 ))}
               </div>
               <div>
-                <div style={{ fontSize:13, fontWeight:700, color:'#e2e8f0' }}>Trusted by students preparing for their ATAR</div>
-                <div style={{ fontSize:12, color:MUTED }}>Free during beta · No credit card · Cancel anytime</div>
+                <div style={{ fontSize:13, fontWeight:700, color:'#e2e8f0' }}>Built for Australian students, primary to ATAR</div>
+                <div style={{ fontSize:12, color:MUTED }}>Free plan · No credit card · Cancel anytime</div>
               </div>
             </div>
           </div>
@@ -489,18 +495,49 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
       <section className="lp-pad" style={{ padding:'56px 32px' }}>
         <div className="lp-stats-grid" style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
           {[
-            { val:175, suf:'+', label:'SACE Questions', sub:'Stage 1 & 2 Chemistry', hi:false },
-            { val:100, suf:'%', label:'Adaptive',       sub:'Tracks your exact weaknesses', hi:true  },
-            { val:0,   suf:'$', label:'Cost to Start',  sub:'Free during beta', hi:false },
+            { text:'∞',        label:'Questions',     sub:'Fresh AI questions — never run out', hi:true },
+            { val:100, suf:'%', label:'Adaptive',      sub:'Tracks your exact weaknesses', hi:false },
+            { text:'$0',       label:'Cost to Start', sub:'Free plan · no credit card', hi:false },
           ].map((s,i) => (
             <FadeUp key={i} delay={i * 70}>
               <div style={{ textAlign:'center', padding:'40px 24px', background: s.hi ? 'rgba(241,190,67,0.07)' : 'rgba(255,255,255,0.02)', borderRadius: i===0?'16px 0 0 16px':i===2?'0 16px 16px 0':0, border:`1px solid ${s.hi?'rgba(241,190,67,0.22)':'rgba(255,255,255,0.05)'}` }}>
-                <div className="lp-stats-num" style={{ fontFamily:FONT_D, fontSize:62, color: s.hi ? GOLD : '#f1f5f9', lineHeight:1, letterSpacing:1 }}><Counter target={s.val} suffix={s.suf} delay={i * 70 + 400} /></div>
+                <div className="lp-stats-num" style={{ fontFamily:FONT_D, fontSize:62, color: s.hi ? GOLD : '#f1f5f9', lineHeight:1, letterSpacing:1 }}>{s.text ?? <Counter target={s.val} suffix={s.suf} delay={i * 70 + 400} />}</div>
                 <div style={{ fontSize:15, fontWeight:700, color:'#e2e8f0', marginTop:10 }}>{s.label}</div>
                 <div style={{ fontSize:12, color:MUTED, marginTop:4 }}>{s.sub}</div>
               </div>
             </FadeUp>
           ))}
+        </div>
+      </section>
+
+      {/* ── UNLIMITED QUESTIONS ── */}
+      <section className="lp-pad lp-pad-section" style={{ padding:'64px 32px 24px' }}>
+        <div style={{ maxWidth:1160, margin:'0 auto' }}>
+          <FadeUp>
+            <div className="unl-card" style={{ background:'linear-gradient(135deg,rgba(241,190,67,0.08),rgba(167,139,250,0.05))', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:24, padding:'44px 40px', position:'relative', overflow:'hidden' }}>
+              <div style={{ position:'absolute', top:-60, right:-40, fontFamily:FONT_D, fontSize:320, lineHeight:1, color:'rgba(241,190,67,0.05)', pointerEvents:'none', userSelect:'none' }} aria-hidden="true">∞</div>
+              <div style={{ position:'relative', maxWidth:640, marginBottom:32 }}>
+                <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><InfinityIcon size={16} aria-hidden="true" />Unlimited questions</div>
+                <h2 className="lp-display lp-h2" style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.8vw,46px)', margin:'0 0 16px', color:'#fff', letterSpacing:1, lineHeight:1.08 }}>
+                  YOU WILL <span style={{ color:GOLD }}>NEVER</span> RUN OUT OF QUESTIONS.
+                </h2>
+                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, margin:0 }}>Most study apps give you a fixed bank — once you've seen every question, you're memorising answers, not learning. On gradefarm., when you work through the bank, Titan writes brand-new questions on the topics you're weakest in.</p>
+              </div>
+              <div className="unl-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, position:'relative' }}>
+                {[
+                  { icon:Sparkles,    color:GOLD,   rgb:'241,190,67',  title:'Fresh on demand',      desc:'New questions are written the moment you need them, so practice never turns into memorising.' },
+                  { icon:Gauge,       color:PURPLE, rgb:'167,139,250', title:'Pitched at your level', desc:'Each new question targets your weak topics at the difficulty you\'re ready for.' },
+                  { icon:ShieldCheck, color:GREEN,  rgb:'16,185,129',  title:'Checked before you see it', desc:'Every generated question is mapped to the curriculum and verified for a correct answer first.' },
+                ].map(f => (
+                  <div key={f.title} style={{ background:'rgba(8,13,40,0.55)', border:`1px solid rgba(${f.rgb},0.2)`, borderRadius:16, padding:'20px 20px 22px' }}>
+                    <div style={{ width:40, height:40, borderRadius:12, background:`rgba(${f.rgb},0.12)`, border:`1px solid rgba(${f.rgb},0.3)`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:14 }}><f.icon size={20} color={f.color} aria-hidden="true" /></div>
+                    <div style={{ fontSize:15, fontWeight:800, color:'#fff', marginBottom:6 }}>{f.title}</div>
+                    <div style={{ fontSize:13, color:MUTED, lineHeight:1.65 }}>{f.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </FadeUp>
         </div>
       </section>
 
@@ -510,7 +547,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <FadeUp>
             <div style={{ textAlign:'center', marginBottom:60 }}>
               <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Everything you need</div>
-              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,50px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>BUILT FOR THE ATAR GENERATION.</h2>
+              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,50px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>BUILT FOR AUSTRALIAN STUDENTS.</h2>
               <p style={{ fontSize:17, color:MUTED, maxWidth:560, margin:'0 auto', lineHeight:1.7 }}>Six next-generation capabilities working together — so you stop guessing what to study and start making real progress.</p>
             </div>
           </FadeUp>
@@ -599,7 +636,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:10 }}>
                     <Folder size={24} color={GOLD} aria-hidden="true" style={{ flexShrink:0 }} />
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#e2e8f0' }}>Chem_Unit3_Reactions.pdf</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#e2e8f0' }}>Term3_Fractions_Notes.pdf</div>
                       <div style={{ fontSize:10, color:MUTED }}>Uploading... 84%</div>
                       <div style={{ height:3, borderRadius:2, background:'rgba(255,255,255,0.08)', marginTop:5 }}>
                         <div style={{ width:'84%', height:'100%', borderRadius:2, background:`linear-gradient(90deg,${GOLD},${GOLDL})` }} />
@@ -626,10 +663,10 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   </div>
                 </div>
                 <div className="lp-sace-text" style={{ flex:1, minWidth:240 }}>
-                  <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Questions written and peer-reviewed by real SACE tutors with proven results. Every question is curriculum-mapped to Stage 1 & Stage 2 Chemistry — nothing off-syllabus, nothing wasted.</p>
+                  <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Subjects are built by Titanium Tutoring from the Australian Curriculum and SACE. Every question is mapped to your syllabus — nothing off-syllabus, nothing wasted — and the bank keeps growing as you practise.</p>
                 </div>
                 <div className="lp-stats lp-sace-stats" style={{ display:'flex', gap:20, minWidth:0, flexWrap:'wrap' }}>
-                  {[['175+','SACE questions'],['100%','Curriculum-aligned'],['2','Stages covered']].map(([n,l]) => (
+                  {[['∞','Questions'],['100%','Curriculum-aligned'],['24/7','AI tutor']].map(([n,l]) => (
                     <div key={l} style={{ textAlign:'center' }}>
                       <div className="lp-sace-num" style={{ fontFamily:FONT_D, fontSize:28, color:GOLD, letterSpacing:1 }}>{n}</div>
                       <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>{l}</div>
@@ -681,23 +718,23 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                     <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 0 20px rgba(167,139,250,0.4)' }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
                     <div>
                       <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>Titan AI</div>
-                      <div style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }} /><span style={{ fontSize:11, color:GREEN }}>Online · Organic Chemistry</span></div>
+                      <div style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }} /><span style={{ fontSize:11, color:GREEN }}>Online · Mathematics</span></div>
                     </div>
                     <div style={{ marginLeft:'auto', fontSize:11, color:MUTED }}>From your notes ✓</div>
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                     <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>Why is carbon so special in organic chemistry?</div>
+                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>Why do I need a common denominator to add fractions?</div>
                     </div>
                     <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
                       <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
                       <div style={{ background:'rgba(167,139,250,0.1)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:'4px 14px 14px 14px', padding:'10px 14px', maxWidth:'88%' }}>
                         <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.08em', marginBottom:6 }}>TITAN AI</div>
-                        <div style={{ fontSize:13, color:'#e2e8f0', lineHeight:1.65 }}>Carbon is like a universal LEGO brick — it has 4 bonding "hands" and can connect to almost anything: other carbons, hydrogen, oxygen, nitrogen. That flexibility is why life itself is carbon-based. <span style={{ color:GOLD, fontWeight:700 }}>4 bonds = infinite combinations.</span></div>
+                        <div style={{ fontSize:13, color:'#e2e8f0', lineHeight:1.65 }}>Picture two pizzas — one cut into quarters, one into thirds. A quarter and a third aren't the same size slice, so you can't just count them. Cut both into twelfths and now you can: <span style={{ color:GOLD, fontWeight:700 }}>3/12 + 4/12 = 7/12.</span></div>
                       </div>
                     </div>
                     <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>So what makes a compound "organic"?</div>
+                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>So how do I find the common denominator?</div>
                     </div>
                     <div style={{ display:'flex', gap:10, alignItems:'center' }}>
                       <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
@@ -726,14 +763,14 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
                     <Zap size={24} color="#fca5a5" aria-hidden="true" style={{ flexShrink:0 }} />
                     <div>
-                      <div style={{ fontSize:13, fontWeight:700, color:'#fca5a5' }}>Priority queue: Equilibrium (19%)</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:'#fca5a5' }}>Priority queue: Probability (19%)</div>
                       <div style={{ fontSize:12, color:MUTED }}>Next 8 questions will target this topic</div>
                     </div>
                   </div>
                   <div style={{ marginTop:10, padding:'14px 16px', background:'rgba(241,190,67,0.06)', border:'1px solid rgba(241,190,67,0.15)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
                     <TrendingUp size={24} color={GOLD} aria-hidden="true" style={{ flexShrink:0 }} />
                     <div>
-                      <div style={{ fontSize:13, fontWeight:700, color:GOLD }}>Session progress: +12% on Redox</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:GOLD }}>Session progress: +12% on Algebra</div>
                       <div style={{ fontSize:12, color:MUTED }}>Difficulty unlocked: Level 3 questions</div>
                     </div>
                   </div>
@@ -747,13 +784,14 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   {' '}<span style={{ color:GOLD }}>LEARNS YOU.</span><br className="lp-hbr" />
                   {' '}NOT JUST FROM YOU.
                 </h2>
-                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most study apps give you a random bank of questions. gradefarm. tracks your error rate at the topic-and-difficulty level — so every session zeros in on exactly what your exam will punish you for.</p>
+                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most study apps give you a fixed bank of questions. gradefarm. tracks your error rate at the topic-and-difficulty level — so every session zeros in on exactly what your exam will punish you for.</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
                   {[
                     { icon:ChartColumn, text:'Error rate tracked per topic and per difficulty tier — not just "right or wrong"' },
                     { icon:Hash, text:'Weighted priority queue updates in real time after every answer you give' },
                     { icon:Brain, text:'Difficulty scales automatically — easier when you\'re struggling, harder when you\'re confident' },
                     { icon:Repeat, text:'Questions you\'ve missed come back in spaced intervals until they stick permanently' },
+                    { icon:InfinityIcon, text:'Never runs dry — new questions are generated for your weak topics as you go' },
                   ].map((f,i) => (
                     <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
                       <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(241,190,67,0.2),rgba(241,190,67,0.07))', border:'1px solid rgba(241,190,67,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(241,190,67,0.15)' }}><f.icon size={20} color={GOLD} aria-hidden="true" /></div>
@@ -808,7 +846,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   <GapsMini />
                   <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:12 }}>
                     <div style={{ fontSize:12, fontWeight:800, color:GREEN, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><ClipboardList size={14} aria-hidden="true" />Your action plan</div>
-                    {['Review equilibrium Le Chatelier shifts (Titan can help)', '3 more sessions on Electrochemistry needed', 'Redox is improving — keep momentum'].map((a,i) => (
+                    {['Review probability with Titan — it can walk you through it', '3 more sessions on Algebra needed', 'Fractions are improving — keep momentum'].map((a,i) => (
                       <div key={i} style={{ display:'flex', gap:8, fontSize:12, color:MUTED, lineHeight:1.55, marginBottom: i<2?6:0 }}>
                         <span style={{ color:GREEN, flexShrink:0 }}>→</span>{a}
                       </div>
@@ -893,24 +931,25 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         <section id="subjects" className="lp-pad lp-pad-section" style={{ padding:'80px 32px', background:'rgba(255,255,255,0.015)', borderTop:'1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ maxWidth:960, margin:'0 auto', textAlign:'center' }}>
             <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Subjects</div>
-            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>STARTING WITH CHEMISTRY.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:44, lineHeight:1.7 }}>More subjects are coming. Stage 1 and Stage 2 covered from day one.</p>
-            <div className="subjects-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-              {[
-                { name:'Chemistry',               stage:'Stage 1 & 2', icon:FlaskConical, color:GOLD,    available:true,  count:'175+ questions' },
-                { name:'Mathematical Methods',    stage:'Stage 2',     icon:'∫',  color:'#a78bfa',available:false },
-                { name:'Physics',                 stage:'Stage 2',     icon:Atom, color:GOLDL,   available:false },
-                { name:'Biology',                 stage:'Stage 2',     icon:Dna, color:GREEN,   available:false },
-                { name:'English Literary Studies',stage:'Stage 2',     icon:BookOpen, color:'#f87171',available:false },
-                { name:'Economics',               stage:'Stage 2',     icon:TrendingUp, color:GOLD,    available:false },
-              ].map(s => (
-                <div key={s.name} onClick={s.available ? onGetStarted : undefined} style={{ padding:'24px 18px', borderRadius:16, border:`1px solid ${s.available?'rgba(241,190,67,0.32)':'rgba(255,255,255,0.06)'}`, background: s.available?'rgba(241,190,67,0.06)':'rgba(255,255,255,0.02)', textAlign:'center', opacity: s.available?1:0.45, cursor: s.available?'pointer':'default', transition:'all 0.18s', boxShadow: s.available?'0 4px 24px rgba(241,190,67,0.12)':'none' }}>
-                  <div style={{ fontSize:28, marginBottom:10, color:s.color }}>{typeof s.icon === 'string' ? s.icon : <s.icon size={30} aria-hidden="true" />}</div>
-                  <div style={{ fontSize:13, fontWeight:800, color: s.available?'#f1f5f9':'#475569', marginBottom:4 }}>{s.name}</div>
-                  <div style={{ fontSize:11, color: s.available?GOLD:'#334155' }}>{s.available ? s.count : s.stage+' · Coming soon'}</div>
-                </div>
-              ))}
-            </div>
+            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>PICK YOUR SUBJECT.</h2>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:44, lineHeight:1.7 }}>Every subject comes with unlimited questions, Titan AI and your readiness score. New subjects are added all the time.</p>
+            {subjects === null ? (
+              <div style={{ fontSize:13, color:MUTED }}>Loading subjects…</div>
+            ) : subjects.length === 0 ? (
+              <button onClick={onGetStarted} className="ctab" style={{ padding:'13px 28px', borderRadius:11, border:'1px solid rgba(241,190,67,0.3)', background:'rgba(241,190,67,0.06)', color:GOLD, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:FONT_B }}>
+                Sign up to see every subject →
+              </button>
+            ) : (
+              <div className="subjects-grid" style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(subjects.length, 3)},minmax(0,1fr))`, gap:12, maxWidth: subjects.length < 3 ? subjects.length * 320 : undefined, margin:'0 auto' }}>
+                {subjects.map(s => (
+                  <button key={s.name} onClick={onGetStarted} className="ctab" style={{ padding:'24px 18px', borderRadius:16, border:'1px solid rgba(241,190,67,0.32)', background:'rgba(241,190,67,0.06)', textAlign:'center', cursor:'pointer', boxShadow:'0 4px 24px rgba(241,190,67,0.12)', fontFamily:FONT_B, color:'inherit' }}>
+                    <div style={{ marginBottom:10, display:'flex', justifyContent:'center' }}><SubjectIconByName name={s.name} color={GOLD} size={30} /></div>
+                    <div style={{ fontSize:13, fontWeight:800, color:'#f1f5f9', marginBottom:4 }}>{formatSubjectLabel({ name: s.name, stage: s.level })}</div>
+                    <div style={{ fontSize:11, color:GOLD, display:'inline-flex', alignItems:'center', gap:4 }}><InfinityIcon size={12} aria-hidden="true" />Unlimited questions</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </FadeUp>
@@ -921,11 +960,11 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <div style={{ maxWidth:820, margin:'0 auto', textAlign:'center' }}>
             <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Pricing</div>
             <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>SIMPLE, TRANSPARENT PRICING.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students get <strong style={{ color:'#f1f5f9' }}>one subject free</strong> (20 questions a day) or go unlimited from <strong style={{ color:'#f1f5f9' }}>$5/week</strong> — extra subjects cost less. Tutors choose a plan that fits their roster.</p>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students get <strong style={{ color:'#f1f5f9' }}>one subject free</strong> (20 questions a day) or go unlimited — every question, no daily cap — from <strong style={{ color:'#f1f5f9' }}>$5/week</strong> — extra subjects cost less. Tutors choose a plan that fits their roster.</p>
             <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:820, margin:'0 auto 36px' }}>
               {[
                 { label:'Free', price:'$0', desc:'1 subject · 20 questions/day', color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
-                { label:'Student', price:'$5', desc:'/week · then $4, then $3 per extra subject', color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
+                { label:'Student', price:'$5', desc:'/week · unlimited questions · extra subjects $4, then $3', color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
                 { label:'Tutor', price:'From $29', desc:'/month · roster & session tools', color:PURPLE, bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.28)' },
               ].map(p => (
                 <div key={p.label} style={{ background:p.bg, border:`1px solid ${p.border}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid ${p.border}`, borderRadius:18, padding:'28px 20px', textAlign:'left' }}>
@@ -953,7 +992,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
               YOUR ATAR DOESN'T CARE HOW GOOD <span style={{ color:GOLD }}>YOUR TEACHER IS AT EXPLAINING.</span> GRADEFARM. DOES.
             </h2>
             <p style={{ fontSize:17, color:MUTED, marginBottom:40, lineHeight:1.75, maxWidth:520, margin:'0 auto 40px' }}>
-              Start free today. No credit card, no commitment. The algorithm gets to work on your first question.
+              Start free today. No credit card, no commitment. The algorithm gets to work on your first question — and the questions never run out.
             </p>
             <div style={{ position:'relative', display:'inline-block' }}>
               <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:300, height:120, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.45) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
@@ -961,7 +1000,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 Start for free →
               </button>
             </div>
-            <div style={{ marginTop:20, fontSize:13, color:MUTED }}>No credit card · No commitment · Beta is free</div>
+            <div style={{ marginTop:20, fontSize:13, color:MUTED }}>No credit card · No commitment · Free plan available</div>
           </div>
         </section>
       </FadeUp>

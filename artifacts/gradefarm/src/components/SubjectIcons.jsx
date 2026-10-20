@@ -94,3 +94,18 @@ export function SubjectIcon({ subj, color, size = 32 }) {
   const Icon = ICON_MAP[subj?.id] ?? IconCurriculum
   return <Icon color={color} size={size} />
 }
+
+const NAME_ICONS = [
+  [/chem/i, IconChemistry],
+  [/bio/i, IconBiology],
+  [/phys/i, IconPhysics],
+  [/math|numera/i, IconMaths],
+  [/english|literacy|writing|reading/i, IconEnglish],
+  [/econ|quant|business|account/i, IconQuant],
+]
+
+/** Icon for a subject known only by name, e.g. "Year 6 Mathematics". */
+export function SubjectIconByName({ name, color, size = 32 }) {
+  const Icon = NAME_ICONS.find(([re]) => re.test(name || ''))?.[1] ?? IconCurriculum
+  return <Icon color={color} size={size} />
+}
