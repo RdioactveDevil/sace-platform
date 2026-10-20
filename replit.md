@@ -31,6 +31,13 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - **Email notifications** (Resend): two API endpoints for tutor→student email
   - `POST /api/tutor/notify-assignment` — sends styled HTML assignment email (type, subject, topics, due date)
   - `POST /api/tutor/notify-student` — sends a custom message email from tutor to student
+- **Automated emails** (Resend): `POST /api/cron/emails` sends whatever is due, run every 15 min by the "Automated emails" GitHub Action (`.github/workflows/automated-emails.yml`)
+  - Welcome email once a new account confirms its email (student or tutor version)
+  - Session reminders ≈24h before (students; only for sessions booked ≥36h ahead) and ≈1h before (students + tutor)
+  - Assignment reminders the day before it's due and the day after if still unfinished, one email per student listing them all, sent 8am–8pm Adelaide time
+  - Every email is claimed in `email_log` (`claim_email()` RPC) before sending, so a late or repeated run never sends it twice; failed sends retry up to 3 times
+  - Reminders carry an unsubscribe link (`/api/email/unsubscribe`, signed per user, plus one-click `List-Unsubscribe` headers) that sets `profiles.emails_unsubscribed_at`; students can also toggle "Email reminders" on My Account. Emails a tutor sends by hand are unaffected
+  - Code: `api-server/src/lib/automated-emails.ts` (jobs), `lib/email.ts` (layout, sending, unsubscribe tokens), `routes/email.ts`
 
 ### Subjects & navigation
 - Subjects are **database-driven**: each row in `curricula` (Admin → Curricula) becomes a picker tile via `curriculumToSubjectTile()` in `src/lib/subjects.js`. The only built-in tiles are the Writing feature.
@@ -45,6 +52,9 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - `ANTHROPIC_API_KEY` — for AI chat/question generation features
 - `SUPABASE_SERVICE_KEY` — for admin operations (question generation, PDF extraction)
 - `RESEND_API_KEY` — for sending tutor→student email notifications (resend.com)
+- `CRON_SECRET` — shared secret for `/api/cron/emails`; set the same value as the `CRON_SECRET` repo secret, and set repo variable `APP_URL` for the GitHub Action
+- `EMAIL_FROM` — optional sender for automated emails (default `gradefarm. <notifications@gradefarm.au>`; must be a Resend-verified domain)
+- `EMAIL_UNSUBSCRIBE_SECRET` — optional key for signing unsubscribe links (defaults to the Supabase service key; changing it invalidates old links)
 - Note: Resend Replit integration was dismissed by user; API key stored directly as a secret instead
 - `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` — live video sessions (LiveKit)
 - Session auto-recording (LiveKit Egress → tutor-resources bucket) also needs:

@@ -18,6 +18,7 @@ import resourcesRouter from "./resources";
 import livekitRouter from "./livekit";
 import leaderboardRouter from "./leaderboard";
 import billingRouter from "./billing";
+import emailRouter from "./email";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(resourcesRouter);
 router.use(livekitRouter);
 router.use(leaderboardRouter);
 router.use(billingRouter);
+router.use(emailRouter);
 
 export default router;

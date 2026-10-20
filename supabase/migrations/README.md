@@ -76,3 +76,11 @@ Renames curricula whose names clash (e.g. two called "Chemistry") to
 their questions (a bare "Chemistry" question goes to the stage whose subtopic
 it matches), and adds a unique index on the name. Apply it before deploying
 the matching app change.
+
+## October 2026: automated emails
+
+`20261020000002_automated_emails` adds `email_log` (one row per automated
+email, so none is sent twice), the `claim_email()` function the API uses to
+claim a send, and `profiles.emails_unsubscribed_at`. Apply it before setting
+`CRON_SECRET`; until then the "Automated emails" Action has nothing to call
+and the My Account "Email reminders" toggle stays hidden.

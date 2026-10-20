@@ -1,0 +1,55 @@
+name: Automated emails
+
+# Every 15 minutes, asks the API to send any automated emails that are due:
+# welcome emails, session reminders (≈24h and ≈1h before) and assignment
+# due / overdue reminders. The API records every email it sends, so a late,
+# skipped or repeated run never sends one twice.
+#
+# Also runnable from the Actions tab → this workflow → "Run workflow", where
+# dry-run lists what would be sent without sending anything.
+#
+# Requires (Settings → Secrets and variables → Actions):
+#   secret   CRON_SECRET — same value as the CRON_SECRET env var on Vercel
+#   variable APP_URL     — e.g. https://gradefarm.com.au (no trailing slash)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (list only, no emails)"
+          - "send"
+        default: "dry-run (list only, no emails)"
+
+concurrency:
+  group: automated-emails
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Run email job
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+          MODE: ${{ inputs.mode || 'send' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${APP_URL:-}" ]; then
+            echo "::warning::CRON_SECRET secret or APP_URL variable is not set; skipping. See the header of this workflow."
+            exit 0
+          fi
+          QUERY=""
+          case "$MODE" in
+            dry-run*) QUERY="?dry_run=1" ;;
+          esac
+          curl -sS --fail-with-body --max-time 300 -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL%/}/api/cron/emails${QUERY}"
+          echo
