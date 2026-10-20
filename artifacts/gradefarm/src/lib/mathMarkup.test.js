@@ -9,6 +9,7 @@ import {
   collapseOverEscapes,
   convertBracketDelimiters,
   restoreLiteralNewlines,
+  parseLatexJson,
 } from './mathMarkup.js'
 
 const math = (tokens) => tokens.filter((t) => t.type === 'math').map((t) => t.content)
@@ -128,4 +129,18 @@ test('literal backslash-n from old generated questions becomes a line break', ()
   assert.equal(restoreLiteralNewlines('$x \\neq 0$, $\\nabla f$, $\\nu$'), '$x \\neq 0$, $\\nabla f$, $\\nu$')
   assert.equal(restoreLiteralNewlines('$\\begin{matrix} a \\\\ b \\end{matrix}$'), '$\\begin{matrix} a \\\\ b \\end{matrix}$')
   assertRenders(parseMathText('$x \\neq 0$\\nso $x^2 > 0$'))
+})
+
+test('parseLatexJson keeps single-backslash LaTeX from model JSON intact', () => {
+  const raw = String.raw`{"q":"$\sqrt{48}$ and $\frac{1}{2} \times \pi$","s":"line1\nline2 $a \neq b$"}`
+  assert.throws(() => JSON.parse(raw))
+  assert.deepEqual(parseLatexJson(raw), {
+    q: String.raw`$\sqrt{48}$ and $\frac{1}{2} \times \pi$`,
+    s: 'line1\nline2 $a ' + String.raw`\neq` + ' b$',
+  })
+})
+
+test('parseLatexJson leaves correctly escaped JSON unchanged', () => {
+  const raw = String.raw`[{"q":"$\\frac{1}{2}$ said \"hi\" é"}]`
+  assert.deepEqual(parseLatexJson(raw), JSON.parse(raw))
 })

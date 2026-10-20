@@ -37,6 +37,7 @@ import {
   REMEDIATION_DB_TIMEOUT_MS,
 } from '../lib/remediation'
 import MathText from './MathText'
+import { parseLatexJson } from '../lib/mathMarkup'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
@@ -154,7 +155,7 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
 
     // Parse single JSON object
     try {
-      const parsed = JSON.parse(rawText)
+      const parsed = parseLatexJson(rawText)
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
     } catch {}
 
@@ -163,7 +164,7 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
     const end = rawText.lastIndexOf('}')
     if (start !== -1 && end > start) {
       try {
-        const parsed = JSON.parse(rawText.slice(start, end + 1))
+        const parsed = parseLatexJson(rawText.slice(start, end + 1))
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
       } catch {}
     }

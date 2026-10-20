@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { expandCurriculumRenameSources } from "../lib/subject-aliases";
 import { normalizeMathText } from "../lib/normalize-math";
@@ -247,7 +247,8 @@ router.post("/admin/curriculum-plan", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 4000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 5500,
         system,
         messages: [{ role: "user", content: userContent }],
       }),
@@ -501,7 +502,8 @@ router.post("/admin/curriculum-generate", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 8000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 10500,
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -650,7 +652,8 @@ router.post("/admin/curriculum-revise", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 4000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 5500,
         system,
         messages: [{ role: "user", content: userContent }],
       }),
@@ -796,7 +799,8 @@ router.post("/admin/curriculum-suggest-remap", async (req, res) => {
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 8000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 10500,
         system,
         messages: [{ role: "user", content: userText }],
       }),

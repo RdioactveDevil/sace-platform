@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import PDFDocument from "pdfkit";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { getSupabaseService, loadWritingAttemptForViewer } from "../lib/writing-auth";
 import { requireUser } from "../lib/auth";
@@ -21,7 +21,7 @@ function getApiKey(): string {
   return process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 }
 
-async function callClaude(system: string, user: string, maxTokens = 1000): Promise<string> {
+async function callClaude(system: string, user: string, maxTokens = 1300): Promise<string> {
   const res = await fetch(`${getBaseUrl()}/v1/messages`, {
     method: "POST",
     headers: {
@@ -31,6 +31,7 @@ async function callClaude(system: string, user: string, maxTokens = 1000): Promi
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
+      thinking: CLAUDE_THINKING,
       max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],
@@ -312,7 +313,7 @@ router.post("/writing/feedback", async (req, res) => {
 
   let rawText: string;
   try {
-    rawText = await callClaude(system, userMsg, 2800);
+    rawText = await callClaude(system, userMsg, 3600);
   } catch (err) {
     logger.error({ err }, "Failed to generate writing feedback");
     res.status(500).json({ error: "Failed to reach Claude API" });

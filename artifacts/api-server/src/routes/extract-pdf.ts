@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { requireAdmin } from "../lib/auth";
 
@@ -137,7 +137,8 @@ router.post("/extract-pdf", async (req, res) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 8000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 10500,
         system,
         messages: [
           {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
@@ -510,7 +510,8 @@ export async function generateForTopic(opts: {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: mathFigures ? 9000 : 6000,
+        thinking: CLAUDE_THINKING,
+        max_tokens: mathFigures ? 12000 : 8000,
         system,
         messages: [{ role: "user", content: user }],
       }),

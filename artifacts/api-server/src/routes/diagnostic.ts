@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { latexPromptRule } from "../lib/math-prompt";
+import { repairLatexJson } from "../lib/json-latex";
+import { logger } from "../lib/logger";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -109,9 +111,13 @@ function getApiKey(): string {
   return process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 }
 
-async function callClaude(system: string, user: string, maxTokens = 4000, prefill?: string): Promise<string> {
-  const messages: { role: string; content: string }[] = [{ role: "user", content: user }];
-  if (prefill) messages.push({ role: "assistant", content: prefill });
+async function callClaude(system: string, user: string, maxTokens = 4000, jsonOnly = false): Promise<string> {
+  // Claude Haiku 5.5 rejects assistant prefill, so ask for bare JSON in the
+  // user turn instead; extractJson() still strips any fences or stray prose.
+  const content = jsonOnly
+    ? `${user}\n\nRespond with ONLY the JSON object, starting with { — no markdown fences or commentary.`
+    : user;
+  const messages = [{ role: "user", content }];
 
   const res = await fetch(`${getBaseUrl()}/v1/messages`, {
     method: "POST",
@@ -122,6 +128,7 @@ async function callClaude(system: string, user: string, maxTokens = 4000, prefil
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
+      thinking: CLAUDE_THINKING,
       max_tokens: maxTokens,
       system,
       messages,
@@ -131,29 +138,39 @@ async function callClaude(system: string, user: string, maxTokens = 4000, prefil
     const text = await res.text();
     throw new Error(`Claude API error: ${text.slice(0, 300)}`);
   }
-  const data = (await res.json()) as { content?: { text: string }[] };
-  const text = data?.content?.[0]?.text || "";
-  // Prepend the prefill so the full response is parseable
-  return prefill ? prefill + text : text;
+  const data = (await res.json()) as { content?: { text: string }[]; stop_reason?: string };
+  if (data?.stop_reason && data.stop_reason !== "end_turn") {
+    logger.warn({ stop_reason: data.stop_reason, maxTokens }, "diagnostic: Claude response did not finish normally");
+  }
+  return data?.content?.[0]?.text || "";
+}
+
+/** JSON.parse that first re-escapes single-backslash LaTeX (\sqrt, \frac ...) the model writes inside strings. */
+function parseLatexJson(text: string): unknown {
+  for (const candidate of [repairLatexJson(text), text]) {
+    try { return JSON.parse(candidate); } catch { /* try next */ }
+  }
+  throw new Error("unparseable JSON");
 }
 
 function extractJson(text: string): unknown {
-  try { return JSON.parse(text); } catch { /* continue */ }
+  try { return parseLatexJson(text); } catch { /* continue */ }
   // Strip markdown fences
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) {
-    try { return JSON.parse(fenced[1].trim()); } catch { /* continue */ }
+    try { return parseLatexJson(fenced[1].trim()); } catch { /* continue */ }
   }
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch { /* continue */ }
+    try { return parseLatexJson(text.slice(start, end + 1)); } catch { /* continue */ }
   }
   const arrStart = text.indexOf("[");
   const arrEnd = text.lastIndexOf("]");
   if (arrStart !== -1 && arrEnd > arrStart) {
-    try { return JSON.parse(text.slice(arrStart, arrEnd + 1)); } catch { /* continue */ }
+    try { return parseLatexJson(text.slice(arrStart, arrEnd + 1)); } catch { /* continue */ }
   }
+  logger.warn({ length: text.length, head: text.slice(0, 300), tail: text.slice(-300) }, "diagnostic: could not parse Claude JSON");
   return null;
 }
 
@@ -266,7 +283,7 @@ STRICT RULES:
 
 Return a JSON object: { "questions": [ ...array of question objects... ] }`;
 
-  const raw = await callClaude(system, user, 8000, "{");
+  const raw = await callClaude(system, user, 10500, true);
   const parsed = extractJson(raw) as { questions?: DiagnosticQuestion[] } | DiagnosticQuestion[] | null;
 
   let questions: DiagnosticQuestion[];
@@ -342,7 +359,7 @@ ${JSON.stringify(markingPayload, null, 2)}
 
 Return JSON: { "results": [ { "id": <int>, "marks_awarded": <int>, "feedback": "<string>" }, ... ] }`;
 
-    const raw = await callClaude(system, user, 3000, "{");
+    const raw = await callClaude(system, user, 4000, true);
     const parsed = extractJson(raw) as { results?: { id: number; marks_awarded: number; feedback: string }[] } | null;
     const rawResults = parsed && typeof parsed === "object" && Array.isArray((parsed as { results?: unknown[] }).results)
       ? (parsed as { results: { id: number; marks_awarded: number; feedback: string }[] }).results
@@ -423,7 +440,7 @@ Return JSON with exactly these fields:
 
 Be specific. Reference actual topics and marks. Limit to 4–5 items per array.`;
 
-  const reportRaw = await callClaude(reportSystem, reportUser, 2000, "{");
+  const reportRaw = await callClaude(reportSystem, reportUser, 2600, true);
   const reportParsed = extractJson(reportRaw) as {
     pain_points?: string[];
     patterns?: string[];
