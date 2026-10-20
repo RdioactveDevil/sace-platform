@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { getStripe, removePaidSubject } from "./billing";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -440,9 +441,9 @@ router.delete("/admin/students/:id", async (req, res) => {
   }
 });
 
-// Subject access. user_subscriptions RLS only lets a user write their own
-// rows, so an admin granting or revoking another student's access goes
-// through here with the service role.
+// Subject access. Students can't write user_subscriptions at all, so admin
+// grants (source 'admin', free) and revokes go through here with the service
+// role. Paid rows (source 'stripe') are managed through Stripe.
 
 // GET /admin/students/:id/subscriptions — the student's active subject access.
 router.get("/admin/students/:id/subscriptions", async (req, res) => {
@@ -475,8 +476,20 @@ router.post("/admin/students/:id/subscriptions", async (req, res) => {
     if (cErr) return res.status(500).json({ error: cErr.message });
     if (!cur) return res.status(404).json({ error: "Subject not found" });
 
+    const stage = (cur.level_label || "").trim();
+    const { data: existing } = await admin
+      .from("user_subscriptions").select("source, active")
+      .eq("user_id", req.params.id).eq("subject_name", cur.name).eq("stage", stage)
+      .maybeSingle<{ source: string; active: boolean }>();
+    if (existing?.active && existing.source === "stripe") {
+      return res.status(409).json({ error: "This student is paying for this subject. Remove it first (that takes it off their plan), then grant it." });
+    }
     const { error } = await admin.from("user_subscriptions").upsert(
-      { user_id: req.params.id, subject_name: cur.name, stage: (cur.level_label || "").trim(), active: true, beta: true },
+      {
+        user_id: req.params.id, subject_name: cur.name, stage, active: true, beta: false, source: "admin",
+        status: null, stripe_subscription_id: null, stripe_customer_id: null, current_period_end: null,
+        cancel_at_period_end: false, updated_at: new Date().toISOString(),
+      },
       { onConflict: "user_id,subject_name,stage" },
     );
     if (error) return res.status(500).json({ error: error.message });
@@ -491,6 +504,22 @@ router.delete("/admin/students/:id/subscriptions/:subId", async (req, res) => {
   try {
     const ctx = await requireAdmin(req, res);
     if (!ctx) return;
+    // Revoking a paid subject takes it off the student's Stripe plan (ending
+    // the plan if it was the last one), so they aren't charged for it.
+    const { data: row } = await ctx.admin
+      .from("user_subscriptions").select("id, source, stripe_subscription_id")
+      .eq("id", req.params.subId).eq("user_id", req.params.id)
+      .maybeSingle<{ id: string; source: string; stripe_subscription_id: string | null }>();
+    if (row?.source === "stripe" && row.stripe_subscription_id) {
+      const stripe = getStripe();
+      if (!stripe) return res.status(503).json({ error: "Stripe isn't configured, so this paid subject can't be removed here." });
+      try {
+        await removePaidSubject(ctx.admin, stripe, { id: row.id, stripe_subscription_id: row.stripe_subscription_id }, { endNow: true });
+        return res.json({ ok: true });
+      } catch (err) {
+        return res.status(502).json({ error: `Couldn't update the student's Stripe plan: ${err instanceof Error ? err.message : "unknown error"}` });
+      }
+    }
     const { error } = await ctx.admin
       .from("user_subscriptions")
       .delete()

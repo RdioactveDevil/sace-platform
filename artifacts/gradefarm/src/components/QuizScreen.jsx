@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Zap, Trophy, TrendingUp, Dumbbell, TriangleAlert, CircleCheck, Bot, Pause, Flame, Timer, Pin, Lightbulb } from 'lucide-react'
+import { Zap, Trophy, TrendingUp, Dumbbell, TriangleAlert, CircleCheck, Bot, Pause, Flame, Timer, Pin, Lightbulb, Lock } from 'lucide-react'
 import {
   selectNextQuestion,
   calcXP,
@@ -373,8 +373,15 @@ export default function QuizScreen({
   sessionTip: _sessionTip, setSessionTip,
   sessionTipLoading: _sessionTipLoading, setSessionTipLoading,
   onGoToStudyPlan,
+  // Free subject only: { used, limit, onAnswered, onUpgrade } — questions answered today.
+  freeQuota = null,
 }) {
   const t = THEMES[theme]
+  // Every answered question in the free subject counts toward today's limit.
+  const recordAnswerCounted = (...args) => {
+    freeQuota?.onAnswered?.()
+    return recordAnswer(...args)
+  }
 
   const [floatXP, setFloatXP] = useState(null)
   const [showExit, setShowExit] = useState(false)
@@ -1112,7 +1119,7 @@ export default function QuizScreen({
       null
     if (trackId) {
       try {
-        await recordAnswer(profile.id, trackId, isCorrect, selectedIndex ?? null, null, timeTakenMs)
+        await recordAnswerCounted(profile.id, trackId, isCorrect, selectedIndex ?? null, null, timeTakenMs)
       } catch (recErr) {
         console.warn('[gradefarm] failed to record variant answer:', recErr?.message || recErr)
       }
@@ -1200,7 +1207,7 @@ export default function QuizScreen({
       }
     })
 
-    await recordAnswer(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
+    await recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
 
     if (!isCorrect) {
       // Remediation state was already set synchronously above. Load the queue in
@@ -1284,7 +1291,7 @@ export default function QuizScreen({
       }
     })
 
-    try { await recordAnswer(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs) } catch {}
+    try { await recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs) } catch {}
 
     if (!isCorrect) {
       setLoadingTip(true)
@@ -1625,6 +1632,33 @@ export default function QuizScreen({
     )
   }
 
+  // Free subject: once today's questions are used up, stop before the next one.
+  if (freeQuota && freeQuota.used >= freeQuota.limit && !showAns) {
+    return (
+      <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: FONT_B }}>
+        <div style={{ maxWidth: 420, textAlign: 'center', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: '32px 28px', boxShadow: t.shadowCard }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY }}>
+            <Lock size={24} aria-hidden="true" />
+          </div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: t.text, marginBottom: 6 }}>That's your {freeQuota.limit} free questions for today</div>
+          <p style={{ fontSize: 13.5, color: t.textMuted, lineHeight: 1.6, margin: '0 0 20px' }}>
+            Nice work! Come back tomorrow for {freeQuota.limit} more, or subscribe for unlimited questions, Exam Mode and more.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button type="button" onClick={freeQuota.onUpgrade}
+              style={{ height: 44, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>
+              Get unlimited questions
+            </button>
+            <button type="button" onClick={onHome}
+              style={{ height: 40, borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Back to Question Bank
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const { pct } = getLevelProgress(profile.xp)
   const baseQuestionId = remediationMode && remediationParentId ? remediationParentId : currentQ.id
   const isStruggle = (struggleMap[baseQuestionId]?.wrong ?? 0) >= 2
@@ -1662,6 +1696,12 @@ export default function QuizScreen({
         .qopt { transition: all 0.13s ease; cursor: pointer; }
         .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
       `}</style>
+      {freeQuota && (
+        <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '7px 16px', fontSize: 12.5, color: t.textMuted, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.06)' : '#fffbeb' }}>
+          <span><strong style={{ color: t.text }}>{Math.max(0, freeQuota.limit - freeQuota.used)}</strong> of {freeQuota.limit} free questions left today</span>
+          <button type="button" onClick={freeQuota.onUpgrade} style={{ border: 'none', background: 'none', padding: 0, color: t.goldText, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Go unlimited →</button>
+        </div>
+      )}
 
       {floatXP && (
         <div style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', fontSize: 30, fontWeight: 800, color: GOLD, animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999 }}>

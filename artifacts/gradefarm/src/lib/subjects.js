@@ -258,3 +258,26 @@ export function questionsBankSubjectKeys(subjectTile) {
   }
   return [subjectTile.name || 'Chemistry']
 }
+
+/**
+ * Whether a user_subscriptions row gives access to a subject tile. A row
+ * without a stage covers every stage of that subject.
+ */
+export function subscriptionCoversSubject(sub, subject) {
+  if (!sub || !subject) return false
+  if (sub.subject_name === subject.name && (sub.stage === subject.stage || !sub.stage)) return true
+  if (subject.curriculumName && sub.subject_name === subject.curriculumName) return true
+  return false
+}
+
+/**
+ * A student's access to a subject tile: 'full' (paid, granted, beta, or a
+ * tutor/admin), 'free' (their free subject, limited questions per day) or
+ * 'none'. `subscriptions` are the student's active user_subscriptions rows.
+ */
+export function subjectAccess(subscriptions, subject, fullAccess = false) {
+  if (fullAccess) return 'full'
+  const rows = (subscriptions || []).filter(sub => subscriptionCoversSubject(sub, subject))
+  if (rows.some(r => r.source !== 'free')) return 'full'
+  return rows.length ? 'free' : 'none'
+}

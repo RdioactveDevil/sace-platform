@@ -63,6 +63,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      // recording.html is the layout LiveKit Egress records sessions with.
+      input: {
+        main: path.resolve(import.meta.dirname, "index.html"),
+        recording: path.resolve(import.meta.dirname, "recording.html"),
+      },
+    },
   },
   server: {
     port,

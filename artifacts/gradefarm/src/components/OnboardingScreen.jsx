@@ -1,10 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { saveSubscriptions, completeOnboarding } from '../lib/db'
-import { curriculumToSubjectTile, formatSubjectLabel } from '../lib/subjects'
-import { fetchLiveCurricula } from '../lib/curriculaDb'
-import { Trophy, Star, Target, TrendingUp, ThumbsUp, User, BookOpen, CircleCheck } from 'lucide-react'
-import { SubjectIcon } from './SubjectIcons'
+import { completeOnboarding } from '../lib/db'
+import { Trophy, Star, Target, TrendingUp, ThumbsUp, User, CircleCheck } from 'lucide-react'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -47,39 +44,12 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const [atarTarget, setAtarTarget]   = useState(null)
   const [goals, setGoals]             = useState('')
   const [studyHours, setStudyHours]   = useState(null)
-  const [selectedSubs, setSelectedSubs] = useState([])
   const [termsAccepted, setTermsAccepted] = useState(false)
-  const [dynamicSubjects, setDynamicSubjects] = useState([])
-
-  useEffect(() => {
-    fetchLiveCurricula()
-      .then(curricula => {
-        setDynamicSubjects(curricula.map(curriculumToSubjectTile))
-      })
-      .catch(() => {})
-  }, [])
-
-  // Every subject comes from the curricula table, so the admin controls them.
-  const allSubjects = dynamicSubjects
-  const AVAILABLE_SUBJECTS = allSubjects.filter(s => s.available)
-  const COMING_SUBJECTS    = allSubjects.filter(s => !s.available)
-
-  const TOTAL_CONTENT_STEPS = 4
+  // Subjects are chosen (and paid for) on the subject picker after onboarding.
+  const TOTAL_CONTENT_STEPS = 3
 
   const next = () => setStep(s => s + 1)
   const back = () => setStep(s => s - 1)
-
-  const toggleSubject = (subj) => {
-    setSelectedSubs(prev => {
-      const key = `${subj.name}::${subj.stage}`
-      const exists = prev.find(s => `${s.subject_name}::${s.stage}` === key)
-      if (exists) return prev.filter(s => `${s.subject_name}::${s.stage}` !== key)
-      return [...prev, { subject_name: subj.name, stage: subj.stage }]
-    })
-  }
-
-  const isSubSelected = (subj) =>
-    selectedSubs.some(s => s.subject_name === subj.name && s.stage === subj.stage)
 
   const finish = async () => {
     setSaving(true)
@@ -92,7 +62,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
       if (atarTarget)         profileUpdates.atar_target = atarTarget
       if (goals.trim())       profileUpdates.goals = goals.trim()
       if (studyHours)         profileUpdates.study_hours_per_week = studyHours
-      await saveSubscriptions(profile.id, selectedSubs)
       await completeOnboarding(profile.id, profileUpdates)
     } catch (e) {
       console.error('Onboarding save error:', e)
@@ -106,7 +75,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
     return (
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          {['Details', 'Goals', 'Subjects', 'Confirm'].map((label, i) => (
+          {['Details', 'Goals', 'Confirm'].map((label, i) => (
             <span key={label} style={{
               fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
               color: step - 1 >= i ? GOLD : 'rgba(255,255,255,0.2)',
@@ -341,61 +310,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
     </div>
   )
 
-  const stepSubjects = () => (
-    <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><BookOpen size={26} color={NAVY} aria-hidden="true" /></div>
-      </div>
-      <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR SUBJECTS</h2>
-      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 6 }}>Select the subjects you're studying.</p>
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <span style={{ fontSize: 11, background: 'rgba(241,190,67,0.15)', color: GOLD, border: `1px solid ${GOLD}30`, borderRadius: 20, padding: '3px 10px', fontWeight: 700 }}>FREE during Beta</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-        {AVAILABLE_SUBJECTS.map((subj, i) => {
-          const sel = isSubSelected(subj)
-          return (
-            <button type="button" key={subj.id} onClick={() => toggleSubject(subj)} style={{
-              display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12,
-              border: `1px solid ${sel ? GOLD : 'rgba(255,255,255,0.1)'}`,
-              background: sel ? 'rgba(241,190,67,0.08)' : 'rgba(255,255,255,0.02)',
-              cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', transition: 'all 0.2s', width: '100%',
-              boxShadow: sel ? `0 0 16px ${GOLD}20` : 'none',
-              animation: `slideIn 0.4s ${i * 0.06}s cubic-bezier(0.34,1.1,0.64,1) both`,
-            }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${subj.color}22`, border: `1px solid ${subj.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}><SubjectIcon subj={subj} color={subj.color} size={20} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: sel ? '#f1f5f9' : '#e2e8f0' }}>{subj.name}</div>
-                <div style={{ fontSize: 11, color: subj.color, fontWeight: 600, marginTop: 1 }}>{subj.stage}</div>
-              </div>
-              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? GOLD : 'rgba(255,255,255,0.15)'}`, background: sel ? GOLD : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
-                {sel && <span style={{ fontSize: 11, color: NAVYD, fontWeight: 800 }}>✓</span>}
-              </div>
-            </button>
-          )
-        })}
-      </div>
-      {COMING_SUBJECTS.length > 0 && (
-        <>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Coming Soon</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: 0.45, marginBottom: 8 }}>
-            {COMING_SUBJECTS.map(subj => (
-              <div key={subj.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
-                <SubjectIcon subj={subj} color="#94a3b8" size={18} />
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>{subj.name}</span>
-                  <span style={{ fontSize: 11, color: '#475569', marginLeft: 8 }}>{subj.stage}</span>
-                </div>
-                <span style={{ fontSize: 10, color: '#475569', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 6 }}>SOON</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      {navButtons({ onNext: next, nextDisabled: selectedSubs.length === 0, nextLabel: selectedSubs.length === 0 ? 'Select at least one subject' : `Continue with ${selectedSubs.length} subject${selectedSubs.length > 1 ? 's' : ''} \u2192` })}
-    </div>
-  )
-
   const stepConfirm = () => (
     <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
@@ -410,7 +324,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           { label: 'Year',           value: yearLevel ? `Year ${yearLevel}` : '\u2014' },
           { label: 'ATAR Target',    value: atarTarget ? `${atarTarget}+` : '\u2014' },
           { label: 'Study hrs/week', value: studyHours ? `${studyHours}h` : '\u2014' },
-          { label: 'Subjects',       value: selectedSubs.map(s => formatSubjectLabel({ name: s.subject_name, stage: s.stage })).join(', ') || '\u2014' },
         ].map(row => (
           <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ fontSize: 12, color: '#475569' }}>{row.label}</span>
@@ -486,7 +399,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           <div style={{ fontSize: 10, color: '#475569', letterSpacing: '0.08em', marginTop: 3, fontFamily: FONT_B }}>by Titanium Tutoring</div>
         </div>
         {progressBar()}
-        {[stepWelcome, stepDetails, stepGoals, stepSubjects, stepConfirm][step]()}
+        {[stepWelcome, stepDetails, stepGoals, stepConfirm][step]()}
       </div>
     </div>
   )

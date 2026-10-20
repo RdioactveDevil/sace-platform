@@ -3,18 +3,18 @@ import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBr
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
-import { notifyError } from './lib/notify'
+import { notify, notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, syncCheckout, getFreeQuestionUsage, countFreeQuestion } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import SubjectPicker     from './components/SubjectPicker'
-import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor } from './lib/subjects'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import HomeScreen        from './components/HomeScreen'
 import QuizScreen        from './components/QuizScreen'
@@ -24,6 +24,7 @@ import ProfileScreen     from './components/ProfileScreen'
 import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
+import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
@@ -68,6 +69,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 // top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
 // appear for subjects that switch it on (Admin → Curricula → Features); Exam
 // Mode and Essay Marker are full-screen, so their tabs open those screens.
+// Sections marked `tutoring` only show for students with a tutor or a lesson.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
@@ -76,6 +78,11 @@ const NAV_SECTIONS = [
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
     { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
+  ]},
+  { icon: 'video', label: 'Lessons', id: 'lessons', tutoring: true, pages: [
+    { id: 'lessons',    label: 'Online Lessons', path: '/lessons' },
+    { id: 'recordings', label: 'Recordings',     path: '/recordings' },
+    { id: 'class-res',  label: 'Resources',      path: '/class-resources' },
   ]},
   { icon: 'pen', label: 'Writing', id: 'writing', feature: 'writing', pages: [
     { id: 'w-essay',   label: 'Write an Essay', path: '/writing/essay' },
@@ -90,7 +97,19 @@ const NAV_SECTIONS = [
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ]},
 ]
-const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature }))
+const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature, tutoring: sec.tutoring }))
+const LESSON_PATHS = ['/lessons', '/recordings', '/class-resources']
+
+/** Whether this student has a tutor or a lesson (shows the Lessons section). */
+function useHasTutoring(userId) {
+  const [has, setHas] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    hasTutoringAccess(userId).then(v => { if (!cancelled) setHas(v) })
+    return () => { cancelled = true }
+  }, [userId])
+  return has
+}
 
 /** A section's pages that the current subject has switched on. */
 function visiblePages(section, subject) {
@@ -116,6 +135,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'tutor'       && <><circle cx="9" cy="6.25" r="3" {...S} /><path d="M3.25 15.5a5.75 5.75 0 0 1 11.5 0" {...S} /></>}
       {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
+      {name === 'video'       && <><rect x="2" y="4.5" width="10" height="9" rx="1.5" {...S} /><path d="m12 8 4-2.25v6.5L12 10" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
     </svg>
   )
@@ -131,7 +151,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const go = (path) => { navigate(path); onClose?.() }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
-  const primaryNav = NAV_ITEMS.filter(item => !item.feature || subjectHasFeature(subject, item.feature))
+  const hasTutoring = useHasTutoring(profile?.id)
+  const primaryNav = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const navItems = [
     ...primaryNav,
     ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
@@ -302,20 +323,24 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
 
 // ── Locked Subject Screen ─────────────────────────────────────────────────────
-function LockedSubjectScreen({ subject, onChangeSubject, theme }) {
+function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, theme }) {
   const t = THEMES[theme]
+  const navigate = useNavigate()
+  const exam = reason === 'exam'
   return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
       <Lock size={48} color={GOLD} aria-hidden="true" />
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Subject Not in Your Plan</h2>
-      <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 360, lineHeight: 1.6, margin: 0 }}>
-        <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> is not included in your current subscription. Contact Titanium Tutoring to add it.
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>{exam ? 'Exam Mode is for paid subjects' : `Unlock ${formatSubjectLabel(subject)}`}</h2>
+      <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
+        {exam
+          ? <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
+          : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
-      <a href="mailto:hello@titaniumtutoring.com.au" style={{ padding: '12px 24px', borderRadius: 12, background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        Contact us to upgrade →
-      </a>
+      <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        See plans →
+      </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        ← Back to subject picker
+        {exam ? '← Back to practice' : '← Back to subject picker'}
       </button>
     </div>
   )
@@ -352,6 +377,47 @@ function SectionTabs({ theme, subject }) {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** Banner across student pages while one of their lessons can be joined. */
+function LiveLessonBanner({ profile, theme }) {
+  const t = THEMES[theme]
+  const navigate = useNavigate()
+  const location = useLocation()
+  const hasTutoring = useHasTutoring(profile?.id)
+  const [sessions, setSessions] = useState([])
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!hasTutoring) return undefined
+    let cancelled = false
+    const poll = () => {
+      setNow(Date.now())
+      fetchTutoringSessions({ from: Date.now() - 6 * 3600_000, to: Date.now() + 3600_000, limit: 20 })
+        .then(rows => { if (!cancelled) setSessions(rows || []) })
+        .catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 60_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [hasTutoring])
+
+  const lesson = sessions.find(s => isJoinable(s, now))
+  if (!lesson || location.pathname === '/lessons') return null
+  const started = lesson.status === 'active' || now >= new Date(lesson.scheduled_at).getTime()
+  return (
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.10)' : '#fff8e6' }}>
+      <Radio size={17} color={t.goldText} aria-hidden="true" style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <strong>{lesson.title || 'Your lesson'}</strong>
+        <span style={{ color: t.textMuted }}> {started ? 'is happening now' : 'is about to start'} · with {lesson.other_party_name || 'your tutor'}</span>
+      </div>
+      <button type="button" onClick={() => navigate(`/session/${lesson.id}`)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 14px', borderRadius: 9, border: 'none', background: GOLD, color: '#171724', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+        <Video size={15} aria-hidden="true" /> Join
+      </button>
     </div>
   )
 }
@@ -414,6 +480,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
             </div>
           </div>
         )}
+        <LiveLessonBanner profile={profile} theme={theme} />
         <SectionTabs theme={theme} subject={subject} />
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
@@ -445,6 +512,7 @@ function AppShellScreens({
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
+  const onLessons = LESSON_PATHS.includes(location.pathname)
   const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'visible' } : { display: 'none' }
 
   // Writing workspace — only for subjects with Writing switched on.
@@ -492,6 +560,9 @@ function AppShellScreens({
           profile={profile} questions={questions} struggleMap={struggleMap}
           theme={theme} onStartSession={onStartSession} subject={subject}
           lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
+      </div>
+      <div style={onLessons ? show(screen) : { display: 'none' }}>
+        <StudentLessonsScreen theme={theme} active={onLessons} />
       </div>
       <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />
@@ -594,6 +665,49 @@ function AppInner() {
       notifyError(e, 'Could not refresh your subjects. Please try again.', { source: 'refreshSubscriptions' })
     }
   }
+
+  // Tutors and admins see every subject. Students need a grant, a paid subject
+  // or their one free subject (limited questions per day).
+  const hasFullAccess = !!(profile?.is_admin || profile?.is_tutor)
+  const selectedAccess = selectedSubject ? subjectAccess(subscriptions, selectedSubject, hasFullAccess) : 'none'
+  const subjectLocked = subscriptionsLoaded && !!selectedSubject && selectedAccess === 'none'
+
+  // Today's free-question count while the free subject is open: { used, limit }.
+  const [freeQuota, setFreeQuota] = useState(null)
+  useEffect(() => {
+    if (selectedAccess !== 'free') { setFreeQuota(null); return }
+    let cancelled = false
+    getFreeQuestionUsage()
+      .then(q => { if (!cancelled) setFreeQuota(q) })
+      .catch(() => { if (!cancelled) setFreeQuota({ used: 0, limit: 20 }) })
+    return () => { cancelled = true }
+  }, [selectedAccess, selectedSubject?.id, user?.id])
+  const onFreeQuestionAnswered = useCallback(() => {
+    setFreeQuota(q => (q ? { ...q, used: q.used + 1 } : q))
+    countFreeQuestion().then(r => setFreeQuota({ used: r.used, limit: r.limit })).catch(() => {})
+  }, [])
+
+  // Back from Stripe Checkout (?checkout=success&session_id=… or ?checkout=cancelled).
+  useEffect(() => {
+    if (!user) return
+    const params = new URLSearchParams(location.search)
+    const checkout = params.get('checkout')
+    if (!checkout) return
+    const sessionId = params.get('session_id')
+    navigate(location.pathname, { replace: true })
+    if (checkout === 'cancelled') {
+      notify.info("Checkout cancelled — you haven't been charged.")
+      return
+    }
+    if (checkout === 'success' && sessionId) {
+      syncCheckout(sessionId)
+        .catch(() => {}) // the Stripe webhook records it too
+        .finally(async () => {
+          await refreshSubscriptions()
+          notify.success("You're in! Your new subject is unlocked.")
+        })
+    }
+  }, [user, location.search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lifted Learn state — survives route changes
   const [learnPhase,      setLearnPhase]      = useState('setup')
@@ -978,7 +1092,9 @@ function AppInner() {
 
       {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
       <Route path="/exam" element={
-        subjectHasFeature(selectedSubject, 'exam_mode')
+        subjectLocked || selectedAccess === 'free'
+          ? <LockedSubjectScreen subject={selectedSubject} reason={subjectLocked ? 'locked' : 'exam'} onChangeSubject={() => navigate('/question-bank')} theme={theme} />
+        : subjectHasFeature(selectedSubject, 'exam_mode')
           ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
           : <Navigate to="/question-bank" replace />
       } />
@@ -1078,7 +1194,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
+          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
       } />
 
       {/* Get access / purchase page */}
@@ -1087,7 +1203,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <GetAccessScreen profile={profile} onAccessGranted={refreshSubscriptions} />
+          : <GetAccessScreen subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} />
       } />
 
       {/* Quiz — wrapped in AppShell so the shared sidebar appears */}
@@ -1096,8 +1212,11 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
+          : subjectLocked
+            ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} />
           : <AppShell {...shellProps}>
               <QuizScreen {...commonProps} {...quizState}
+              freeQuota={selectedAccess === 'free' && freeQuota ? { ...freeQuota, onAnswered: onFreeQuestionAnswered, onUpgrade: () => navigate('/get-access', { state: { subject: selectedSubject } }) } : null}
               profile={profile} setProfile={setProfile} subjectTile={selectedSubject}
               questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')}
@@ -1174,7 +1293,7 @@ function AppInner() {
         !(user && profile) ? <Navigate to="/home" replace /> :
         !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
-        (subscriptionsLoaded && subscriptions.length > 0 && !subscriptions.some(s => s.subject_name === selectedSubject?.name && s.stage === selectedSubject?.stage)) ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
+        subjectLocked ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}

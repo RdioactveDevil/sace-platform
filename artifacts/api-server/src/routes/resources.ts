@@ -409,6 +409,7 @@ router.get("/resources/student", async (req: Request, res: Response) => {
           file_size: r.file_size,
           mime_type: r.mime_type,
           created_at: r.created_at,
+          session_id: r.session_id ?? null,
           tutor_name: tutorNames[r.tutor_id] ?? "Tutor",
           download_url,
         };

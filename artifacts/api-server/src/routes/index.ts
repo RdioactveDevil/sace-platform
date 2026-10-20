@@ -17,6 +17,7 @@ import reportQuestionRouter from "./report-question";
 import resourcesRouter from "./resources";
 import livekitRouter from "./livekit";
 import leaderboardRouter from "./leaderboard";
+import billingRouter from "./billing";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(reportQuestionRouter);
 router.use(resourcesRouter);
 router.use(livekitRouter);
 router.use(leaderboardRouter);
+router.use(billingRouter);
 
 export default router;

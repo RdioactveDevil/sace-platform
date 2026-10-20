@@ -11,7 +11,7 @@ export type Caller = {
   admin: SupabaseClient;
 };
 
-function getServiceClient(): SupabaseClient {
+export function getServiceClient(): SupabaseClient {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) throw new Error("No SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY configured");
   return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } });

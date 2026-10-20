@@ -66,6 +66,20 @@ function recordingEnabled(): boolean {
 }
 
 /**
+ * How the recording is laid out. By default Egress loads our own page
+ * (artifacts/gradefarm/recording.html): a screen share fills the frame with
+ * the presenter's camera in a corner, otherwise cameras in equal tiles.
+ * RECORDING_TEMPLATE_URL points it elsewhere; "builtin" uses LiveKit's own
+ * speaker layout instead.
+ */
+function recordingLayoutOptions(): { customBaseUrl: string } | { layout: string } {
+  const configured = process.env.RECORDING_TEMPLATE_URL?.trim();
+  if (configured === "builtin") return { layout: "speaker" };
+  const appUrl = (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/$/, "");
+  return { customBaseUrl: configured || `${appUrl}/recording.html` };
+}
+
+/**
  * Start a Room Composite Egress that writes an MP4 into the tutor-resources
  * bucket. Returns the egress id + the storage key the file will land at, or
  * null if recording is not configured / fails to start.
@@ -102,7 +116,7 @@ export async function startSessionRecording(
   });
 
   try {
-    const info = await egressClient.startRoomCompositeEgress(roomName, output);
+    const info = await egressClient.startRoomCompositeEgress(roomName, output, recordingLayoutOptions());
     if (!info?.egressId) return null;
     return { egressId: info.egressId, storagePath };
   } catch {
@@ -427,7 +441,7 @@ router.get("/sessions", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
 
-  const { status, limit = "50", offset = "0" } = req.query as Record<string, string>;
+  const { status, limit = "50", offset = "0", from, to, order } = req.query as Record<string, string>;
 
   // For students, we need to find sessions they're participating in (handles group sessions)
   let sessionIds: string[] | null = null;
@@ -446,8 +460,8 @@ router.get("/sessions", async (req: Request, res: Response) => {
   let query = ctx.admin
     .from("tutoring_sessions")
     .select("*")
-    .order("scheduled_at", { ascending: true })
-    .limit(parseInt(limit));
+    .order("scheduled_at", { ascending: order !== "desc" })
+    .limit(Math.min(parseInt(limit) || 50, 200));
 
   if (ctx.isTutor) {
     query = query.eq("tutor_id", ctx.userId);
@@ -456,6 +470,8 @@ router.get("/sessions", async (req: Request, res: Response) => {
   }
 
   if (status) query = query.eq("status", status);
+  if (from && !Number.isNaN(Date.parse(from))) query = query.gte("scheduled_at", new Date(from).toISOString());
+  if (to && !Number.isNaN(Date.parse(to))) query = query.lt("scheduled_at", new Date(to).toISOString());
 
   const { data: sessions, error } = await query;
   if (error) {

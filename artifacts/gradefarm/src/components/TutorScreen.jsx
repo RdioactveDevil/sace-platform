@@ -385,6 +385,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
     setDeletingId(null)
   }
 
+  const overdueCount = assignments.filter(a => assignmentStatus(a) === 'Overdue').length
   const filteredAssignments = assignments.filter(a => {
     if (filterStudent && a.student_id !== filterStudent) return false
     if (filterStatus !== 'All' && assignmentStatus(a) !== filterStatus) return false
@@ -398,7 +399,16 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={() => setFilterStatus(s => (s === 'Overdue' ? 'All' : 'Overdue'))}
+          aria-pressed={filterStatus === 'Overdue'}
+          title={overdueCount > 0 ? `${overdueCount} overdue assignment${overdueCount !== 1 ? 's' : ''}` : 'No overdue assignments'}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', height: 38, borderRadius: 9, border: `1px solid ${filterStatus === 'Overdue' ? '#f87171' : t.border}`, background: filterStatus === 'Overdue' ? 'rgba(248,113,113,0.10)' : 'transparent', color: overdueCount > 0 ? '#f87171' : t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+        >
+          <Bell size={15} aria-hidden="true" />
+          {overdueCount > 0 ? `${overdueCount} overdue` : 'None overdue'}
+        </button>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
           style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? (theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border) : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
@@ -2347,18 +2357,6 @@ export default function TutorScreen({ profile, theme, subject }) {
               </div>
             )}
             <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
-            <button onClick={() => go('assignments')}
-              style={{ position: 'relative', width: 36, height: 36, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDark ? 'rgba(255,255,255,0.5)' : '#94a3b8', flexShrink: 0 }}
-              title={overdueCount > 0 ? `${overdueCount} overdue assignment${overdueCount !== 1 ? 's' : ''}` : 'No overdue assignments'}
-            >
-              <Bell size={17} aria-hidden="true" />
-              {overdueCount > 0 && <span style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', border: `2px solid ${isDark ? '#06071a' : '#fff'}` }} />}
-            </button>
-            <button onClick={() => go('assignments')} className="btn-gold-shimmer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', height: 34, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0 }}
-            >
-              + New Assignment
-            </button>
           </div>
         </header>
 

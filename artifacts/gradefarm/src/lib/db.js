@@ -571,33 +571,54 @@ export async function getSubscriptions(userId) {
   return data || []
 }
 
-export async function saveSubscriptions(userId, subjects) {
-  // subjects = [{ subject_name, stage }]
-  // Delete all existing subscriptions first so de-selected subjects don't persist
-  const { error: delError } = await supabase
-    .from('user_subscriptions')
-    .delete()
-    .eq('user_id', userId)
-  if (delError) throw delError
-  if (subjects.length === 0) return
-  const rows = subjects.map(s => ({
-    user_id: userId,
-    subject_name: s.subject_name,
-    stage: s.stage,
-    active: true,
-    beta: true,
-  }))
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .insert(rows)
-  if (error) throw error
+// ─── ACCESS & BILLING ────────────────────────────────────────────────────────
+// Students can't write user_subscriptions; access comes from an admin grant,
+// their one free subject, or their Stripe plan (one subscription, quantity =
+// paid subjects, $5 / $4 / $3+ per week), all through these endpoints.
+
+/** { enabled, tiers, paidCount, weeklyTotal, nextPrice, hasPlan, renewsAt, endsAtPeriodEnd, freeDailyQuestions } */
+export async function getBillingConfig() {
+  return tutorFetch('/api/billing/config')
 }
 
-export async function addSubscription(userId, subjectName, stage) {
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .upsert({ user_id: userId, subject_name: subjectName, stage, active: true, beta: true }, { onConflict: 'user_id,subject_name,stage' })
+/** Make a subject the student's one free subject (replaces any other). */
+export async function chooseFreeSubject(curriculumId) {
+  return tutorFetch('/api/billing/free-subject', { method: 'POST', body: JSON.stringify({ curriculumId }) })
+}
+
+/** Pay for a subject: resolves to { url } (first subject → Stripe Checkout) or { added, weeklyTotal }. */
+export async function addPaidSubject(curriculumId) {
+  return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumId }) })
+}
+
+/** Stop paying for a subject (by its user_subscriptions row id). */
+export async function removePaidSubject(rowId) {
+  return tutorFetch(`/api/billing/subjects/${encodeURIComponent(rowId)}`, { method: 'DELETE' })
+}
+
+/** After returning from Checkout: make sure the new plan is recorded. */
+export async function syncCheckout(sessionId) {
+  return tutorFetch('/api/billing/sync', { method: 'POST', body: JSON.stringify({ sessionId }) })
+}
+
+/** Stripe customer portal (card, receipts, cancel); resolves to its URL. */
+export async function openBillingPortal() {
+  const json = await tutorFetch('/api/billing/portal', { method: 'POST' })
+  return json.url
+}
+
+/** Free-subject questions answered today: { used, limit }. */
+export async function getFreeQuestionUsage() {
+  const { data, error } = await supabase.rpc('free_questions_today')
   if (error) throw error
+  return data
+}
+
+/** Count one free-subject question: { used, limit, allowed }. */
+export async function countFreeQuestion() {
+  const { data, error } = await supabase.rpc('use_free_question')
+  if (error) throw error
+  return data
 }
 
 export async function completeOnboarding(userId, profileUpdates) {
@@ -1463,18 +1484,41 @@ export async function createTutoringSession({ session_type = 'individual', stude
 }
 
 /** List tutoring sessions for the current user (tutor or student). */
-export async function fetchTutoringSessions({ status, limit = 20, offset = 0 } = {}) {
+export async function fetchTutoringSessions({ status, limit = 20, offset = 0, from, to, order } = {}) {
   const session = await getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not authenticated.')
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
   if (status) params.set('status', status)
+  if (from) params.set('from', new Date(from).toISOString())
+  if (to) params.set('to', new Date(to).toISOString())
+  if (order) params.set('order', order)
   const res = await fetch(`/api/sessions?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.error || 'Failed to fetch sessions.')
   return json.sessions
+}
+
+const tutoringAccessCache = new Map()
+
+/**
+ * Whether a student has a tutor or has been invited to a lesson — decides
+ * whether the Lessons section shows in their sidebar. Cached per user.
+ */
+export function hasTutoringAccess(userId) {
+  if (!userId) return Promise.resolve(false)
+  if (!tutoringAccessCache.has(userId)) {
+    const check = Promise.all([
+      supabase.from('tutor_students').select('tutor_id', { count: 'exact', head: true }).eq('student_id', userId),
+      supabase.from('session_participants').select('session_id', { count: 'exact', head: true }).eq('student_id', userId),
+    ])
+      .then(([roster, lessons]) => (roster.count ?? 0) > 0 || (lessons.count ?? 0) > 0)
+      .catch(() => false)
+    tutoringAccessCache.set(userId, check)
+  }
+  return tutoringAccessCache.get(userId)
 }
 
 /** Get a single tutoring session by ID. */

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { signUpAsTutorAccount, applyForTutor, saveSubscriptions, updateProfile } from '../lib/db'
+import { signUpAsTutorAccount, applyForTutor, updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
 
 const GOLD = '#f1be43'
@@ -92,7 +92,6 @@ export default function TutorSignupScreen() {
         tutor_bio: bio.trim() || null,
       })
       await applyForTutor()
-      await saveSubscriptions(uid, [])
       window.location.assign('/onboarding/tutor')
     } catch (err) {
       setError(err.message || 'Something went wrong.')

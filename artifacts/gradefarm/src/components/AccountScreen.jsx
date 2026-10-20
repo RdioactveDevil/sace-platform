@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, RANKS, XP_LEVELS } from '../lib/engine'
-import { updateProfile } from '../lib/db'
+import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject } from '../lib/db'
+import { formatSubjectLabel } from '../lib/subjects'
 import { supabase } from '../lib/supabase'
 import RankIcon from './RankIcon'
 
@@ -9,6 +10,115 @@ const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
+
+const shortDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '')
+
+/** What a subject's access row means for the student, in one line. */
+function accessLine(sub, freeDaily) {
+  if (sub.source === 'beta') return { text: 'Free — beta member', tone: 'success' }
+  if (sub.source === 'free') return { text: `Free subject — ${freeDaily} questions a day`, tone: 'success' }
+  if (sub.source !== 'stripe') return { text: 'Included by Titanium Tutoring', tone: 'success' }
+  if (sub.status === 'past_due') return { text: 'Payment failed — update your card', tone: 'danger' }
+  if (sub.cancel_at_period_end) return { text: `Ends ${shortDate(sub.current_period_end)}`, tone: 'muted' }
+  return { text: 'In your plan', tone: 'muted' }
+}
+
+/** The student's subjects, their weekly plan, and the Stripe portal. */
+function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
+  const t = THEMES[theme]
+  const [subs, setSubs] = useState(null)
+  const [plan, setPlan] = useState(null)
+  const [busy, setBusy] = useState(null) // 'portal' | row id
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    const [rows, config] = await Promise.all([
+      getSubscriptions(profile.id).catch(() => []),
+      getBillingConfig().catch(() => null),
+    ])
+    setSubs(rows)
+    setPlan(config)
+  }
+  useEffect(() => { load() }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const paid = (subs || []).filter(s => s.source === 'stripe')
+  const freeDaily = plan?.freeDailyQuestions ?? 20
+  const tiers = plan?.tiers ?? [5, 4, 3]
+  const totalAfterRemoving = () => {
+    const n = paid.length - 1
+    return Array.from({ length: n }, (_, i) => tiers[Math.min(i, tiers.length - 1)]).reduce((a, b) => a + b, 0)
+  }
+
+  const openPortal = async () => {
+    setBusy('portal'); setError('')
+    try { window.location.assign(await openBillingPortal()) }
+    catch (e) { setError(e.message || 'Could not open billing.'); setBusy(null) }
+  }
+
+  const remove = async (sub) => {
+    const label = formatSubjectLabel({ name: sub.subject_name, stage: sub.stage })
+    const msg = paid.length === 1
+      ? `Remove ${label}? It's your only paid subject, so your plan ends on ${shortDate(sub.current_period_end)} and you keep access until then.`
+      : `Remove ${label} now? Your plan drops to $${totalAfterRemoving()}/week and unused time is credited to your next bill.`
+    if (!window.confirm(msg)) return
+    setBusy(sub.id); setError('')
+    try { await removePaidSubject(sub.id); await load() }
+    catch (e) { setError(e.message || 'Could not update your plan.') }
+    setBusy(null)
+  }
+
+  const toneColour = { success: t.success, danger: t.danger, muted: t.textMuted }
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Subjects & billing</div>
+        {plan?.hasPlan && (
+          <span style={{ fontSize: 12.5, color: t.textMuted }}>
+            <strong style={{ color: t.text }}>${plan.weeklyTotal}/week</strong>
+            {plan.endsAtPeriodEnd ? ` · ends ${shortDate(plan.renewsAt)}` : plan.renewsAt ? ` · next bill ${shortDate(plan.renewsAt)}` : ''}
+          </span>
+        )}
+      </div>
+      {subs === null ? (
+        <div style={{ fontSize: 13, color: t.textMuted }}>Loading…</div>
+      ) : subs.length === 0 ? (
+        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>You haven't picked a subject yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
+          {subs.map((s, i) => {
+            const line = accessLine(s, freeDaily)
+            const removable = s.source === 'stripe' && !s.cancel_at_period_end
+            return (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i ? `1px solid ${t.border}` : 'none' }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: t.text }}>{formatSubjectLabel({ name: s.subject_name, stage: s.stage })}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: toneColour[line.tone], textAlign: 'right' }}>{line.text}</span>
+                {removable && (
+                  <button type="button" onClick={() => remove(s)} disabled={!!busy}
+                    style={{ border: 'none', background: 'none', padding: 0, color: t.textFaint, fontFamily: FONT_B, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer' }}>
+                    {busy === s.id ? 'Removing…' : 'Remove'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onChangeSubject} style={btn('primary')}>+ Add a subject</button>
+        {paid.length > 0 && (
+          <button type="button" onClick={openPortal} disabled={!!busy} style={btn('secondary', !!busy)}>
+            {busy === 'portal' ? 'Opening…' : 'Card & receipts'}
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 11.5, color: t.textFaint, marginTop: 10, lineHeight: 1.5 }}>
+        ${tiers[0]}/week for your first paid subject{tiers.length > 1 ? `, then $${tiers.slice(1).join(', then $')}/week for each extra one` : ''}.
+      </div>
+      {error && <div style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{error}</div>}
+    </div>
+  )
+}
 
 export default function AccountScreen({ profile, theme, onSignOut, onChangeSubject, onReplayFeatureTour }) {
   const t = THEMES[theme]
@@ -141,6 +251,10 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
           {next - profile.xp} XP to {RANKS[Math.min(level + 1, RANKS.length - 1)]}
         </div>
       </div>
+
+      {!profile.is_tutor && !profile.is_admin && (
+        <BillingCard profile={profile} theme={theme} card={card} btn={btn} onChangeSubject={onChangeSubject} />
+      )}
 
       {/* ── Display name ── */}
       <div style={card}>

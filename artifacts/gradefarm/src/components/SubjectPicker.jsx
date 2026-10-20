@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { curriculumToSubjectTile } from '../lib/subjects'
-import { fetchSubjectBankCounts } from '../lib/db'
+import { curriculumToSubjectTile, subjectAccess } from '../lib/subjects'
+import { fetchSubjectBankCounts, getBillingConfig } from '../lib/db'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIcon } from './SubjectIcons'
 import './SubjectPicker.css'
@@ -13,12 +13,6 @@ function hex(color, alpha) {
   const g = parseInt(c.slice(2, 4), 16)
   const b = parseInt(c.slice(4, 6), 16)
   return `rgba(${r},${g},${b},${alpha})`
-}
-
-function subMatchesSubject(sub, s) {
-  if (sub.subject_name === s.name && (sub.stage === s.stage || !sub.stage)) return true
-  if (s.curriculumName && sub.subject_name === s.curriculumName) return true
-  return false
 }
 
 const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
@@ -39,11 +33,21 @@ function writeCountsCache(counts) {
 }
 
 /* ─── Component ───────────────────────────────────────────── */
-export default function SubjectPicker({ profile, subscriptions = [], onSelect, onGetAccess }) {
+/**
+ * `fullAccess` (tutors/admins) unlocks every subject. Students see their paid
+ * and free subjects first, then the rest with what unlocking them costs.
+ */
+export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess }) {
   const [selected, setSelected]         = useState(null)
   const [liveQuestionCounts, setCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamic]   = useState([])
   const [loadingCurricula, setLoading]  = useState(true)
+  const [billing, setBilling]           = useState(null)
+
+  useEffect(() => {
+    if (fullAccess) return
+    getBillingConfig().then(setBilling).catch(() => {})
+  }, [fullAccess])
 
   useEffect(() => {
     fetchLiveCurricula()
@@ -74,9 +78,12 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
   }, [dynamicSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allSubjects      = dynamicSubjects
-  const hasSubscriptions = subscriptions.length > 0
-  const subscribed       = allSubjects.filter(s => s.available && (!hasSubscriptions || subscriptions.some(sub => subMatchesSubject(sub, s))))
-  const notSubscribed    = hasSubscriptions ? allSubjects.filter(s => s.available && !subscriptions.some(sub => subMatchesSubject(sub, s))) : []
+  const accessOf         = (s) => subjectAccess(subscriptions, s, fullAccess)
+  const subscribed       = allSubjects.filter(s => s.available && accessOf(s) !== 'none')
+  const notSubscribed    = allSubjects.filter(s => s.available && accessOf(s) === 'none')
+  const hasFreeSubject   = subscriptions.some(sub => sub.source === 'free')
+  const freeDaily        = billing?.freeDailyQuestions ?? 20
+  const priceLabel       = hasFreeSubject ? `$${billing?.nextPrice ?? 5}/week` : 'Try free'
   const comingSoon       = allSubjects.filter(s => !s.available)
 
   const firstName = profile.display_name?.split(' ')[0] ?? 'there'
@@ -87,7 +94,36 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
 
   const displaySubject = selected ?? subscribed[0] ?? null
   const displayColor   = displaySubject?.color ?? GOLD
-  const tileSubjects   = [...subscribed, ...notSubscribed]
+
+  const renderTile = (subj, idx, locked) => {
+    const isSel  = selected?.id === subj.id
+    const color  = subj.color ?? GOLD
+    return (
+      <div
+        key={subj.id}
+        className="sp-tile"
+        data-selected={isSel ? 'true' : 'false'}
+        data-locked={locked ? 'true' : 'false'}
+        style={{ '--sp-color': color, animationDelay: `${idx * 50}ms` }}
+        onClick={() => {
+          if (locked) { onGetAccess?.({ ...subj, questionCount: liveQuestionCounts?.[subj.id] ?? subj.questionCount }); return }
+          setSelected(subj)
+        }}
+      >
+        <div className="sp-tile-icon">
+          {locked
+            ? <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4" strokeLinecap="round"/></svg>
+            : <SubjectIcon subj={subj} color={isSel ? color : hex(color, 0.85)} size={22} />
+          }
+        </div>
+        <div className="sp-tile-name">{subj.name}</div>
+        <div className="sp-tile-stage">{subj.stage}</div>
+        {locked && <div className="sp-tile-price">{priceLabel}</div>}
+        {!locked && !fullAccess && accessOf(subj) === 'free' && <div className="sp-tile-price sp-tile-price--free">Free · {freeDaily}/day</div>}
+        {isSel && <div className="sp-check">✓</div>}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -198,40 +234,32 @@ export default function SubjectPicker({ profile, subscriptions = [], onSelect, o
               </div>
             )}
 
+            {/* ── Nothing unlocked yet ── */}
+            {subscribed.length === 0 && notSubscribed.length > 0 && (
+              <div className="sp-fadein sp-intro">
+                <div className="sp-intro-title">Pick a subject to start</div>
+                <div className="sp-intro-body">
+                  Choose one subject to use free ({freeDaily} questions a day), or go unlimited from ${billing?.tiers?.[0] ?? 5}/week
+                  {billing?.tiers?.length > 1 ? ` — extra subjects are cheaper ($${billing.tiers.slice(1).join(', then $')}/week each)` : ''}.
+                </div>
+              </div>
+            )}
+
             {/* ── Subject Tiles ── */}
-            {tileSubjects.length > 0 && (
+            {subscribed.length > 0 && (
               <div style={{ marginBottom: 28 }}>
                 <div className="sp-section-label">YOUR SUBJECTS</div>
-
                 <div className="sp-grid">
-                  {tileSubjects.map((subj, idx) => {
-                    const locked = hasSubscriptions && !subscribed.includes(subj)
-                    const isSel  = selected?.id === subj.id
-                    const color  = subj.color ?? GOLD
-                    return (
-                      <div
-                        key={subj.id}
-                        className="sp-tile"
-                        data-selected={isSel ? 'true' : 'false'}
-                        data-locked={locked ? 'true' : 'false'}
-                        style={{ '--sp-color': color, animationDelay: `${idx * 50}ms` }}
-                        onClick={() => {
-                          if (locked) { onGetAccess?.({ ...subj, questionCount: liveQuestionCounts?.[subj.id] ?? subj.questionCount }); return }
-                          setSelected(subj)
-                        }}
-                      >
-                        <div className="sp-tile-icon">
-                          {locked
-                            ? <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4" strokeLinecap="round"/></svg>
-                            : <SubjectIcon subj={subj} color={isSel ? color : hex(color, 0.85)} size={22} />
-                          }
-                        </div>
-                        <div className="sp-tile-name">{subj.name}</div>
-                        <div className="sp-tile-stage">{subj.stage}</div>
-                        {isSel && <div className="sp-check">✓</div>}
-                      </div>
-                    )
-                  })}
+                  {subscribed.map((subj, idx) => renderTile(subj, idx, false))}
+                </div>
+              </div>
+            )}
+
+            {notSubscribed.length > 0 && (
+              <div style={{ marginBottom: 28 }}>
+                <div className="sp-section-label">{subscribed.length > 0 ? 'ADD A SUBJECT' : 'CHOOSE A SUBJECT'}</div>
+                <div className="sp-grid">
+                  {notSubscribed.map((subj, idx) => renderTile(subj, idx + subscribed.length, true))}
                 </div>
               </div>
             )}
