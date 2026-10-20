@@ -1,11 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Resend } from "resend";
 
-/** Sender for automated emails. Must be on a domain verified in Resend. */
-export const EMAIL_FROM = process.env.EMAIL_FROM ?? "gradefarm. <notifications@gradefarm.au>";
+/** Sender for every email the API sends. Must be on a domain verified in Resend. */
+export const EMAIL_FROM = process.env.EMAIL_FROM ?? "gradefarm. <notifications@gradefarm.com.au>";
 
+/**
+ * The site's canonical address. The bare domain redirects here, and a redirect
+ * would break one-click unsubscribe (mail clients don't follow it for a POST).
+ */
 export function appUrl(): string {
-  return (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/+$/, "");
+  return (process.env.APP_URL ?? "https://www.gradefarm.com.au").replace(/\/+$/, "");
 }
 
 export function getResend(): Resend | null {
