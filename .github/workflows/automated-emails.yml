@@ -51,7 +51,18 @@ jobs:
           case "$MODE" in
             dry-run*) QUERY="?dry_run=1" ;;
           esac
-          curl -sS --fail-with-body --max-time 300 -X POST \
+          STATUS=$(curl -sS --max-time 300 -o response.txt -w "%{http_code}" -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${APP_URL%/}/api/cron/emails${QUERY}"
+            "${APP_URL%/}/api/cron/emails${QUERY}")
+          cat response.txt
           echo
+          # Anything but 200 means the job didn't run (or failed), including a
+          # redirect, which curl doesn't follow and wouldn't otherwise fail on.
+          if [ "$STATUS" != "200" ]; then
+            case "$STATUS" in
+              3*) echo "::error::HTTP $STATUS redirect: set the APP_URL variable to the address the site redirects to (https://www.gradefarm.com.au)." ;;
+              401) echo "::error::HTTP 401: CRON_SECRET here doesn't match CRON_SECRET on Vercel." ;;
+              *) echo "::error::Email job returned HTTP $STATUS." ;;
+            esac
+            exit 1
+          fi
