@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { EMAIL_FROM, appUrl } from "../lib/email";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -251,7 +252,7 @@ router.post("/tutor/resources", async (req: Request, res: Response) => {
             const to = emailMap.get(sid);
             if (!to) return;
             const { error: sendErr } = await resend.emails.send({
-              from: "gradefarm. <notifications@gradefarm.au>",
+              from: EMAIL_FROM,
               to,
               subject: `New ${safeType} from your tutor — ${safeTitle}`,
               html: `
@@ -262,7 +263,7 @@ router.post("/tutor/resources", async (req: Request, res: Response) => {
                   <div style="padding: 32px;">
                     <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">New class resource</h2>
                     <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Your tutor ${safeTutor} shared <strong style="color:#f0f4ff;">${safeTitle}</strong> with you.</p>
-                    <a href="https://gradefarm.au" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
+                    <a href="${appUrl()}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
                   </div>
                   <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
                     You're receiving this because your tutor ${safeTutor} shared a resource with you via gradefarm.

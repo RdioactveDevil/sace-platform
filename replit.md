@@ -53,7 +53,8 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - `SUPABASE_SERVICE_KEY` — for admin operations (question generation, PDF extraction)
 - `RESEND_API_KEY` — for sending tutor→student email notifications (resend.com)
 - `CRON_SECRET` — shared secret for `/api/cron/emails`; set the same value as the `CRON_SECRET` repo secret, and set repo variable `APP_URL` for the GitHub Action
-- `EMAIL_FROM` — optional sender for automated emails (default `gradefarm. <notifications@gradefarm.au>`; must be a Resend-verified domain)
+- `EMAIL_FROM` — sender for every email the API sends (default `gradefarm. <notifications@gradefarm.com.au>`); its domain must be verified in Resend (DNS for gradefarm.com.au is at Crazy Domains)
+- `APP_URL` — `https://www.gradefarm.com.au` (the www address: the bare domain redirects, which breaks one-click unsubscribe)
 - `EMAIL_UNSUBSCRIBE_SECRET` — optional key for signing unsubscribe links (defaults to the Supabase service key; changing it invalidates old links)
 - Note: Resend Replit integration was dismissed by user; API key stored directly as a secret instead
 - `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` — live video sessions (LiveKit)

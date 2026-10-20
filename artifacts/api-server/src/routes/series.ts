@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import { Resend } from "resend";
+import { EMAIL_FROM } from "../lib/email";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -273,7 +274,7 @@ router.post("/series", async (req: Request, res: Response) => {
       if (!email) return;
       const safeStudent = escapeHtml(nameMap[sid] ?? "Student");
       await resend.emails.send({
-        from: "GradeFarm <sessions@gradefarm.com.au>",
+        from: EMAIL_FROM,
         to: [email],
         subject: `Recurring ${isGroup ? "group " : ""}sessions booked: ${safeTitle}`,
         html: `

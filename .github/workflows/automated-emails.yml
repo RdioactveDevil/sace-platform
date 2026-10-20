@@ -10,7 +10,9 @@ name: Automated emails
 #
 # Requires (Settings → Secrets and variables → Actions):
 #   secret   CRON_SECRET — same value as the CRON_SECRET env var on Vercel
-#   variable APP_URL     — e.g. https://gradefarm.com.au (no trailing slash)
+#   variable APP_URL     — https://www.gradefarm.com.au (the www address: the
+#                          bare domain redirects, and curl won't follow that
+#                          redirect with the Authorization header)
 
 on:
   schedule:
