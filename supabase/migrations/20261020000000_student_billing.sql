@@ -37,8 +37,18 @@ create unique index if not exists user_subscriptions_one_free_subject
 create index if not exists user_subscriptions_stripe_subscription_id_idx
   on public.user_subscriptions (stripe_subscription_id) where stripe_subscription_id is not null;
 
-drop policy if exists "Users can insert own subscriptions" on public.user_subscriptions;
-drop policy if exists "Users can delete own subscriptions" on public.user_subscriptions;
+-- Students can no longer write their own rows: the old self-service insert
+-- and delete policies now allow nothing (changed in place).
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_subscriptions'
+             and policyname = 'Users can insert own subscriptions') then
+    alter policy "Users can insert own subscriptions" on public.user_subscriptions with check (false);
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_subscriptions'
+             and policyname = 'Users can delete own subscriptions') then
+    alter policy "Users can delete own subscriptions" on public.user_subscriptions using (false);
+  end if;
+end $$;
 
 -- Stripe customer and current subscription per student. Server-only (no
 -- policies): a client must never be able to point its account at someone

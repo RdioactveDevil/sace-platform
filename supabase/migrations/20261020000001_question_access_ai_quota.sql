@@ -32,27 +32,29 @@ revoke all on function public.is_staff() from public, anon;
 grant execute on function public.is_staff() to authenticated;
 
 -- `(select …)` / `array(select …)` run once per query, not once per row.
-drop policy if exists questions_read_all on public.questions;
-create policy questions_read_entitled on public.questions
-  for select to authenticated
-  using ((select public.is_staff()) or curriculum_id = any (array(select public.readable_curriculum_ids())));
-
-drop policy if exists passages_read_all on public.passages;
-create policy passages_read_entitled on public.passages
-  for select to authenticated
-  using ((select public.is_staff()) or curriculum_id = any (array(select public.readable_curriculum_ids())));
-
--- Variants follow their parent question (the subquery is itself filtered by
--- the questions policy above).
-drop policy if exists question_variants_read_all on public.question_variants;
-create policy question_variants_read_entitled on public.question_variants
-  for select to authenticated
-  using ((select public.is_staff()) or exists (select 1 from public.questions q where q.id = parent_question_id));
-
-drop policy if exists question_variants_update_authenticated on public.question_variants;
-create policy question_variants_update_entitled on public.question_variants
-  for update to authenticated
-  using ((select public.is_staff()) or exists (select 1 from public.questions q where q.id = parent_question_id));
+-- The old read-everything policies are changed in place (and renamed); on a
+-- database without them the new ones are created.
+do $$
+declare
+  entitled text := '(select public.is_staff()) or curriculum_id = any (array(select public.readable_curriculum_ids()))';
+  via_parent text := '(select public.is_staff()) or exists (select 1 from public.questions q where q.id = parent_question_id)';
+  p record;
+begin
+  for p in select * from (values
+    ('questions',         'questions_read_all',                     'questions_read_entitled',          'select', entitled),
+    ('passages',          'passages_read_all',                      'passages_read_entitled',           'select', entitled),
+    ('question_variants', 'question_variants_read_all',             'question_variants_read_entitled',  'select', via_parent),
+    ('question_variants', 'question_variants_update_authenticated', 'question_variants_update_entitled', 'update', via_parent)
+  ) as t(tbl, old_name, new_name, cmd, expr)
+  loop
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = p.tbl and policyname = p.old_name) then
+      execute format('alter policy %I on public.%I to authenticated using (%s)', p.old_name, p.tbl, p.expr);
+      execute format('alter policy %I on public.%I rename to %I', p.old_name, p.tbl, p.new_name);
+    elsif not exists (select 1 from pg_policies where schemaname = 'public' and tablename = p.tbl and policyname = p.new_name) then
+      execute format('create policy %I on public.%I for %s to authenticated using (%s)', p.new_name, p.tbl, p.cmd, p.expr);
+    end if;
+  end loop;
+end $$;
 
 -- 2. Daily AI usage.
 --
