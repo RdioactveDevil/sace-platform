@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { r2DeleteObject, r2SignedUrl } from "../lib/r2";
+import { recordingExpiresAt } from "../lib/recording-retention";
 import { EMAIL_FROM, appUrl } from "../lib/email";
 
 const router = Router();
@@ -339,6 +340,7 @@ router.get("/tutor/resources", async (req: Request, res: Response) => {
       ...r,
       class_name: r.class_id ? classNames[r.class_id] ?? null : null,
       student_name: r.student_id ? studentNames[r.student_id] ?? null : null,
+      expires_at: recordingExpiresAt(r),
     }));
 
     return res.json({ resources: enriched });
@@ -425,6 +427,7 @@ router.get("/resources/student", async (req: Request, res: Response) => {
           mime_type: r.mime_type,
           created_at: r.created_at,
           session_id: r.session_id ?? null,
+          expires_at: recordingExpiresAt(r),
           tutor_name: tutorNames[r.tutor_id] ?? "Tutor",
           download_url,
         };

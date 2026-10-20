@@ -71,6 +71,7 @@ export default function StudentLessonsScreen({ theme, active = true }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [playing, setPlaying] = useState(null) // { resource, url }
+  const [downloadingId, setDownloadingId] = useState(null)
 
   const load = useCallback(async () => {
     setError('')
@@ -110,6 +111,20 @@ export default function StudentLessonsScreen({ theme, active = true }) {
       setPlaying({ resource, url })
     } catch {
       setPlaying({ resource, url: resource.download_url, })
+    }
+  }
+
+  // The download link is signed with Content-Disposition: attachment, so
+  // navigating to it saves the file without leaving the page.
+  const download = async (resource) => {
+    setDownloadingId(resource.id)
+    try {
+      const url = await getTutorResourceDownloadUrl(resource.id)
+      if (url) window.location.assign(url)
+    } catch {
+      if (resource.download_url) window.open(resource.download_url, '_blank', 'noopener')
+    } finally {
+      setDownloadingId(null)
     }
   }
 
@@ -225,6 +240,8 @@ export default function StudentLessonsScreen({ theme, active = true }) {
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: t.textMuted }}><Loader size={13} aria-hidden="true" /> Recording processing</span>
                     ) : s.recording_status === 'failed' ? (
                       <span style={{ fontSize: 12, color: t.textMuted }}>Recording unavailable</span>
+                    ) : s.recording_status === 'expired' ? (
+                      <span style={{ fontSize: 12, color: t.textMuted }}>Recording expired</span>
                     ) : null}
                   </LessonRow>
                 </div>
@@ -241,18 +258,29 @@ export default function StudentLessonsScreen({ theme, active = true }) {
     : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {recordings.map(r => (
-          <button key={r.id} type="button" onClick={() => play(r)}
-            style={{ ...card, padding: 0, overflow: 'hidden', textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ aspectRatio: '16 / 9', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #12152a, #262b4a)', color: GOLD }}>
+          <div key={r.id} style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <button type="button" onClick={() => play(r)} aria-label={`Watch ${r.title}`}
+              style={{ aspectRatio: '16 / 9', width: '100%', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #12152a, #262b4a)', color: GOLD }}>
               <PlayCircle size={44} strokeWidth={1.5} aria-hidden="true" />
-            </div>
-            <div style={{ padding: '12px 14px 14px' }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, lineHeight: 1.35 }}>{r.title}</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
-                {r.tutor_name} · {new Date(r.created_at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+            </button>
+            <div style={{ padding: '12px 14px 14px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, lineHeight: 1.35 }}>{r.title}</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
+                  {r.tutor_name} · {new Date(r.created_at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+                </div>
+                {r.expires_at && (
+                  <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
+                    Available until {new Date(r.expires_at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                )}
               </div>
+              <button type="button" onClick={() => download(r)} disabled={downloadingId === r.id}
+                style={{ ...quietButton, alignSelf: 'flex-start', marginTop: 'auto', cursor: downloadingId === r.id ? 'wait' : 'pointer' }}>
+                {downloadingId === r.id ? <Loader size={14} aria-hidden="true" /> : <Download size={14} aria-hidden="true" />} Download
+              </button>
             </div>
-          </button>
+          </div>
         ))}
       </div>
     )
@@ -286,7 +314,7 @@ export default function StudentLessonsScreen({ theme, active = true }) {
 
   const heading = {
     lessons: { title: 'Online Lessons', sub: 'Join live lessons with your tutor and catch up on past ones.' },
-    recordings: { title: 'Recordings', sub: 'Watch your recorded lessons any time.' },
+    recordings: { title: 'Recordings', sub: 'Watch or download your recorded lessons. Each one is kept for 10 weeks.' },
     resources: { title: 'Resources', sub: 'Notes, worksheets and links from your tutor.' },
   }[view]
 

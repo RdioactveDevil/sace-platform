@@ -79,3 +79,16 @@ function isServiceKey(token: string): boolean {
   if (!key || token.length !== key.length) return false;
   return timingSafeEqual(Buffer.from(token), Buffer.from(key));
 }
+
+/**
+ * Scheduled jobs (.github/workflows/*) call with `Authorization: Bearer
+ * $CRON_SECRET` (the same header Vercel Cron sends).
+ */
+export function isCronCaller(req: Request): boolean {
+  const secret = process.env.CRON_SECRET ?? "";
+  const header = req.headers.authorization ?? "";
+  if (!secret || !header.startsWith("Bearer ")) return false;
+  const given = Buffer.from(header.slice(7));
+  const expected = Buffer.from(secret);
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}

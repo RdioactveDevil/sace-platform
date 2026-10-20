@@ -46,14 +46,15 @@ export async function r2ObjectExists(key: string): Promise<boolean> {
   return res.ok;
 }
 
-/** Delete an object. Best-effort. */
-export async function r2DeleteObject(key: string): Promise<void> {
+/** Delete an object. Returns whether it is gone (already-missing counts). */
+export async function r2DeleteObject(key: string): Promise<boolean> {
   const cfg = getR2Config();
-  if (!cfg) return;
+  if (!cfg) return false;
   try {
-    await client(cfg).fetch(objectUrl(cfg, key).toString(), { method: "DELETE" });
+    const res = await client(cfg).fetch(objectUrl(cfg, key).toString(), { method: "DELETE" });
+    return res.ok || res.status === 404;
   } catch {
-    // ignore
+    return false;
   }
 }
 

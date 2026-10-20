@@ -1,0 +1,63 @@
+name: Recording cleanup
+
+# Once a day, asks the API to delete automatic session recordings older than
+# 10 weeks (RECORDING_RETENTION_DAYS in artifacts/api-server/src/lib/
+# recording-retention.ts): the video file in R2 / Supabase Storage and its
+# resource row. Files tutors upload themselves are never deleted. A file that
+# fails to delete is kept and retried on the next run.
+#
+# Also runnable from the Actions tab → this workflow → "Run workflow", where
+# dry-run counts what would be deleted without deleting anything.
+#
+# Uses the same CRON_SECRET secret and APP_URL variable as automated-emails.yml.
+
+on:
+  schedule:
+    - cron: "23 17 * * *" # ≈ 3:53am Adelaide
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode"
+        type: choice
+        options:
+          - "dry-run (count only, no deletes)"
+          - "delete"
+        default: "dry-run (count only, no deletes)"
+
+concurrency:
+  group: recording-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Run cleanup job
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+          MODE: ${{ inputs.mode || 'delete' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${APP_URL:-}" ]; then
+            echo "::warning::CRON_SECRET secret or APP_URL variable is not set; skipping. See automated-emails.yml."
+            exit 0
+          fi
+          QUERY=""
+          case "$MODE" in
+            dry-run*) QUERY="?dry_run=1" ;;
+          esac
+          STATUS=$(curl -sS --max-time 300 -o response.txt -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL%/}/api/cron/recordings${QUERY}")
+          cat response.txt
+          echo
+          if [ "$STATUS" != "200" ]; then
+            case "$STATUS" in
+              3*) echo "::error::HTTP $STATUS redirect: set the APP_URL variable to the address the site redirects to (https://www.gradefarm.com.au)." ;;
+              401) echo "::error::HTTP 401: CRON_SECRET here doesn't match CRON_SECRET on Vercel." ;;
+              *) echo "::error::Recording cleanup returned HTTP $STATUS." ;;
+            esac
+            exit 1
+          fi

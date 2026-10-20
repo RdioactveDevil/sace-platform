@@ -343,6 +343,7 @@ export default function ResourcesTab({ profile, theme }) {
                       {targetLabel(r)} · {fmtDate(r.created_at)}
                       {r.kind === 'file' && r.file_size != null ? ` · ${fmtSize(r.file_size)}` : ''}
                       {r.kind === 'link' ? ' · external link' : ''}
+                      {r.expires_at ? ` · deleted ${fmtDate(r.expires_at)}` : ''}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>

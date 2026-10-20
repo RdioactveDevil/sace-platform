@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { timingSafeEqual } from "node:crypto";
-import { getServiceClient } from "../lib/auth";
+import { getServiceClient, isCronCaller } from "../lib/auth";
 import { appUrl, escapeHtml, getResend, verifyUnsubscribeToken } from "../lib/email";
 import { runAutomatedEmails } from "../lib/automated-emails";
 import { logger } from "../lib/logger";
@@ -11,15 +10,6 @@ const router = Router();
 // Called every 15 minutes by .github/workflows/automated-emails.yml with
 // `Authorization: Bearer $CRON_SECRET` (the same header Vercel Cron sends).
 // ?dry_run=1 lists what would be sent without sending; ?max=N caps the run.
-
-function isCronCaller(req: Request): boolean {
-  const secret = process.env.CRON_SECRET ?? "";
-  const header = req.headers.authorization ?? "";
-  if (!secret || !header.startsWith("Bearer ")) return false;
-  const given = Buffer.from(header.slice(7));
-  const expected = Buffer.from(secret);
-  return given.length === expected.length && timingSafeEqual(given, expected);
-}
 
 function maskEmail(email: string): string {
   const [name, domain] = email.split("@");
