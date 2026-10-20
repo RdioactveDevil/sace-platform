@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { r2DeleteObject, r2SignedUrl } from "../lib/r2";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -100,6 +101,8 @@ interface ResourceRow {
   type: string;
   kind: "file" | "link";
   storage_path: string | null;
+  /** 'supabase' (tutor-resources bucket) or 'r2' (session recordings). */
+  storage_backend: string | null;
   file_name: string | null;
   file_size: number | null;
   mime_type: string | null;
@@ -109,6 +112,20 @@ interface ResourceRow {
   session_id: string | null;
   visible_to_students: boolean;
   created_at: string;
+}
+
+/** Signed URL for a file resource, from whichever storage holds it. */
+async function signedFileUrl(
+  admin: AdminClient,
+  r: Pick<ResourceRow, "storage_path" | "storage_backend">,
+  opts: { download?: string } = {},
+): Promise<string | null> {
+  if (!r.storage_path) return null;
+  if (r.storage_backend === "r2") return r2SignedUrl(r.storage_path, SIGNED_URL_TTL, opts);
+  const { data } = await admin.storage
+    .from(BUCKET)
+    .createSignedUrl(r.storage_path, SIGNED_URL_TTL, opts.download ? { download: opts.download } : undefined);
+  return data?.signedUrl ?? null;
 }
 
 /** Resolve which roster students a resource reaches (for email + counts). */
@@ -394,10 +411,7 @@ router.get("/resources/student", async (req: Request, res: Response) => {
       visible.map(async (r) => {
         let download_url: string | null = r.external_url;
         if (r.kind === "file" && r.storage_path) {
-          const { data: signed } = await admin.storage
-            .from(BUCKET)
-            .createSignedUrl(r.storage_path, SIGNED_URL_TTL);
-          download_url = signed?.signedUrl ?? null;
+          download_url = await signedFileUrl(admin, r);
         }
         return {
           id: r.id,
@@ -470,11 +484,9 @@ router.get("/resources/:id/download", async (req: Request, res: Response) => {
     if (r.kind === "link") return res.json({ url: r.external_url });
     if (!r.storage_path) return res.status(404).json({ error: "File missing." });
 
-    const { data: signed, error: signErr } = await admin.storage
-      .from(BUCKET)
-      .createSignedUrl(r.storage_path, SIGNED_URL_TTL, { download: r.file_name || undefined });
-    if (signErr || !signed) return res.status(500).json({ error: "Could not create download link." });
-    return res.json({ url: signed.signedUrl });
+    const url = await signedFileUrl(admin, r, { download: r.file_name || undefined });
+    if (!url) return res.status(500).json({ error: "Could not create download link." });
+    return res.json({ url });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -491,15 +503,16 @@ router.delete("/tutor/resources/:id", async (req: Request, res: Response) => {
 
     const { data: r, error: exErr } = await admin
       .from("tutor_resources")
-      .select("id, tutor_id, kind, storage_path")
+      .select("id, tutor_id, kind, storage_path, storage_backend")
       .eq("id", id)
-      .single<Pick<ResourceRow, "id" | "tutor_id" | "kind" | "storage_path">>();
+      .single<Pick<ResourceRow, "id" | "tutor_id" | "kind" | "storage_path" | "storage_backend">>();
     if (exErr || !r || r.tutor_id !== userId) {
       return res.status(404).json({ error: "Resource not found." });
     }
 
     if (r.kind === "file" && r.storage_path) {
-      await admin.storage.from(BUCKET).remove([r.storage_path]).catch(() => {});
+      if (r.storage_backend === "r2") await r2DeleteObject(r.storage_path);
+      else await admin.storage.from(BUCKET).remove([r.storage_path]).catch(() => {});
     }
     const { error } = await admin.from("tutor_resources").delete().eq("id", id);
     if (error) return res.status(500).json({ error: error.message });

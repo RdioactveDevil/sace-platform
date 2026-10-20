@@ -2,6 +2,7 @@ import express, { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { WebhookReceiver, EgressStatus } from "livekit-server-sdk";
 import { startSessionRecording, RECORDING_BUCKET } from "./sessions";
+import { r2ObjectExists } from "../lib/r2";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -24,6 +25,7 @@ interface SessionRow {
   recording_egress_id: string | null;
   recording_status: string | null;
   recording_storage_path: string | null;
+  recording_storage_backend: string | null;
 }
 
 /**
@@ -113,7 +115,7 @@ async function handleRoomStarted(admin: SupabaseClient, roomName: string): Promi
 
   const started = await startSessionRecording(roomName, target.tutor_id, target.id);
   if (!started) {
-    await admin.from("tutoring_sessions").update({ recording_status: "failed" }).eq("id", target.id);
+    await markFailed(admin, target.id, "Recording could not start (LiveKit or storage not configured, or egress refused).");
     return;
   }
   await admin
@@ -121,14 +123,25 @@ async function handleRoomStarted(admin: SupabaseClient, roomName: string): Promi
     .update({
       recording_egress_id: started.egressId,
       recording_storage_path: started.storagePath,
+      recording_storage_backend: started.backend,
       recording_status: "recording",
+      recording_error: null,
     })
     .eq("id", target.id);
+}
+
+async function markFailed(admin: SupabaseClient, sessionId: string, reason: string): Promise<void> {
+  console.warn(`[livekit webhook] recording failed for session ${sessionId}: ${reason}`);
+  await admin
+    .from("tutoring_sessions")
+    .update({ recording_status: "failed", recording_error: reason.slice(0, 500) })
+    .eq("id", sessionId);
 }
 
 interface EgressInfoLike {
   egressId: string;
   status: EgressStatus;
+  error?: string;
   fileResults?: Array<{ filename?: string; size?: bigint | number; duration?: bigint | number }>;
 }
 
@@ -136,7 +149,7 @@ async function handleEgressEnded(admin: SupabaseClient, info: EgressInfoLike): P
   const { data: session } = await admin
     .from("tutoring_sessions")
     .select(
-      "id, tutor_id, student_id, class_id, session_type, title, record_session, recording_egress_id, recording_status, recording_storage_path",
+      "id, tutor_id, student_id, class_id, session_type, title, record_session, recording_egress_id, recording_status, recording_storage_path, recording_storage_backend",
     )
     .eq("recording_egress_id", info.egressId)
     .maybeSingle<SessionRow>();
@@ -146,25 +159,32 @@ async function handleEgressEnded(admin: SupabaseClient, info: EgressInfoLike): P
   if (session.recording_status === "ready") return;
 
   if (info.status !== EgressStatus.EGRESS_COMPLETE) {
-    await admin.from("tutoring_sessions").update({ recording_status: "failed" }).eq("id", session.id);
+    await markFailed(admin, session.id, info.error || `Egress ended with status ${EgressStatus[info.status] ?? info.status}.`);
     return;
   }
 
   const file = info.fileResults?.[0];
   const storagePath = session.recording_storage_path || file?.filename || null;
   if (!storagePath) {
-    await admin.from("tutoring_sessions").update({ recording_status: "failed" }).eq("id", session.id);
+    await markFailed(admin, session.id, "Egress finished without a file.");
     return;
   }
   const fileSize = file?.size != null ? Number(file.size) : null;
 
   // Confirm the object actually landed in storage before publishing.
+  const backend = session.recording_storage_backend === "r2" ? "r2" : "supabase";
   const lastSlash = storagePath.lastIndexOf("/");
   const dir = lastSlash >= 0 ? storagePath.slice(0, lastSlash) : "";
   const base = lastSlash >= 0 ? storagePath.slice(lastSlash + 1) : storagePath;
-  const { data: listed } = await admin.storage.from(RECORDING_BUCKET).list(dir, { search: base });
-  if (!listed || !listed.find((o: { name: string }) => o.name === base)) {
-    await admin.from("tutoring_sessions").update({ recording_status: "failed" }).eq("id", session.id);
+  let landed: boolean;
+  if (backend === "r2") {
+    landed = await r2ObjectExists(storagePath);
+  } else {
+    const { data: listed } = await admin.storage.from(RECORDING_BUCKET).list(dir, { search: base });
+    landed = !!listed?.find((o: { name: string }) => o.name === base);
+  }
+  if (!landed) {
+    await markFailed(admin, session.id, `Recording file not found in ${backend === "r2" ? "R2" : "Supabase storage"} after upload.`);
     return;
   }
 
@@ -178,13 +198,14 @@ async function handleEgressEnded(admin: SupabaseClient, info: EgressInfoLike): P
   const classId = session.class_id ?? null;
   const studentId = !classId && session.session_type !== "group" ? session.student_id ?? null : null;
 
-  await admin.from("tutor_resources").insert({
+  const { error: insertErr } = await admin.from("tutor_resources").insert({
     tutor_id: session.tutor_id,
     title,
     description: "Automatically recorded class session.",
     type: "recording",
     kind: "file",
     storage_path: storagePath,
+    storage_backend: backend,
     file_name: base,
     file_size: fileSize,
     mime_type: "video/mp4",
@@ -193,8 +214,12 @@ async function handleEgressEnded(admin: SupabaseClient, info: EgressInfoLike): P
     session_id: session.id,
     visible_to_students: true,
   });
+  if (insertErr) {
+    await markFailed(admin, session.id, `Could not publish the recording: ${insertErr.message}`);
+    return;
+  }
 
-  await admin.from("tutoring_sessions").update({ recording_status: "ready" }).eq("id", session.id);
+  await admin.from("tutoring_sessions").update({ recording_status: "ready", recording_error: null }).eq("id", session.id);
 }
 
 export default router;

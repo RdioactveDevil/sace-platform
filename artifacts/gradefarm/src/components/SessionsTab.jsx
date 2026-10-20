@@ -53,7 +53,7 @@ function RecordingBadge({ session, t }) {
   else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = t.goldText }
   else return null
   return (
-    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+    <span title={rs === 'failed' ? session.recording_error || undefined : undefined} style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
       {icon}{label}
     </span>
   )

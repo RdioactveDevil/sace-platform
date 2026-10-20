@@ -48,6 +48,7 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - Note: Resend Replit integration was dismissed by user; API key stored directly as a secret instead
 - `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` / `LIVEKIT_URL` — live video sessions (LiveKit)
 - Session auto-recording (LiveKit Egress → tutor-resources bucket) also needs:
+  - `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` — Cloudflare R2 bucket for recordings (Cloudflare dashboard → R2 → Manage API tokens, Object Read & Write on that bucket). When set, recordings go to R2; otherwise they fall back to Supabase Storage, whose Free plan rejects files over 50 MB
   - `SUPABASE_S3_ACCESS_KEY_ID` / `SUPABASE_S3_SECRET_ACCESS_KEY` / `SUPABASE_S3_REGION` — Supabase Storage S3 access keys (Supabase dashboard → Storage → S3 connection)
   - `SUPABASE_S3_ENDPOINT` — optional; defaults to `<project>.supabase.co/storage/v1/s3`
   - LiveKit dashboard → Webhooks → point at `https://<app>/api/livekit/webhook` (the API verifies the signature with LIVEKIT_API_SECRET)

@@ -223,6 +223,8 @@ export default function StudentLessonsScreen({ theme, active = true }) {
                       </button>
                     ) : s.recording_status === 'recording' || s.recording_status === 'processing' ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: t.textMuted }}><Loader size={13} aria-hidden="true" /> Recording processing</span>
+                    ) : s.recording_status === 'failed' ? (
+                      <span style={{ fontSize: 12, color: t.textMuted }}>Recording unavailable</span>
                     ) : null}
                   </LessonRow>
                 </div>
