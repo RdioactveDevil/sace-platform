@@ -134,6 +134,10 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
   const [pwMsg, setPwMsg]               = useState('')
   const [replayTourBusy, setReplayTourBusy] = useState(false)
 
+  const [remindersOn, setRemindersOn]   = useState(!profile.emails_unsubscribed_at)
+  const [savingReminders, setSavingReminders] = useState(false)
+  const [remindersMsg, setRemindersMsg] = useState('')
+
   const card = {
     background: t.bgCard,
     border: `1px solid ${t.border}`,
@@ -190,6 +194,20 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
     else { setPwMsg('Password updated!'); setNewPw('') }
     setSavingPw(false)
     setTimeout(() => setPwMsg(''), 4000)
+  }
+
+  const handleToggleReminders = async () => {
+    const next = !remindersOn
+    setSavingReminders(true); setRemindersMsg('')
+    try {
+      await updateProfile(profile.id, { emails_unsubscribed_at: next ? null : new Date().toISOString() })
+      setRemindersOn(next)
+    } catch {
+      setRemindersMsg('Failed to save.')
+      setTimeout(() => setRemindersMsg(''), 3000)
+    } finally {
+      setSavingReminders(false)
+    }
   }
 
   const handleReplayFeatureTour = async () => {
@@ -311,6 +329,37 @@ export default function AccountScreen({ profile, theme, onSignOut, onChangeSubje
                 </div>
                 {pwMsg && <div style={{ fontSize: 12, color: pwMsg === 'Password updated!' ? t.success : t.danger, marginTop: 8 }}>{pwMsg}</div>}
               </div>
+
+              {/* ── Email reminders (hidden until the automated-emails migration adds the column) ── */}
+              {'emails_unsubscribed_at' in profile && (
+                <div style={card}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Email reminders</div>
+                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
+                        Session reminders and assignment due dates. Emails your tutor sends you directly always arrive.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={remindersOn}
+                      aria-label="Email reminders"
+                      onClick={handleToggleReminders}
+                      disabled={savingReminders}
+                      style={{
+                        width: 44, height: 24, borderRadius: 999, border: 'none', padding: 2, flexShrink: 0,
+                        cursor: savingReminders ? 'not-allowed' : 'pointer', opacity: savingReminders ? 0.6 : 1,
+                        background: remindersOn ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.border,
+                        display: 'flex', justifyContent: remindersOn ? 'flex-end' : 'flex-start', transition: 'background 0.2s',
+                      }}
+                    >
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+                    </button>
+                  </div>
+                  {remindersMsg && <div style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{remindersMsg}</div>}
+                </div>
+              )}
 
               {/* ── Feature tour (replay from Settings) ── */}
               {typeof onReplayFeatureTour === 'function' && (
