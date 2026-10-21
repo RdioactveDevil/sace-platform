@@ -727,6 +727,7 @@ interface BatchAssignmentBody {
   difficulty?: string;
   min_accuracy?: number | null;
   pass_mode?: string;
+  remediation?: boolean;
 }
 
 const ASSIGNMENT_DIFFICULTIES = ["adaptive", "easy", "medium", "hard"];
@@ -747,6 +748,7 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
     // Optional pass mark (%): omitted or null means none.
     const minAccuracy = body.min_accuracy == null ? null : Number(body.min_accuracy);
     const passMode = body.pass_mode ?? "until_pass";
+    const remediation = body.remediation !== false;
 
     if (!type || !subject || !Array.isArray(topics) || topics.length === 0) {
       return res.status(400).json({ error: "type, subject and at least one topic are required." });
@@ -827,6 +829,7 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       difficulty,
       min_accuracy: minAccuracy,
       pass_mode: passMode,
+      remediation,
     }));
 
     const { data: inserted, error: insErr } = await admin

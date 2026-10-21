@@ -138,12 +138,13 @@ export function applyAssignmentAnswer(a, correct) {
   return { ...a, progress_count: Math.min((a.progress_count || 0) + 1, goal), recent_results: recent }
 }
 
-/** "4/10 questions · Hard · Pass 80%" for an assignment with a tutor-set count, else null. */
+/** "4/10 questions · Hard · Pass 80% · No remediation" for an assignment with a tutor-set count, else null. */
 export function assignmentGoalLabel(a) {
   const st = assignmentStanding(a)
   if (!st) return null
   const parts = [`${st.progress}/${st.goal} questions`, ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive']
   if (st.minAccuracy) parts.push(`Pass ${st.minAccuracy}%${st.oneAttempt ? ' (one attempt)' : ''}`)
+  if (a.remediation === false) parts.push('No remediation')
   return parts.join(' · ')
 }
 

@@ -13,13 +13,17 @@
 -- 3. report_summary: the AI write-up shown on the tutor's report, cached so it
 --    is generated once. tutor_notified_at: when the tutor was emailed that the
 --    assignment finished.
+-- 4. remediation: whether a wrong answer gives the student similar practice
+--    questions (the default) or the assignment runs as a straight quiz, so the
+--    tutor sees what the student can do unaided.
 
 alter table public.assignments
   add column if not exists pass_mode text not null default 'until_pass'
     check (pass_mode in ('until_pass', 'one_attempt')),
   add column if not exists passed boolean,
   add column if not exists report_summary jsonb,
-  add column if not exists tutor_notified_at timestamptz;
+  add column if not exists tutor_notified_at timestamptz,
+  add column if not exists remediation boolean not null default true;
 
 create table if not exists public.assignment_answers (
   id             uuid primary key default gen_random_uuid(),

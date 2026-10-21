@@ -175,3 +175,8 @@ test('pass_mode is ignored without a pass mark', () => {
   assert.equal(assignmentStanding(a).complete, true)
   assert.equal(assignmentStanding(a).passed, null)
 })
+
+test('an assignment run without remediation says so in its label', () => {
+  assert.equal(assignmentGoalLabel({ question_count: 10, progress_count: 0, difficulty: 'medium', remediation: false }), '0/10 questions · Medium · No remediation')
+  assert.equal(assignmentGoalLabel({ question_count: 10, progress_count: 0, difficulty: 'medium', remediation: true }), '0/10 questions · Medium')
+})

@@ -108,7 +108,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
       { k: 'Score', v: score.pct != null ? `${score.pct}%` : '—', sub: score.total ? `${score.correct}/${score.total} correct` : 'No answers yet', color: result.color },
       { k: 'Result', v: result.text, sub: a.min_accuracy ? `Pass mark ${a.min_accuracy}%${a.pass_mode === 'one_attempt' ? ' · one attempt' : ''}` : 'No pass mark', color: result.color },
       { k: 'Answered', v: goal ? `${Math.min(a.progress_count || 0, goal)}/${goal}` : String(answers.length), sub: done ? `Finished ${fmtDate(a.completed_at)}` : `Due ${fmtDate(a.due_date)}`, color: t.text },
-      { k: 'Avg time', v: fmtSecs(avgMs), sub: `Difficulty: ${ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive'}`, color: t.text },
+      { k: 'Avg time', v: fmtSecs(avgMs), sub: `${ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive'} · ${a.remediation === false ? 'no remediation' : 'with remediation'}`, color: t.text },
     ]
 
     const list = (Icon, title, items, color) => items?.length > 0 && (

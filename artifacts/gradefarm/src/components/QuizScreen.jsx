@@ -485,6 +485,8 @@ export default function QuizScreen({
   const assignmentBand = ASSIGNMENT_DIFFICULTIES[activeAssignment?.difficulty] || null
   const goalReached = !endedForGoal && (!!completedGoal || !!assignmentStand?.complete)
   const goalDisplay = completedGoal || assignmentStand
+  // A tutor can run an assignment as a straight quiz, without remediation.
+  const remediationAllowed = activeAssignment?.remediation !== false
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   const remediationQueue = Array.isArray(_remediationQueue) ? _remediationQueue : []
@@ -1225,7 +1227,7 @@ export default function QuizScreen({
     let remediationCompleted = false
     if (isRemediationQuestion) {
       remediationCompleted = decideRemediationVariantOutcome(isCorrect)
-    } else if (!isCorrect && !currentQ.passage_id) {
+    } else if (!isCorrect && !currentQ.passage_id && remediationAllowed) {
       // Reading-passage questions skip remediation: a generated "similar
       // question" would have no passage to answer from.
       enterRemediationStateSync(currentQ)
@@ -1259,7 +1261,7 @@ export default function QuizScreen({
     if (!isCorrect) {
       // Remediation state was already set synchronously above. Load the queue in
       // the background — parallel with the AI tip fetch.
-      if (!currentQ.passage_id) enterRemediation(currentQ)
+      if (!currentQ.passage_id && remediationAllowed) enterRemediation(currentQ)
 
       setLoadingTip(true)
       try {

@@ -288,6 +288,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     pass_mark_on: false,    // optional pass mark (min_accuracy)
     min_accuracy: 80,
     pass_mode: 'until_pass', // 'until_pass': practise until passed · 'one_attempt': pass or fail at the count
+    remediation: true,       // similar practice questions after a wrong answer; off = straight quiz
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
@@ -400,13 +401,14 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
         difficulty: form.difficulty,
         min_accuracy: minAccuracy,
         pass_mode: form.pass_mode,
+        remediation: form.remediation,
         studentIds: form.target_mode === 'classes' || form.target_mode === 'all' ? [] : form.student_ids,
         classIds: form.target_mode === 'classes' ? form.class_ids : [],
         allRoster: form.target_mode === 'all',
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', pass_mark_on: false, min_accuracy: 80, pass_mode: 'until_pass', target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', pass_mark_on: false, min_accuracy: 80, pass_mode: 'until_pass', remediation: true, target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -561,6 +563,18 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                   })}
                 </div>
                 <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{DIFFICULTY_OPTIONS.find(o => o.id === form.difficulty)?.hint}</div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.remediation} onChange={e => setForm(f => ({ ...f, remediation: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                Remediation
+              </label>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4, paddingLeft: 23 }}>
+                {form.remediation
+                  ? 'After a wrong answer they get similar practice questions before moving on. These don’t count toward the assignment.'
+                  : 'Straight quiz: no practice questions between answers, so you see what they can do on their own.'}
               </div>
             </div>
 

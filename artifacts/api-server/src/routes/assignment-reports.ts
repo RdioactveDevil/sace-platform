@@ -60,6 +60,7 @@ interface AssignmentRow {
   difficulty: string;
   min_accuracy: number | null;
   pass_mode: string;
+  remediation: boolean;
   progress_count: number;
   recent_results: boolean[];
   passed: boolean | null;
@@ -100,7 +101,7 @@ interface ReportAnswer {
 
 const ASSIGNMENT_COLUMNS =
   "id, tutor_id, student_id, type, subject, topics, due_date, created_at, completed_at, question_count, difficulty, " +
-  "min_accuracy, pass_mode, progress_count, recent_results, passed, report_summary, tutor_notified_at";
+  "min_accuracy, pass_mode, remediation, progress_count, recent_results, passed, report_summary, tutor_notified_at";
 
 /** Score over the answers that count toward the goal (the most recent question_count). */
 function scoreOf(a: AssignmentRow) {
@@ -240,6 +241,7 @@ router.post("/tutor/assignments/:id/report/summary", async (req: Request, res: R
       "Write any maths in LaTeX inside $...$.";
     const user = `Assignment: ${a.type} — ${a.subject}; topics: ${(a.topics ?? []).join(", ") || a.subject}.
 Student: ${studentName}. Goal: ${a.question_count ?? "?"} questions, difficulty ${a.difficulty}. ${passLine}
+${a.remediation ? "Wrong answers were followed by similar practice questions (not counted below)." : "Run as a straight quiz: no help or practice questions between answers."}
 Score on the counted answers: ${score.correct}/${score.total}${score.pct != null ? ` (${score.pct}%)` : ""}. All answers recorded: ${allCorrect}/${answers.length} correct.
 
 Answers in order:

@@ -1185,10 +1185,10 @@ export async function removeStudentFromClass(classId, studentId) {
 }
 
 /** Create a batch of assignments. Server resolves the union of studentIds + classIds + allRoster. */
-export async function createBatchAssignment({ type, subject, topics, due_date, question_count, difficulty, min_accuracy = null, pass_mode = 'until_pass', studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
+export async function createBatchAssignment({ type, subject, topics, due_date, question_count, difficulty, min_accuracy = null, pass_mode = 'until_pass', remediation = true, studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
   return tutorFetch('/api/tutor/assignments/batch', {
     method: 'POST',
-    body: JSON.stringify({ type, subject, topics, due_date, question_count, difficulty, min_accuracy, pass_mode, studentIds, classIds, allRoster, notify }),
+    body: JSON.stringify({ type, subject, topics, due_date, question_count, difficulty, min_accuracy, pass_mode, remediation, studentIds, classIds, allRoster, notify }),
   })
 }
 
