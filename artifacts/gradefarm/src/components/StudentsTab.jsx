@@ -212,7 +212,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     try {
       const sentTo = email.trim().toLowerCase()
       const res = await inviteStudent(sentTo)
-      if (!res.emailSent) setAddError(`Invite saved, but the email didn't send: ${res.emailError}. Try Resend below.`)
+      if (!res.emailSent) setAddError(`Invite saved, but the email didn't send: ${String(res.emailError).replace(/\.+$/, '')}. Try Resend below.`)
       else { setEmail(''); setAddNotice(`Invite sent to ${sentTo}. They'll join your roster once they accept.`) }
       fetchPendingInvites().then(setInvites).catch(() => {})
     } catch (err) { setAddError(err.message || 'Could not send the invite.') }
