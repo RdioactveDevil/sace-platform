@@ -139,9 +139,9 @@ function studentSteps(isTutor) {
         {
           path: '/tutor',
           target: 'nav-tutor',
-          title: 'Tutor Dashboard',
+          title: 'Tutor Portal',
           body:
-            'Manage roster, classes, batch assignments, and student progress from here.',
+            'Your Tutor Portal sits above Change Subject. Manage your roster, classes, lessons, assignments and messages from here.',
         },
       ]
     : []
