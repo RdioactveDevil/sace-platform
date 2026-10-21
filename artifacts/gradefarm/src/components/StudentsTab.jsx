@@ -4,7 +4,9 @@ import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
   fetchStudentEmails,
-  addStudentToRoster,
+  inviteStudent,
+  fetchPendingInvites,
+  cancelInvite,
   removeStudentFromRoster,
   notifyStudent,
   fetchTutorClasses,
@@ -70,6 +72,10 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   const [email, setEmail] = useState('')
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
+  const [addNotice, setAddNotice] = useState('')
+  const [invites, setInvites] = useState([])
+  const [inviteBusy, setInviteBusy] = useState(null)
+  const [inviteMsg, setInviteMsg] = useState({})        // { inviteId: text }
   const [showAdd, setShowAdd] = useState(false)
   const [editId, setEditId] = useState(null)
   const [confirmRemove, setConfirmRemove] = useState(null)
@@ -90,6 +96,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         fetchStudentEmails(r.map(x => x.student_id)).then(setEmails).catch(() => {})
       } else setEmails({})
       fetchRosterDetails({ allTutors }).then(setDetails).catch(() => {})
+      fetchPendingInvites().then(setInvites).catch(() => {})
     } catch {}
     setLoading(false)
   }
@@ -201,11 +208,30 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     e.preventDefault()
     if (!email.trim()) return
     setAddError(''); setAddLoading(true)
+    setAddNotice('')
     try {
-      await addStudentToRoster(profile.id, email.trim().toLowerCase())
-      setEmail(''); setShowAdd(false); await load()
-    } catch (err) { setAddError(err.message || 'Could not find a student with that email.') }
+      const sentTo = email.trim().toLowerCase()
+      const res = await inviteStudent(sentTo)
+      if (!res.emailSent) setAddError(`Invite saved, but the email didn't send: ${String(res.emailError).replace(/\.+$/, '')}. Try Resend below.`)
+      else { setEmail(''); setAddNotice(`Invite sent to ${sentTo}. They'll join your roster once they accept.`) }
+      fetchPendingInvites().then(setInvites).catch(() => {})
+    } catch (err) { setAddError(err.message || 'Could not send the invite.') }
     setAddLoading(false)
+  }
+  const handleResend = async (inv) => {
+    setInviteBusy(inv.id); setInviteMsg(m => ({ ...m, [inv.id]: '' }))
+    try {
+      const res = await inviteStudent(inv.email)
+      setInviteMsg(m => ({ ...m, [inv.id]: res.emailSent ? 'Sent again.' : `Email failed: ${res.emailError}` }))
+      fetchPendingInvites().then(setInvites).catch(() => {})
+    } catch (err) { setInviteMsg(m => ({ ...m, [inv.id]: err.message })) }
+    setInviteBusy(null)
+  }
+  const handleCancelInvite = async (inv) => {
+    setInviteBusy(inv.id)
+    try { await cancelInvite(inv.id); setInvites(prev => prev.filter(i => i.id !== inv.id)) }
+    catch (err) { setInviteMsg(m => ({ ...m, [inv.id]: err.message })) }
+    setInviteBusy(null)
   }
   const handleRemove = async (id) => {
     try { await removeStudentFromRoster(profile.id, id); setConfirmRemove(null); await load() } catch {}
@@ -315,7 +341,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
           <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>Group</span>
           <select className="td-input-gold" value={groupBy} onChange={e => setGroupBy(e.target.value)} style={ctrl}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}</select>
         </div>
-        <button onClick={() => { setShowAdd(v => !v); setAddError('') }} style={{ marginLeft: 'auto', padding: '9px 16px', borderRadius: 9, border: 'none', background: showAdd ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showAdd ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>{showAdd ? '✕ Cancel' : '+ Add student'}</button>
+        <button onClick={() => { setShowAdd(v => !v); setAddError(''); setAddNotice('') }} style={{ marginLeft: 'auto', padding: '9px 16px', borderRadius: 9, border: 'none', background: showAdd ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showAdd ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>{showAdd ? '✕ Cancel' : '+ Invite student'}</button>
       </div>
 
       {/* Filters */}
@@ -338,12 +364,36 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       {/* Add form */}
       {showAdd && (
         <div style={{ ...card, padding: '16px 18px' }}>
-          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 10 }}>Enter the student's email to add them to your roster. You can set their year level &amp; subjects after.</div>
+          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 10 }}>Enter the student's email and we'll send them an invite. They join your roster (and get the Student Portal) once they accept. They don't need an account yet.</div>
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError('') }} placeholder="student@email.com" type="email" style={{ ...ctrl, flex: 1, minWidth: 220 }} />
-            <button type="submit" disabled={addLoading || !email.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Adding…' : 'Add'}</button>
+            <input className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }} placeholder="student@email.com" type="email" style={{ ...ctrl, flex: 1, minWidth: 220 }} />
+            <button type="submit" disabled={addLoading || !email.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Sending…' : 'Send invite'}</button>
           </form>
           {addError && <div style={{ marginTop: 8, fontSize: 12, color: t.danger }}>{addError}</div>}
+          {addNotice && <div style={{ marginTop: 8, fontSize: 12, color: t.success, fontWeight: 600 }}>{addNotice}</div>}
+        </div>
+      )}
+
+      {/* Pending invites (the caller's own) */}
+      {invites.length > 0 && (
+        <div style={{ ...card, overflow: 'hidden' }}>
+          <div style={{ padding: '13px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Pending invites</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>Waiting for the student to accept</div>
+          </div>
+          {invites.map(inv => (
+            <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px', borderBottom: `1px solid ${divider}` }}>
+              <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.email}</div>
+                <div style={{ fontSize: 11, color: inv.expired ? t.danger : t.textMuted }}>
+                  {inv.expired ? 'Expired. Resend to renew' : inv.sent_at ? `Sent ${fmtDate(inv.sent_at)}` : 'Not sent yet'}
+                  {inviteMsg[inv.id] ? ` · ${inviteMsg[inv.id]}` : ''}
+                </div>
+              </div>
+              <button onClick={() => handleResend(inv)} disabled={inviteBusy === inv.id} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Resend</button>
+              <button onClick={() => handleCancelInvite(inv)} disabled={inviteBusy === inv.id} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -356,7 +406,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         {loading ? (
           <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
         ) : students.length === 0 ? (
-          <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students yet. Add one above to get started.</div>
+          <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students yet. Invite one above to get started.</div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students match the current filters.</div>
         ) : (

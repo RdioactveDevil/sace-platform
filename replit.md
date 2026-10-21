@@ -23,7 +23,8 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
 - Leaderboard, progress tracking, study plans
 - Subject picker with subscription gating
 - **Tutor Dashboard** (`/tutor`): 3-tab dashboard for users with `is_tutor=true` on their profile
-  - Students tab: add students by email (looked up server-side via service role), view/remove roster; "✉ Notify" button per student opens an inline email composer to send a custom message
+  - Students tab: **invite** students by email, view/remove roster; "✉ Notify" button per student opens an inline email composer to send a custom message
+  - **Student invites** (`api-server/src/routes/invites.ts`, table `tutor_invites`): "Invite student" emails an invite link (`/invite/:token`, works for people without an account yet). The student accepts signed in with the invited address, and only then joins the tutor's roster (`tutor_students`), which opens the Lessons section of the Student Portal and lets the tutor see their progress. Pending invites also show as a card on the student's Home page; tutors can resend or cancel them from the Students tab. Invites expire 30 days after they were last sent. Tutors can no longer insert roster rows from the browser (admin and class tools still link students through the service role)
   - Assignments tab: create Quiz/Test/Worksheet/Homework assignments with topics and due dates; auto-sends assignment notification email to each selected student on creation
   - Progress tab: per-student XP, accuracy, topic breakdown, recent activity
 - **Assigned Tasks widget**: appears on student Home screen when they have pending tutor assignments

@@ -117,44 +117,6 @@ async function getStudentName(
   return profile?.display_name ?? "Student";
 }
 
-router.post("/tutor/find-student", async (req: Request, res: Response) => {
-  try {
-    const ctx = await requireTutor(req, res);
-    if (!ctx) return;
-    const { admin, callerUserId } = ctx;
-
-    const { email } = req.body as { email: string };
-    if (!email) return res.status(400).json({ error: "email is required" });
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const { data: listData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    if (listError) return res.status(500).json({ error: listError.message });
-
-    const found = listData.users.find((u) => u.email?.toLowerCase() === normalizedEmail);
-    if (!found) {
-      return res.status(404).json({ error: "No user found with that email address." });
-    }
-    if (found.id === callerUserId) {
-      return res.status(400).json({ error: "You cannot add yourself as a student." });
-    }
-
-    const { data: studentProfile, error: studentProfError } = await admin
-      .from("profiles")
-      .select("id, display_name")
-      .eq("id", found.id)
-      .single<{ id: string; display_name: string | null }>();
-
-    if (studentProfError || !studentProfile) {
-      return res.status(404).json({ error: "User has not completed setup." });
-    }
-
-    return res.json({ id: studentProfile.id, display_name: studentProfile.display_name, email: found.email });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal error";
-    return res.status(500).json({ error: message });
-  }
-});
-
 router.post("/tutor/student-emails", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);

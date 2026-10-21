@@ -1,10 +1,10 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flame, ClipboardList, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
+import { Flame, ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { supabase } from '../lib/supabase'
-import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources } from '../lib/db'
+import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
@@ -28,12 +28,16 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [assessments, setAssessments] = useState([])
   const [assignments, setAssignments] = useState([])
   const [resources, setResources] = useState([])
+  const [invites, setInvites] = useState([])
+  const [inviteBusy, setInviteBusy] = useState(null)
+  const [inviteError, setInviteError] = useState('')
 
   useEffect(() => {
     let cancelled = false
     getAssessments(profile.id).then(rows => { if (!cancelled) setAssessments(rows) }).catch(() => {})
     fetchAssignmentsForStudent(profile.id).then(rows => { if (!cancelled) setAssignments(rows) }).catch(() => {})
     fetchStudentResources().then(rows => { if (!cancelled) setResources(rows) }).catch(() => {})
+    fetchMyInvites().then(rows => { if (!cancelled) setInvites(rows) }).catch(() => {})
     return () => { cancelled = true }
   }, [profile.id, assignmentsVersion])
 
@@ -301,6 +305,38 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       ))}
     </div>
   )
+
+  const respondInvite = async (token, accept) => {
+    setInviteBusy(token); setInviteError('')
+    try {
+      await respondToInvite(token, accept)
+      // Reload so the sidebar picks up the new tutor (Lessons section).
+      if (accept) { window.location.reload(); return }
+      setInvites(prev => prev.filter(i => i.token !== token))
+    } catch (e) { setInviteError(e.message) }
+    setInviteBusy(null)
+  }
+
+  const TutorInvitesCard = () => {
+    if (invites.length === 0) return null
+    const btn = (primary) => ({ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent', color: primary ? '#0c1037' : t.textMuted })
+    return (
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.35)`, background: theme === 'dark' ? 'rgba(241,190,67,0.06)' : t.bgCard }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={16} aria-hidden="true" />Tutor invite{invites.length > 1 ? 's' : ''}</div>
+        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Accept to open the Student Portal. Your tutor will see your practice progress.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {invites.map(inv => (
+            <div key={inv.token} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
+              <div style={{ flex: 1, minWidth: 120, fontSize: 13, fontWeight: 700, color: t.text }}>{inv.tutor_name}</div>
+              <button onClick={() => respondInvite(inv.token, true)} disabled={!!inviteBusy} style={btn(true)}>{inviteBusy === inv.token ? '…' : 'Accept'}</button>
+              <button onClick={() => respondInvite(inv.token, false)} disabled={!!inviteBusy} style={btn(false)}>Decline</button>
+            </div>
+          ))}
+        </div>
+        {inviteError && <div style={{ marginTop: 8, fontSize: 12, color: t.danger }}>{inviteError}</div>}
+      </div>
+    )
+  }
 
   const AssignedTasksCard = () => {
     if (assignments.length === 0) return null
@@ -773,6 +809,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <div className="hs-mobile-cards">
+            <TutorInvitesCard />
             <AssignedTasksCard />
             <ClassResourcesCard />
             <ExamCountdownCard />
@@ -784,6 +821,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
 
         <div className="hs-right">
+          <TutorInvitesCard />
           <AssignedTasksCard />
           <ClassResourcesCard />
           <ExamCountdownCard />
