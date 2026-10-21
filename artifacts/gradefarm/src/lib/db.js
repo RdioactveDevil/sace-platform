@@ -966,6 +966,63 @@ export async function respondToInvite(token, accept) {
   return json
 }
 
+// ── STUDENT PORTAL & MESSAGES ────────────────────────────────────────────────
+
+/** The signed-in student's tutors with their profiles. */
+export async function fetchMyTutors() {
+  const json = await tutorFetch('/api/portal/tutors')
+  return json.tutors || []
+}
+
+/** The classes the signed-in student is in, with tutors and classmates. */
+export async function fetchMyClasses() {
+  const json = await tutorFetch('/api/portal/classes')
+  return json.classes || []
+}
+
+/** The signed-in tutor's profile (what students see on "My Tutor"). */
+export async function fetchTutorProfile() {
+  const json = await tutorFetch('/api/tutor/profile')
+  return json.profile
+}
+
+export async function saveTutorProfile(fields) {
+  const json = await tutorFetch('/api/tutor/profile', { method: 'PUT', body: JSON.stringify(fields) })
+  return json.profile
+}
+
+/** Everyone the caller can message: [{ other_id, other_name, other_role, last_message, unread }]. */
+export async function fetchMessageThreads() {
+  const json = await tutorFetch('/api/messages/threads')
+  return json.threads || []
+}
+
+export async function fetchUnreadMessageCount() {
+  const json = await tutorFetch('/api/messages/unread')
+  return json.unread || 0
+}
+
+/** One conversation: { other: { id, name, role }, messages: [{ id, body, created_at, from_me, read_at }] }. */
+export async function fetchMessages(otherId) {
+  return tutorFetch(`/api/messages/${encodeURIComponent(otherId)}`)
+}
+
+export async function sendMessage(otherId, body) {
+  const json = await tutorFetch(`/api/messages/${encodeURIComponent(otherId)}`, { method: 'POST', body: JSON.stringify({ body }) })
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('gf-messages-changed'))
+  return json.message
+}
+
+export async function markMessagesRead(otherId) {
+  await tutorFetch(`/api/messages/${encodeURIComponent(otherId)}/read`, { method: 'POST' })
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('gf-messages-changed'))
+}
+
+/** Start or stop recording the lesson in this room (tutor only). Resolves to { status }. */
+export async function setRoomRecording(roomName, action) {
+  return tutorFetch(`/api/rooms/${encodeURIComponent(roomName)}/recording`, { method: 'POST', body: JSON.stringify({ action }) })
+}
+
 /** Fetch email map { studentId → email } for the given roster student IDs. */
 export async function fetchStudentEmails(studentIds) {
   if (!Array.isArray(studentIds) || studentIds.length === 0) return {}

@@ -20,6 +20,7 @@ import leaderboardRouter from "./leaderboard";
 import billingRouter from "./billing";
 import emailRouter from "./email";
 import invitesRouter from "./invites";
+import portalRouter from "./portal";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(leaderboardRouter);
 router.use(billingRouter);
 router.use(emailRouter);
 router.use(invitesRouter);
+router.use(portalRouter);
 
 export default router;

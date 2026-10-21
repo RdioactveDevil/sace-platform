@@ -6,7 +6,7 @@ import { initObservability } from './lib/analytics'
 import { notify, notifyError } from './lib/notify'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, syncCheckout, getFreeQuestionUsage, countFreeQuestion } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
@@ -25,6 +25,8 @@ import AccountScreen from './components/AccountScreen'
 import HistoryScreen     from './components/HistoryScreen'
 import StudyPlanScreen   from './components/StudyPlanScreen'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
+import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
+import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
@@ -71,6 +73,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 // appear for subjects that switch it on (Admin → Curricula → Features); Exam
 // Mode and Essay Marker are full-screen, so their tabs open those screens.
 // Sections marked `tutoring` only show for students with a tutor or a lesson.
+// The Student Portal (`separate`) sits apart from the rest, above Change Subject.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
@@ -80,10 +83,14 @@ const NAV_SECTIONS = [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
     { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
   ]},
-  { icon: 'video', label: 'Lessons', id: 'lessons', tutoring: true, pages: [
-    { id: 'lessons',    label: 'Online Lessons', path: '/lessons' },
-    { id: 'recordings', label: 'Recordings',     path: '/recordings' },
-    { id: 'class-res',  label: 'Resources',      path: '/class-resources' },
+  { icon: 'portal', label: 'Student Portal', id: 'portal', tutoring: true, separate: true, pages: [
+    { id: 'portal',     label: 'Overview',   path: '/portal' },
+    { id: 'my-tutor',   label: 'My Tutor',   path: '/portal/tutor' },
+    { id: 'messages',   label: 'Messages',   path: '/portal/messages' },
+    { id: 'my-class',   label: 'My Class',   path: '/portal/class' },
+    { id: 'lessons',    label: 'Lessons',    path: '/lessons' },
+    { id: 'recordings', label: 'Recordings', path: '/recordings' },
+    { id: 'class-res',  label: 'Resources',  path: '/class-resources' },
   ]},
   { icon: 'pen', label: 'Writing', id: 'writing', feature: 'writing', pages: [
     { id: 'w-essay',   label: 'Write an Essay', path: '/writing/essay' },
@@ -98,10 +105,10 @@ const NAV_SECTIONS = [
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ]},
 ]
-const NAV_ITEMS = NAV_SECTIONS.map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature, tutoring: sec.tutoring }))
+const NAV_ITEMS = NAV_SECTIONS.filter(sec => !sec.separate).map(sec => ({ icon: sec.icon, label: sec.label, id: sec.id, path: sec.pages[0].path, feature: sec.feature, tutoring: sec.tutoring }))
 const LESSON_PATHS = ['/lessons', '/recordings', '/class-resources']
 
-/** Whether this student has a tutor or a lesson (shows the Lessons section). */
+/** Whether this student has a tutor or a lesson (unlocks the Student Portal). */
 function useHasTutoring(userId) {
   const [has, setHas] = useState(false)
   useEffect(() => {
@@ -110,6 +117,25 @@ function useHasTutoring(userId) {
     return () => { cancelled = true }
   }, [userId])
   return has
+}
+
+/** Unread tutor messages, refreshed every minute and whenever a conversation changes. */
+function useUnreadMessages(enabled) {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!enabled) return undefined
+    let cancelled = false
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      fetchUnreadMessageCount().then(n => { if (!cancelled) setCount(n) }).catch(() => {})
+    }
+    refresh()
+    const id = setInterval(refresh, 60_000)
+    window.addEventListener('gf-messages-changed', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener('gf-messages-changed', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [enabled])
+  return count
 }
 
 /** A section's pages that the current subject has switched on. */
@@ -137,6 +163,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'admin'       && <><path d="M9 2 3.5 4v4.25c0 3.4 2.4 6.4 5.5 7.25 3.1-.85 5.5-3.85 5.5-7.25V4Z" {...S} /><path d="m6.75 9 1.75 1.75L11.5 7.5" {...S} /></>}
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
       {name === 'video'       && <><rect x="2" y="4.5" width="10" height="9" rx="1.5" {...S} /><path d="m12 8 4-2.25v6.5L12 10" {...S} /></>}
+      {name === 'portal'      && <><path d="M1.75 6.5 9 3l7.25 3.5L9 10Z" {...S} /><path d="M4.5 8v3.75c0 1.1 2 2.25 4.5 2.25s4.5-1.15 4.5-2.25V8" {...S} /><path d="M16.25 6.5v4" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
     </svg>
   )
@@ -153,6 +180,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
   const hasTutoring = useHasTutoring(profile?.id)
+  const unreadMessages = useUnreadMessages(hasTutoring)
+  const portalActive = sectionForPath(location.pathname)?.id === 'portal'
   const primaryNav = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const navItems = [
     ...primaryNav,
@@ -302,6 +331,38 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
       {/* Footer actions */}
       <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        {/* Student Portal — kept apart from the study navigation above */}
+        {hasTutoring && (
+          <button
+            type="button"
+            data-tutorial-target="nav-portal"
+            className="gf-footer-btn"
+            aria-current={portalActive ? 'page' : undefined}
+            onClick={() => go('/portal')}
+            style={{
+              width: '100%', padding: '10px 11px', marginBottom: 4, borderRadius: 12, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 10,
+              border: `1px solid ${portalActive ? 'rgba(241,190,67,0.55)' : 'rgba(255,255,255,0.09)'}`,
+              background: portalActive ? 'linear-gradient(135deg, rgba(241,190,67,0.22), rgba(241,190,67,0.07))' : 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { if (!portalActive) e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)' }}
+            onMouseLeave={e => { if (!portalActive) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
+          >
+            <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#06091f' }}>
+              <NavIcon name="portal" size={18} color="currentColor" />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: portalActive ? GOLD : '#f1f5f9' }}>Student Portal</span>
+              <span style={{ display: 'block', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Your tutor &amp; lessons</span>
+            </span>
+            {unreadMessages > 0 && (
+              <span aria-label={`${unreadMessages} unread message${unreadMessages === 1 ? '' : 's'}`} style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: GOLD, color: '#06091f', fontSize: 11, fontWeight: 800, lineHeight: '20px', textAlign: 'center', flexShrink: 0 }}>
+                {unreadMessages > 9 ? '9+' : unreadMessages}
+              </span>
+            )}
+          </button>
+        )}
         <button
           data-tutorial-target="change-subject"
           className="gf-footer-btn"
@@ -428,6 +489,23 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // The first time a student has a tutor, announce the Student Portal and
+  // offer a tour. Remembered per browser.
+  const hasTutoring = useHasTutoring(profile?.id)
+  const portalWelcomeKey = `gf-portal-welcome-${profile?.id}`
+  const [portalWelcome, setPortalWelcome] = useState(false)
+  const [portalTour, setPortalTour] = useState(false)
+  useEffect(() => {
+    if (!hasTutoring || tutorialOverlay || location.pathname === '/quiz') return
+    try { if (!localStorage.getItem(portalWelcomeKey)) setPortalWelcome(true) } catch {}
+  }, [hasTutoring, tutorialOverlay, location.pathname, portalWelcomeKey])
+  const closePortalWelcome = (tour) => {
+    try { localStorage.setItem(portalWelcomeKey, new Date().toISOString()) } catch {}
+    setPortalWelcome(false)
+    if (tour) { navigate('/portal'); setPortalTour(true) }
+  }
 
   useEffect(() => {
     const open = () => setMenuOpen(true)
@@ -486,6 +564,8 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
       {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
+      {portalWelcome && <PortalWelcome theme={theme} onTour={() => closePortalWelcome(true)} onClose={() => closePortalWelcome(false)} />}
+      {portalTour && <WebsiteTutorialOverlay theme={theme} steps={PORTAL_TOUR_STEPS} onFinish={() => setPortalTour(false)} />}
     </div>
   )
 }
@@ -514,6 +594,8 @@ function AppShellScreens({
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
   const onLessons = LESSON_PATHS.includes(location.pathname)
+  const onPortal = PORTAL_PATHS.includes(location.pathname)
+  const hasTutoring = useHasTutoring(profile?.id)
   const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'visible' } : { display: 'none' }
 
   // Writing workspace — only for subjects with Writing switched on.
@@ -561,6 +643,9 @@ function AppShellScreens({
           profile={profile} questions={questions} struggleMap={struggleMap}
           theme={theme} onStartSession={onStartSession} subject={subject}
           lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
+      </div>
+      <div style={onPortal ? show(screen) : { display: 'none' }}>
+        <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} />
       </div>
       <div style={onLessons ? show(screen) : { display: 'none' }}>
         <StudentLessonsScreen theme={theme} active={onLessons} />

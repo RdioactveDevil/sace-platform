@@ -79,6 +79,7 @@
     "@excalidraw/excalidraw": "^0.18.1",
     "@livekit/components-react": "^2.9.21",
     "@livekit/components-styles": "^1.1.2",
+    "@livekit/track-processors": "^0.8.2",
     "@supabase/supabase-js": "^2.105.1",
     "katex": "^0.16.45",
     "livekit-client": "^2.18.9",

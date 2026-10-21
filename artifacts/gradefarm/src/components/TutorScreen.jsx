@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User } from 'lucide-react'
+import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard } from 'lucide-react'
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
 import OverviewTab from './OverviewTab'
+import MessagesView from './MessagesView'
+import TutorProfileTab from './TutorProfileTab'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
 import './TutorDashboard.css'
@@ -38,6 +40,7 @@ import {
   fetchDiagnosticReport,
   fetchTutorResources,
   fetchTutoringSessions,
+  fetchUnreadMessageCount,
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
@@ -2130,6 +2133,7 @@ const NAV_GROUPS = [
     { id: 'overview',    label: 'Overview',    icon: LayoutDashboard },
     { id: 'students',    label: 'Students',    icon: Users },
     { id: 'classes',     label: 'Classes',     icon: School },
+    { id: 'messages',    label: 'Messages',    icon: MessageSquare },
   ]},
   { label: 'Teaching', items: [
     { id: 'assignments', label: 'Assignments', icon: ClipboardList },
@@ -2139,6 +2143,9 @@ const NAV_GROUPS = [
   { label: 'Insights', items: [
     { id: 'progress',    label: 'Progress',    icon: ChartColumn },
     { id: 'diagnostic',  label: 'Diagnostic',  icon: FlaskConical },
+  ]},
+  { label: 'You', items: [
+    { id: 'profile',     label: 'My Profile',  icon: IdCard },
   ]},
 ]
 const SECTION_META = {
@@ -2150,12 +2157,18 @@ const SECTION_META = {
   resources:   { title: 'Resources',   sub: 'Notes, files & class recordings.' },
   progress:    { title: 'Progress',    sub: 'Per-student analytics & reports.' },
   diagnostic:  { title: 'Diagnostic',  sub: 'AI-built diagnostic assessments.' },
+  messages:    { title: 'Messages',    sub: 'Conversations with your students.' },
+  profile:     { title: 'My Profile',  sub: 'What your students see about you.' },
 }
 
 export default function TutorScreen({ profile, theme, subject }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('overview')
+  // ?tab=messages (from message emails) opens a tab directly.
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    return tab && SECTION_META[tab] ? tab : 'overview'
+  })
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
 
@@ -2196,7 +2209,18 @@ export default function TutorScreen({ profile, theme, subject }) {
     () => assignments.filter(a => !a.completed_at && a.due_date && new Date(a.due_date).setHours(23,59,59,999) < Date.now()).length,
     [assignments],
   )
-  const badges = { students: roster.length || null, assignments: overdueCount || null }
+  // Unread student messages, refreshed every minute and when a conversation changes.
+  const [unreadMessages, setUnreadMessages] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => { fetchUnreadMessageCount().then(n => { if (!cancelled) setUnreadMessages(n) }).catch(() => {}) }
+    refresh()
+    const id = setInterval(refresh, 60_000)
+    window.addEventListener('gf-messages-changed', refresh)
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener('gf-messages-changed', refresh) }
+  }, [])
+
+  const badges = { students: roster.length || null, assignments: overdueCount || null, messages: unreadMessages || null }
 
   const go = (id) => { setActiveTab(id); setMobileNav(false) }
 
@@ -2259,8 +2283,8 @@ export default function TutorScreen({ profile, theme, subject }) {
                   {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
                   {!collapsed && badge != null && (
                     <span style={{
-                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.18)' : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
-                      color: item.id === 'assignments' ? '#f87171' : (isDark ? t.textSub : '#64748b'),
+                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.18)' : item.id === 'messages' ? GOLD : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
+                      color: item.id === 'assignments' ? '#f87171' : item.id === 'messages' ? '#0c1037' : (isDark ? t.textSub : '#64748b'),
                       fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '2px 7px',
                       border: item.id === 'assignments' ? '1px solid rgba(248,113,113,0.30)' : (isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #cbd5e1'),
                     }}>{badge}</span>
@@ -2371,6 +2395,8 @@ export default function TutorScreen({ profile, theme, subject }) {
             {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
             {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} allTutors={allTutors} />}
             {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
+            {activeTab === 'messages'    && <MessagesView   theme={theme} emptyHint="Invite a student from the Students tab to start a conversation." />}
+            {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
           </div>
         </div>
       </div>

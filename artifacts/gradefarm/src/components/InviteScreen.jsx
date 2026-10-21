@@ -41,8 +41,8 @@ export default function InviteScreen({ signedIn }) {
     setBusy(null)
   }
 
-  // Reload so the sidebar picks up the new tutor (Lessons section).
-  const openPortal = () => window.location.assign('/home')
+  // Reload so the sidebar picks up the new tutor and the portal welcome shows.
+  const openPortal = () => window.location.assign('/portal')
 
   const btn = (primary, disabled) => ({
     padding: '12px 22px', borderRadius: 10, fontSize: 14, fontWeight: 800, fontFamily: FONT_B,

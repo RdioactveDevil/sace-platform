@@ -48,6 +48,7 @@ function RecordingBadge({ session, t }) {
   const rs = session.recording_status
   let label, bg, text, icon = null
   if (rs === 'recording')          { label = 'Recording';          bg = t.dangerBg;  text = t.danger; icon = <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.danger, display: 'inline-block' }} /> }
+  else if (rs === 'processing')    { label = 'Saving recording';   bg = t.blueBg;    text = t.blue;   icon = <Video size={12} aria-hidden="true" /> }
   else if (rs === 'ready')         { label = 'Recorded';           bg = t.blueBg;    text = t.blue;   icon = <Video size={12} aria-hidden="true" /> }
   else if (rs === 'failed')        { label = 'Recording failed';   bg = t.dangerBg;  text = t.danger; icon = <TriangleAlert size={12} aria-hidden="true" /> }
   else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = t.goldText }
