@@ -82,8 +82,7 @@ export default function AdminVisionScreen() {
 
   return (
     <div style={{ maxWidth: 720, fontFamily: FONT_B, color: '#f1f5f9' }}>
-      <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Generate from Image</h2>
-      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 24, lineHeight: 1.6 }}>
+      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 0, marginBottom: 24, lineHeight: 1.6 }}>
         Upload an exam figure, diagram, graph or map (or paste an image URL). Claude reads the image and writes questions from it — including click-the-region and label-the-diagram formats. The image is hosted and attached to each question.
       </p>
 

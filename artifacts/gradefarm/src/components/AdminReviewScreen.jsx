@@ -339,10 +339,7 @@ export default function AdminReviewScreen({ profile }) {
       {activeTab === 'reports' && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-            <h2 style={{ color: '#fff', margin: 0 }}>
-              AI Reports
-              {!loadingReports && <span style={{ marginLeft: 8, fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>({reports.length})</span>}
-            </h2>
+            <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{loadingReports ? '' : `${reports.length} report${reports.length === 1 ? '' : 's'}`}</span>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {['all', 'pending', 'processing', 'fixed_index', 'regenerated', 'dismissed', 'error'].map(s => (
                 <button
@@ -461,10 +458,7 @@ export default function AdminReviewScreen({ profile }) {
       {/* Left: table */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <h2 style={{ color: '#fff', margin: 0 }}>
-            Review Queue
-            {!loading && <span style={{ marginLeft: 8, fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>({drafts.length})</span>}
-          </h2>
+          <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{loading ? '' : `${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {drafts.length > 0 && (
               <button

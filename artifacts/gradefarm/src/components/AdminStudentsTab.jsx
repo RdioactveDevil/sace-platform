@@ -297,10 +297,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
 
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: GOLD, flexShrink: 0 }}>
-          Students
-          {!loading && <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8, fontWeight: 400 }}>({filtered.length}{hasFilters ? ` of ${students.length}` : ''})</span>}
-        </h2>
+        {!loading && <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{filtered.length}{hasFilters ? ` of ${students.length}` : ''} student{(hasFilters ? students.length : filtered.length) === 1 ? '' : 's'}</span>}
 
         <input
           value={search}

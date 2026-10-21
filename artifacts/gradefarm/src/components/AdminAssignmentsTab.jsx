@@ -81,10 +81,7 @@ export default function AdminAssignmentsTab() {
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: GOLD }}>
-          Assignments
-          <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8, fontWeight: 400 }}>({total.toLocaleString()})</span>
-        </h2>
+        <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{total.toLocaleString()} assignment{total === 1 ? '' : 's'}</span>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14, alignItems: 'center' }}>

@@ -153,8 +153,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         }
       `}</style>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: GOLD }}>Curricula</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <button onClick={openModal} style={goldBtn}>
           + New Curriculum
         </button>

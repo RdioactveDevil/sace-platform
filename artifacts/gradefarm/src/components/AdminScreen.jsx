@@ -70,7 +70,7 @@ const NAV_GROUPS = [
     { path: 'assignments',  label: 'Assignments',        icon: ClipboardList,   sub: 'Work set by every tutor, and how it’s going.' },
   ]},
   { label: 'Platform', items: [
-    { path: 'settings',     label: 'Settings',           icon: Settings,        sub: 'Platform-wide switches and configuration.' },
+    { path: 'settings',     label: 'Settings',           icon: Settings,        sub: 'Student access and pricing.' },
   ]},
 ]
 const NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items)

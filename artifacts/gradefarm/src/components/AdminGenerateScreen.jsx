@@ -169,8 +169,7 @@ export default function AdminGenerateScreen() {
 
   return (
     <div>
-      <h2 style={{ color: '#fff', marginTop: 0 }}>Generate Questions</h2>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 0 }}>
         Pick a subject and one or more subtopics, then let Claude generate MCQs. They land in the draft queue for your review.
       </p>
 

@@ -70,8 +70,7 @@ export default function AdminUploadScreen() {
 
   return (
     <div>
-      <h2 style={{ color: '#fff', marginTop: 0 }}>Upload PDF</h2>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 0 }}>
         Upload a SACE Chemistry exam or textbook. Claude will extract all MCQs into the draft queue.
         {' '}PDFs up to 50 MB are supported.
       </p>

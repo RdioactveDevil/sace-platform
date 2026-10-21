@@ -141,11 +141,6 @@ export default function AdminOverviewTab() {
 
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
-      <div style={{ marginBottom: 22 }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 4 }}>Overview</div>
-        <div style={{ fontSize: 13, color: '#64748b' }}>A snapshot of your platform and anything that needs your attention.</div>
-      </div>
-
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 26 }}>
         {kpis.map(k => (
