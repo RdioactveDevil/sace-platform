@@ -19,6 +19,7 @@ import livekitRouter from "./livekit";
 import leaderboardRouter from "./leaderboard";
 import billingRouter from "./billing";
 import emailRouter from "./email";
+import invitesRouter from "./invites";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(livekitRouter);
 router.use(leaderboardRouter);
 router.use(billingRouter);
 router.use(emailRouter);
+router.use(invitesRouter);
 
 export default router;

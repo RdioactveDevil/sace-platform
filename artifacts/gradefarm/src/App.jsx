@@ -53,6 +53,7 @@ const AdminScreen           = lazyWithReload(() => import('./components/AdminScr
 const TutorScreen           = lazyWithReload(() => import('./components/TutorScreen'))
 const WritingScreen         = lazyWithReload(() => import('./components/WritingScreen'))
 const DiagnosticScreen      = lazyWithReload(() => import('./components/DiagnosticScreen'))
+const InviteScreen          = lazyWithReload(() => import('./components/InviteScreen'))
 const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazyWithReload(() => import('./components/ExamModeScreen'))
@@ -1108,6 +1109,9 @@ function AppInner() {
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
+
+      {/* Tutor invite — public; accepting needs the invited account signed in */}
+      <Route path="/invite/:token" element={<InviteScreen signedIn={!!(user && profile)} />} />
 
       {/* Landing page — public */}
       <Route path="/home" element={

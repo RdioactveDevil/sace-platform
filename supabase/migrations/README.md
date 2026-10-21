@@ -84,3 +84,12 @@ email, so none is sent twice), the `claim_email()` function the API uses to
 claim a send, and `profiles.emails_unsubscribed_at`. Apply it before setting
 `CRON_SECRET`; until then the "Automated emails" Action has nothing to call
 and the My Account "Email reminders" toggle stays hidden.
+
+## 20261021000000_tutor_invites
+
+Adds `tutor_invites` and stops tutors inserting `tutor_students` rows from the
+browser: "Add student" in the Tutor portal now emails the student an invite,
+and the API adds the roster row when they accept. Apply it before deploying
+the matching app change (the new app's invite endpoints need the table; until
+the app is deployed, the old "Add student" button fails with a permissions
+error).

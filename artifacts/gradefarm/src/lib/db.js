@@ -928,34 +928,42 @@ export async function fetchRoster(tutorId, { allTutors = false } = {}) {
   return [...byStudent.values()]
 }
 
-/** Add a student to a tutor's roster by email.
- *  Email lookup is done server-side via the api-server (service role required to query auth.users).
- *  The caller's Supabase JWT is forwarded so the server can verify tutor identity.
- */
-export async function addStudentToRoster(tutorId, studentEmail) {
-  const { data: sessionData } = await supabase.auth.getSession()
-  const jwt = sessionData?.session?.access_token
-  if (!jwt) throw new Error('Not authenticated.')
+/** Invite a student by email (or re-send their pending invite). They join
+ *  the roster once they accept. Resolves to { invite, emailSent, emailError }. */
+export async function inviteStudent(studentEmail) {
+  return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify({ email: studentEmail }) })
+}
 
-  const res = await fetch('/api/tutor/find-student', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${jwt}`,
-    },
-    body: JSON.stringify({ email: studentEmail }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Failed to add student' }))
-    throw new Error(err.error || 'No user found with that email address.')
-  }
-  const studentData = await res.json()
+/** The tutor's pending invites: [{ id, email, created_at, sent_at, expired }]. */
+export async function fetchPendingInvites() {
+  const json = await tutorFetch('/api/tutor/invites')
+  return json.invites || []
+}
 
-  const { error } = await supabase
-    .from('tutor_students')
-    .upsert({ tutor_id: tutorId, student_id: studentData.id }, { onConflict: 'tutor_id,student_id' })
-  if (error) throw error
-  return studentData
+/** Cancel a pending invite so its link stops working. */
+export async function cancelInvite(inviteId) {
+  return tutorFetch(`/api/tutor/invites/${encodeURIComponent(inviteId)}`, { method: 'DELETE' })
+}
+
+/** Pending tutor invites for the signed-in student: [{ token, tutor_name, created_at }]. */
+export async function fetchMyInvites() {
+  const json = await tutorFetch('/api/invites/mine')
+  return json.invites || []
+}
+
+/** Who an invite link is from; works signed out. Resolves to { tutor_name, email, status }. */
+export async function fetchInvite(token) {
+  const res = await fetch(`/api/invites/${encodeURIComponent(token)}`)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'This invite link isn\'t valid.')
+  return json
+}
+
+/** Accept or decline an invite as the signed-in user. */
+export async function respondToInvite(token, accept) {
+  const json = await tutorFetch(`/api/invites/${encodeURIComponent(token)}/${accept ? 'accept' : 'decline'}`, { method: 'POST' })
+  tutoringAccessCache.clear()
+  return json
 }
 
 /** Fetch email map { studentId → email } for the given roster student IDs. */

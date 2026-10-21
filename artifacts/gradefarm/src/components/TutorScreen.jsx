@@ -10,7 +10,7 @@ import MathText from './MathText'
 import './TutorDashboard.css'
 import {
   fetchRoster,
-  addStudentToRoster,
+  inviteStudent,
   removeStudentFromRoster,
   createAssignment,
   fetchAssignmentsForTutor,
@@ -106,7 +106,7 @@ function _LegacyStudentsTab({ profile, theme }) {
     setAddError('')
     setAddLoading(true)
     try {
-      await addStudentToRoster(profile.id, email.trim().toLowerCase())
+      await inviteStudent(email.trim().toLowerCase())
       setEmail('')
       await load()
     } catch (err) {

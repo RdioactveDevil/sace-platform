@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { signIn, signUp } from '../lib/db'
 import { Zap, GraduationCap, ChartColumn, Trophy } from 'lucide-react'
 
@@ -19,7 +19,9 @@ const TRUST_ITEMS = [
 
 export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const navigate = useNavigate()
-  const [mode, setMode]       = useState('signin')
+  const location = useLocation()
+  // The tutor-invite page links here with { mode: 'signup' }.
+  const [mode, setMode]       = useState(location.state?.mode === 'signup' ? 'signup' : 'signin')
   const [email, setEmail]     = useState('')
   const [pass, setPass]       = useState('')
   const [name, setName]       = useState('')
