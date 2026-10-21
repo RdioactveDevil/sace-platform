@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useCallback, useMemo, useEffect } from 'react'
+import { useState, useLayoutEffect, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 
@@ -19,11 +19,37 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n))
 }
 
-/** Position the tour card beside the spotlight rect (fallback: bottom-centered). */
-function computeTooltipStyle(rect, estimateH = 248) {
+/** The part of an element's box that is on screen, so a tall target never pushes the spotlight off it. */
+function visibleRect(r) {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const top = clamp(r.top, 0, vh)
+  const bottom = clamp(r.bottom, 0, vh)
+  const left = clamp(r.left, 0, vw)
+  const right = clamp(r.right, 0, vw)
+  return { top, bottom, left, right, width: right - left, height: bottom - top }
+}
+
+/**
+ * Position the tour card beside the spotlight rect (fallback: bottom-centered).
+ * On phones there's no room beside anything, so the card spans the screen in
+ * whichever half the target isn't in.
+ */
+function computeTooltipStyle(rect, estimateH = 248, isMobile = false) {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 400
   const vh = typeof window !== 'undefined' ? window.innerHeight : 700
   const margin = 12
+  if (isMobile) {
+    // Tall targets are scrolled to the top of the screen, so their start is what matters.
+    const targetInTopHalf = !rect || rect.height > vh * 0.45 || (rect.top + rect.bottom) / 2 < vh / 2
+    return {
+      position: 'fixed',
+      left: margin,
+      right: margin,
+      width: 'auto',
+      ...(targetInTopHalf ? { bottom: `calc(${margin}px + env(safe-area-inset-bottom, 0px))` } : { top: margin }),
+    }
+  }
   const gap = 14
   const tw = Math.min(400, vw - margin * 2)
   const th = estimateH
@@ -113,9 +139,9 @@ function studentSteps(isTutor) {
         {
           path: '/tutor',
           target: 'nav-tutor',
-          title: 'Tutor Dashboard',
+          title: 'Tutor Portal',
           body:
-            'Manage roster, classes, batch assignments, and student progress from here.',
+            'Your Tutor Portal sits above Change Subject. Manage your roster, classes, lessons, assignments and messages from here.',
         },
       ]
     : []
@@ -190,11 +216,11 @@ export default function WebsiteTutorialOverlay({ isTutor, theme, onSeen, onFinis
   const step = steps[safeIx]
 
   useLayoutEffect(() => {
-    const upd = () => setTooltipStyle(computeTooltipStyle(rect))
+    const upd = () => setTooltipStyle(computeTooltipStyle(rect, 248, isMobile))
     upd()
     window.addEventListener('resize', upd)
     return () => window.removeEventListener('resize', upd)
-  }, [rect, safeIx])
+  }, [rect, safeIx, isMobile])
 
   useLayoutEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 860)
@@ -202,20 +228,34 @@ export default function WebsiteTutorialOverlay({ isTutor, theme, onSeen, onFinis
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  // On phones the sidebar is a drawer: open it for sidebar steps, close it for
+  // the rest so it doesn't cover the page being explained.
+  const drawerOpenedFor = useRef(null)
+  const scrolledFor = useRef(null)
   const measure = useCallback(() => {
     if (!step) return
     const sel = `[data-tutorial-target="${step.target}"]`
-    let el = document.querySelector(sel)
-    if (!el && isMobile && step.target.startsWith('nav-')) {
+    const sidebarStep = step.target.startsWith('nav-')
+    if (isMobile && !sidebarStep) window.dispatchEvent(new CustomEvent('gf-tutorial-close-sidebar'))
+    const el = document.querySelector(sel)
+    if (!el && isMobile && sidebarStep && drawerOpenedFor.current !== step) {
+      drawerOpenedFor.current = step
       window.dispatchEvent(new CustomEvent('gf-tutorial-open-sidebar'))
-      el = document.querySelector(sel)
+      setTimeout(measure, 350) // after the drawer slides in
+      return
     }
-    if (el) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'instant' })
-      setRect(el.getBoundingClientRect())
-    } else {
+    if (!el) {
       setRect(null)
+      return
     }
+    // Scroll once per step (scrolling again on every scroll event would fight the user).
+    if (scrolledFor.current !== step) {
+      scrolledFor.current = step
+      const tall = el.getBoundingClientRect().height > window.innerHeight * 0.45
+      el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'instant' })
+      if (tall && isMobile) window.scrollBy(0, -70) // clear the sticky top bar
+    }
+    setRect(visibleRect(el.getBoundingClientRect()))
   }, [step, isMobile])
 
   useLayoutEffect(() => {

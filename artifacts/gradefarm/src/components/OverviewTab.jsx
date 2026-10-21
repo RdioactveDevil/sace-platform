@@ -243,7 +243,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
       </div>
 
       {/* ── KPI row ───────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
         {kpis.map((k, i) => (
           <div key={k.title} className={`td-fadein td-fadein-${i + 1}`}
             style={{ ...card, padding: '18px 18px 14px', cursor: 'default',
@@ -265,7 +265,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
 
       {/* ── Body: 2/3 + 1/3 grid ─────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 20, alignItems: 'start' }} className="ov-grid">
-        <style>{`@media (max-width: 860px){ .ov-grid{ grid-template-columns: 1fr !important; } }`}</style>
+        <style>{`@media (max-width: 860px){ .ov-grid{ grid-template-columns: minmax(0, 1fr) !important; } .ov-session-row{ padding: 12px 14px !important; gap: 10px !important; } .ov-session-time{ width: 52px !important; } }`}</style>
 
         {/* ── Left column ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -285,7 +285,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
               ) : upcoming.map((s, idx) => {
                 const soon = isStartingSoon(s.scheduled_at)
                 return (
-                  <div key={s.id} style={{
+                  <div key={s.id} className="ov-session-row" style={{
                     display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px',
                     borderBottom: idx < upcoming.length - 1 ? `1px solid ${divider}` : 'none',
                     transition: 'background 0.12s',
@@ -294,7 +294,7 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
                     {/* Time column */}
-                    <div style={{ width: 64, flexShrink: 0, textAlign: 'center' }}>
+                    <div className="ov-session-time" style={{ width: 64, flexShrink: 0, textAlign: 'center' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: textPri }}>{fmtTimeShort(s.scheduled_at)}</div>
                       <div style={{ fontSize: 11, color: textMuted, marginTop: 1 }}>{sessionDateLabel(s.scheduled_at)}</div>
                     </div>
@@ -312,9 +312,9 @@ export default function OverviewTab({ profile, theme, roster, classes, assignmen
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: textMuted }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><User size={13} aria-hidden="true" />{s.other_party_name || 'Student'}</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Video size={13} aria-hidden="true" />{s.session_type === 'group' ? 'Group' : '1-on-1'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 12px', fontSize: 12, color: textMuted }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><User size={13} aria-hidden="true" style={{ flexShrink: 0 }} />{s.other_party_name || 'Student'}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><Video size={13} aria-hidden="true" />{s.session_type === 'group' ? 'Group' : '1-on-1'}</span>
                         {s.record_session && <span style={{ color: '#f87171', display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f87171', display: 'inline-block' }} />Recording</span>}
                       </div>
                     </div>

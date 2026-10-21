@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
@@ -170,6 +170,41 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
+/** A portal entry above Change Subject (Student Portal, Tutor Portal, Admin), set apart from the study navigation. */
+function PortalLink({ icon, title, subtitle, active, badge = 0, target, onClick }) {
+  return (
+    <button
+      type="button"
+      data-tutorial-target={target}
+      className="gf-footer-btn"
+      aria-current={active ? 'page' : undefined}
+      onClick={onClick}
+      style={{
+        width: '100%', padding: '10px 11px', borderRadius: 12, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left',
+        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+        border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : 'rgba(255,255,255,0.09)'}`,
+        background: active ? 'linear-gradient(135deg, rgba(241,190,67,0.22), rgba(241,190,67,0.07))' : 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', transition: 'background 0.15s, border-color 0.15s',
+      }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)' }}
+      onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
+    >
+      <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#06091f' }}>
+        <NavIcon name={icon} size={18} color="currentColor" />
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: active ? GOLD : '#f1f5f9' }}>{title}</span>
+        <span style={{ display: 'block', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</span>
+      </span>
+      {badge > 0 && (
+        <span aria-label={`${badge} unread message${badge === 1 ? '' : 's'}`} style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: GOLD, color: '#06091f', fontSize: 11, fontWeight: 800, lineHeight: '20px', textAlign: 'center', flexShrink: 0 }}>
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
 function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -180,23 +215,22 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
   const hasTutoring = useHasTutoring(profile?.id)
-  const unreadMessages = useUnreadMessages(hasTutoring)
+  const isTutor = !!profile?.is_tutor
+  const isAdmin = !!profile?.is_admin
+  // Tutors see unread student messages on the Tutor Portal button, students on the Student Portal one.
+  const unreadMessages = useUnreadMessages(hasTutoring || isTutor)
   const portalActive = sectionForPath(location.pathname)?.id === 'portal'
-  const primaryNav = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
-  const navItems = [
-    ...primaryNav,
-    ...(profile?.is_tutor ? [{ icon: 'tutor', label: 'Tutor Dashboard', id: 'tutor', path: '/tutor' }] : []),
-    ...(profile?.is_admin ? [{ icon: 'admin', label: 'Admin',           id: 'admin', path: '/admin' }] : []),
-  ]
+  const tutorActive = location.pathname.startsWith('/tutor')
+  const adminActive = location.pathname.startsWith('/admin')
+  // Study navigation only; the portals (student, tutor, admin) sit above Change Subject.
+  const navItems = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const isActivePath = (p) =>
     sectionForPath(location.pathname)?.pages[0].path === p ||
     location.pathname === p ||
     (p === '/home' && location.pathname === '/') ||
     (p === '/question-bank' && location.pathname === '/quiz') ||
     // Writing module uses /writing/* routes
-    (p.startsWith('/writing/') && location.pathname === p) ||
-    // Admin uses nested routes (/admin/*); treat any /admin descendant as active.
-    (p === '/admin' && location.pathname.startsWith('/admin'))
+    (p.startsWith('/writing/') && location.pathname === p)
 
   return (
     <div className="gf-sidebar" style={{
@@ -204,7 +238,9 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
       // Layered premium-dark surface: deeper base + radial highlight + top inner highlight + soft outer shadow.
       background: `radial-gradient(120% 60% at 0% 0%, rgba(241,190,67,0.06) 0%, rgba(241,190,67,0) 55%), linear-gradient(180deg, #07091f 0%, #05071a 100%)`,
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), inset -1px 0 0 rgba(255,255,255,0.04), 4px 0 24px rgba(0,0,0,0.35)',
-      position: 'relative', overflow: 'hidden',
+      // The whole panel scrolls (short screens, phone drawer); the nav list grows
+      // to keep the portal buttons and Change Subject at the bottom when there's room.
+      position: 'relative', overflowX: 'hidden', overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'thin',
     }}>
       <style>{`
         .gf-nav-btn { position: relative; isolation: isolate; }
@@ -293,7 +329,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
       <div style={{ padding: '14px 14px 6px', flexShrink: 0 }}>
         <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', paddingLeft: 4 }}>Navigate</div>
       </div>
-      <nav style={{ flex: 1, padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+      <nav style={{ flex: '1 0 auto', padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {navItems.map(item => {
           const active = isActivePath(item.path)
           return (
@@ -331,37 +367,22 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
 
       {/* Footer actions */}
       <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        {/* Student Portal — kept apart from the study navigation above */}
-        {hasTutoring && (
-          <button
-            type="button"
-            data-tutorial-target="nav-portal"
-            className="gf-footer-btn"
-            aria-current={portalActive ? 'page' : undefined}
-            onClick={() => go('/portal')}
-            style={{
-              width: '100%', padding: '10px 11px', marginBottom: 4, borderRadius: 12, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left',
-              display: 'flex', alignItems: 'center', gap: 10,
-              border: `1px solid ${portalActive ? 'rgba(241,190,67,0.55)' : 'rgba(255,255,255,0.09)'}`,
-              background: portalActive ? 'linear-gradient(135deg, rgba(241,190,67,0.22), rgba(241,190,67,0.07))' : 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', transition: 'background 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={e => { if (!portalActive) e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)' }}
-            onMouseLeave={e => { if (!portalActive) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
-          >
-            <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#06091f' }}>
-              <NavIcon name="portal" size={18} color="currentColor" />
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: portalActive ? GOLD : '#f1f5f9' }}>Student Portal</span>
-              <span style={{ display: 'block', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Your tutor &amp; lessons</span>
-            </span>
-            {unreadMessages > 0 && (
-              <span aria-label={`${unreadMessages} unread message${unreadMessages === 1 ? '' : 's'}`} style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: GOLD, color: '#06091f', fontSize: 11, fontWeight: 800, lineHeight: '20px', textAlign: 'center', flexShrink: 0 }}>
-                {unreadMessages > 9 ? '9+' : unreadMessages}
-              </span>
+        {/* Portals — kept apart from the study navigation above */}
+        {(hasTutoring || isTutor || isAdmin) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+            {hasTutoring && (
+              <PortalLink icon="portal" title="Student Portal" subtitle="Your tutor & lessons" target="nav-portal"
+                active={portalActive} badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
             )}
-          </button>
+            {isTutor && (
+              <PortalLink icon="tutor" title="Tutor Portal" subtitle="Students & lessons" target="nav-tutor"
+                active={tutorActive} badge={unreadMessages} onClick={() => go('/tutor')} />
+            )}
+            {isAdmin && (
+              <PortalLink icon="admin" title="Admin" subtitle="Manage gradefarm." target="nav-admin"
+                active={adminActive} onClick={() => go('/admin')} />
+            )}
+          </div>
         )}
         <button
           data-tutorial-target="change-subject"
@@ -414,10 +435,20 @@ function SectionTabs({ theme, subject }) {
   const navigate = useNavigate()
   const location = useLocation()
   const t = THEMES[theme]
+  const activeRef = useRef(null)
   const section = sectionForPath(location.pathname)
   const pages = section ? visiblePages(section, subject) : []
-  if (pages.length < 2) return null
   const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
+  // On narrow screens the strip scrolls sideways; keep the current tab in view.
+  useEffect(() => {
+    const el = activeRef.current
+    const strip = el?.parentElement
+    if (el && strip && strip.scrollWidth > strip.clientWidth) {
+      const offset = el.getBoundingClientRect().left - strip.getBoundingClientRect().left
+      strip.scrollLeft += offset - (strip.clientWidth - el.offsetWidth) / 2
+    }
+  }, [current])
+  if (pages.length < 2) return null
   return (
     // The bottom rule is an inset shadow (painted under the tabs) rather than a
     // border the active underline overlaps with a negative margin: that 1px
@@ -427,7 +458,7 @@ function SectionTabs({ theme, subject }) {
       {pages.map(page => {
         const active = page.path === current
         return (
-          <button key={page.id} type="button" role="tab" aria-selected={active}
+          <button key={page.id} type="button" role="tab" aria-selected={active} ref={active ? activeRef : undefined}
             onClick={() => navigate(page.path)}
             style={{
               padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -509,8 +540,13 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 
   useEffect(() => {
     const open = () => setMenuOpen(true)
+    const close = () => setMenuOpen(false)
     window.addEventListener('gf-tutorial-open-sidebar', open)
-    return () => window.removeEventListener('gf-tutorial-open-sidebar', open)
+    window.addEventListener('gf-tutorial-close-sidebar', close)
+    return () => {
+      window.removeEventListener('gf-tutorial-open-sidebar', open)
+      window.removeEventListener('gf-tutorial-close-sidebar', close)
+    }
   }, [])
 
   useEffect(() => {
@@ -534,7 +570,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
       {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100vh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100dvh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
             <SidebarContent {...sProps} onClose={() => setMenuOpen(false)} />
           </div>
         </div>

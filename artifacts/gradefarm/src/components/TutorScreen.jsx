@@ -2170,7 +2170,8 @@ export default function TutorScreen({ profile, theme, subject }) {
     return tab && SECTION_META[tab] ? tab : 'overview'
   })
   const [collapsed, setCollapsed] = useState(false)
-  const [mobileNav, setMobileNav] = useState(false)
+  const [mobileSearch, setMobileSearch] = useState(false)
+  const activeMobileTab = useRef(null)
 
   // Admins (managers) can switch the portal between their own students and
   // every tutor's. Remembered per browser.
@@ -2222,7 +2223,12 @@ export default function TutorScreen({ profile, theme, subject }) {
 
   const badges = { students: roster.length || null, assignments: overdueCount || null, messages: unreadMessages || null }
 
-  const go = (id) => { setActiveTab(id); setMobileNav(false) }
+  const go = (id) => { setActiveTab(id); setMobileSearch(false) }
+
+  // Phones: keep the selected tab visible in the swipeable tab strip.
+  useEffect(() => {
+    activeMobileTab.current?.scrollIntoView({ inline: 'center', block: 'nearest' })
+  }, [activeTab])
 
   const SIDEBAR_W = collapsed ? 74 : 224
   const meta = SECTION_META[activeTab] || { title: '', sub: '' }
@@ -2342,18 +2348,10 @@ export default function TutorScreen({ profile, theme, subject }) {
       {/* Desktop sidebar */}
       <div className="tutor-desktop-sidebar" style={{ display: 'flex', height: '100vh', position: 'sticky', top: 0 }}>{sidebar}</div>
 
-      {/* Mobile drawer */}
-      {mobileNav && (
-        <div className="tutor-mobile-only" style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex' }}>
-          <div style={{ height: '100%' }}>{sidebar}</div>
-          <div onClick={() => setMobileNav(false)} style={{ flex: 1, background: 'rgba(0,0,0,0.55)' }} />
-        </div>
-      )}
-
-      {/* Main column */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      {/* Main column. On phones the sidebar is replaced by a tab strip in the header. */}
+      <div className="td-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100vh' }}>
         {/* Top bar */}
-        <header style={{
+        <header className="td-header" style={{
           position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14,
           padding: '0 24px',
           background: headerBg, backdropFilter: 'blur(16px)',
@@ -2361,11 +2359,11 @@ export default function TutorScreen({ profile, theme, subject }) {
           minHeight: 64, height: 64,
         }}>
           <span className="td-header-sep" />
-          <button onClick={() => { window.innerWidth <= 860 ? setMobileNav(v => !v) : setCollapsed(v => !v) }}
+          <button className="td-collapse-btn" onClick={() => setCollapsed(v => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: isDark ? 'rgba(255,255,255,0.5)' : '#94a3b8', cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.04em', color: isDark ? t.text : '#0f172a', lineHeight: 1.1 }}>{meta.title}</div>
-            <div style={{ fontSize: 11, color: isDark ? t.textMuted : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
+            <div className="td-header-sub" style={{ fontSize: 11, color: isDark ? t.textMuted : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {isAdmin && (
@@ -2380,12 +2378,46 @@ export default function TutorScreen({ profile, theme, subject }) {
                 ))}
               </div>
             )}
-            <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
+            <div className="td-search-desktop">
+              <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
+            </div>
+            <button type="button" className="tutor-mobile-only" onClick={() => setMobileSearch(v => !v)} aria-label="Search" aria-pressed={mobileSearch}
+              style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9, cursor: 'pointer', display: 'flex',
+                border: `1px solid ${mobileSearch ? GOLD : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`, background: 'transparent', color: mobileSearch ? GOLD : (isDark ? 'rgba(255,255,255,0.6)' : '#64748b') }}>
+              <Search size={16} aria-hidden="true" />
+            </button>
           </div>
+          {mobileSearch && (
+            <div className="tutor-mobile-only" style={{ width: '100%' }}>
+              <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} width="100%" autoFocus />
+            </div>
+          )}
+          {/* Phones: every section as a swipeable strip of tabs */}
+          <nav className="tutor-mobile-only td-mobile-tabs" aria-label="Tutor portal sections">
+            {NAV_GROUPS.flatMap(g => g.items).map(item => {
+              const active = activeTab === item.id
+              const badge = badges[item.id]
+              return (
+                <button key={item.id} type="button" ref={active ? activeMobileTab : undefined} onClick={() => go(item.id)} aria-current={active ? 'page' : undefined}
+                  style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: active ? 800 : 600, whiteSpace: 'nowrap',
+                    border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : (isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0')}`,
+                    background: active ? (isDark ? 'rgba(241,190,67,0.16)' : '#0f172a') : 'transparent',
+                    color: active ? (isDark ? GOLD : '#fff') : navItemDflt }}>
+                  <item.icon size={14} aria-hidden="true" />
+                  {item.label}
+                  {badge != null && (
+                    <span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, fontSize: 10, fontWeight: 800, lineHeight: '17px', textAlign: 'center',
+                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.2)' : item.id === 'messages' ? GOLD : (isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'),
+                      color: item.id === 'assignments' ? '#f87171' : item.id === 'messages' ? '#0c1037' : (isDark ? t.textSub : '#64748b') }}>{badge}</span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
         </header>
 
         {/* Section content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
+        <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
           <div key={`${activeTab}-${allTutors ? 'all' : 'mine'}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
             {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
             {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} allTutors={allTutors} />}
@@ -2405,7 +2437,7 @@ export default function TutorScreen({ profile, theme, subject }) {
 }
 
 // ── Global search (students · classes · resources · assignments) ───────────────
-function GlobalSearch({ theme, roster, classes, resources, assignments, onNavigate }) {
+function GlobalSearch({ theme, roster, classes, resources, assignments, onNavigate, width = 'min(320px, 46vw)', autoFocus = false }) {
   const t = THEMES[theme]
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -2439,13 +2471,14 @@ function GlobalSearch({ theme, roster, classes, resources, assignments, onNaviga
   }, [q, roster, classes, resources, assignments])
 
   return (
-    <div ref={boxRef} style={{ position: 'relative', width: 'min(320px, 46vw)' }}>
+    <div ref={boxRef} style={{ position: 'relative', width }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, border: `1px solid ${open ? GOLD : (theme === 'dark' ? 'rgba(255,255,255,0.10)' : t.border)}`, borderRadius: 10, padding: '8px 12px', transition: 'border-color 0.15s' }}>
         <Search size={14} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0 }} />
         <input
           value={q}
           onChange={e => { setQ(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
+          autoFocus={autoFocus}
           placeholder="Search students, classes, resources…"
           style={{ border: 'none', background: 'transparent', outline: 'none', color: t.text, fontFamily: FONT_B, fontSize: 13, width: '100%' }}
         />
