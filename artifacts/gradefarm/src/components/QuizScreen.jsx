@@ -11,6 +11,8 @@ import {
   seenQuestionChecker,
   questionContentKey,
   ASSIGNMENT_DIFFICULTIES,
+  assignmentStanding,
+  applyAssignmentAnswer,
 } from '../lib/engine'
 import {
   recordAnswer,
@@ -25,7 +27,7 @@ import {
   reportQuestion,
   flagTopicForStudyPlan,
   completeAssignment,
-  recordAssignmentProgress,
+  recordAssignmentAnswer,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { getTopicCodeByName, resolveManagedSubjectName } from '../lib/adminTopics'
@@ -412,8 +414,8 @@ export default function QuizScreen({
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
   const [assignmentsCompleted, setAssignmentsCompleted] = useState([])
-  // { progress, goal } once the RPC confirms the tutor's question count was met.
-  // Kept locally because App clears activeAssignment as soon as it completes.
+  // The assignment's standing once the RPC confirms it is complete. Kept
+  // locally because App clears activeAssignment as soon as it completes.
   const [completedGoal, setCompletedGoal] = useState(null)
   const [endedForGoal, setEndedForGoal] = useState(false)
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
@@ -476,17 +478,12 @@ export default function QuizScreen({
   const remediationStreak = _remediationStreak ?? 0
   const remediationTarget = _remediationTarget ?? 3
 
-  // Tutor-set goal for the assignment that launched this session. Progress is
-  // the count saved before this session plus main questions answered in it;
-  // remediation variants don't count. Legacy assignments have no question_count.
-  const assignmentGoal = activeAssignment?.question_count || null
+  // Tutor-set goal for the assignment that launched this session: a question
+  // count, optionally a pass mark. Legacy assignments have no question_count.
+  const assignmentStand = assignmentStanding(activeAssignment)
   const assignmentBand = ASSIGNMENT_DIFFICULTIES[activeAssignment?.difficulty] || null
-  const mainAnsweredCount = sessionResults.filter(r => !r.remediation).length
-  const assignmentProgress = assignmentGoal
-    ? Math.min(assignmentGoal, (activeAssignment.progress_count || 0) + mainAnsweredCount)
-    : 0
-  const goalReached = !endedForGoal && (!!completedGoal || (!!assignmentGoal && assignmentProgress >= assignmentGoal))
-  const goalDisplay = completedGoal || (assignmentGoal ? { progress: assignmentProgress, goal: assignmentGoal } : null)
+  const goalReached = !endedForGoal && (!!completedGoal || !!assignmentStand?.complete)
+  const goalDisplay = completedGoal || assignmentStand
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   const remediationQueue = Array.isArray(_remediationQueue) ? _remediationQueue : []
@@ -703,21 +700,23 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidateSubtopic])
 
-  // Save progress toward the tutor's question count after each answer; the RPC
-  // completes the assignment once the count is reached.
-  useEffect(() => {
-    if (!assignmentGoal || mainAnsweredCount === 0) return
+  // Count a main-question answer toward the assignment goal. App holds the
+  // running state (updated here the same way the RPC updates the row) so it
+  // survives this screen remounting; the RPC decides completion.
+  const countAssignmentAnswer = (isCorrect) => {
+    if (!activeAssignment?.question_count) return
+    const next = applyAssignmentAnswer(activeAssignment, isCorrect)
+    onAssignmentProgress?.({ progress_count: next.progress_count, recent_results: next.recent_results })
     const id = activeAssignment.id
-    recordAssignmentProgress(id, assignmentProgress)
+    recordAssignmentAnswer(id, isCorrect)
       .then(row => {
         if (!row?.completed_at) return
-        setCompletedGoal({ progress: row.progress_count, goal: row.question_count })
+        setCompletedGoal(assignmentStanding({ ...next, ...row }))
         setAssignmentsCompleted([{ id }])
         onAssignmentComplete?.()
       })
       .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignmentProgress, assignmentGoal])
+  }
 
   // Legacy assignments (no question_count): complete when the session ends,
   // provided the student actually answered at least one question.
@@ -1208,6 +1207,7 @@ export default function QuizScreen({
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
     setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, remediation: isRemediationQuestion }])
+    if (!isRemediationQuestion) countAssignmentAnswer(isCorrect)
 
     if (isCorrect) {
       setFloatXP(xpEarned)
@@ -1297,6 +1297,7 @@ export default function QuizScreen({
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
     setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant }])
+    if (!isVariant) countAssignmentAnswer(isCorrect)
 
     if (isCorrect) {
       setFloatXP(xpEarned)
@@ -1377,8 +1378,8 @@ export default function QuizScreen({
   const nextQ = async () => {
     if (!currentQ) return
 
-    // The tutor's question count is met: end on the summary instead of serving
-    // another question (or starting remediation on the last one).
+    // The tutor's goal is met: end on the summary instead of serving another
+    // question (or starting remediation on the last one).
     if (goalReached) {
       clearRemediation()
       if (!sessionAnswered.includes(currentQ.id)) setSessionAnswered([...sessionAnswered, currentQ.id])
@@ -1471,9 +1472,6 @@ export default function QuizScreen({
       setGeneratingMore(false)
       setGenerationError(null)
       setSessionEpoch(e => e + 1)
-      // Results are about to reset, so carry an unfinished assignment's
-      // progress into the baseline it is counted from.
-      if (assignmentGoal) onAssignmentProgress?.(assignmentProgress)
       setCompletedGoal(null)
       setEndedForGoal(false)
       setQuizMode(mode)
@@ -1537,7 +1535,7 @@ export default function QuizScreen({
             </div>
             <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
               {endedForGoal && goalDisplay
-                ? `You've answered all ${goalDisplay.goal} questions your tutor set.`
+                ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
                 : quizMode === 'new' && sessTotal > 0
                   ? "You've worked through every question in this set."
                   : 'Good work finishing the session.'}
@@ -1572,15 +1570,19 @@ export default function QuizScreen({
             </div>
           )}
 
-          {/* Unfinished assignment — the bank ran out before the tutor's count */}
-          {assignmentsCompleted.length === 0 && assignmentGoal && assignmentProgress < assignmentGoal && (
+          {/* Unfinished assignment — the session ended before the tutor's goal */}
+          {assignmentsCompleted.length === 0 && assignmentStand && !assignmentStand.complete && (
             <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.bgCard, border: `1px solid ${t.borderAccent}`, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Pin size={18} color={GOLD} style={{ flexShrink: 0 }} aria-hidden="true" />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
-                  Assignment progress: {assignmentProgress}/{assignmentGoal} questions
+                  Assignment progress: {assignmentStand.progress}/{assignmentStand.goal} questions
                 </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>Your progress is saved. Answer {assignmentGoal - assignmentProgress} more to complete it.</div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>
+                  {assignmentStand.progress < assignmentStand.goal
+                    ? `Your progress is saved. Answer ${assignmentStand.goal - assignmentStand.progress} more to complete it${assignmentStand.minAccuracy ? `, scoring at least ${assignmentStand.minAccuracy}%` : ''}.`
+                    : `Score at least ${assignmentStand.minAccuracy}% on your last ${assignmentStand.goal} answers to complete it — you're on ${assignmentStand.accuracy}%. Keep practising.`}
+                </div>
               </div>
             </div>
           )}
@@ -1804,6 +1806,7 @@ export default function QuizScreen({
           {goalDisplay && (
             <span title="Questions answered toward your tutor's assignment" style={{ fontSize: 11, fontWeight: 800, color: NAVY, background: 'rgba(255,255,255,0.3)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
               Assignment {goalDisplay.progress}/{goalDisplay.goal}
+              {goalDisplay.minAccuracy && goalDisplay.accuracy !== null && ` · ${goalDisplay.accuracy}% (pass ${goalDisplay.minAccuracy}%)`}
             </span>
           )}
           <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />

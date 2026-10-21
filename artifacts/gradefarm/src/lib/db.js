@@ -1185,10 +1185,10 @@ export async function removeStudentFromClass(classId, studentId) {
 }
 
 /** Create a batch of assignments. Server resolves the union of studentIds + classIds + allRoster. */
-export async function createBatchAssignment({ type, subject, topics, due_date, question_count, difficulty, studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
+export async function createBatchAssignment({ type, subject, topics, due_date, question_count, difficulty, min_accuracy = null, studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
   return tutorFetch('/api/tutor/assignments/batch', {
     method: 'POST',
-    body: JSON.stringify({ type, subject, topics, due_date, question_count, difficulty, studentIds, classIds, allRoster, notify }),
+    body: JSON.stringify({ type, subject, topics, due_date, question_count, difficulty, min_accuracy, studentIds, classIds, allRoster, notify }),
   })
 }
 
@@ -1213,15 +1213,15 @@ export async function completeAssignment(assignmentId) {
   if (error) throw error
 }
 
-/** Record how many questions a student has answered toward an assignment's
- *  question_count. Progress only moves forward; the RPC completes the
- *  assignment once the count is reached. Returns { progress_count,
- *  question_count, completed_at }, or null if the assignment is already done.
+/** Record one answer toward an assignment's question_count (and pass mark, if
+ *  set). The RPC completes the assignment once both are met. Returns
+ *  { progress_count, question_count, min_accuracy, recent_results,
+ *  completed_at }, or null if the assignment is already done.
  */
-export async function recordAssignmentProgress(assignmentId, progress) {
-  const { data, error } = await supabase.rpc('record_assignment_progress', {
+export async function recordAssignmentAnswer(assignmentId, correct) {
+  const { data, error } = await supabase.rpc('record_assignment_answer', {
     p_assignment_id: assignmentId,
-    p_progress: progress,
+    p_correct: !!correct,
   })
   if (error) throw error
   return Array.isArray(data) ? data[0] || null : data

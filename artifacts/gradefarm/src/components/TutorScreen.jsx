@@ -270,6 +270,8 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
     due_date: '',
     question_count: 10,
     difficulty: 'adaptive',
+    pass_mark_on: false,    // optional: only complete once recent answers reach min_accuracy
+    min_accuracy: 80,
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
@@ -366,6 +368,10 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
     if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
       setFormError('Number of questions must be a whole number from 1 to 100.'); return
     }
+    const minAccuracy = form.pass_mark_on ? Number(form.min_accuracy) : null
+    if (minAccuracy !== null && (!Number.isInteger(minAccuracy) || minAccuracy < 1 || minAccuracy > 100)) {
+      setFormError('Pass mark must be a whole number from 1 to 100.'); return
+    }
     if (resolvedCount === 0) { setFormError('Select at least one target (student, class, or roster).'); return }
     setSaving(true)
     try {
@@ -376,13 +382,14 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
         due_date: form.due_date,
         question_count: questionCount,
         difficulty: form.difficulty,
+        min_accuracy: minAccuracy,
         studentIds: form.target_mode === 'classes' || form.target_mode === 'all' ? [] : form.student_ids,
         classIds: form.target_mode === 'classes' ? form.class_ids : [],
         allRoster: form.target_mode === 'all',
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', pass_mark_on: false, min_accuracy: 80, target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -538,6 +545,26 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                 </div>
                 <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{DIFFICULTY_OPTIONS.find(o => o.id === form.difficulty)?.hint}</div>
               </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.pass_mark_on} onChange={e => setForm(f => ({ ...f, pass_mark_on: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                Require a pass mark <span style={{ fontSize: 11, color: t.textMuted, fontWeight: 500 }}>(optional)</span>
+              </label>
+              {form.pass_mark_on && (
+                <div style={{ marginTop: 8, paddingLeft: 23 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input aria-label="Pass mark percentage" type="number" min={1} max={100} step={1} value={form.min_accuracy}
+                      onChange={e => setForm(f => ({ ...f, min_accuracy: e.target.value }))}
+                      style={{ ...inputStyle, width: 72 }} />
+                    <span style={{ fontSize: 13, color: t.textMuted }}>% correct</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>
+                    The student keeps going until they score at least this on their last {Number(form.question_count) || 'N'} answers.
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -765,7 +792,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                           <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{head.type}</span>
                           <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.15)', color: GOLD, fontWeight: 700 }}>Batch</span>
                           <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(head.due_date)}</span>
-                          {head.question_count > 0 && <span style={{ fontSize: 11, color: t.textMuted }}>{head.question_count} questions · {ASSIGNMENT_DIFFICULTIES[head.difficulty]?.label || 'Adaptive'}</span>}
+                          {head.question_count > 0 && <span style={{ fontSize: 11, color: t.textMuted }}>{head.question_count} questions · {ASSIGNMENT_DIFFICULTIES[head.difficulty]?.label || 'Adaptive'}{head.min_accuracy ? ` · Pass ${head.min_accuracy}%` : ''}</span>}
                         </div>
                         <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>
                           <strong style={{ color: t.text }}>{headerLabel}</strong>

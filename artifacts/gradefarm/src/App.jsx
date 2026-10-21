@@ -1359,8 +1359,8 @@ function AppInner() {
                 setActiveAssignment(null)
                 setAssignmentsVersion(v => v + 1)
               }}
-              onAssignmentProgress={(progress) => {
-                setActiveAssignment(a => (a ? { ...a, progress_count: progress } : a))
+              onAssignmentProgress={(next) => {
+                setActiveAssignment(a => (a ? { ...a, ...next } : a))
               }}
               onBankQuestionsAdded={(newQs) => {
                 if (!Array.isArray(newQs) || newQs.length === 0) return

@@ -725,6 +725,7 @@ interface BatchAssignmentBody {
   notify?: boolean;
   question_count?: number;
   difficulty?: string;
+  min_accuracy?: number | null;
 }
 
 const ASSIGNMENT_DIFFICULTIES = ["adaptive", "easy", "medium", "hard"];
@@ -742,6 +743,8 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
     const { type, subject, topics, due_date, studentIds, classIds, allRoster, notify } = body;
     const questionCount = Number(body.question_count ?? 10);
     const difficulty = body.difficulty ?? "adaptive";
+    // Optional pass mark (%): omitted or null means none.
+    const minAccuracy = body.min_accuracy == null ? null : Number(body.min_accuracy);
 
     if (!type || !subject || !Array.isArray(topics) || topics.length === 0) {
       return res.status(400).json({ error: "type, subject and at least one topic are required." });
@@ -752,6 +755,9 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
     }
     if (!ASSIGNMENT_DIFFICULTIES.includes(difficulty)) {
       return res.status(400).json({ error: "difficulty must be adaptive, easy, medium or hard." });
+    }
+    if (minAccuracy !== null && (!Number.isInteger(minAccuracy) || minAccuracy < 1 || minAccuracy > 100)) {
+      return res.status(400).json({ error: "min_accuracy must be a whole number from 1 to 100." });
     }
 
     // Resolve target student IDs.
@@ -814,6 +820,7 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       class_id: singleClassId,
       question_count: questionCount,
       difficulty,
+      min_accuracy: minAccuracy,
     }));
 
     const { data: inserted, error: insErr } = await admin
@@ -842,7 +849,10 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
         const safeSubject = escapeHtml(subject);
         const safeTopics = escapeHtml(topicsList);
         const safeDueDate = escapeHtml(dueLabel);
-        const safeGoal = escapeHtml(`${questionCount} question${questionCount === 1 ? "" : "s"} · ${DIFFICULTY_LABELS[difficulty]}`);
+        const safeGoal = escapeHtml(
+          `${questionCount} question${questionCount === 1 ? "" : "s"} · ${DIFFICULTY_LABELS[difficulty]}` +
+          (minAccuracy !== null ? ` · ${minAccuracy}% pass mark` : ""),
+        );
 
         await Promise.all(targets.map(async (sid) => {
           const studentEmail = emailMap.get(sid);

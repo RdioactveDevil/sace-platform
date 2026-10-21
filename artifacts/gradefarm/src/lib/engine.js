@@ -108,11 +108,36 @@ export const ASSIGNMENT_DIFFICULTIES = {
   hard:   { label: 'Hard',   min: 4, max: 5, target: 4 },
 }
 
-/** "4/10 questions · Hard" for an assignment with a tutor-set count, else null. */
-export function assignmentGoalLabel(a) {
+/**
+ * Where an assignment with a tutor-set count stands. With a pass mark
+ * (min_accuracy), it completes only once the most recent question_count
+ * answers reach it. Mirrors record_assignment_answer() in the database.
+ */
+export function assignmentStanding(a) {
   if (!a?.question_count) return null
-  const done = Math.min(a.progress_count || 0, a.question_count)
-  return `${done}/${a.question_count} questions · ${ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive'}`
+  const goal = a.question_count
+  const progress = Math.min(a.progress_count || 0, goal)
+  const recent = Array.isArray(a.recent_results) ? a.recent_results : []
+  const recentCorrect = recent.filter(Boolean).length
+  const accuracy = recent.length > 0 ? Math.round((recentCorrect / recent.length) * 100) : null
+  const meetsMark = !a.min_accuracy || (recent.length > 0 && recentCorrect * 100 >= a.min_accuracy * recent.length)
+  return { goal, progress, minAccuracy: a.min_accuracy || null, accuracy, meetsMark, complete: progress >= goal && meetsMark }
+}
+
+/** The assignment after one more answer — the same update the database makes. */
+export function applyAssignmentAnswer(a, correct) {
+  const goal = a.question_count
+  const recent = [...(a.recent_results || []), !!correct].slice(-goal)
+  return { ...a, progress_count: Math.min((a.progress_count || 0) + 1, goal), recent_results: recent }
+}
+
+/** "4/10 questions · Hard · Pass 80%" for an assignment with a tutor-set count, else null. */
+export function assignmentGoalLabel(a) {
+  const st = assignmentStanding(a)
+  if (!st) return null
+  const parts = [`${st.progress}/${st.goal} questions`, ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive']
+  if (st.minAccuracy) parts.push(`Pass ${st.minAccuracy}%`)
+  return parts.join(' · ')
 }
 
 /**
