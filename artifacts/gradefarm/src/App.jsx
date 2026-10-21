@@ -869,7 +869,7 @@ function AppInner() {
   const [quizRemediationOriginalQ, setQuizRemediationOriginalQ] = useState(null)
   const [quizRemediationUsedIds,   setQuizRemediationUsedIds]   = useState([])
   const [quizRemediationWrongCount, setQuizRemediationWrongCount] = useState(0)
-  const [activeAssignmentId, setActiveAssignmentId] = useState(null)
+  const [activeAssignment, setActiveAssignment] = useState(null)
   const [quizExamMode, setQuizExamMode] = useState(false)
   const [quizTimerSeconds, setQuizTimerSeconds] = useState(0)
   const [quizFinished, setQuizFinished] = useState(false)
@@ -1354,10 +1354,13 @@ function AppInner() {
               }}
               consolidateSubtopic={consolidateSubtopic}
               onClearConsolidate={() => setConsolidateSubtopic(null)}
-              activeAssignmentId={activeAssignmentId}
+              activeAssignment={activeAssignment}
               onAssignmentComplete={() => {
-                setActiveAssignmentId(null)
+                setActiveAssignment(null)
                 setAssignmentsVersion(v => v + 1)
+              }}
+              onAssignmentProgress={(progress) => {
+                setActiveAssignment(a => (a ? { ...a, progress_count: progress } : a))
               }}
               onBankQuestionsAdded={(newQs) => {
                 if (!Array.isArray(newQs) || newQs.length === 0) return
@@ -1433,14 +1436,14 @@ function AppInner() {
           onStartSession={async (opts) => {
             const nextMode = opts?.mode || 'new'
             const nextSubtopics = Array.isArray(opts?.subtopics) ? opts.subtopics : []
-            setActiveAssignmentId(opts?.assignmentId ?? null)
+            setActiveAssignment(opts?.assignment ?? null)
 
             // If assignment specifies a subject, switch to it and load the right question bank
             let activeQuestions = questions
             let activeSubject = selectedSubject
-            if (opts?.assignmentSubject) {
+            if (opts?.assignment?.subject) {
               const tiles = await fetchLiveCurricula().then(cs => cs.map(curriculumToSubjectTile)).catch(() => [])
-              const matchingSubject = findTileForSubjectString(tiles, opts.assignmentSubject)
+              const matchingSubject = findTileForSubjectString(tiles, opts.assignment.subject)
               if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))
@@ -1454,7 +1457,7 @@ function AppInner() {
             // Assignment entries may be topic names OR subtopic names. Expand topic
             // names to their matching subtopics; keep direct subtopic matches as-is.
             let expandedSubtopics = nextSubtopics
-            if (opts?.assignmentId && nextSubtopics.length > 0) {
+            if (opts?.assignment && nextSubtopics.length > 0) {
               const { normFn } = getTopicConfigForSubject(activeSubject)
               const allSubtopicsLower = new Map()
               activeQuestions.forEach(q => {

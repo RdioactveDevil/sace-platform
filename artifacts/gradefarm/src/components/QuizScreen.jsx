@@ -10,6 +10,7 @@ import {
   getQuestionConceptTag,
   seenQuestionChecker,
   questionContentKey,
+  ASSIGNMENT_DIFFICULTIES,
 } from '../lib/engine'
 import {
   recordAnswer,
@@ -24,6 +25,7 @@ import {
   reportQuestion,
   flagTopicForStudyPlan,
   completeAssignment,
+  recordAssignmentProgress,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { getTopicCodeByName, resolveManagedSubjectName } from '../lib/adminTopics'
@@ -367,8 +369,9 @@ export default function QuizScreen({
   remediationParentId: _remediationParentId, setRemediationParentId,
   remediationOriginalQ: _remediationOriginalQ, setRemediationOriginalQ,
   remediationUsedIds: _remediationUsedIds, setRemediationUsedIds,
-  activeAssignmentId,
+  activeAssignment,
   onAssignmentComplete,
+  onAssignmentProgress,
   onBankQuestionsAdded,
   finished: _finished, setFinished,
   sessionTip: _sessionTip, setSessionTip,
@@ -409,6 +412,10 @@ export default function QuizScreen({
   const [remediationWrongCount, setRemediationWrongCount] = useState(0)
   const [remediationDifficultyTarget, setRemediationDifficultyTarget] = useState(null)
   const [assignmentsCompleted, setAssignmentsCompleted] = useState([])
+  // { progress, goal } once the RPC confirms the tutor's question count was met.
+  // Kept locally because App clears activeAssignment as soon as it completes.
+  const [completedGoal, setCompletedGoal] = useState(null)
+  const [endedForGoal, setEndedForGoal] = useState(false)
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
   const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
@@ -468,6 +475,20 @@ export default function QuizScreen({
   const remediationMode = _remediationMode ?? false
   const remediationStreak = _remediationStreak ?? 0
   const remediationTarget = _remediationTarget ?? 3
+
+  // Tutor-set goal for the assignment that launched this session. Progress is
+  // the count saved before this session plus main questions answered in it;
+  // remediation variants don't count. Legacy assignments have no question_count.
+  const assignmentGoal = activeAssignment?.question_count || null
+  const assignmentBand = ASSIGNMENT_DIFFICULTIES[activeAssignment?.difficulty] || null
+  const mainAnsweredCount = sessionResults.filter(r => !r.remediation).length
+  const assignmentProgress = assignmentGoal
+    ? Math.min(assignmentGoal, (activeAssignment.progress_count || 0) + mainAnsweredCount)
+    : 0
+  const goalReached = !endedForGoal && (!!completedGoal || (!!assignmentGoal && assignmentProgress >= assignmentGoal))
+  const goalDisplay = completedGoal || (assignmentGoal ? { progress: assignmentProgress, goal: assignmentGoal } : null)
+  const targetDifficultyFor = (results) =>
+    assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   const remediationQueue = Array.isArray(_remediationQueue) ? _remediationQueue : []
   const remediationStatus = _remediationStatus ?? 'idle'
   const remediationSource = _remediationSource ?? 'prebuilt'
@@ -524,13 +545,16 @@ export default function QuizScreen({
   }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns])
 
   const loadNext = useCallback((answered, map, mode = 'new', subtopics = [], targetDiff = null) => {
-    const q = selectNextQuestion(questions, map, answered, mode, subtopics, targetDiff)
+    const q = selectNextQuestion(
+      questions, map, answered, mode, subtopics,
+      assignmentBand ? assignmentBand.target : targetDiff, assignmentBand,
+    )
     if (!q) {
       setFinished(true)
       return
     }
     setDisplayQuestion(q)
-  }, [questions, setDisplayQuestion])
+  }, [questions, setDisplayQuestion, assignmentBand])
 
   const clearRemediation = useCallback(() => {
     setRemediationMode(false)
@@ -679,24 +703,41 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidateSubtopic])
 
-  // Auto-complete the specific tutor assignment that launched this session (if any).
-  // Only fires when the student actually answered at least one question.
+  // Save progress toward the tutor's question count after each answer; the RPC
+  // completes the assignment once the count is reached.
   useEffect(() => {
-    const sessionEnded = finished || (sessionResults.length > 0 && !_currentQ)
-    if (!sessionEnded) return
-    if (sessionCompletedRef.current) return
-    if (!activeAssignmentId) return
-    if (sessionResults.length === 0) return  // guard: no questions answered, don't auto-complete
-    sessionCompletedRef.current = true
-
-    completeAssignment(activeAssignmentId)
-      .then(() => {
-        setAssignmentsCompleted([{ id: activeAssignmentId }])
+    if (!assignmentGoal || mainAnsweredCount === 0) return
+    const id = activeAssignment.id
+    recordAssignmentProgress(id, assignmentProgress)
+      .then(row => {
+        if (!row?.completed_at) return
+        setCompletedGoal({ progress: row.progress_count, goal: row.question_count })
+        setAssignmentsCompleted([{ id }])
         onAssignmentComplete?.()
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished, _currentQ, sessionResults.length, activeAssignmentId])
+  }, [assignmentProgress, assignmentGoal])
+
+  // Legacy assignments (no question_count): complete when the session ends,
+  // provided the student actually answered at least one question.
+  useEffect(() => {
+    const sessionEnded = finished || (sessionResults.length > 0 && !_currentQ)
+    if (!sessionEnded) return
+    if (sessionCompletedRef.current) return
+    if (!activeAssignment || activeAssignment.question_count) return
+    if (sessionResults.length === 0) return  // guard: no questions answered, don't auto-complete
+    sessionCompletedRef.current = true
+
+    const id = activeAssignment.id
+    completeAssignment(id)
+      .then(() => {
+        setAssignmentsCompleted([{ id }])
+        onAssignmentComplete?.()
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished, _currentQ, sessionResults.length, activeAssignment])
 
   // Reset completion ref when a new session starts
   useEffect(() => {
@@ -781,7 +822,7 @@ export default function QuizScreen({
     setFinished(false)
 
     // Derive target difficulty from recent session performance.
-    const exhaustionDiff = getTargetDifficulty(sessionResults, questions)
+    const exhaustionDiff = targetDifficultyFor(sessionResults)
 
     // Request a healthy batch (6) up front: generation + answer-key
     // verification + duplicate filtering all shed some questions, so asking for
@@ -854,7 +895,7 @@ export default function QuizScreen({
     // this, the difficulty would be stuck not because selection is wrong but
     // because there is nothing hard to select. Generate ahead when the target
     // has climbed to 3+ and fewer than 2 available questions sit near it.
-    const prefetchDiff = getTargetDifficulty(sessionResults, questions)
+    const prefetchDiff = targetDifficultyFor(sessionResults)
     const nearTargetCount = prefetchDiff == null
       ? null
       : available.filter(q => Math.abs((q.difficulty || 3) - prefetchDiff) <= 1).length
@@ -1336,6 +1377,16 @@ export default function QuizScreen({
   const nextQ = async () => {
     if (!currentQ) return
 
+    // The tutor's question count is met: end on the summary instead of serving
+    // another question (or starting remediation on the last one).
+    if (goalReached) {
+      clearRemediation()
+      if (!sessionAnswered.includes(currentQ.id)) setSessionAnswered([...sessionAnswered, currentQ.id])
+      setEndedForGoal(true)
+      setFinished(true)
+      return
+    }
+
     // Compute target difficulty once for all loadNext calls in this transition.
     const targetDiff = getTargetDifficulty(sessionResults, questions)
 
@@ -1420,6 +1471,11 @@ export default function QuizScreen({
       setGeneratingMore(false)
       setGenerationError(null)
       setSessionEpoch(e => e + 1)
+      // Results are about to reset, so carry an unfinished assignment's
+      // progress into the baseline it is counted from.
+      if (assignmentGoal) onAssignmentProgress?.(assignmentProgress)
+      setCompletedGoal(null)
+      setEndedForGoal(false)
       setQuizMode(mode)
       setSessionAnswered([])
       setSessionResults([])
@@ -1480,9 +1536,11 @@ export default function QuizScreen({
               {headlineText}
             </div>
             <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
-              {quizMode === 'new' && sessTotal > 0
-                ? "You've worked through every question in this set."
-                : 'Good work finishing the session.'}
+              {endedForGoal && goalDisplay
+                ? `You've answered all ${goalDisplay.goal} questions your tutor set.`
+                : quizMode === 'new' && sessTotal > 0
+                  ? "You've worked through every question in this set."
+                  : 'Good work finishing the session.'}
             </div>
           </div>
 
@@ -1510,6 +1568,19 @@ export default function QuizScreen({
                   {assignmentsCompleted.length === 1 ? 'Assignment completed!' : `${assignmentsCompleted.length} assignments completed!`}
                 </div>
                 <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>Your tutor has been notified.</div>
+              </div>
+            </div>
+          )}
+
+          {/* Unfinished assignment — the bank ran out before the tutor's count */}
+          {assignmentsCompleted.length === 0 && assignmentGoal && assignmentProgress < assignmentGoal && (
+            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.bgCard, border: `1px solid ${t.borderAccent}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Pin size={18} color={GOLD} style={{ flexShrink: 0 }} aria-hidden="true" />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
+                  Assignment progress: {assignmentProgress}/{assignmentGoal} questions
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>Your progress is saved. Answer {assignmentGoal - assignmentProgress} more to complete it.</div>
               </div>
             </div>
           )}
@@ -1730,6 +1801,11 @@ export default function QuizScreen({
       <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
+          {goalDisplay && (
+            <span title="Questions answered toward your tutor's assignment" style={{ fontSize: 11, fontWeight: 800, color: NAVY, background: 'rgba(255,255,255,0.3)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
+              Assignment {goalDisplay.progress}/{goalDisplay.goal}
+            </span>
+          )}
           <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
           {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Priority</span>}

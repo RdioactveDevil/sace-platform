@@ -43,6 +43,7 @@ import {
   fetchUnreadMessageCount,
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
+import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -50,6 +51,13 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
 const ASSIGNMENT_TYPES = ['Quiz', 'Test', 'Worksheet', 'Homework']
+const QUESTION_COUNT_PRESETS = [5, 10, 15, 20, 30]
+const DIFFICULTY_OPTIONS = [
+  { id: 'adaptive', label: 'Adaptive', hint: 'Follows the student’s level' },
+  ...Object.entries(ASSIGNMENT_DIFFICULTIES).map(([id, d]) => ({
+    id, label: d.label, hint: d.min === d.max ? `${d.min}★` : `${d.min}–${d.max}★`,
+  })),
+]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -260,6 +268,8 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
     subject: subject?.name || '',
     topics: [],
     due_date: '',
+    question_count: 10,
+    difficulty: 'adaptive',
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
@@ -352,6 +362,10 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
     setNotifyStatus(null)
     if (form.topics.length === 0) { setFormError('Select at least one topic.'); return }
     if (!form.due_date) { setFormError('Please set a due date.'); return }
+    const questionCount = Number(form.question_count)
+    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
+      setFormError('Number of questions must be a whole number from 1 to 100.'); return
+    }
     if (resolvedCount === 0) { setFormError('Select at least one target (student, class, or roster).'); return }
     setSaving(true)
     try {
@@ -360,13 +374,15 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
         subject: form.subject,
         topics: form.topics,
         due_date: form.due_date,
+        question_count: questionCount,
+        difficulty: form.difficulty,
         studentIds: form.target_mode === 'classes' || form.target_mode === 'all' ? [] : form.student_ids,
         classIds: form.target_mode === 'classes' ? form.class_ids : [],
         allRoster: form.target_mode === 'all',
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -485,6 +501,42 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 14 }}>
+              <div>
+                <label htmlFor="assignment-question-count" style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Questions to complete</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {QUESTION_COUNT_PRESETS.map(n => {
+                    const active = Number(form.question_count) === n
+                    return (
+                      <button key={n} type="button" onClick={() => setForm(f => ({ ...f, question_count: n }))} aria-pressed={active}
+                        style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                        {n}
+                      </button>
+                    )
+                  })}
+                  <input id="assignment-question-count" type="number" min={1} max={100} step={1} value={form.question_count}
+                    onChange={e => setForm(f => ({ ...f, question_count: e.target.value }))}
+                    style={{ ...inputStyle, width: 72 }} />
+                </div>
+                <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>Marked complete once the student has answered this many. Progress carries over between sessions.</div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Difficulty</label>
+                <div role="radiogroup" aria-label="Difficulty" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {DIFFICULTY_OPTIONS.map(opt => {
+                    const active = form.difficulty === opt.id
+                    return (
+                      <button key={opt.id} type="button" role="radio" aria-checked={active} title={opt.hint} onClick={() => setForm(f => ({ ...f, difficulty: opt.id }))}
+                        style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{DIFFICULTY_OPTIONS.find(o => o.id === form.difficulty)?.hint}</div>
               </div>
             </div>
 
@@ -655,6 +707,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                     <div style={{ fontSize: 12, color: t.textMuted, marginBottom: indent ? 0 : 3 }}>
                       <strong style={{ color: t.text }}>Student:</strong> {a.profiles?.display_name || a.student_id}
                       {a.completed_at && <span style={{ marginLeft: 8, color: '#4ade80' }}>· Completed {fmtDate(a.completed_at)}</span>}
+                      {assignmentGoalLabel(a) && <span style={{ marginLeft: 8 }}>· {assignmentGoalLabel(a)}</span>}
                     </div>
                     {!indent && (
                       <div style={{ fontSize: 12, color: t.textMuted }}>
@@ -712,6 +765,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                           <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{head.type}</span>
                           <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.15)', color: GOLD, fontWeight: 700 }}>Batch</span>
                           <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(head.due_date)}</span>
+                          {head.question_count > 0 && <span style={{ fontSize: 11, color: t.textMuted }}>{head.question_count} questions · {ASSIGNMENT_DIFFICULTIES[head.difficulty]?.label || 'Adaptive'}</span>}
                         </div>
                         <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>
                           <strong style={{ color: t.text }}>{headerLabel}</strong>
@@ -848,7 +902,7 @@ function ProgressTab({ profile, theme, allTutors = false }) {
                     <div key={a.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', gap: 14 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} — {(a.topics || []).join(', ') || a.subject}</div>
-                        <div style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}{a.completed_at ? ` · Completed ${fmtDate(a.completed_at)}` : ''}</div>
+                        <div style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}{a.completed_at ? ` · Completed ${fmtDate(a.completed_at)}` : ''}{assignmentGoalLabel(a) ? ` · ${assignmentGoalLabel(a)}` : ''}</div>
                       </div>
                       <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700, flexShrink: 0 }}>{status}</span>
                     </div>

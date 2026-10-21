@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Flame, ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getQuestionCounts } from '../lib/engine'
+import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
@@ -358,16 +358,21 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                   {a.topics?.length > 0 && (
                     <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.topics.join(', ')}</div>
                   )}
+                  {a.question_count > 0 && (
+                    <div style={{ fontSize: 11, color: t.textSub, fontWeight: 600, marginTop: 3 }}>
+                      {assignmentGoalLabel(a)}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color }}>
                     {overdue ? 'Overdue' : daysLeft === 0 ? 'Due today' : daysLeft !== null ? `${daysLeft}d left` : 'No due date'}
                   </div>
                   <button
-                    onClick={() => onStartSession({ mode: 'new', subtopics: a.topics || [], assignmentId: a.id, assignmentSubject: a.subject })}
+                    onClick={() => onStartSession({ mode: 'new', subtopics: a.topics || [], assignment: a })}
                     style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
                   >
-                    Start
+                    {a.progress_count > 0 ? 'Continue' : 'Start'}
                   </button>
                 </div>
               </div>

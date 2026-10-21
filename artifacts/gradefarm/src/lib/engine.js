@@ -97,6 +97,25 @@ export function seenQuestionChecker(questions, struggleMap) {
 }
 
 /**
+ * Fixed difficulty bands a tutor can set on an assignment. `min`/`max` bound
+ * the stars served (falling back to the whole pool when the bank has none in
+ * the band) and `target` steers weighting and AI top-up generation.
+ * 'adaptive' has no band: the engine follows the student's level.
+ */
+export const ASSIGNMENT_DIFFICULTIES = {
+  easy:   { label: 'Easy',   min: 1, max: 2, target: 2 },
+  medium: { label: 'Medium', min: 3, max: 3, target: 3 },
+  hard:   { label: 'Hard',   min: 4, max: 5, target: 4 },
+}
+
+/** "4/10 questions · Hard" for an assignment with a tutor-set count, else null. */
+export function assignmentGoalLabel(a) {
+  if (!a?.question_count) return null
+  const done = Math.min(a.progress_count || 0, a.question_count)
+  return `${done}/${a.question_count} questions · ${ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive'}`
+}
+
+/**
  * Pick the next question using weighted random selection.
  *
  * mode:
@@ -107,9 +126,12 @@ export function seenQuestionChecker(questions, struggleMap) {
  * targetDifficulty (1–5 or null): when provided, biases selection towards
  *   questions at that difficulty level for adaptive pacing.
  *
+ * difficultyRange ({ min, max } or null): restricts the pool to questions in
+ *   that star range when any are left; otherwise the whole pool is used.
+ *
  * Within the eligible pool, adaptive weighting still applies.
  */
-export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new', subtopics = [], targetDifficulty = null) {
+export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, mode = 'new', subtopics = [], targetDifficulty = null, difficultyRange = null) {
   const questionPool = subtopics.length > 0
     ? questions.filter(q => subtopics.includes(q.subtopic))
     : questions
@@ -137,6 +159,14 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
   // Finish the reading passage the student is part-way through before moving on.
   const sibling = nextPassageSibling(questions, pool, sessionAnsweredIds)
   if (sibling) return sibling
+
+  if (difficultyRange) {
+    const inRange = pool.filter(q => {
+      const d = q.difficulty || 3
+      return d >= difficultyRange.min && d <= difficultyRange.max
+    })
+    if (inRange.length) pool = inRange
+  }
 
   const weights = computeWeights(pool, struggleMap, targetDifficulty)
   weights.sort((a, b) => b.weight - a.weight)
