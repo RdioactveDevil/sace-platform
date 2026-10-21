@@ -310,8 +310,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     setInviteBusy(token); setInviteError('')
     try {
       await respondToInvite(token, accept)
-      // Reload so the sidebar picks up the new tutor (Lessons section).
-      if (accept) { window.location.reload(); return }
+      // Reload into the portal so the sidebar picks up the new tutor and the welcome shows.
+      if (accept) { window.location.assign('/portal'); return }
       setInvites(prev => prev.filter(i => i.token !== token))
     } catch (e) { setInviteError(e.message) }
     setInviteBusy(null)

@@ -7,6 +7,7 @@ import {
   EncodedFileOutput,
   EncodedFileType,
   EncodingOptions,
+  EgressStatus,
   S3Upload,
 } from "livekit-server-sdk";
 import { Resend } from "resend";
@@ -716,6 +717,111 @@ router.post("/sessions/:id/end", async (req: Request, res: Response) => {
     .eq("id", id);
 
   res.json({ ok: true });
+});
+
+/** Whether an egress is still running (starting, active or finishing). */
+async function egressRunning(egressId: string): Promise<boolean> {
+  const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
+  if (!apiKey || !apiSecret) return false;
+  const egressClient = new EgressClient(wsUrl.replace(/^ws/, "http"), apiKey, apiSecret);
+  try {
+    const [info] = await egressClient.listEgress({ egressId });
+    return !!info && info.status <= EgressStatus.EGRESS_ENDING;
+  } catch {
+    return false;
+  }
+}
+
+interface RecordableSession {
+  id: string;
+  tutor_id: string;
+  status: string | null;
+  scheduled_at: string | null;
+  recording_status: string | null;
+  recording_egress_id: string | null;
+}
+
+// POST /rooms/:roomName/recording { action: "start" | "stop" } — the tutor
+// starts or stops recording during the lesson. Works for one-off sessions and
+// recurring rooms (the occurrence happening now is the one recorded). A
+// stopped recording is published like an automatic one once LiveKit finishes
+// the file (egress_ended webhook); a new one can start after that.
+router.post("/rooms/:roomName/recording", async (req: Request, res: Response) => {
+  const ctx = await requireAuth(req, res);
+  if (!ctx) return;
+
+  const roomName = String(req.params.roomName);
+  const action = (req.body as { action?: string })?.action;
+  if (action !== "start" && action !== "stop") {
+    res.status(400).json({ error: "action must be start or stop" });
+    return;
+  }
+
+  const { data: rows, error } = await ctx.admin
+    .from("tutoring_sessions")
+    .select("id, tutor_id, status, scheduled_at, recording_status, recording_egress_id")
+    .eq("livekit_room_name", roomName)
+    .neq("status", "cancelled")
+    .returns<RecordableSession[]>();
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  const own = (rows ?? []).filter((s) => s.tutor_id === ctx.userId);
+  if (!own.length) {
+    res.status(403).json({ error: "Only the lesson's tutor can record it." });
+    return;
+  }
+
+  if (action === "stop") {
+    const target = own.find((s) => s.recording_status === "recording");
+    if (target?.recording_egress_id) {
+      await stopSessionRecording(target.recording_egress_id);
+      await ctx.admin.from("tutoring_sessions").update({ recording_status: "processing" }).eq("id", target.id);
+    }
+    res.json({ ok: true, status: target ? "processing" : null });
+    return;
+  }
+
+  // A recording still running or still being saved holds the session's
+  // egress id until LiveKit reports it finished; don't replace it before then.
+  for (const s of own) {
+    if ((s.recording_status === "recording" || s.recording_status === "processing") && s.recording_egress_id && (await egressRunning(s.recording_egress_id))) {
+      res.status(409).json({
+        error: s.recording_status === "recording" ? "This lesson is already being recorded." : "The last recording is still being saved. Try again in a minute.",
+      });
+      return;
+    }
+  }
+  if (!recordingEnabled()) {
+    res.status(503).json({ error: "Recording isn't set up on this server yet." });
+    return;
+  }
+
+  const now = Date.now();
+  const target =
+    own.find((s) => s.status === "active") ??
+    own
+      .slice()
+      .sort((a, b) => Math.abs(new Date(a.scheduled_at ?? 0).getTime() - now) - Math.abs(new Date(b.scheduled_at ?? 0).getTime() - now))[0];
+
+  const started = await startSessionRecording(roomName, target.tutor_id, target.id);
+  if (!started) {
+    res.status(502).json({ error: "Recording couldn't start. Try again in a moment." });
+    return;
+  }
+  await ctx.admin
+    .from("tutoring_sessions")
+    .update({
+      record_session: true,
+      recording_egress_id: started.egressId,
+      recording_storage_path: started.storagePath,
+      recording_storage_backend: started.backend,
+      recording_status: "recording",
+      recording_error: null,
+    })
+    .eq("id", target.id);
+  res.json({ ok: true, status: "recording" });
 });
 
 // PATCH /sessions/:id — update a session (reschedule, notes, status)

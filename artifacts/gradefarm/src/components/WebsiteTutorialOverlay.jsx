@@ -8,7 +8,7 @@ const NAVYD = '#080d28'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 /** Paths where the in-app spotlight tutorial may appear (not quiz — different shell concerns). */
-export const WEBSITE_TUTORIAL_PATH_PREFIXES = ['/question-bank', '/learn', '/leaderboard', '/my-progress', '/study-plan', '/history', '/my-account', '/writing', '/tutor']
+export const WEBSITE_TUTORIAL_PATH_PREFIXES = ['/question-bank', '/learn', '/leaderboard', '/my-progress', '/study-plan', '/history', '/my-account', '/writing', '/tutor', '/portal', '/lessons', '/recordings', '/class-resources']
 
 export function isWebsiteTutorialSurface(pathname) {
   if (pathname === '/quiz') return false
@@ -162,12 +162,13 @@ function SpotlightSlices({ rect }) {
   )
 }
 
-export default function WebsiteTutorialOverlay({ isTutor, theme, onSeen, onFinish }) {
+/** Spotlight tour. Runs the app tour, or the `steps` passed in (e.g. the Student Portal tour). */
+export default function WebsiteTutorialOverlay({ isTutor, theme, onSeen, onFinish, steps: customSteps = null }) {
   const navigate = useNavigate()
   const location = useLocation()
   const t = THEMES[theme] || THEMES.dark
 
-  const steps = useMemo(() => studentSteps(isTutor), [isTutor])
+  const steps = useMemo(() => customSteps || studentSteps(isTutor), [customSteps, isTutor])
 
   const [ix, setIx] = useState(0)
 

@@ -93,3 +93,10 @@ and the API adds the roster row when they accept. Apply it before deploying
 the matching app change (the new app's invite endpoints need the table; until
 the app is deployed, the old "Add student" button fails with a permissions
 error).
+
+## 20261021000001_student_portal
+
+Adds `tutor_profiles` (what a tutor shows students on "My Tutor") and
+`tutor_messages` (tutor ↔ student conversations). Both are new tables used only
+through the API, so applying it changes nothing for the current app; apply it
+before deploying the Student Portal.

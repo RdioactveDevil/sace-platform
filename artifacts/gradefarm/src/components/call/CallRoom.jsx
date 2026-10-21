@@ -6,17 +6,21 @@ import {
   useConnectionState,
   useIsRecording,
   useParticipants,
+  useRoomContext,
   useTrackToggle,
   useTracks,
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
-import { Mic, MicOff, Video, VideoOff, MonitorUp, MonitorX, PenLine, MessageSquare, PhoneOff, Users, X, SendHorizontal, Circle } from 'lucide-react'
+import { toast } from 'sonner'
+import { Mic, MicOff, Video, VideoOff, MonitorUp, MonitorX, PenLine, MessageSquare, PhoneOff, Users, X, SendHorizontal, Circle, CircleDot, Square, Wallpaper } from 'lucide-react'
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { useLiveKitJoinOverlay } from '../../hooks/useLiveKitJoinOverlay'
 import { useWhiteboardBroadcast } from '../../hooks/useWhiteboardBroadcast'
 import VideoTile, { TILE_CSS } from './VideoTile'
 import { pickStage, fitGrid } from './callLayout'
+import { useCallBackground, BackgroundPanel, BACKGROUND_CSS } from './BackgroundPicker'
+import { setRoomRecording } from '../../lib/db'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -81,6 +85,14 @@ function CallHeader({ title, subtitle }) {
   const elapsed = useElapsed()
   const recording = useIsRecording()
   const participants = useParticipants()
+  // Tell everyone when recording starts or stops mid-call (not on join).
+  const wasRecording = useRef(recording)
+  useEffect(() => {
+    if (recording === wasRecording.current) return
+    wasRecording.current = recording
+    if (recording) toast('This lesson is now being recorded', { icon: <Circle size={10} fill="#ef4444" color="#ef4444" aria-hidden="true" /> })
+    else toast('Recording stopped')
+  }, [recording])
   return (
     <header className="gf-call-header">
       <div className="gf-call-header-main">
@@ -176,7 +188,46 @@ function ToggleButton({ source, onIcon: OnIcon, offIcon: OffIcon, onLabel, offLa
   )
 }
 
-function Dock({ isTutor, showWhiteboard, onToggleWhiteboard, showChat, onToggleChat, unread, onLeave, onEnd }) {
+/** Tutor's record button: starts or stops recording mid-lesson. */
+function RecordButton() {
+  const room = useRoomContext()
+  const recording = useIsRecording()
+  const [intent, setIntent] = useState(null) // 'starting' | 'stopping'
+
+  // Clear the pending state once LiveKit reports the change (or give up after 30s).
+  useEffect(() => {
+    if ((intent === 'starting' && recording) || (intent === 'stopping' && !recording)) setIntent(null)
+  }, [recording, intent])
+  useEffect(() => {
+    if (!intent) return undefined
+    const id = setTimeout(() => setIntent(null), 30_000)
+    return () => clearTimeout(id)
+  }, [intent])
+
+  const toggle = async () => {
+    const action = recording ? 'stop' : 'start'
+    setIntent(action === 'start' ? 'starting' : 'stopping')
+    try {
+      const { status } = await setRoomRecording(room.name, action)
+      if (status === 'processing') toast.success('Recording stopped. It’ll appear in Resources once it’s saved.')
+      if (!status) setIntent(null)
+    } catch (e) {
+      setIntent(null)
+      toast.error(e.message || 'Couldn’t change the recording.')
+    }
+  }
+
+  const label = intent === 'starting' ? 'Starting…' : intent === 'stopping' ? 'Stopping…' : recording ? 'Stop rec' : 'Record'
+  return (
+    <button type="button" className={`gf-dock-btn${recording ? ' gf-dock-btn--rec' : ''}`} onClick={toggle} disabled={!!intent || !room.name}
+      aria-pressed={recording} aria-label={recording ? 'Stop recording' : 'Start recording'} title={recording ? 'Stop recording' : 'Record this lesson'}>
+      {recording ? <Square size={17} fill="currentColor" aria-hidden="true" /> : <CircleDot size={19} aria-hidden="true" />}
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function Dock({ isTutor, showWhiteboard, onToggleWhiteboard, showChat, onToggleChat, unread, onLeave, onEnd, showBackground, onToggleBackground }) {
   return (
     <div className="gf-dock" role="toolbar" aria-label="Call controls">
       <div className="gf-dock-group">
@@ -194,6 +245,11 @@ function Dock({ isTutor, showWhiteboard, onToggleWhiteboard, showChat, onToggleC
           <span>Chat</span>
           {unread > 0 && !showChat && <span className="gf-badge">{unread > 9 ? '9+' : unread}</span>}
         </button>
+        <button type="button" data-bg-toggle className={`gf-dock-btn${showBackground ? ' gf-dock-btn--on' : ''}`} aria-pressed={showBackground} onClick={onToggleBackground} title="Background" aria-label="Background">
+          <Wallpaper size={19} aria-hidden="true" />
+          <span>Background</span>
+        </button>
+        {isTutor && <RecordButton />}
       </div>
       <div className="gf-dock-group">
         {isTutor && onEnd ? (
@@ -284,6 +340,8 @@ export default function CallRoom({ title, subtitle, isTutor, onLeave, onEnd }) {
   const showJoinOverlay = useLiveKitJoinOverlay(connectionState)
   const [showChat, setShowChat] = useState(false)
   const [showWhiteboard, setShowWhiteboard] = useState(false)
+  const [showBackground, setShowBackground] = useState(false)
+  const background = useCallBackground()
 
   const tracks = useTracks(
     [
@@ -347,8 +405,13 @@ export default function CallRoom({ title, subtitle, isTutor, onLeave, onEnd }) {
         )}
       </div>
 
+      <div className="gf-bg-anchor">
+        {showBackground && <BackgroundPanel bg={background} onClose={() => setShowBackground(false)} />}
+      </div>
       <Dock
         isTutor={isTutor}
+        showBackground={showBackground}
+        onToggleBackground={() => setShowBackground(v => !v)}
         showWhiteboard={showWhiteboard}
         onToggleWhiteboard={() => setShowWhiteboard(v => !v)}
         showChat={showChat}
@@ -366,6 +429,7 @@ const CALL_CSS = `
   @keyframes gf-spin { to { transform: rotate(360deg) } }
   @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
   ${TILE_CSS}
+  ${BACKGROUND_CSS}
   .gf-call { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #0a0c1a; color: #f5f6ff; font-family: ${FONT_B}; }
   .gf-call-header { height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
   .gf-call-header-main { min-width: 0; display: flex; align-items: center; gap: 14px; }
@@ -434,6 +498,7 @@ const CALL_CSS = `
   .gf-dock-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .gf-dock-btn--off { background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.35); color: #fecaca; }
   .gf-dock-btn--on { background: rgba(241,190,67,0.16); border-color: rgba(241,190,67,0.55); color: ${GOLD}; }
+  .gf-dock-btn--rec { background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.55); color: #fca5a5; }
   .gf-dock-btn--ghost { background: transparent; }
   .gf-dock-btn--danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
   .gf-dock-btn--danger:hover:not(:disabled) { background: #dc2626; border-color: #dc2626; }
