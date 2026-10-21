@@ -66,8 +66,7 @@ export default function AdminUsersTab({ profile }) {
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: GOLD }}>All users</h2>
-        <span style={{ fontSize: 12, color: '#64748b' }}>({users.length})</span>
+        <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{users.length} user{users.length === 1 ? '' : 's'}</span>
         <input
           value={filter}
           onChange={e => setFilter(e.target.value)}

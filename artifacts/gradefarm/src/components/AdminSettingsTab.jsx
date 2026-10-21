@@ -107,9 +107,6 @@ export default function AdminSettingsTab() {
 
   return (
     <div style={{ fontFamily: FONT_B }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', marginBottom: 8 }}>Platform Settings</div>
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 28 }}>Student access and pricing.</div>
-
       {/* ── Student access ── */}
       <Section title="Student access">
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>

@@ -83,7 +83,6 @@ export default function AdminCohortTab() {
 
   if (error) return (
     <div style={{ fontFamily: FONT_B }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 16 }}>Cohort Analytics</div>
       <div style={{
         padding: '20px 22px', borderRadius: 14,
         background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)',
@@ -103,7 +102,6 @@ export default function AdminCohortTab() {
 
   if (rows.length === 0) return (
     <div style={{ fontFamily: FONT_B }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 16 }}>Cohort Analytics</div>
       <div style={{
         textAlign: 'center', padding: '64px 24px',
         border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 14, color: '#64748b',
@@ -124,7 +122,6 @@ export default function AdminCohortTab() {
   return (
     <div style={{ fontFamily: FONT_B }}>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 6 }}>Cohort Analytics</div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
           Class-wide topic performance · {totalAttempts.toLocaleString()} total answers · {overallAccuracy}% overall accuracy
         </div>

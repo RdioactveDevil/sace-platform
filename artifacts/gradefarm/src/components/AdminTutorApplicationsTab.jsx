@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { adminListTutorApplications, adminApproveTutor, adminRejectTutor } from '../lib/db'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
 
 export default function AdminTutorApplicationsTab() {
   const [apps, setApps]       = useState([])
@@ -37,8 +36,7 @@ export default function AdminTutorApplicationsTab() {
   return (
     <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: GOLD }}>Pending tutor applications</h2>
-        <span style={{ fontSize: 12, color: '#64748b' }}>({apps.length})</span>
+        <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{apps.length} pending application{apps.length === 1 ? '' : 's'}</span>
       </div>
 
       {error && (

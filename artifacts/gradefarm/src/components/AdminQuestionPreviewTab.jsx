@@ -124,7 +124,6 @@ export default function AdminQuestionPreviewTab() {
 
   return (
     <div style={s.page}>
-      <h2 style={s.heading}>Question Preview</h2>
       <p style={s.sub}>Look up any question by ID to preview and edit its visual fields (graph, table, image).</p>
 
       {/* Search */}
@@ -267,7 +266,6 @@ export default function AdminQuestionPreviewTab() {
 
 const styles = {
   page: { padding: '28px 32px', maxWidth: 900, fontFamily: FONT_B },
-  heading: { color: '#fff', fontSize: 20, fontWeight: 800, margin: '0 0 6px' },
   sub: { color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: '0 0 24px' },
   searchRow: { display: 'flex', gap: 8, marginBottom: 20 },
   input: {
