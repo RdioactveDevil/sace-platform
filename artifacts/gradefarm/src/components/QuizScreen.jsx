@@ -28,6 +28,7 @@ import {
   flagTopicForStudyPlan,
   completeAssignment,
   recordAssignmentAnswer,
+  notifyAssignmentFinished,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { getTopicCodeByName, resolveManagedSubjectName } from '../lib/adminTopics'
@@ -484,6 +485,8 @@ export default function QuizScreen({
   const assignmentBand = ASSIGNMENT_DIFFICULTIES[activeAssignment?.difficulty] || null
   const goalReached = !endedForGoal && (!!completedGoal || !!assignmentStand?.complete)
   const goalDisplay = completedGoal || assignmentStand
+  // A tutor can run an assignment as a straight quiz, without remediation.
+  const remediationAllowed = activeAssignment?.remediation !== false
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   const remediationQueue = Array.isArray(_remediationQueue) ? _remediationQueue : []
@@ -703,17 +706,19 @@ export default function QuizScreen({
   // Count a main-question answer toward the assignment goal. App holds the
   // running state (updated here the same way the RPC updates the row) so it
   // survives this screen remounting; the RPC decides completion.
-  const countAssignmentAnswer = (isCorrect) => {
+  // The question, response and time go into the tutor's assignment report.
+  const countAssignmentAnswer = (isCorrect, response, timeMs) => {
     if (!activeAssignment?.question_count) return
     const next = applyAssignmentAnswer(activeAssignment, isCorrect)
     onAssignmentProgress?.({ progress_count: next.progress_count, recent_results: next.recent_results })
     const id = activeAssignment.id
-    recordAssignmentAnswer(id, isCorrect)
+    recordAssignmentAnswer(id, isCorrect, { questionId: currentQ?.id, response, timeMs })
       .then(row => {
         if (!row?.completed_at) return
         setCompletedGoal(assignmentStanding({ ...next, ...row }))
         setAssignmentsCompleted([{ id }])
         onAssignmentComplete?.()
+        notifyAssignmentFinished(id).catch(() => {})
       })
       .catch(() => {})
   }
@@ -796,6 +801,8 @@ export default function QuizScreen({
   // questions table so they're reusable.
   useEffect(() => {
     if (!finished || (quizMode !== 'new' && quizMode !== 'all')) return
+    // Ending on an assignment's question count is not the bank running out.
+    if (endedForGoal) return
     if (generatingMoreRef.current) return
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
@@ -1207,7 +1214,7 @@ export default function QuizScreen({
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
     setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, remediation: isRemediationQuestion }])
-    if (!isRemediationQuestion) countAssignmentAnswer(isCorrect)
+    if (!isRemediationQuestion) countAssignmentAnswer(isCorrect, idx, timeTakenMs)
 
     if (isCorrect) {
       setFloatXP(xpEarned)
@@ -1220,7 +1227,7 @@ export default function QuizScreen({
     let remediationCompleted = false
     if (isRemediationQuestion) {
       remediationCompleted = decideRemediationVariantOutcome(isCorrect)
-    } else if (!isCorrect && !currentQ.passage_id) {
+    } else if (!isCorrect && !currentQ.passage_id && remediationAllowed) {
       // Reading-passage questions skip remediation: a generated "similar
       // question" would have no passage to answer from.
       enterRemediationStateSync(currentQ)
@@ -1254,7 +1261,7 @@ export default function QuizScreen({
     if (!isCorrect) {
       // Remediation state was already set synchronously above. Load the queue in
       // the background — parallel with the AI tip fetch.
-      if (!currentQ.passage_id) enterRemediation(currentQ)
+      if (!currentQ.passage_id && remediationAllowed) enterRemediation(currentQ)
 
       setLoadingTip(true)
       try {
@@ -1297,7 +1304,7 @@ export default function QuizScreen({
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
     setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant }])
-    if (!isVariant) countAssignmentAnswer(isCorrect)
+    if (!isVariant) countAssignmentAnswer(isCorrect, response, timeTakenMs)
 
     if (isCorrect) {
       setFloatXP(xpEarned)
@@ -1535,7 +1542,7 @@ export default function QuizScreen({
             </div>
             <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
               {endedForGoal && goalDisplay
-                ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
+                ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
                 : quizMode === 'new' && sessTotal > 0
                   ? "You've worked through every question in this set."
                   : 'Good work finishing the session.'}
@@ -1557,13 +1564,27 @@ export default function QuizScreen({
             </div>
           )}
 
+          {/* One-attempt assignment finished below the pass mark */}
+          {assignmentsCompleted.length > 0 && completedGoal?.passed === false && (
+            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.bgCard, border: `1px solid ${t.borderAccent}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Pin size={18} color={GOLD} style={{ flexShrink: 0 }} aria-hidden="true" />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
+                  Assignment finished: {completedGoal.accuracy}% (pass mark {completedGoal.minAccuracy}%)
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>You didn’t reach the pass mark this time. Your tutor has your results and will go through them with you.</div>
+              </div>
+            </div>
+          )}
+
           {/* Assignments completed banner */}
-          {assignmentsCompleted.length > 0 && (
+          {assignmentsCompleted.length > 0 && completedGoal?.passed !== false && (
             <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}55`, display: 'flex', alignItems: 'center', gap: 10 }}>
               <CircleCheck size={20} color={t.success} style={{ flexShrink: 0 }} aria-hidden="true" />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.success }}>
                   {assignmentsCompleted.length === 1 ? 'Assignment completed!' : `${assignmentsCompleted.length} assignments completed!`}
+                  {completedGoal?.passed && ` You scored ${completedGoal.accuracy}%, above the ${completedGoal.minAccuracy}% pass mark.`}
                 </div>
                 <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>Your tutor has been notified.</div>
               </div>
@@ -1580,7 +1601,7 @@ export default function QuizScreen({
                 </div>
                 <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>
                   {assignmentStand.progress < assignmentStand.goal
-                    ? `Your progress is saved. Answer ${assignmentStand.goal - assignmentStand.progress} more to complete it${assignmentStand.minAccuracy ? `, scoring at least ${assignmentStand.minAccuracy}%` : ''}.`
+                    ? `Your progress is saved. Answer ${assignmentStand.goal - assignmentStand.progress} more to ${assignmentStand.oneAttempt ? 'finish' : 'complete'} it${assignmentStand.minAccuracy ? `, scoring at least ${assignmentStand.minAccuracy}%${assignmentStand.oneAttempt ? ' to pass' : ''}` : ''}.`
                     : `Score at least ${assignmentStand.minAccuracy}% on your last ${assignmentStand.goal} answers to complete it — you're on ${assignmentStand.accuracy}%. Keep practising.`}
                 </div>
               </div>
@@ -1742,7 +1763,9 @@ export default function QuizScreen({
   const inRemediationQuestion = remediationMode && !!currentQ?.is_variant
   const remediationPendingEntry = remediationMode && !currentQ?.is_variant && remediationOriginalQ?.id === currentQ?.id
 
-  const nextButtonLabel = remediationPendingEntry
+  const nextButtonLabel = goalReached
+    ? 'Finish assignment →'
+    : remediationPendingEntry
     ? 'Start Remediation →'
     : inRemediationQuestion && remediationStatus === 'complete'
       ? 'Return to Quiz →'

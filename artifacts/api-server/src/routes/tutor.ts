@@ -726,6 +726,8 @@ interface BatchAssignmentBody {
   question_count?: number;
   difficulty?: string;
   min_accuracy?: number | null;
+  pass_mode?: string;
+  remediation?: boolean;
 }
 
 const ASSIGNMENT_DIFFICULTIES = ["adaptive", "easy", "medium", "hard"];
@@ -745,6 +747,8 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
     const difficulty = body.difficulty ?? "adaptive";
     // Optional pass mark (%): omitted or null means none.
     const minAccuracy = body.min_accuracy == null ? null : Number(body.min_accuracy);
+    const passMode = body.pass_mode ?? "until_pass";
+    const remediation = body.remediation !== false;
 
     if (!type || !subject || !Array.isArray(topics) || topics.length === 0) {
       return res.status(400).json({ error: "type, subject and at least one topic are required." });
@@ -758,6 +762,9 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
     }
     if (minAccuracy !== null && (!Number.isInteger(minAccuracy) || minAccuracy < 1 || minAccuracy > 100)) {
       return res.status(400).json({ error: "min_accuracy must be a whole number from 1 to 100." });
+    }
+    if (passMode !== "until_pass" && passMode !== "one_attempt") {
+      return res.status(400).json({ error: "pass_mode must be until_pass or one_attempt." });
     }
 
     // Resolve target student IDs.
@@ -821,6 +828,8 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       question_count: questionCount,
       difficulty,
       min_accuracy: minAccuracy,
+      pass_mode: passMode,
+      remediation,
     }));
 
     const { data: inserted, error: insErr } = await admin
@@ -851,7 +860,7 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
         const safeDueDate = escapeHtml(dueLabel);
         const safeGoal = escapeHtml(
           `${questionCount} question${questionCount === 1 ? "" : "s"} · ${DIFFICULTY_LABELS[difficulty]}` +
-          (minAccuracy !== null ? ` · ${minAccuracy}% pass mark` : ""),
+          (minAccuracy !== null ? ` · ${minAccuracy}% pass mark${passMode === "one_attempt" ? " (one attempt)" : ""}` : ""),
         );
 
         await Promise.all(targets.map(async (sid) => {
