@@ -1,13 +1,17 @@
 /* Reuse shared platform keyframes from SubjectPicker.css (spFadeUp, spTileIn) */
 
 /* ─── Staggered entry ───────────────────────────────────────────────────── */
-.td-fadein        { animation: spFadeUp 0.32s ease both; }
+/* `backwards`, not `both`: the end state is the element's own style anyway, and
+   an element that keeps a filled transform animation becomes the containing
+   block for position: fixed descendants, which shrinks drawers and modals
+   inside it (e.g. the admin Students panel) to the size of the content. */
+.td-fadein        { animation: spFadeUp 0.32s ease backwards; }
 .td-fadein-1      { animation-delay: 40ms; }
 .td-fadein-2      { animation-delay: 90ms; }
 .td-fadein-3      { animation-delay: 140ms; }
 .td-fadein-4      { animation-delay: 190ms; }
 .td-fadein-5      { animation-delay: 240ms; }
-.td-content-enter { animation: spFadeUp 0.28s ease both; }
+.td-content-enter { animation: spFadeUp 0.28s ease backwards; }
 
 /* ─── Root ──────────────────────────────────────────────────────────────── */
 .td-root { position: relative; }

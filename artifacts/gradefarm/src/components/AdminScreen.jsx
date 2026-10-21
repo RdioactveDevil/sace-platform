@@ -165,7 +165,7 @@ export default function AdminScreen({ profile }) {
         </div>
       </div>
 
-      <nav aria-label="Admin portal sections" style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
+      <nav aria-label="Admin portal sections" style={{ flex: 1, overflowY: 'auto', padding: '10px 10px', scrollbarWidth: 'thin' }}>
         {NAV_GROUPS.map(group => (
           <div key={group.label} style={{ marginTop: 14 }}>
             {!collapsed && (
@@ -227,6 +227,8 @@ export default function AdminScreen({ profile }) {
         background: C.bg,
         backgroundImage: 'radial-gradient(ellipse 900px 700px at 85% -8%, rgba(241,190,67,0.055) 0%, transparent 55%), radial-gradient(ellipse 700px 600px at -5% 95%, rgba(99,102,241,0.05) 0%, transparent 60%)',
         fontFamily: FONT_B, color: '#fff',
+        // Dark scrollbars, date pickers and dropdown menus to match the portal.
+        colorScheme: 'dark',
       }}
     >
       {/* Desktop sidebar */}
