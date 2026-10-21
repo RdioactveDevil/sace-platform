@@ -149,11 +149,29 @@ test('without a pass mark an assignment completes at the question count', () => 
 test('a pass mark is judged on the most recent question_count answers', () => {
   let a = { question_count: 3, min_accuracy: 67, progress_count: 0, recent_results: [] }
   for (const c of [false, false, true]) a = applyAssignmentAnswer(a, c)
-  assert.deepEqual(assignmentStanding(a), { goal: 3, progress: 3, minAccuracy: 67, accuracy: 33, meetsMark: false, complete: false })
+  assert.deepEqual(assignmentStanding(a), { goal: 3, progress: 3, minAccuracy: 67, oneAttempt: false, accuracy: 33, meetsMark: false, complete: false, passed: null })
   a = applyAssignmentAnswer(a, true)            // f t t: 66.7% is under 67%
   assert.equal(assignmentStanding(a).complete, false)
   a = applyAssignmentAnswer(a, true)            // t t t
   assert.deepEqual(a.recent_results, [true, true, true])
   assert.equal(a.progress_count, 3)
   assert.equal(assignmentStanding(a).complete, true)
+})
+
+test('a one-attempt pass mark ends at the question count and records pass or fail', () => {
+  let a = { question_count: 3, min_accuracy: 60, pass_mode: 'one_attempt', progress_count: 0, recent_results: [] }
+  for (const c of [true, false]) a = applyAssignmentAnswer(a, c)
+  assert.equal(assignmentStanding(a).complete, false)
+  const failed = applyAssignmentAnswer(a, false)
+  assert.equal(assignmentStanding(failed).complete, true)
+  assert.equal(assignmentStanding(failed).passed, false)
+  const passed = applyAssignmentAnswer(a, true)
+  assert.equal(assignmentStanding(passed).passed, true)
+  assert.equal(assignmentGoalLabel(passed), '3/3 questions · Adaptive · Pass 60% (one attempt)')
+})
+
+test('pass_mode is ignored without a pass mark', () => {
+  const a = { question_count: 1, pass_mode: 'one_attempt', progress_count: 1, recent_results: [false] }
+  assert.equal(assignmentStanding(a).complete, true)
+  assert.equal(assignmentStanding(a).passed, null)
 })

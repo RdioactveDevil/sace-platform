@@ -9,6 +9,7 @@ import MessagesView from './MessagesView'
 import TutorProfileTab from './TutorProfileTab'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
+import AssignmentReport from './AssignmentReport'
 import './TutorDashboard.css'
 import {
   fetchRoster,
@@ -66,7 +67,7 @@ function fmtDate(iso) {
 }
 
 function assignmentStatus(a) {
-  if (a.completed_at) return 'Completed'
+  if (a.completed_at) return a.passed === false ? 'Not passed' : 'Completed'
   const due = new Date(a.due_date)
   const now = new Date()
   due.setHours(23, 59, 59, 999)
@@ -76,11 +77,25 @@ function assignmentStatus(a) {
 
 function statusColor(s) {
   if (s === 'Completed') return '#4ade80'
-  if (s === 'Overdue')   return '#f87171'
+  if (s === 'Overdue' || s === 'Not passed') return '#f87171'
   return GOLD
 }
 
 // ── (legacy Students Tab — superseded by ./StudentsTab.jsx; kept out of the tree) ──
+// An assignment's report is worth opening once the student has answered something.
+const hasReport = (a) => !!a.question_count && ((a.progress_count || 0) > 0 || !!a.completed_at)
+
+function ReportButton({ assignment, onOpen, theme }) {
+  if (!onOpen || !hasReport(assignment)) return null
+  const t = THEMES[theme]
+  return (
+    <button type="button" onClick={() => onOpen(assignment.id)}
+      style={{ padding: '5px 11px', borderRadius: 7, border: `1px solid ${GOLD}66`, background: 'rgba(241,190,67,0.10)', color: t.goldText, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
+      Report
+    </button>
+  )
+}
+
 // eslint-disable-next-line no-unused-vars
 function _LegacyStudentsTab({ profile, theme }) {
   const t = THEMES[theme]
@@ -249,10 +264,10 @@ function _LegacyStudentsTab({ profile, theme }) {
   )
 }
 
-const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed']
+const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed', 'Not passed']
 
 // ── Assignments Tab ───────────────────────────────────────────────────────────
-function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
+function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenReport }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
@@ -270,8 +285,9 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
     due_date: '',
     question_count: 10,
     difficulty: 'adaptive',
-    pass_mark_on: false,    // optional: only complete once recent answers reach min_accuracy
+    pass_mark_on: false,    // optional pass mark (min_accuracy)
     min_accuracy: 80,
+    pass_mode: 'until_pass', // 'until_pass': practise until passed · 'one_attempt': pass or fail at the count
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
@@ -383,13 +399,14 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
         question_count: questionCount,
         difficulty: form.difficulty,
         min_accuracy: minAccuracy,
+        pass_mode: form.pass_mode,
         studentIds: form.target_mode === 'classes' || form.target_mode === 'all' ? [] : form.student_ids,
         classIds: form.target_mode === 'classes' ? form.class_ids : [],
         allRoster: form.target_mode === 'all',
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', pass_mark_on: false, min_accuracy: 80, target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', pass_mark_on: false, min_accuracy: 80, pass_mode: 'until_pass', target_mode: 'single', student_ids: [], class_ids: [] })
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -560,8 +577,19 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                       style={{ ...inputStyle, width: 72 }} />
                     <span style={{ fontSize: 13, color: t.textMuted }}>% correct</span>
                   </div>
-                  <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>
-                    The student keeps going until they score at least this on their last {Number(form.question_count) || 'N'} answers.
+                  <div role="radiogroup" aria-label="If they don't reach the pass mark" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                    {[
+                      { id: 'until_pass', label: 'Keep going until they pass', hint: `They keep practising until they score at least this on their last ${Number(form.question_count) || 'N'} answers.` },
+                      { id: 'one_attempt', label: 'One attempt: pass or fail', hint: `The assignment ends after ${Number(form.question_count) || 'N'} questions and is marked passed or not passed. You get the report either way.` },
+                    ].map(opt => (
+                      <label key={opt.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                        <input type="radio" name="pass_mode" checked={form.pass_mode === opt.id} onChange={() => setForm(f => ({ ...f, pass_mode: opt.id }))} style={{ accentColor: GOLD, marginTop: 2 }} />
+                        <span>
+                          <span style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{opt.label}</span>
+                          <span style={{ display: 'block', fontSize: 11, color: t.textMuted, marginTop: 2 }}>{opt.hint}</span>
+                        </span>
+                      </label>
+                    ))}
                   </div>
                 </div>
               )}
@@ -742,6 +770,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
                       </div>
                     )}
                   </div>
+                  <ReportButton assignment={a} onOpen={onOpenReport} theme={theme} />
                   <button
                     onClick={() => handleDelete(a.id)}
                     disabled={deletingId === a.id}
@@ -815,7 +844,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false }) {
 }
 
 // ── Progress Tab ──────────────────────────────────────────────────────────────
-function ProgressTab({ profile, theme, allTutors = false }) {
+function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
   const t = THEMES[theme]
   const [roster, setRoster]           = useState([])
   const [selectedStudentId, setSelectedStudentId] = useState('')
@@ -932,6 +961,7 @@ function ProgressTab({ profile, theme, allTutors = false }) {
                         <div style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}{a.completed_at ? ` · Completed ${fmtDate(a.completed_at)}` : ''}{assignmentGoalLabel(a) ? ` · ${assignmentGoalLabel(a)}` : ''}</div>
                       </div>
                       <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700, flexShrink: 0 }}>{status}</span>
+                      <ReportButton assignment={a} onOpen={onOpenReport} theme={theme} />
                     </div>
                   )
                 })}
@@ -2253,6 +2283,9 @@ export default function TutorScreen({ profile, theme, subject }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileSearch, setMobileSearch] = useState(false)
   const activeMobileTab = useRef(null)
+  // An assignment report open over the portal. ?report=<id> (from the
+  // "assignment finished" email) opens one directly.
+  const [reportId, setReportId] = useState(() => new URLSearchParams(window.location.search).get('report'))
 
   // Admins (managers) can switch the portal between their own students and
   // every tutor's. Remembered per browser.
@@ -2503,16 +2536,17 @@ export default function TutorScreen({ profile, theme, subject }) {
             {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
             {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} allTutors={allTutors} />}
             {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} allTutors={allTutors} />}
-            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} />}
+            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} onOpenReport={setReportId} />}
             {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
             {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
-            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} allTutors={allTutors} />}
+            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} allTutors={allTutors} onOpenReport={setReportId} />}
             {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
             {activeTab === 'messages'    && <MessagesView   theme={theme} emptyHint="Invite a student from the Students tab to start a conversation." />}
             {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
           </div>
         </div>
       </div>
+      {reportId && <AssignmentReport assignmentId={reportId} theme={theme} onClose={() => setReportId(null)} />}
     </div>
   )
 }

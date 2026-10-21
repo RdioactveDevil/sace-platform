@@ -21,6 +21,7 @@ import billingRouter from "./billing";
 import emailRouter from "./email";
 import invitesRouter from "./invites";
 import portalRouter from "./portal";
+import assignmentReportsRouter from "./assignment-reports";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(billingRouter);
 router.use(emailRouter);
 router.use(invitesRouter);
 router.use(portalRouter);
+router.use(assignmentReportsRouter);
 
 export default router;

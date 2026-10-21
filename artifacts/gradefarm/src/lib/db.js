@@ -1185,10 +1185,10 @@ export async function removeStudentFromClass(classId, studentId) {
 }
 
 /** Create a batch of assignments. Server resolves the union of studentIds + classIds + allRoster. */
-export async function createBatchAssignment({ type, subject, topics, due_date, question_count, difficulty, min_accuracy = null, studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
+export async function createBatchAssignment({ type, subject, topics, due_date, question_count, difficulty, min_accuracy = null, pass_mode = 'until_pass', studentIds = [], classIds = [], allRoster = false, notify = true } = {}) {
   return tutorFetch('/api/tutor/assignments/batch', {
     method: 'POST',
-    body: JSON.stringify({ type, subject, topics, due_date, question_count, difficulty, min_accuracy, studentIds, classIds, allRoster, notify }),
+    body: JSON.stringify({ type, subject, topics, due_date, question_count, difficulty, min_accuracy, pass_mode, studentIds, classIds, allRoster, notify }),
   })
 }
 
@@ -1218,13 +1218,35 @@ export async function completeAssignment(assignmentId) {
  *  { progress_count, question_count, min_accuracy, recent_results,
  *  completed_at }, or null if the assignment is already done.
  */
-export async function recordAssignmentAnswer(assignmentId, correct) {
+export async function recordAssignmentAnswer(assignmentId, correct, { questionId = null, response = null, timeMs = null } = {}) {
   const { data, error } = await supabase.rpc('record_assignment_answer', {
     p_assignment_id: assignmentId,
     p_correct: !!correct,
+    p_question_id: questionId,
+    p_response: response ?? null,
+    p_time_ms: Number.isFinite(timeMs) ? Math.round(timeMs) : null,
   })
   if (error) throw error
   return Array.isArray(data) ? data[0] || null : data
+}
+
+/** Tell the API a student's assignment just finished, so it can email the tutor. */
+export async function notifyAssignmentFinished(assignmentId) {
+  return tutorFetch(`/api/assignments/${encodeURIComponent(assignmentId)}/finished`, { method: 'POST' })
+}
+
+/** The tutor's report on one assignment: score, every answer and topic breakdown. */
+export async function fetchAssignmentReport(assignmentId) {
+  return tutorFetch(`/api/tutor/assignments/${encodeURIComponent(assignmentId)}/report`)
+}
+
+/** Generate (or return the cached) AI write-up for an assignment report. */
+export async function generateAssignmentReportSummary(assignmentId, { refresh = false } = {}) {
+  const json = await tutorFetch(`/api/tutor/assignments/${encodeURIComponent(assignmentId)}/report/summary`, {
+    method: 'POST',
+    body: JSON.stringify({ refresh }),
+  })
+  return json.summary
 }
 
 /** Delete an assignment (tutor only). */

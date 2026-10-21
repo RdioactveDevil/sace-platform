@@ -110,8 +110,10 @@ export const ASSIGNMENT_DIFFICULTIES = {
 
 /**
  * Where an assignment with a tutor-set count stands. With a pass mark
- * (min_accuracy), it completes only once the most recent question_count
- * answers reach it. Mirrors record_assignment_answer() in the database.
+ * (min_accuracy) and pass_mode 'until_pass', it completes only once the most
+ * recent question_count answers reach it; with 'one_attempt' it ends at the
+ * count either way and `passed` says whether the mark was reached. Mirrors
+ * record_assignment_answer() in the database.
  */
 export function assignmentStanding(a) {
   if (!a?.question_count) return null
@@ -121,7 +123,12 @@ export function assignmentStanding(a) {
   const recentCorrect = recent.filter(Boolean).length
   const accuracy = recent.length > 0 ? Math.round((recentCorrect / recent.length) * 100) : null
   const meetsMark = !a.min_accuracy || (recent.length > 0 && recentCorrect * 100 >= a.min_accuracy * recent.length)
-  return { goal, progress, minAccuracy: a.min_accuracy || null, accuracy, meetsMark, complete: progress >= goal && meetsMark }
+  const oneAttempt = !!a.min_accuracy && a.pass_mode === 'one_attempt'
+  const complete = progress >= goal && (meetsMark || oneAttempt)
+  return {
+    goal, progress, minAccuracy: a.min_accuracy || null, oneAttempt, accuracy, meetsMark, complete,
+    passed: complete && a.min_accuracy ? meetsMark : null,
+  }
 }
 
 /** The assignment after one more answer — the same update the database makes. */
@@ -136,7 +143,7 @@ export function assignmentGoalLabel(a) {
   const st = assignmentStanding(a)
   if (!st) return null
   const parts = [`${st.progress}/${st.goal} questions`, ASSIGNMENT_DIFFICULTIES[a.difficulty]?.label || 'Adaptive']
-  if (st.minAccuracy) parts.push(`Pass ${st.minAccuracy}%`)
+  if (st.minAccuracy) parts.push(`Pass ${st.minAccuracy}%${st.oneAttempt ? ' (one attempt)' : ''}`)
   return parts.join(' · ')
 }
 
