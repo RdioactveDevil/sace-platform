@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeWeights, selectNextQuestion, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts } from './engine.js'
+import { computeWeights, selectNextQuestion, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts, ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel, assignmentStanding, applyAssignmentAnswer } from './engine.js'
 
 // A spread of unseen questions across the full difficulty range.
 const bank = [
@@ -109,4 +109,51 @@ test('unseen counts ignore answered questions and count duplicates once', () => 
   assert.equal(getQuestionCounts(qs, {}).unseen, 3)
   assert.equal(getQuestionCounts(qs, { b: seen }).unseen, 2)
   assert.equal(getQuestionCounts(qs, { a: seen }).unseen, 2)
+})
+
+test('an assignment difficulty band only serves questions inside it', () => {
+  const hard = ASSIGNMENT_DIFFICULTIES.hard
+  for (let i = 0; i < 50; i++) {
+    const q = selectNextQuestion(bank, {}, [], 'new', [], hard.target, hard)
+    assert.ok(q.difficulty >= 4, `served difficulty ${q.difficulty}`)
+  }
+  const easy = ASSIGNMENT_DIFFICULTIES.easy
+  for (let i = 0; i < 50; i++) {
+    assert.ok(selectNextQuestion(bank, {}, [], 'new', [], easy.target, easy).difficulty <= 2)
+  }
+})
+
+test('a difficulty band falls back to the whole pool when none are left in it', () => {
+  const hard = ASSIGNMENT_DIFFICULTIES.hard
+  assert.equal(selectNextQuestion(bank, {}, ['d4', 'd5'], 'new', [], hard.target, hard)?.difficulty <= 3, true)
+})
+
+test('assignment goal label shows capped progress and difficulty', () => {
+  assert.equal(assignmentGoalLabel({ question_count: 10, progress_count: 4, difficulty: 'hard' }), '4/10 questions · Hard')
+  assert.equal(assignmentGoalLabel({ question_count: 5, progress_count: 9, difficulty: 'adaptive' }), '5/5 questions · Adaptive')
+  assert.equal(assignmentGoalLabel({ question_count: null }), null)
+})
+
+test('pass mark label is shown only when set', () => {
+  assert.equal(assignmentGoalLabel({ question_count: 10, progress_count: 2, difficulty: 'easy', min_accuracy: 80 }), '2/10 questions · Easy · Pass 80%')
+})
+
+test('without a pass mark an assignment completes at the question count', () => {
+  let a = { question_count: 3, progress_count: 0, recent_results: [] }
+  for (const c of [false, false]) a = applyAssignmentAnswer(a, c)
+  assert.equal(assignmentStanding(a).complete, false)
+  a = applyAssignmentAnswer(a, false)
+  assert.equal(assignmentStanding(a).complete, true)
+})
+
+test('a pass mark is judged on the most recent question_count answers', () => {
+  let a = { question_count: 3, min_accuracy: 67, progress_count: 0, recent_results: [] }
+  for (const c of [false, false, true]) a = applyAssignmentAnswer(a, c)
+  assert.deepEqual(assignmentStanding(a), { goal: 3, progress: 3, minAccuracy: 67, accuracy: 33, meetsMark: false, complete: false })
+  a = applyAssignmentAnswer(a, true)            // f t t: 66.7% is under 67%
+  assert.equal(assignmentStanding(a).complete, false)
+  a = applyAssignmentAnswer(a, true)            // t t t
+  assert.deepEqual(a.recent_results, [true, true, true])
+  assert.equal(a.progress_count, 3)
+  assert.equal(assignmentStanding(a).complete, true)
 })

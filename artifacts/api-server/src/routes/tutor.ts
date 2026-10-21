@@ -723,7 +723,15 @@ interface BatchAssignmentBody {
   classIds?: string[];
   allRoster?: boolean;
   notify?: boolean;
+  question_count?: number;
+  difficulty?: string;
+  min_accuracy?: number | null;
 }
+
+const ASSIGNMENT_DIFFICULTIES = ["adaptive", "easy", "medium", "hard"];
+const DIFFICULTY_LABELS: Record<string, string> = {
+  adaptive: "Adaptive", easy: "Easy", medium: "Medium", hard: "Hard",
+};
 
 router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
   try {
@@ -733,11 +741,24 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
 
     const body = req.body as BatchAssignmentBody;
     const { type, subject, topics, due_date, studentIds, classIds, allRoster, notify } = body;
+    const questionCount = Number(body.question_count ?? 10);
+    const difficulty = body.difficulty ?? "adaptive";
+    // Optional pass mark (%): omitted or null means none.
+    const minAccuracy = body.min_accuracy == null ? null : Number(body.min_accuracy);
 
     if (!type || !subject || !Array.isArray(topics) || topics.length === 0) {
       return res.status(400).json({ error: "type, subject and at least one topic are required." });
     }
     if (!due_date) return res.status(400).json({ error: "due_date is required." });
+    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
+      return res.status(400).json({ error: "question_count must be a whole number from 1 to 100." });
+    }
+    if (!ASSIGNMENT_DIFFICULTIES.includes(difficulty)) {
+      return res.status(400).json({ error: "difficulty must be adaptive, easy, medium or hard." });
+    }
+    if (minAccuracy !== null && (!Number.isInteger(minAccuracy) || minAccuracy < 1 || minAccuracy > 100)) {
+      return res.status(400).json({ error: "min_accuracy must be a whole number from 1 to 100." });
+    }
 
     // Resolve target student IDs.
     const resolved = new Set<string>();
@@ -797,6 +818,9 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       due_date,
       batch_id: batchId,
       class_id: singleClassId,
+      question_count: questionCount,
+      difficulty,
+      min_accuracy: minAccuracy,
     }));
 
     const { data: inserted, error: insErr } = await admin
@@ -825,6 +849,10 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
         const safeSubject = escapeHtml(subject);
         const safeTopics = escapeHtml(topicsList);
         const safeDueDate = escapeHtml(dueLabel);
+        const safeGoal = escapeHtml(
+          `${questionCount} question${questionCount === 1 ? "" : "s"} · ${DIFFICULTY_LABELS[difficulty]}` +
+          (minAccuracy !== null ? ` · ${minAccuracy}% pass mark` : ""),
+        );
 
         await Promise.all(targets.map(async (sid) => {
           const studentEmail = emailMap.get(sid);
@@ -848,6 +876,7 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
                       <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px; width: 90px;">Type</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeType}</td></tr>
                       <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Subject</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeSubject}</td></tr>
                       <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Topics</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeTopics}</td></tr>
+                      <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Goal</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeGoal}</td></tr>
                       <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Due</td><td style="padding: 6px 0; color: #f1be43; font-size: 13px; font-weight: 700;">${safeDueDate}</td></tr>
                     </table>
                   </div>
