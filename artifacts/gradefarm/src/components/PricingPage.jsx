@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getPlatformSettings } from '../lib/db'
-import { Lightbulb, GraduationCap, FlaskConical, Atom, Dna, BookOpen, TrendingUp } from 'lucide-react'
+import { Lightbulb, GraduationCap, Menu, X, Infinity as InfinityIcon } from 'lucide-react'
+import { usePublicSubjects } from '../lib/publicSubjects'
+import { formatSubjectLabel } from '../lib/subjects'
+import { SubjectIconByName } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -49,6 +52,8 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   const [tab, setTab] = useState('students') // 'students' | 'tutors'
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
   const [dbPricing, setDbPricing] = useState(DEFAULT_PRICING)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const subjects = usePublicSubjects()
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
@@ -101,7 +106,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       accentColor: GOLD,
       cta: 'Start learning →',
       features: [
-        { text: 'Unlimited questions', included: true },
+        { text: 'Unlimited questions — fresh AI questions, no daily cap', included: true },
         { text: 'Exam Mode', included: true },
         { text: 'Unlimited Titan AI tutoring', included: true },
         { text: 'Readiness score & study plan', included: true },
@@ -200,22 +205,41 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
         .pp-shimmer { background: linear-gradient(90deg,${GOLD} 0%,${GOLDL} 30%,#fff8e1 50%,${GOLDL} 70%,${GOLD} 100%); background-size: 200% auto; animation: pp-shimmer 3s linear infinite; }
         @keyframes pp-shimmer { to { background-position: -200% center; } }
         .pp-shimmer-purple { background: linear-gradient(90deg,${PURPLE} 0%,#c4b5fd 40%,${PURPLE} 100%); background-size: 200% auto; animation: pp-shimmer 3s linear infinite; }
+        .pp-menu-btn { display: none; }
+        @media(max-width:900px) {
+          .pp-plans-grid { grid-template-columns: 1fr !important; max-width: 460px; margin: 0 auto; }
+          .pp-nav-links { display: none !important; }
+          .pp-menu-btn { display: flex; }
+        }
         @media(max-width:760px) {
-          .pp-plans-grid { grid-template-columns: 1fr !important; }
-          .pp-student-grid { grid-template-columns: 1fr !important; }
+          .pp-student-grid { grid-template-columns: 1fr !important; max-width: 460px; margin: 0 auto; }
+        }
+        @media(max-width:560px) {
+          .pp-pad { padding-left: 16px !important; padding-right: 16px !important; }
+          .pp-nav { padding: 0 14px !important; }
+          .pp-tag, .pp-signin { display: none !important; }
+          .pp-hero { padding-top: 48px !important; padding-bottom: 32px !important; }
+          .pp-hero-p { font-size: 15px !important; margin-bottom: 28px !important; }
+          .pp-tabs { display: flex !important; width: 100%; }
+          .pp-tabs > button { flex: 1; padding: 10px 12px !important; }
+          .pp-card { padding: 32px 20px 24px !important; }
+          .pp-card:hover { transform: none; }
+          .pp-price { font-size: 44px !important; }
+          .pp-note { padding: 16px !important; gap: 12px !important; }
+          .pp-footer { flex-direction: column; text-align: center; }
         }
       `}</style>
 
       {/* ── NAV ── */}
-      <nav style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', background: 'rgba(8,13,40,0.88)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 32px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+      <nav className="pp-nav" style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', background: 'rgba(8,13,40,0.88)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 32px' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <button onClick={() => navigate('/home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <span style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: 1 }}>
               <span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 2 }}>by Titanium Tutoring</span>
+            <span className="pp-tag" style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 2 }}>by Titanium Tutoring</span>
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
+          <div className="pp-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
             {[['features', 'Features'], ['how', 'How It Works'], ['subjects', 'Subjects']].map(([id, label]) => (
               <button
                 key={id}
@@ -229,27 +253,44 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
               style={{ background: 'none', border: 'none', color: GOLD, fontSize: 13.5, fontWeight: 700, cursor: 'default', fontFamily: FONT_B, whiteSpace: 'nowrap' }}
             >Pricing</button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-            <button onClick={handleSignIn} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.65)', fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>Sign in</button>
-            <button onClick={handleGetStarted} className="pp-shimmer" style={{ padding: '9px 20px', borderRadius: 9, border: 'none', color: NAVYD, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B }}>Get started free</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <button onClick={handleSignIn} className="pp-signin" style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.65)', fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>Sign in</button>
+            <button onClick={handleGetStarted} className="pp-shimmer" style={{ padding: '9px 16px', borderRadius: 9, border: 'none', color: NAVYD, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>Get started free</button>
+            <button
+              className="pp-menu-btn"
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              style={{ alignItems: 'center', justifyContent: 'center', width: 38, height: 38, background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', cursor: 'pointer', padding: 0 }}
+            >
+              {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+            </button>
           </div>
         </div>
+        {menuOpen && (
+          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '4px 0 14px', display: 'flex', flexDirection: 'column' }}>
+            {[['features', 'Features'], ['how', 'How It Works'], ['subjects', 'Subjects']].map(([id, label]) => (
+              <button key={id} onClick={() => navigate(`/home#${id}`)} style={{ background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8', fontSize: 16, fontWeight: 600, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', padding: '14px 8px' }}>{label}</button>
+            ))}
+            <button onClick={handleSignIn} style={{ background: 'none', border: 'none', color: '#f1f5f9', fontSize: 16, fontWeight: 600, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', padding: '14px 8px' }}>Sign in</button>
+          </div>
+        )}
       </nav>
 
       {/* ── HERO ── */}
       <FadeUp>
-        <section style={{ padding: '80px 32px 48px', textAlign: 'center' }}>
+        <section className="pp-pad pp-hero" style={{ padding: '80px 32px 48px', textAlign: 'center' }}>
           <div style={{ maxWidth: 680, margin: '0 auto' }}>
             <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 14 }}>Pricing</div>
             <h1 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,5vw,52px)', margin: '0 0 18px', color: '#fff', letterSpacing: 1, lineHeight: 1.1 }}>
               PLANS FOR STUDENTS<br /><span style={{ color: GOLD }}>&amp; TUTORS.</span>
             </h1>
-            <p style={{ fontSize: 17, color: MUTED, lineHeight: 1.75, margin: '0 0 40px' }}>
-              Students pay only for the subjects they need. Tutors choose a plan that fits their roster.
+            <p className="pp-hero-p" style={{ fontSize: 17, color: MUTED, lineHeight: 1.75, margin: '0 0 40px' }}>
+              Students pay only for the subjects they need — and every paid subject comes with unlimited questions. Tutors choose a plan that fits their roster.
             </p>
 
             {/* Role tab switcher */}
-            <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 4, gap: 4, marginBottom: 20 }}>
+            <div className="pp-tabs" style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 4, gap: 4, marginBottom: 20 }}>
               {[['students', 'For Students'], ['tutors', 'For Tutors']].map(([key, label]) => (
                 <button
                   key={key}
@@ -286,7 +327,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       {/* ── STUDENT PLANS ── */}
       {tab === 'students' && (
         <FadeUp delay={60}>
-          <section style={{ padding: '0 32px 80px' }}>
+          <section className="pp-pad" style={{ padding: '0 32px 80px' }}>
             <div style={{ maxWidth: 780, margin: '0 auto' }}>
               <div className="pp-student-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 20 }}>
                 {studentPlans.map((plan) => (
@@ -307,7 +348,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                     )}
                     <div style={{ fontSize: 11, fontWeight: 800, color: plan.hi ? GOLD : 'rgba(255,255,255,0.28)', marginBottom: 10, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{plan.name}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-                      <div style={{ fontFamily: FONT_D, fontSize: 52, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.45)', letterSpacing: 1, lineHeight: 1 }}>
+                      <div className="pp-price" style={{ fontFamily: FONT_D, fontSize: 52, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.45)', letterSpacing: 1, lineHeight: 1 }}>
                         {displayPrice(plan.price, plan.fixed)}
                       </div>
                       {plan.price > 0 && <span style={{ fontSize: 13, color: MUTED, marginBottom: 2 }}>{plan.unit || '/mo'}</span>}
@@ -342,12 +383,12 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
               {/* Per-subject note */}
               <FadeUp delay={120}>
-                <div style={{ marginTop: 28, background: 'rgba(241,190,67,0.04)', border: '1px solid rgba(241,190,67,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div className="pp-note" style={{ marginTop: 28, background: 'rgba(241,190,67,0.04)', border: '1px solid rgba(241,190,67,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                   <Lightbulb size={24} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Mix &amp; match subjects</div>
                     <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
-                      Each extra subject costs less. Chemistry, Maths Methods and Physics together are just <strong style={{ color: '#f1f5f9' }}>${threeSubjects}/week</strong> (${tiers.slice(0, 3).map(n => `$${n}`).join(' + ')}). One weekly bill — add or remove subjects any time.
+                      Each extra subject costs less. Three subjects together are just <strong style={{ color: '#f1f5f9' }}>${threeSubjects}/week</strong> ({tiers.slice(0, 3).map(n => `$${n}`).join(' + ')}). One weekly bill — add or remove subjects any time.
                     </div>
                   </div>
                 </div>
@@ -357,25 +398,22 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
               <FadeUp delay={180}>
                 <div style={{ marginTop: 48, textAlign: 'center' }}>
                   <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 20 }}>Available subjects</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
-                    {[
-                      { icon: FlaskConical, label: 'Chemistry S1 & S2', live: true },
-                      { icon: '∫', label: 'Mathematical Methods S2', live: false },
-                      { icon: Atom, label: 'Physics S2', live: false },
-                      { icon: Dna, label: 'Biology S2', live: false },
-                      { icon: BookOpen, label: 'English Literary Studies S2', live: false },
-                      { icon: TrendingUp, label: 'Economics S2', live: false },
-                    ].map(s => (
-                      <div key={s.label} style={{ padding: '8px 16px', borderRadius: 20, background: s.live ? 'rgba(241,190,67,0.08)' : 'rgba(255,255,255,0.02)', border: `1px solid ${s.live ? 'rgba(241,190,67,0.28)' : 'rgba(255,255,255,0.06)'}`, fontSize: 12, fontWeight: 600, color: s.live ? '#f1f5f9' : '#475569', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {typeof s.icon === 'string' ? s.icon : <s.icon size={14} aria-hidden="true" />}
-                        {s.label}
-                        {s.live
-                          ? <span style={{ fontSize: 10, background: 'rgba(16,185,129,0.15)', color: GREEN, border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, padding: '1px 7px', fontWeight: 800 }}>LIVE</span>
-                          : <span style={{ fontSize: 10, color: '#334155', fontWeight: 600 }}>Soon</span>
-                        }
-                      </div>
-                    ))}
-                  </div>
+                  {subjects === null ? (
+                    <div style={{ fontSize: 13, color: MUTED }}>Loading subjects…</div>
+                  ) : subjects.length === 0 ? (
+                    <div style={{ fontSize: 13, color: MUTED }}>Sign up to see every subject we offer.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+                      {subjects.map(s => (
+                        <div key={s.name} style={{ padding: '8px 16px', borderRadius: 20, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.28)', fontSize: 12, fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <SubjectIconByName name={s.name} color={GOLD} size={16} />
+                          {formatSubjectLabel({ name: s.name, stage: s.level })}
+                          <span style={{ fontSize: 10, background: 'rgba(16,185,129,0.15)', color: GREEN, border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, padding: '1px 7px', fontWeight: 800 }}>LIVE</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 14, fontSize: 12, color: MUTED, display: 'inline-flex', alignItems: 'center', gap: 6 }}><InfinityIcon size={14} color={GOLD} aria-hidden="true" />More subjects are added all the time</div>
                 </div>
               </FadeUp>
             </div>
@@ -386,7 +424,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       {/* ── TUTOR PLANS ── */}
       {tab === 'tutors' && (
         <FadeUp delay={60}>
-          <section style={{ padding: '0 32px 80px' }}>
+          <section className="pp-pad" style={{ padding: '0 32px 80px' }}>
             <div style={{ maxWidth: 1040, margin: '0 auto' }}>
               <div className="pp-plans-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18 }}>
                 {tutorPlans.map((plan) => (
@@ -407,7 +445,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                     )}
                     <div style={{ fontSize: 11, fontWeight: 800, color: plan.hi ? PURPLE : 'rgba(255,255,255,0.28)', marginBottom: 10, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{plan.name}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-                      <div style={{ fontFamily: FONT_D, fontSize: 46, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.55)', letterSpacing: 1, lineHeight: 1 }}>
+                      <div className="pp-price" style={{ fontFamily: FONT_D, fontSize: 46, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.55)', letterSpacing: 1, lineHeight: 1 }}>
                         {displayPrice(plan.price)}
                       </div>
                       <span style={{ fontSize: 13, color: MUTED, marginBottom: 2 }}>/mo</span>
@@ -446,7 +484,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
               {/* Tutor note */}
               <FadeUp delay={120}>
-                <div style={{ marginTop: 28, background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div className="pp-note" style={{ marginTop: 28, background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                   <GraduationCap size={24} color={PURPLE} aria-hidden="true" style={{ flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: PURPLE, marginBottom: 6 }}>Already a registered tutor?</div>
@@ -463,15 +501,16 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
       {/* ── FAQ ── */}
       <FadeUp>
-        <section style={{ padding: '20px 32px 80px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <section className="pp-pad" style={{ padding: '20px 32px 80px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 14 }}>FAQ</div>
             <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(22px,3.5vw,36px)', margin: '0 0 44px', color: '#fff', letterSpacing: 1 }}>COMMON QUESTIONS</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
               {[
+                { q: 'Are the questions really unlimited?', a: `Yes. When you've worked through a topic's question bank, Titan writes brand-new questions for it, pitched at your level and checked before you see them — so you never run out. The free plan is capped at ${freeDaily} questions a day; paid subjects have no cap.` },
                 { q: 'Can I try before I pay?', a: `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
                 { q: 'Can I cancel anytime?', a: "Absolutely. Remove a subject from My Account whenever you like — unused time is credited to your next bill. Removing your last paid subject ends your plan at the end of the week you've paid for." },
-                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one weekly bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraLadder}/week. Chemistry + Maths Methods is $${tiers[0] + tiers[Math.min(1, tiers.length - 1)]}/week.` },
+                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one weekly bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraLadder}/week. Two subjects are $${tiers[0] + tiers[Math.min(1, tiers.length - 1)]}/week.` },
                 { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student subscriptions are always weekly." },
                 { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },
@@ -485,8 +524,8 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
       {/* ── CTA ── */}
       <FadeUp>
-        <section style={{ padding: '60px 32px 100px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 300, borderRadius: '50%', background: `radial-gradient(ellipse,rgba(241,190,67,0.1) 0%,transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none' }} />
+        <section className="pp-pad" style={{ padding: '60px 32px 100px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(600px, 100%)', height: 300, borderRadius: '50%', background: `radial-gradient(ellipse,rgba(241,190,67,0.1) 0%,transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
             <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(22px,4vw,44px)', margin: '0 0 18px', color: '#fff', letterSpacing: 1 }}>
               START FREE TODAY.
@@ -497,14 +536,14 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
             <button onClick={handleGetStarted} className="pp-shimmer" style={{ padding: '16px 48px', borderRadius: 13, border: 'none', color: NAVYD, fontSize: 16, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 10px 36px rgba(241,190,67,0.4)` }}>
               Get started free →
             </button>
-            <div style={{ marginTop: 16, fontSize: 13, color: MUTED }}>No credit card · No commitment · Beta is free</div>
+            <div style={{ marginTop: 16, fontSize: 13, color: MUTED }}>No credit card · No commitment · Free plan available</div>
           </div>
         </section>
       </FadeUp>
 
       {/* ── FOOTER ── */}
-      <footer style={{ borderTop: '1px solid rgba(241,190,67,0.1)', padding: '28px 32px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      <footer className="pp-pad" style={{ borderTop: '1px solid rgba(241,190,67,0.1)', padding: '28px 32px' }}>
+        <div className="pp-footer" style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}><span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span></span>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
@@ -532,7 +571,7 @@ function FaqItem({ q, a }) {
         <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>{q}</span>
         <span style={{ fontSize: 18, color: GOLD, fontWeight: 300, flexShrink: 0, transform: open ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s', lineHeight: 1 }}>+</span>
       </button>
-      <div style={{ maxHeight: open ? 200 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
+      <div style={{ maxHeight: open ? 400 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
         <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.7, paddingBottom: 18, margin: 0 }}>{a}</p>
       </div>
     </div>

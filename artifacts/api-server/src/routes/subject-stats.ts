@@ -99,4 +99,28 @@ router.post("/subject-question-counts", async (req, res) => {
   }
 });
 
+// GET /api/public-subjects
+// The live subject catalogue for signed-out pages (landing, pricing). The
+// curricula table is only readable when signed in, so this reads it with the
+// service key and returns names and levels only.
+// Returns: { subjects: Array<{ name: string, level: string }> }
+router.get("/public-subjects", async (_req, res) => {
+  try {
+    const admin = getAdmin();
+    const { data, error } = await admin
+      .from("curricula")
+      .select("name, level_label")
+      .eq("status", "live")
+      .is("archived_at", null)
+      .order("name");
+    if (error) throw new Error(error.message);
+    const subjects = (data ?? []).map((c) => ({ name: c.name as string, level: (c.level_label as string) || "" }));
+    res.set("Cache-Control", "public, max-age=300, s-maxage=300");
+    res.json({ subjects });
+  } catch (err) {
+    logger.error({ err }, "public-subjects failed");
+    res.status(500).json({ error: "Could not load subjects" });
+  }
+});
+
 export default router;
