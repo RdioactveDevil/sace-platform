@@ -1378,14 +1378,16 @@ function AppInner() {
             </AppShell>
       } />
 
-      {/* Admin — is_admin only */}
+      {/* Admin — is_admin only. Wrapped in AppShell like the Tutor and Student portals. */}
       <Route path="/admin/*" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
           : <AdminRoute profile={profile}>
-              <AdminScreen profile={profile} />
+              <AppShell {...shellProps}>
+                <AdminScreen profile={profile} />
+              </AppShell>
             </AdminRoute>
       } />
 
