@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
@@ -414,10 +414,20 @@ function SectionTabs({ theme, subject }) {
   const navigate = useNavigate()
   const location = useLocation()
   const t = THEMES[theme]
+  const activeRef = useRef(null)
   const section = sectionForPath(location.pathname)
   const pages = section ? visiblePages(section, subject) : []
-  if (pages.length < 2) return null
   const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
+  // On narrow screens the strip scrolls sideways; keep the current tab in view.
+  useEffect(() => {
+    const el = activeRef.current
+    const strip = el?.parentElement
+    if (el && strip && strip.scrollWidth > strip.clientWidth) {
+      const offset = el.getBoundingClientRect().left - strip.getBoundingClientRect().left
+      strip.scrollLeft += offset - (strip.clientWidth - el.offsetWidth) / 2
+    }
+  }, [current])
+  if (pages.length < 2) return null
   return (
     // The bottom rule is an inset shadow (painted under the tabs) rather than a
     // border the active underline overlaps with a negative margin: that 1px
@@ -427,7 +437,7 @@ function SectionTabs({ theme, subject }) {
       {pages.map(page => {
         const active = page.path === current
         return (
-          <button key={page.id} type="button" role="tab" aria-selected={active}
+          <button key={page.id} type="button" role="tab" aria-selected={active} ref={active ? activeRef : undefined}
             onClick={() => navigate(page.path)}
             style={{
               padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -509,8 +519,13 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 
   useEffect(() => {
     const open = () => setMenuOpen(true)
+    const close = () => setMenuOpen(false)
     window.addEventListener('gf-tutorial-open-sidebar', open)
-    return () => window.removeEventListener('gf-tutorial-open-sidebar', open)
+    window.addEventListener('gf-tutorial-close-sidebar', close)
+    return () => {
+      window.removeEventListener('gf-tutorial-open-sidebar', open)
+      window.removeEventListener('gf-tutorial-close-sidebar', close)
+    }
   }, [])
 
   useEffect(() => {
