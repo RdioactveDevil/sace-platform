@@ -324,7 +324,6 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         @keyframes spin    { to{transform:rotate(360deg)} }
         @keyframes typing  { 0%,100%{opacity:0.25;transform:scale(0.9)} 50%{opacity:1;transform:scale(1.1)} }
         @keyframes scan    { 0%{top:-40%} 100%{top:110%} }
-        @keyframes pulse   { 0%,100%{box-shadow:0 0 0 3px rgba(241,190,67,0.2)} 50%{box-shadow:0 0 0 7px rgba(241,190,67,0.06)} }
         .tdot { animation:typing 1.4s ease-in-out infinite; }
         .td0  { animation-delay:0ms; }
         .td1  { animation-delay:220ms; }
@@ -335,7 +334,6 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         .bc { transition:transform 0.25s,box-shadow 0.25s,border-color 0.25s; }
         .bc:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(0,0,0,0.55) !important; }
         .bc-gold:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(241,190,67,0.2) !important; }
-        .pill { animation:fadeUp 0.5s ease; }
         .dot-grid { background-image: linear-gradient(rgba(241,190,67,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(241,190,67,0.045) 1px, transparent 1px); background-size: 48px 48px; }
         .grad-text { background:linear-gradient(135deg,${GOLD} 0%,${GOLDL} 50%,#fff 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
         .shimmer-btn { background:linear-gradient(90deg,${GOLD} 0%,${GOLDL} 30%,#fff8e1 50%,${GOLDL} 70%,${GOLD} 100%); background-size:200% auto; animation:shimmer 3s linear infinite; }
@@ -376,9 +374,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           .lp-h1 { font-size:clamp(30px,9vw,40px) !important; letter-spacing:0.5px !important; }
           .lp-h2 { font-size:clamp(24px,7vw,32px) !important; letter-spacing:0.5px !important; }
           .lp-h2-cta { font-size:clamp(22px,6.5vw,30px) !important; letter-spacing:0.5px !important; }
-          /* keep stats / pill rows wrapping cleanly inside their containers */
+          /* keep stats rows wrapping cleanly inside their containers */
           .lp-stats { gap:14px !important; justify-content:flex-start !important; }
-          .lp-pill-text { white-space:normal !important; }
           /* footer copyright wraps instead of pushing the row */
           .lp-copy { text-align:center; width:100%; line-height:1.5; }
           .footer-row { gap:14px !important; }
@@ -441,11 +438,6 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         <div className="hero-grid" style={{ maxWidth:1160, width:'100%', display:'flex', alignItems:'center', gap:80, position:'relative', zIndex:1 }}>
           {/* left */}
           <div style={{ flex:1, animation:'fadeUp 0.6s ease' }}>
-            <div className="pill" style={{ display:'inline-flex', alignItems:'center', gap:9, background:'rgba(241,190,67,0.08)', border:'1px solid rgba(241,190,67,0.32)', borderRadius:24, padding:'7px 16px', marginBottom:28 }}>
-              <div style={{ width:7, height:7, borderRadius:'50%', background:GOLD, animation:'pulse 2.2s ease-in-out infinite', flexShrink:0 }} />
-              <span className="lp-pill-text" style={{ fontSize:12, color:GOLD, fontWeight:700, letterSpacing:'0.02em' }}>AI-powered · Built for Australia · Free to start</span>
-            </div>
-
             <h1 className="lp-display lp-h1" style={{ fontFamily:FONT_D, fontSize:'clamp(36px,5.5vw,68px)', lineHeight:1.02, margin:'0 0 24px', color:'#fff', letterSpacing:1 }}>
               THE STUDY PLATFORM<br className="lp-hbr" />
               {' '}THAT <span className="grad-text">ADAPTS</span><br className="lp-hbr" />
