@@ -7,7 +7,7 @@ import {
   loadManagedCurriculaTopics,
   updateCurriculumFeatures,
 } from '../lib/curriculaDb'
-import { adminApiPost } from '../lib/adminApi'
+import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
 import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
@@ -77,7 +77,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [reviseInstruction, setReviseInstruction] = useState('')
   const [reviseSourceText, setReviseSourceText]   = useState('')
   const [showPasteArea, setShowPasteArea]         = useState(false)
-  const [reviseDoc, setReviseDoc]     = useState(null) // { base64, mediaType, name }
+  const [reviseDoc, setReviseDoc]     = useState(null) // the picked File
   const [revising, setRevising]       = useState(false)
   const pollRef = useRef(null)
 
@@ -180,13 +180,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
   const handleReviseFileUpload = (e) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const base64 = reader.result.split(',')[1]
-      setReviseDoc({ base64, mediaType: file.type || 'application/pdf', name: file.name })
-    }
-    reader.readAsDataURL(file)
+    if (file) setReviseDoc(file)
   }
 
   const handleRevise = async () => {
@@ -199,7 +193,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         sourceText: reviseSourceText.trim(),
         subjectName: curriculum.name,
       }
-      if (reviseDoc) { payload.base64Doc = reviseDoc.base64; payload.mediaType = reviseDoc.mediaType }
+      if (reviseDoc) {
+        const doc = await prepareCurriculumDoc(reviseDoc)
+        // A .txt document joins any text pasted into the reference box.
+        if (doc.sourceText) payload.sourceText = [payload.sourceText, doc.sourceText].filter(Boolean).join('\n\n')
+        else payload.docStoragePath = doc.docStoragePath
+      }
       const { topics: revised } = await adminApiPost('/api/admin/curriculum-revise', payload)
       setTopics(revised.map(t => ({ ...t, subtopics: (t.subtopics || []).map(s => ({ ...s })) })))
       setReviseInstruction('')

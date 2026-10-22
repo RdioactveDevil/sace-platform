@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { listCurricula, createCurriculum, deleteCurriculum, setCurriculumArchived } from '../lib/curriculaDb'
 import { fetchSubjectBankCounts } from '../lib/db'
-import { adminApiPost } from '../lib/adminApi'
+import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 
 
@@ -34,7 +34,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [error, setError]               = useState('')
   const [showModal, setShowModal]       = useState(false)
   const [description, setDescription]  = useState('')
-  const [uploadedDoc, setUploadedDoc]  = useState(null) // { base64, mediaType, name }
+  const [uploadedDoc, setUploadedDoc]  = useState(null) // the picked File
   const [creating, setCreating]         = useState(false)
   const [createError, setCreateError]  = useState('')
   const [subjectTitle, setSubjectTitle] = useState('')
@@ -67,14 +67,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result
-      const base64 = result.split(',')[1]
-      setUploadedDoc({ base64, mediaType: file.type || 'application/pdf', name: file.name })
-    }
-    reader.readAsDataURL(file)
+    if (file) setUploadedDoc(file)
   }
 
   const handleGeneratePlan = async () => {
@@ -99,7 +92,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         return
       }
       const payload = { subjectDescription: description.trim(), cohortLevel }
-      if (uploadedDoc) { payload.base64Doc = uploadedDoc.base64; payload.mediaType = uploadedDoc.mediaType }
+      if (uploadedDoc) Object.assign(payload, await prepareCurriculumDoc(uploadedDoc))
       const { topics } = await adminApiPost('/api/admin/curriculum-plan', payload)
       const subject_description = [description.trim(), uploadedDoc ? `Source: ${uploadedDoc.name}` : '']
         .filter(Boolean)

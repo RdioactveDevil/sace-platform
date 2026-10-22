@@ -21,6 +21,24 @@ function getAdmin() {
   return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
 
+// Curriculum documents are uploaded by the browser to the admin-uploads bucket
+// and referenced by path: sending the PDF inline as base64 trips Vercel's
+// 4.5 MB request-body limit (413 FUNCTION_PAYLOAD_TOO_LARGE) on anything but a
+// small file. Downloads the PDF as base64 and deletes the temporary upload.
+const CURRICULUM_DOC_PREFIX = "curriculum-docs/";
+
+async function loadCurriculumDoc(storagePath: unknown): Promise<{ base64?: string; error?: string }> {
+  if (typeof storagePath !== "string" || !storagePath.startsWith(CURRICULUM_DOC_PREFIX) || storagePath.includes("..")) {
+    return { error: "Invalid document path" };
+  }
+  const admin = getAdmin();
+  const { data: blob, error } = await admin.storage.from("admin-uploads").download(storagePath);
+  if (error || !blob) return { error: `Failed to download document from storage${error?.message ? `: ${error.message}` : ""}` };
+  const base64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+  admin.storage.from("admin-uploads").remove([storagePath]).catch(() => {});
+  return { base64 };
+}
+
 function extractJson(text: string): unknown {
   try { return JSON.parse(text); } catch {}
   const start = text.indexOf("{");
@@ -184,15 +202,27 @@ async function cascadeCurriculumSubjectRename(
 }
 
 // POST /api/admin/curriculum-plan
-// Body: { subjectDescription: string, base64Doc?: string, mediaType?: string }
+// Body: { subjectDescription: string, cohortLevel?: string, docStoragePath?: string, sourceText?: string }
+//   docStoragePath — a PDF the browser uploaded to admin-uploads/curriculum-docs/
+//   sourceText     — the contents of an uploaded .txt document
 // Returns: { topics: [{ name: string, subtopics: [{ name: string }] }] }
 router.post("/admin/curriculum-plan", async (req, res) => {
   const caller = await requireAdmin(req, res);
   if (!caller) return;
-  const { subjectDescription, base64Doc, mediaType, cohortLevel } = req.body || {};
-  if (!subjectDescription?.trim() && !base64Doc) {
+  const { subjectDescription, docStoragePath, sourceText, cohortLevel } = req.body || {};
+  if (!subjectDescription?.trim() && !docStoragePath && !sourceText?.trim()) {
     res.status(400).json({ error: "subjectDescription or a document is required" });
     return;
+  }
+
+  let base64Doc: string | undefined;
+  if (docStoragePath) {
+    const doc = await loadCurriculumDoc(docStoragePath);
+    if (!doc.base64) {
+      res.status(400).json({ error: doc.error });
+      return;
+    }
+    base64Doc = doc.base64;
   }
 
   const cohort = typeof cohortLevel === "string" ? cohortLevel.trim() : "";
@@ -220,13 +250,16 @@ router.post("/admin/curriculum-plan", async (req, res) => {
     : cohort
       ? `${cohortNote}`
       : "";
-  const userText = base64Doc
-    ? `${descText}Generate a complete topic and subtopic breakdown based on the attached curriculum document.`
+  const sourceLine = sourceText?.trim()
+    ? `Curriculum document:\n---\n${sourceText.trim()}\n---\n\n`
+    : "";
+  const userText = base64Doc || sourceLine
+    ? `${descText}${sourceLine}Generate a complete topic and subtopic breakdown based on the ${base64Doc ? "attached " : ""}curriculum document.`
     : `Generate a complete topic and subtopic breakdown for:\n${descText.trimEnd()}`;
 
   const userContent = base64Doc
     ? [
-        { type: "document", source: { type: "base64", media_type: mediaType || "application/pdf", data: base64Doc } },
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Doc } },
         { type: "text", text: userText },
       ]
     : userText;
@@ -595,15 +628,26 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 });
 
 // POST /api/admin/curriculum-revise
-// Body: { currentTopics, instruction, subjectName, base64Doc?, mediaType? }
+// Body: { currentTopics, instruction, subjectName, sourceText?, docStoragePath? }
+//   docStoragePath — a PDF the browser uploaded to admin-uploads/curriculum-docs/
 // Returns: { topics: [{ name, subtopics: [{ name }] }] }
 router.post("/admin/curriculum-revise", async (req, res) => {
   const caller = await requireAdmin(req, res);
   if (!caller) return;
-  const { currentTopics, instruction, sourceText, subjectName, base64Doc, mediaType } = req.body || {};
-  if (!currentTopics || (!instruction?.trim() && !base64Doc && !sourceText?.trim())) {
+  const { currentTopics, instruction, sourceText, subjectName, docStoragePath } = req.body || {};
+  if (!currentTopics || (!instruction?.trim() && !docStoragePath && !sourceText?.trim())) {
     res.status(400).json({ error: "currentTopics and either instruction, sourceText, or a document are required" });
     return;
+  }
+
+  let base64Doc: string | undefined;
+  if (docStoragePath) {
+    const doc = await loadCurriculumDoc(docStoragePath);
+    if (!doc.base64) {
+      res.status(400).json({ error: doc.error });
+      return;
+    }
+    base64Doc = doc.base64;
   }
 
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
@@ -633,7 +677,7 @@ router.post("/admin/curriculum-revise", async (req, res) => {
 
   const userContent = base64Doc
     ? [
-        { type: "document", source: { type: "base64", media_type: mediaType || "application/pdf", data: base64Doc } },
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Doc } },
         { type: "text", text: userText },
       ]
     : userText;
