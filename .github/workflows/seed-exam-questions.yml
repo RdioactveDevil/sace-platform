@@ -1,0 +1,71 @@
+name: Seed exam-grade questions
+
+# Manually triggered from the GitHub UI (Actions tab → this workflow → "Run workflow").
+# Fills a subject's live bank with exam-grade questions: the hardest multiple
+# choice, with graphs wherever the topic allows, written by the stronger model
+# and kept only if they pass the strict answer check
+# (scripts/src/seed-hard-graph-questions.ts). Re-running only fills the gaps.
+#
+# Calls the deployed app's API, so the app must already be deployed with this
+# feature. Requires the repository secret SUPABASE_SERVICE_KEY. Optional
+# repository variable API_BASE_URL (default https://www.gradefarm.com.au).
+
+on:
+  workflow_dispatch:
+    inputs:
+      subject:
+        description: "Subject (exact curriculum name)"
+        type: string
+        required: true
+      topics:
+        description: "Only these topics, comma-separated (blank = all)"
+        type: string
+        default: ""
+      target:
+        description: "Exam-grade questions wanted per subtopic"
+        type: string
+        default: "4"
+      dry_run:
+        description: "Dry run (list what would be generated, no AI calls)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: seed-exam-questions
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Seed
+        env:
+          SUBJECTS: ${{ inputs.subject }}
+          TOPICS: ${{ inputs.topics }}
+          TARGET: ${{ inputs.target }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "::error::SUPABASE_SERVICE_KEY secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          export API_BASE="${API_BASE_URL:-https://www.gradefarm.com.au}"
+          pnpm --filter @workspace/scripts run seed:hard-graph

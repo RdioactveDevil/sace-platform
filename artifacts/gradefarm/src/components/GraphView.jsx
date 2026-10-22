@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { makeEvalFn } from '../lib/graphExpr'
+import { makeEvalFn, samplePath } from '../lib/graphExpr'
 
 const COLORS = ['#4f8ef7', '#f15b5b', '#3cba74', '#f5a623', '#9b59b6']
 
@@ -9,12 +9,20 @@ const PAD = { top: 20, right: 20, bottom: 36, left: 44 }
 const PLOT_W = SVG_W - PAD.left - PAD.right
 const PLOT_H = SVG_H - PAD.top - PAD.bottom
 
+// Spec (questions.graph, see api-server/src/lib/graph-spec.ts):
+//   functions: [{ expr, domain?: [a, b], color? }]   points: [{ x, y, label?, open? }]
+//   asymptotes: [{ x } | { y }, label?]               shade: [{ fn, from, to, to_fn? }]
+//   xRange, yRange, xLabel?, yLabel?
 export default function GraphView({ graph, theme }) {
   const {
     functions = [],
     points = [],
+    asymptotes = [],
+    shade = [],
     xRange = [-5, 5],
     yRange = [-6, 6],
+    xLabel = 'x',
+    yLabel = 'y',
   } = graph || {}
 
   const [xMin, xMax] = xRange
@@ -50,28 +58,38 @@ export default function GraphView({ graph, theme }) {
   }, [yMin, yMax])
 
   // Sample function paths
+  const evalFns = useMemo(() => functions.map((fn) => makeEvalFn(fn.expr)), [functions])
   const paths = useMemo(() => {
     return functions.map((fn, fi) => {
-      const evalFn = makeEvalFn(fn.expr)
-      if (!evalFn) return { d: '', color: fn.color || COLORS[fi % COLORS.length] }
-      const steps = 300
-      const dx = (xMax - xMin) / steps
-      let d = ''
-      let penDown = false
-      for (let i = 0; i <= steps; i++) {
-        const x = xMin + i * dx
-        let y
-        try { y = evalFn(x) } catch { penDown = false; continue }
-        if (!isFinite(y) || isNaN(y)) { penDown = false; continue }
-        const sx = toSvgX(x)
-        const sy = toSvgY(y)
-        if (!penDown) { d += `M ${sx} ${sy} `; penDown = true }
-        else { d += `L ${sx} ${sy} ` }
-      }
-      return { d, color: fn.color || COLORS[fi % COLORS.length] }
+      const evalFn = evalFns[fi]
+      const color = fn.color || COLORS[fi % COLORS.length]
+      if (!evalFn) return { d: '', color }
+      return { d: samplePath(evalFn, { xMin, xMax, yMin, yMax, domain: fn.domain, toSvgX, toSvgY }), color }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [functions, xMin, xMax, yMin, yMax])
+  }, [functions, evalFns, xMin, xMax, yMin, yMax])
+
+  // Shaded regions: under a curve down to the x-axis, or between two curves.
+  const shadePolys = useMemo(() => {
+    const at = (fi, x) => {
+      if (fi == null) return 0
+      try { const y = evalFns[fi]?.(x); return Number.isFinite(y) ? Math.min(yMax, Math.max(yMin, y)) : null } catch { return null }
+    }
+    return shade.map((s, si) => {
+      if (!evalFns[s.fn]) return null
+      const n = 120
+      const top = [], bottom = []
+      for (let i = 0; i <= n; i++) {
+        const x = s.from + (i / n) * (s.to - s.from)
+        const y1 = at(s.fn, x), y2 = at(s.to_fn, x)
+        if (y1 == null || y2 == null) continue
+        top.push(`${toSvgX(x)},${toSvgY(y1)}`)
+        bottom.unshift(`${toSvgX(x)},${toSvgY(y2)}`)
+      }
+      return top.length > 1 ? { key: si, points: [...top, ...bottom].join(' '), color: functions[s.fn]?.color || COLORS[s.fn % COLORS.length] } : null
+    }).filter(Boolean)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shade, evalFns, functions, xMin, xMax, yMin, yMax])
 
   const isDark = theme === 'dark'
   const textColor = isDark ? '#cbd5e1' : '#334155'
@@ -115,6 +133,26 @@ export default function GraphView({ graph, theme }) {
         <clipPath id="plotClip">
           <rect x={PAD.left} y={PAD.top} width={PLOT_W} height={PLOT_H} />
         </clipPath>
+        {shadePolys.map((p) => (
+          <polygon key={`sh${p.key}`} points={p.points} fill={p.color} fillOpacity={0.22} stroke="none" clipPath="url(#plotClip)" />
+        ))}
+        {asymptotes.map((a, i) => {
+          const vertical = typeof a.x === 'number'
+          if (vertical ? (a.x < xMin || a.x > xMax) : (a.y < yMin || a.y > yMax)) return null
+          const x = vertical ? toSvgX(a.x) : null
+          const y = vertical ? null : toSvgY(a.y)
+          return (
+            <g key={`as${i}`}>
+              {vertical
+                ? <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + PLOT_H} stroke={axisColor} strokeWidth={1.3} strokeDasharray="6 5" />
+                : <line x1={PAD.left} y1={y} x2={PAD.left + PLOT_W} y2={y} stroke={axisColor} strokeWidth={1.3} strokeDasharray="6 5" />}
+              {a.label && (
+                <text x={vertical ? x + 5 : PAD.left + PLOT_W - 4} y={vertical ? PAD.top + 12 : y - 6} textAnchor={vertical ? 'start' : 'end'}
+                  fontSize={11} fill={textColor} fontFamily="system-ui, sans-serif" fontStyle="italic">{a.label}</text>
+              )}
+            </g>
+          )
+        })}
         {paths.map((p, i) => (
           <path key={i} d={p.d} stroke={p.color} strokeWidth={2.2} fill="none" clipPath="url(#plotClip)" />
         ))}
@@ -126,7 +164,9 @@ export default function GraphView({ graph, theme }) {
           const labelAbove = pt.y >= (yMin + yMax) / 2
           return (
             <g key={i}>
-              <circle cx={sx} cy={sy} r={5} fill={COLORS[i % COLORS.length]} stroke={bgColor} strokeWidth={1.5} />
+              {pt.open
+                ? <circle cx={sx} cy={sy} r={4.5} fill={bgColor} stroke={COLORS[i % COLORS.length]} strokeWidth={2} />
+                : <circle cx={sx} cy={sy} r={5} fill={COLORS[i % COLORS.length]} stroke={bgColor} strokeWidth={1.5} />}
               {pt.label && (
                 <text
                   x={sx + 8}
@@ -148,8 +188,8 @@ export default function GraphView({ graph, theme }) {
         <polygon points={`${axisX},${PAD.top} ${axisX - 4},${PAD.top + 7} ${axisX + 4},${PAD.top + 7}`} fill={axisColor} />
 
         {/* Axis labels */}
-        <text x={PAD.left + PLOT_W - 4} y={axisY + 28} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">x</text>
-        <text x={axisX + 6} y={PAD.top + 4} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">y</text>
+        <text x={PAD.left + PLOT_W - 4} y={axisY + 28} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">{xLabel}</text>
+        <text x={axisX + 6} y={PAD.top + 4} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">{yLabel}</text>
       </svg>
     </div>
   )

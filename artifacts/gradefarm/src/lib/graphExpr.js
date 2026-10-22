@@ -57,3 +57,31 @@ export function makeEvalFn(expr) {
     return null
   }
 }
+
+// Samples y = f(x) into SVG path data. The curve is drawn only inside its
+// domain (if any), the pen lifts where f is undefined, and it lifts across a
+// vertical asymptote: consecutive samples on opposite sides of the window (one
+// above it, one below, as 1/x or tan x jump) are never joined, which would
+// otherwise draw a false vertical line.
+export function samplePath(evalFn, { xMin, xMax, yMin, yMax, domain, toSvgX, toSvgY, steps = 400 }) {
+  const lo = domain ? Math.max(xMin, domain[0]) : xMin
+  const hi = domain ? Math.min(xMax, domain[1]) : xMax
+  if (!(hi > lo)) return ''
+  const span = yMax - yMin
+  // Off-window values are clamped so the path stays small; clipping hides them.
+  const clampY = (y) => Math.min(yMax + span, Math.max(yMin - span, y))
+  let d = ''
+  let prev = null
+  for (let i = 0; i <= steps; i++) {
+    const x = lo + (i / steps) * (hi - lo)
+    let y
+    try { y = evalFn(x) } catch { y = NaN }
+    if (!Number.isFinite(y)) { prev = null; continue }
+    const crossesAsymptote = prev !== null &&
+      ((prev > yMax && y < yMin) || (prev < yMin && y > yMax))
+    const cmd = prev === null || crossesAsymptote ? 'M' : 'L'
+    d += `${cmd} ${toSvgX(x).toFixed(2)} ${toSvgY(clampY(y)).toFixed(2)} `
+    prev = y
+  }
+  return d.trim()
+}

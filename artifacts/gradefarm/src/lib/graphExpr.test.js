@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeExprVariable, makeEvalFn } from './graphExpr.js'
+import { normalizeExprVariable, makeEvalFn, samplePath } from './graphExpr.js'
 
 test('rewrites a lone non-x variable to x', () => {
   // The radioactive-decay model from the failing question, written in t.
@@ -48,4 +48,37 @@ test('makeEvalFn still handles caret and x expressions', () => {
   const fn = makeEvalFn('x^2 - 4')
   assert.equal(fn(0), -4)
   assert.equal(fn(3), 5)
+})
+
+// Identity mapping keeps path coordinates in data units for the assertions.
+const WINDOW = { xMin: -5, xMax: 5, yMin: -6, yMax: 6, toSvgX: (x) => x, toSvgY: (y) => y }
+const moves = (d) => (d.match(/M/g) || []).length
+const xs = (d) => d.split(/[ML]/).filter((s) => s.trim()).map((s) => Number(s.trim().split(/\s+/)[0]))
+
+test('samplePath lifts the pen across a vertical asymptote', () => {
+  // 1/(x - 0.5): no sample lands on the asymptote, so only the jump detection
+  // keeps the two branches apart.
+  const d = samplePath(makeEvalFn('1/(x - 0.5)'), WINDOW)
+  assert.equal(moves(d), 2)
+  // tan x has four asymptotes inside [-5, 5] (±π/2, ±3π/2): five branches.
+  assert.equal(moves(samplePath(makeEvalFn('tan(x)'), WINDOW)), 5)
+})
+
+test('samplePath keeps a steep continuous curve joined', () => {
+  assert.equal(moves(samplePath(makeEvalFn('exp(x)'), WINDOW)), 1)
+  assert.equal(moves(samplePath(makeEvalFn('x**3'), WINDOW)), 1)
+})
+
+test('samplePath draws only inside the domain, endpoints included', () => {
+  const d = samplePath(makeEvalFn('x**2'), { ...WINDOW, domain: [-1, 2] })
+  const sampled = xs(d)
+  assert.equal(Math.min(...sampled), -1)
+  assert.equal(Math.max(...sampled), 2)
+  assert.equal(samplePath(makeEvalFn('x'), { ...WINDOW, domain: [7, 9] }), '')
+})
+
+test('samplePath leaves gaps where the function is undefined', () => {
+  const d = samplePath(makeEvalFn('sqrt(x)'), WINDOW)
+  assert.ok(Math.min(...xs(d)) >= 0)
+  assert.equal(moves(d), 1)
 })
