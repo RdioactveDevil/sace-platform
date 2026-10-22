@@ -4,6 +4,7 @@ import {
   updateCurriculum,
   updateCurriculumStatus,
   getSubtopicStatuses,
+  updateSubtopicGenStatus,
   loadManagedCurriculaTopics,
   updateCurriculumFeatures,
 } from '../lib/curriculaDb'
@@ -16,6 +17,10 @@ import { TriangleAlert, Sparkles } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
+
+// Subtopics generated at once. Each is one Claude call plus answer
+// verification (~1 min), so a 125-subtopic curriculum takes ~40 min, not ~2 h.
+const GEN_CONCURRENCY = 3
 
 // ── Inline editable text node ─────────────────────────────────────────────────
 function EditableText({ value, onSave, style }) {
@@ -64,6 +69,15 @@ function EditableText({ value, onSave, style }) {
   )
 }
 
+// One progress row per subtopic, in curriculum order, carrying its topic name
+// (needed by /api/admin/curriculum-generate).
+function subtopicProgress(detail) {
+  return detail.topics.flatMap(t => t.subtopics.map(s => ({
+    id: s.id, name: s.name, topic_id: t.id, topicName: t.name,
+    gen_status: s.gen_status || 'pending', questions_generated: s.questions_generated || 0,
+  })))
+}
+
 export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }) {
   const [curriculum, setCurriculum]   = useState(null)
   const [topics, setTopics]           = useState([])
@@ -79,6 +93,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [showPasteArea, setShowPasteArea]         = useState(false)
   const [reviseDoc, setReviseDoc]     = useState(null) // the picked File
   const [revising, setRevising]       = useState(false)
+  // Generation is driven from this tab: `running` is true while this tab's
+  // queue is sending subtopics. A curriculum can be 'generating' with nothing
+  // running (tab closed or reloaded mid-run); it then shows a Resume button.
+  const [running, setRunning]         = useState(false)
+  const runningRef = useRef(false) // set synchronously, so a double click can't start two runs
+  const stopRef = useRef(false)
   const pollRef = useRef(null)
 
   // Question reallocation state
@@ -92,8 +112,16 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
   useEffect(() => {
     loadDetail()
-    return () => clearInterval(pollRef.current)
+    return () => { clearInterval(pollRef.current); stopRef.current = true }
   }, [curriculumId])
+
+  // Leaving the page stops generation, so ask first while it is running.
+  useEffect(() => {
+    if (!running) return
+    const warn = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [running])
 
   async function loadDetail() {
     setLoading(true)
@@ -106,6 +134,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       })))
       if (detail.status === 'generating') {
         setGenerating(true)
+        setProgress(subtopicProgress(detail))
         startPolling()
       }
     } catch (e) {
@@ -397,6 +426,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   // ── Generation pipeline ───────────────────────────────────────────────────
 
   const handleApproveAndGenerate = async () => {
+    if (runningRef.current) return
     const subtopicCount = topics.flatMap(t => t.subtopics).length
     if (!window.confirm(`Generate 5 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
     if (!(curriculum.level_label || '').trim()) {
@@ -417,33 +447,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       setGenerating(true)
 
       const freshDetail = await getCurriculumDetail(curriculumId)
-      const allSubtopics = freshDetail.topics.flatMap((t) =>
-        t.subtopics.map((s) => ({ ...s, topicName: t.name }))
-      )
-
-      const initialProgress = allSubtopics.map(s => ({
-        id: s.id, name: s.name, topicName: s.topicName,
-        gen_status: 'pending', questions_generated: 0,
-      }))
-      setProgress(initialProgress)
+      const allSubtopics = subtopicProgress(freshDetail).map(p => ({ ...p, gen_status: 'pending', questions_generated: 0 }))
+      setProgress(allSubtopics)
       startPolling()
-
-      for (const sub of allSubtopics) {
-        setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'generating' } : p))
-        try {
-          await adminApiPost('/api/admin/curriculum-generate', {
-            subtopicId: sub.id,
-            curriculumId,
-            subjectName: freshDetail.name,
-            topicName: sub.topicName,
-            subtopicName: sub.name,
-            count: 5,
-          })
-          setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 5 } : p))
-        } catch {
-          setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
-        }
-      }
+      setSaving(false)
+      await runGeneration(async () => allSubtopics, freshDetail.name)
+      return
     } catch (e) {
       setError(e.message)
       setGenerating(false)
@@ -451,20 +460,73 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     setSaving(false)
   }
 
-  const handleRetry = async (sub) => {
+  // Continue a run that stopped part-way (tab closed, reloaded or paused):
+  // everything not yet done or failed is queued again. A subtopic left at
+  // 'generating' by a dropped request is retried too; the server skips any
+  // question text it already holds.
+  const handleResume = async () => {
+    setError('')
+    try {
+      await runGeneration(async () => {
+        const freshDetail = await getCurriculumDetail(curriculumId)
+        const all = subtopicProgress(freshDetail)
+        setProgress(all)
+        startPolling()
+        return all.filter(p => p.gen_status !== 'done' && p.gen_status !== 'failed')
+      }, curriculum.name)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const handlePause = () => { stopRef.current = true }
+
+  const handleRetry = (sub) => {
+    // Progress rows refreshed by polling carry topic_id, not the topic name.
+    const topicName = sub.topicName || topics.find(t => t.id === sub.topic_id)?.name
+    return generateSubtopic({ ...sub, topicName }, curriculum.name)
+  }
+
+  async function generateSubtopic(sub, subjectName) {
     setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'generating' } : p))
     try {
-      await adminApiPost('/api/admin/curriculum-generate', {
+      const { inserted } = await adminApiPost('/api/admin/curriculum-generate', {
         subtopicId: sub.id,
         curriculumId,
-        subjectName: curriculum.name,
+        subjectName,
         topicName: sub.topicName,
         subtopicName: sub.name,
         count: 5,
       })
-      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: 5 } : p))
+      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: inserted ?? 5 } : p))
     } catch {
       setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
+      // A request cut off by the serverless time limit leaves the row at
+      // 'generating', which the poll would read back, so the run never ends.
+      updateSubtopicGenStatus(sub.id, 'failed').catch(() => {})
+    }
+  }
+
+  // Works through the queue `loadQueue` returns, GEN_CONCURRENCY subtopics at
+  // a time, until it is empty or the admin pauses. The 5 s poll marks the
+  // curriculum live once every subtopic is done or failed.
+  async function runGeneration(loadQueue, subjectName) {
+    if (runningRef.current) return
+    runningRef.current = true
+    stopRef.current = false
+    setRunning(true)
+    try {
+      const queue = await loadQueue()
+      let next = 0
+      const worker = async () => {
+        while (!stopRef.current && next < queue.length) {
+          await generateSubtopic(queue[next++], subjectName)
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(GEN_CONCURRENCY, queue.length) }, worker))
+    } finally {
+      runningRef.current = false
+      setRunning(false)
     }
   }
 
@@ -475,6 +537,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const doneCount   = (progress || []).filter(p => p.gen_status === 'done').length
   const failedCount = (progress || []).filter(p => p.gen_status === 'failed').length
   const totalQs     = (progress || []).reduce((n, p) => n + (p.questions_generated || 0), 0)
+  const remainingCount = (progress || []).length - doneCount - failedCount
   const isDraft     = curriculum.status === 'draft'
 
   const statusColor = curriculum.status === 'live' ? '#4ade80' : curriculum.status === 'generating' ? '#38bdf8' : GOLD
@@ -979,6 +1042,26 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 {failedCount > 0 && <span style={{ color: '#f87171' }}> · {failedCount} failed</span>}
               </div>
             </div>
+
+            {generating && running && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1, fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
+                  Keep this tab open: generation runs from it and stops if you close it.
+                </div>
+                <button onClick={handlePause} style={secondaryBtn(false)}>Pause</button>
+              </div>
+            )}
+            {generating && !running && remainingCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1, fontSize: 11, color: GOLD, lineHeight: 1.4 }}>
+                  Paused with {remainingCount} subtopic{remainingCount === 1 ? '' : 's'} to go.
+                </div>
+                <button onClick={handleResume} style={{
+                  padding: '9px 16px', borderRadius: 9, border: 'none', background: GOLD,
+                  color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B,
+                }}>Resume</button>
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {progress.map(p => {
