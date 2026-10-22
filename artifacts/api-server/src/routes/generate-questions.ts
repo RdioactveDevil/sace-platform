@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
+import { CLAUDE_MODEL, CLAUDE_THINKING, CLAUDE_EXAM_MODEL, CLAUDE_EXAM_EFFORT } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
@@ -10,6 +10,13 @@ import { latexPromptRule } from "../lib/math-prompt";
 import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireUser } from "../lib/auth";
 import { isMathSubject, topicWantsFigures, figureInstructions, diagramColumn } from "../lib/figure";
+import { sanitizeGraph } from "../lib/graph-spec";
+
+// Exam-grade batches: questions per subtopic per request, kept small so the
+// stronger model's reasoning plus verification fits the 300 s function limit.
+export const EXAM_GRADE_MAX_COUNT = 3;
+// Subtopics per exam-grade request (they run in parallel inside one request).
+export const EXAM_GRADE_MAX_TOPICS = 4;
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -241,6 +248,27 @@ export function mcqColumns(q: GeneratedQuestion): { options: string[] | null; an
   };
 }
 
+// Extra rules for exam-grade batches. "Hard" is about the reasoning a question
+// demands, not its length, and the options must not leak the answer.
+function examGradeRules(curriculumLabel: string, graphsWanted: boolean): string[] {
+  return [
+    "EXAM-GRADE QUESTIONS. These are the hardest questions in the bank, for students aiming at top marks. Each must match the hardest multiple-choice and extended-response questions on real end-of-year exams for " + curriculumLabel + ".",
+    "What makes a question hard (use several of these in every question):",
+    "  - it chains two or three distinct ideas, so no single remembered procedure answers it;",
+    "  - it works backwards or with a parameter: for what values of k..., find a and b given..., the rule given its features;",
+    "  - it puts a familiar idea in an unfamiliar setting, or asks what must be true rather than for a calculation;",
+    "  - the information must be extracted from a graph, table or wording rather than handed over.",
+    "What does NOT make a question hard: long arithmetic, obscure facts, extra wording, or a single trick.",
+    "Options: all four are the same kind of answer (all values, all equations, all intervals) and similar length. Every wrong option is the exact result of a specific, common mistake (a sign error, a missed solution, the wrong interval endpoint, forgetting a domain restriction). No option may contain reasoning, hints or 'because'. Never ask 'which ... and why'.",
+    "Before writing each question, solve it completely yourself and make sure exactly one option is correct and every number in it is exact.",
+    "Where reference exam questions are given above, model the difficulty on the HARDEST of them, not the typical one.",
+    "Set difficulty to 4 or 5 on every question.",
+    ...(graphsWanted
+      ? ["At least half of the questions MUST include a graph whenever this subtopic involves functions, graphs, transformations, rates of change, derivatives or areas, and the graph must be needed to answer (see the graph rules)."]
+      : []),
+  ];
+}
+
 // Generate questions for a single subtopic. Returns an HTTP-style status/body
 // so callers can either forward it directly (single-topic request) or inspect
 // it when aggregating a batch (multi-topic request) — all in-process, with no
@@ -255,11 +283,18 @@ export async function generateForTopic(opts: {
   questionTypes?: string[];
   includeDiagrams?: boolean;
   includeGraphs?: boolean;
+  // Admin-only: write exam-level questions with the stronger model (see
+  // CLAUDE_EXAM_MODEL), stricter prompt rules and fail-closed verification.
+  examGrade?: boolean;
 }): Promise<GenResult> {
-  const { adminDb, resolvedSubject, topicCode, count, difficulty, autoApprove } = opts;
+  const { adminDb, resolvedSubject, topicCode, difficulty, autoApprove } = opts;
+  const examGrade = !!opts.examGrade;
+  const count = examGrade ? Math.min(opts.count, EXAM_GRADE_MAX_COUNT) : opts.count;
   // Which formats Claude may use. Defaults to MCQ-only so existing flows are
-  // completely unchanged. Any unknown type is ignored.
-  const requestedTypes = (Array.isArray(opts.questionTypes) ? opts.questionTypes : ["mcq"])
+  // completely unchanged. Any unknown type is ignored. Exam-grade questions are
+  // MCQ only: the answer verifier checks MCQ keys, and an unchecked hard
+  // question is not allowed into the bank.
+  const requestedTypes = (examGrade ? ["mcq"] : Array.isArray(opts.questionTypes) ? opts.questionTypes : ["mcq"])
     .filter((tp) => ALLOWED_QUESTION_TYPES.includes(tp));
   const extraTypes = requestedTypes.filter((tp) => tp !== "mcq");
   const allowMulti = extraTypes.length > 0;
@@ -300,17 +335,17 @@ export async function generateForTopic(opts: {
   const curriculumLabel = normalizedSubject;
   const learningObjective = LEARNING_OBJECTIVES[topicName] || topicName;
 
-  // Calibrate the 1\u20135 scale against real SACE / senior-secondary exam standards
-  // so that "difficulty 3\u20134" actually means exam-level challenge, not a slightly
-  // wordier recall question.
+  // Calibrate the 1\u20135 scale against the real exams for this curriculum
+  // (SACE, VCE, ...) so that "difficulty 3\u20134" actually means exam-level
+  // challenge, not a slightly wordier recall question.
   const SACE_DIFFICULTY_ANCHOR =
-    "Difficulty scale (calibrate against real SACE / senior-secondary exam papers for this subject): " +
+    `Difficulty scale (calibrate against the real end-of-year exam papers for ${curriculumLabel}): ` +
     "1 = recall or a single routine step; " +
     "2 = straightforward application of one concept; " +
-    "3 = a multi-step question combining two ideas, equivalent to a mid-paper SACE exam question; " +
-    "4 = multi-step analysis, synthesis or an unfamiliar context, equivalent to a harder SACE exam question; " +
-    "5 = demanding multi-part reasoning at the very top of SACE exam difficulty. " +
-    "A difficulty 3 or 4 question MUST be as cognitively demanding as the corresponding question on an actual SACE exam \u2014 not merely longer.";
+    "3 = a multi-step question combining two ideas, equivalent to a mid-paper exam question; " +
+    "4 = multi-step analysis, synthesis or an unfamiliar context, equivalent to a harder exam question; " +
+    "5 = demanding multi-step reasoning at the very top of exam difficulty, like the last parts of an extended-response question. " +
+    "A difficulty 3 or 4 question MUST be as cognitively demanding as the corresponding question on an actual exam \u2014 not merely longer.";
 
   const numDiff = Number(difficulty);
   const difficultyInstruction =
@@ -392,10 +427,13 @@ export async function generateForTopic(opts: {
 
   const GRAPH_INSTRUCTIONS = [
     `  graph (optional \u2014 include ONLY when the question genuinely requires a visual graph to be answered. If not needed, omit the key entirely or set to null.)`,
-    `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>" }], "xRange": [<min>, <max>], "yRange": [<min>, <max>] }`,
-    `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4".`,
-    `    Always write expr in terms of x for the horizontal axis, even when the question phrases the function with another letter (e.g. for N(t)=1200*(1/3)**(t/5) the expr is "1200 * (1/3)**(x/5)").`,
-    `    Include graph for questions about: identifying graph features (vertex, intercepts, turning points), reading values off a graph, matching an equation to a graph, or describing transformations shown visually.`,
+    `    graph schema: { "functions": [{ "expr": "<js-math-expression-in-x>", "domain": [<min>, <max>] (optional, draws the curve only there), "color": "<optional hex>" }], "points": [{ "x": <number>, "y": <number>, "label": "<optional string>", "open": true (optional: hollow dot for an excluded endpoint) }], "asymptotes": [{ "x": <number> } or { "y": <number> }, optional "label"] (dashed lines), "shade": [{ "fn": <index of function>, "from": <x>, "to": <x>, "to_fn": <optional second function index> }] (shades the region between the curve and the x-axis, or between two curves), "xRange": [<min>, <max>], "yRange": [<min>, <max>], "xLabel": "<optional axis name, e.g. t>", "yLabel": "<optional>" }`,
+    `    expr must be valid JavaScript math using x as the variable. Use ** for powers (not ^). Examples: "x**2 - 4", "2*x + 1", "Math.sqrt(x)", "-x**2 + 3*x + 4", "2/(x-1) + 3", "Math.log(x)", "3*Math.sin(2*x)".`,
+    `    Always write expr in terms of x for the horizontal axis, even when the question phrases the function with another letter (e.g. for N(t)=1200*(1/3)**(t/5) the expr is "1200 * (1/3)**(x/5)" with "xLabel": "t").`,
+    `    A hybrid (piecewise) function is several functions entries, each with its own domain, with closed or open (hollow) endpoint points where pieces start and stop.`,
+    `    THE GRAPH MUST CARRY INFORMATION THE STUDENT NEEDS. When the question asks about the plotted function (its rule, a parameter, a feature, its derivative, an area), do NOT state its equation in the question \u2014 the student must get it from the graph. Never write "The graph of y = ... is shown" and then ask something answerable from that equation alone.`,
+    `    Label every value the student must read exactly: intercepts, turning points and endpoints as points with coordinate labels, e.g. "(2, -3)", and asymptotes with their equation. The student can only estimate unlabelled values from the grid.`,
+    `    Good graph questions: find the rule or a parameter from labelled features; identify the graph of f' (or f) from f (or f'); find a signed or shaded area; state the transformation mapping one drawn curve to another; count solutions of f(x) = k; state domain and range of a restricted or hybrid function; read a rate of change or a tangent's gradient off the curve.`,
     `    Do NOT include graph for purely algebraic or numeric questions.`,
   ];
 
@@ -463,6 +501,7 @@ export async function generateForTopic(opts: {
     "Do not repeat the same scenario across questions.",
     SACE_DIFFICULTY_ANCHOR,
     difficultyInstruction,
+    ...(examGrade ? examGradeRules(curriculumLabel, flagGraphs && mathFigures) : []),
   ].join("\n");
 
   let user = [
@@ -507,14 +546,28 @@ export async function generateForTopic(opts: {
         "Content-Type": "application/json",
         "x-api-key": anthropicApiKey,
         "anthropic-version": "2023-06-01",
+        ...(examGrade && anthropicBaseUrl === "https://api.anthropic.com" ? { "anthropic-beta": "server-side-fallback-2026-07-01" } : {}),
       },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        thinking: CLAUDE_THINKING,
-        max_tokens: mathFigures ? 12000 : 8000,
-        system,
-        messages: [{ role: "user", content: user }],
-      }),
+      body: JSON.stringify(examGrade
+        ? {
+            // Adaptive thinking is on by default for this model; effort sets
+            // how hard it works each question through.
+            model: CLAUDE_EXAM_MODEL,
+            output_config: { effort: CLAUDE_EXAM_EFFORT },
+            max_tokens: 32000,
+            system,
+            messages: [{ role: "user", content: user }],
+            // On a safety decline, rerun on a fallback model rather than
+            // failing (Anthropic API only; proxies may not accept the beta).
+            ...(anthropicBaseUrl === "https://api.anthropic.com" ? { fallbacks: "default" } : {}),
+          }
+        : {
+            model: CLAUDE_MODEL,
+            thinking: CLAUDE_THINKING,
+            max_tokens: mathFigures ? 12000 : 8000,
+            system,
+            messages: [{ role: "user", content: user }],
+          }),
     });
   } catch (err) {
     logger.error({ err }, "Failed to reach Claude API");
@@ -526,8 +579,12 @@ export async function generateForTopic(opts: {
     return { status: 500, body: { error: "Claude API error", detail: errText } };
   }
 
-  const claudeData = await claudeResponse.json() as { content?: { text: string }[] };
-  const rawText = claudeData?.content?.[0]?.text || "";
+  // With thinking on, thinking blocks come before the text block.
+  const claudeData = await claudeResponse.json() as { content?: { type: string; text?: string }[]; stop_reason?: string };
+  const rawText = claudeData?.content?.find((b) => b.type === "text")?.text || "";
+  if (examGrade && claudeData?.stop_reason !== "end_turn") {
+    logger.warn({ topicCode, stop_reason: claudeData?.stop_reason }, "[generate-questions] exam-grade generation did not finish cleanly");
+  }
   const questions = extractJsonArray(rawText) as GeneratedQuestion[];
 
   if (!questions.length) {
@@ -538,7 +595,7 @@ export async function generateForTopic(opts: {
   // Fact-check each generated question: drop unsalvageable ones and fix any
   // mislabelled answer_index so a wrong answer key can't reach students.
   const { kept: verifiedQuestions, dropped, fixed, errored } =
-    await filterVerifiedQuestions(questions, { context: { topicCode } });
+    await filterVerifiedQuestions(questions, { context: { topicCode }, strict: examGrade });
   if (dropped || fixed || errored) {
     logger.info(
       { topicCode, generated: questions.length, kept: verifiedQuestions.length, dropped, fixed, errored },
@@ -555,7 +612,8 @@ export async function generateForTopic(opts: {
     const allRows = verifiedQuestions
       .filter((q) => q.question)
       .map((q) => ({
-        id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        // ai_exam_ marks exam-grade questions (the seed script counts them).
+        id: `${examGrade ? "ai_exam" : "ai"}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         subject: normalizedSubject,
         topic: parentTopicName,
         subtopic: topicName,
@@ -565,7 +623,7 @@ export async function generateForTopic(opts: {
         ...mcqColumns(q),
         ...typeColumns(q),
         solution: normalizeMathText(q.solution || "") as string,
-        graph: q.graph || null,
+        graph: sanitizeGraph(q.graph),
         table_data: q.table_data || null,
         diagram: diagramColumn(q),
         tip: null,
@@ -599,7 +657,7 @@ export async function generateForTopic(opts: {
     ...mcqColumns(q),
     ...typeColumns(q),
     solution: q.solution ? (normalizeMathText(q.solution) as string) : null,
-    graph: q.graph || null,
+    graph: sanitizeGraph(q.graph),
     table_data: q.table_data || null,
     diagram: diagramColumn(q),
     difficulty: q.difficulty || null,
@@ -618,6 +676,8 @@ router.post("/generate-questions", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
   const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams, includeGraphs } = req.body;
+  // The stronger exam-grade model costs far more per question: admins only.
+  const examGrade = !!req.body.examGrade && caller.isAdmin;
 
   const resolvedSubject: string = subject || stage;
   // Support both a single topicCode and a topicCodes array
@@ -635,6 +695,11 @@ router.post("/generate-questions", async (req, res) => {
   // AI credits or flood the live bank.
   if (!caller.isAdmin && (topicCodes.length > 1 || Number(count) > 10)) {
     res.status(403).json({ error: "Bulk generation is admin only" });
+    return;
+  }
+
+  if (examGrade && topicCodes.length > EXAM_GRADE_MAX_TOPICS) {
+    res.status(400).json({ error: `Exam-grade generation takes up to ${EXAM_GRADE_MAX_TOPICS} subtopics per request` });
     return;
   }
 
@@ -658,7 +723,7 @@ router.post("/generate-questions", async (req, res) => {
         const code = topicCodes[cursor++];
         try {
           const { status, body } = await generateForTopic({
-            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs,
+            adminDb, resolvedSubject, topicCode: code, count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs, examGrade,
           });
           if (status === 200) {
             totalInserted += (body.inserted as number) ?? 0;
@@ -681,7 +746,7 @@ router.post("/generate-questions", async (req, res) => {
   // Single topic
   try {
     const { status, body } = await generateForTopic({
-      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs,
+      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs, examGrade,
     });
     res.status(status).json(body);
   } catch (err) {

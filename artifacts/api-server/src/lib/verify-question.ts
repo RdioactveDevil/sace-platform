@@ -1,5 +1,6 @@
 import { CLAUDE_VERIFY_MODEL } from "./anthropic-model";
 import { logger } from "./logger";
+import { describeGraph } from "./graph-spec";
 
 /**
  * AI fact-checking for multiple-choice questions.
@@ -69,14 +70,14 @@ export async function verifyQuestionPayload(q: {
   question: string;
   options: string[];
   answer_index: number;
-}): Promise<Verdict> {
+}, limits: { maxTokens?: number; timeoutMs?: number } = {}): Promise<Verdict> {
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 
   let lastErr: Error = new Error("verification failed");
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), limits.timeoutMs ?? 30_000);
     let resp: Response | null = null;
     try {
       resp = await fetch(`${baseUrl}/v1/messages`, {
@@ -89,13 +90,14 @@ export async function verifyQuestionPayload(q: {
         },
         body: JSON.stringify({
           model: CLAUDE_VERIFY_MODEL,
-          max_tokens: 2000,
+          max_tokens: limits.maxTokens ?? 2000,
           messages: [{ role: "user", content: buildPrompt(q) }],
         }),
       });
       if (resp.ok) {
-        const body = await resp.json() as any;
-        return parseVerdict((body.content?.[0]?.text ?? "").trim());
+        const body = await resp.json() as { content?: { type: string; text?: string }[] };
+        const text = body.content?.find((b) => b.type === "text")?.text ?? "";
+        return parseVerdict(text.trim());
       }
     } catch (err) {
       lastErr = err as Error; // network error / timeout abort — retryable
@@ -127,6 +129,8 @@ export type VerifiableQuestion = {
   options?: string[];
   answer_index?: number;
   solution?: string | null;
+  // A function graph shown with the question; described to the verifier.
+  graph?: unknown;
 };
 
 /**
@@ -140,10 +144,15 @@ export type VerifiableQuestion = {
  * Fails OPEN: if the verifier errors (network/parse/model unavailable) the
  * question is kept unverified rather than silently lost. Set
  * VERIFY_GENERATED_QUESTIONS=false to disable the gate entirely.
+ *
+ * `strict` (exam-grade questions) gives the verifier room to work a hard
+ * question through, and fails CLOSED: an unverifiable hard question is dropped,
+ * because a wrong answer key on a difficulty-5 question is worse than one
+ * fewer question.
  */
 export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
   questions: T[],
-  opts: { concurrency?: number; context?: Record<string, unknown>; stimulus?: string } = {},
+  opts: { concurrency?: number; context?: Record<string, unknown>; stimulus?: string; strict?: boolean } = {},
 ): Promise<{ kept: T[]; dropped: number; fixed: number; errored: number }> {
   if (process.env.VERIFY_GENERATED_QUESTIONS === "false" || questions.length === 0) {
     return { kept: questions, dropped: 0, fixed: 0, errored: 0 };
@@ -166,11 +175,12 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
         continue;
       }
       try {
+        const graphText = q.graph ? describeGraph(q.graph) : "";
         const verdict = await verifyQuestionPayload({
-          question: withStimulus(q.question, opts.stimulus),
+          question: withStimulus(graphText ? `${q.question}\n\n${graphText}` : q.question, opts.stimulus),
           options: q.options,
           answer_index: q.answer_index,
-        });
+        }, opts.strict ? { maxTokens: 6000, timeoutMs: 120_000 } : {});
         if (verdict.verdict === "wrong_question") {
           results[idx] = null;
         } else if (
@@ -193,9 +203,11 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
         errored++;
         logger.warn(
           { err: (err as Error).message, ...(opts.context || {}) },
-          "[verify-question] verification failed; keeping question unverified",
+          opts.strict
+            ? "[verify-question] verification failed; dropping exam-grade question"
+            : "[verify-question] verification failed; keeping question unverified",
         );
-        results[idx] = q;
+        results[idx] = opts.strict ? null : q;
       }
     }
   };

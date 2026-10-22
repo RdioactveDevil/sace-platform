@@ -16,3 +16,18 @@ export const CLAUDE_THINKING = { type: "disabled" } as const;
  * AI_VERIFY_MODEL (e.g. set it to claude-haiku-5-5 to cut cost).
  */
 export const CLAUDE_VERIFY_MODEL = process.env.AI_VERIFY_MODEL || "claude-sonnet-4-6";
+
+/**
+ * Model for "exam-grade" generation: the hardest bank questions, requested by
+ * admins and the seed script (never by students' live top-ups). Writing a
+ * genuinely hard maths question means solving it while writing it, so this is
+ * the most capable model with adaptive thinking. Override via AI_EXAM_MODEL.
+ */
+export const CLAUDE_EXAM_MODEL = process.env.AI_EXAM_MODEL || "claude-opus-5-5";
+
+/**
+ * Reasoning effort for exam-grade generation. "high" keeps a 2–3 question
+ * batch, plus its verification, inside the 300 s serverless limit; lower it
+ * (AI_EXAM_EFFORT=medium) if requests start timing out.
+ */
+export const CLAUDE_EXAM_EFFORT = process.env.AI_EXAM_EFFORT || "high";

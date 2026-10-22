@@ -39,6 +39,7 @@ export default function AdminGenerateScreen() {
   const [difficulty,      setDifficulty]      = useState('mixed')
   const [extraTypes,      setExtraTypes]      = useState(new Set()) // formats beyond plain MCQ
   const [includeDiagrams, setIncludeDiagrams] = useState(false)
+  const [examGrade,       setExamGrade]       = useState(false) // stronger model, hard + graph questions
   const [loading,         setLoading]         = useState(false)
   const [elapsed,         setElapsed]         = useState(0)
   const [result,          setResult]          = useState(null)
@@ -133,10 +134,12 @@ export default function AdminGenerateScreen() {
       const extras = {
         ...(questionTypes ? { questionTypes } : {}),
         ...(includeDiagrams ? { includeDiagrams: true } : {}),
+        ...(examGrade ? { examGrade: true, includeGraphs: true, difficulty: 5 } : {}),
       }
       const payload = (isBuiltIn || isManaged)
         ? { subject, topicCodes, count, difficulty, ...extras }
         : { stage: subject, topicCodes, count, difficulty, ...extras }
+      if (examGrade && topicCodes.length > 4) throw new Error('Exam-grade takes up to 4 subtopics at a time.')
 
       const data = await adminApiPost('/api/generate-questions', payload)
       setResult(data)
@@ -350,6 +353,25 @@ export default function AdminGenerateScreen() {
           {includeDiagrams ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
           Auto-draw diagrams (AI vector figures — no upload)
         </button>
+        <button
+          type="button"
+          onClick={() => setExamGrade(v => !v)}
+          style={{
+            marginTop: 12, marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
+            background: examGrade ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${examGrade ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
+            color: examGrade ? GOLD : 'rgba(255,255,255,0.6)',
+          }}
+        >
+          {examGrade ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
+          Exam-grade (hardest questions + graphs)
+        </button>
+        {examGrade && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+            Uses the strongest model with reasoning: difficulty 4–5 multiple choice, graphs wherever the topic allows, up to 3 questions
+            per subtopic and 4 subtopics per run. Questions that fail a strict answer check are dropped; the rest go to the review queue. Slower and costs more per question.
+          </div>
+        )}
       </div>
 
       <button
