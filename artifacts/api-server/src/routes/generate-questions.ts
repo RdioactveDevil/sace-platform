@@ -8,7 +8,7 @@ import { extractJsonArray } from "../lib/json-latex";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
 import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
-import { requireUser } from "../lib/auth";
+import { requireUser, type Caller } from "../lib/auth";
 import { isMathSubject, topicWantsFigures, figureInstructions, diagramColumn } from "../lib/figure";
 import { sanitizeGraph } from "../lib/graph-spec";
 
@@ -672,12 +672,51 @@ export async function generateForTopic(opts: {
   return { status: 200, body: { inserted: rows.length } };
 }
 
+// Default daily allowance of exam-grade questions per student per subject.
+const DEFAULT_EXAM_GRADE_DAILY_LIMIT = 9;
+
+/**
+ * Whether a student's top-up may use the exam-grade generator, claiming the
+ * questions from today's allowance if so. Requires: the subject switched
+ * features.exam_grade_topups on, one subtopic at difficulty 4+, and room in the
+ * student's allowance (use_exam_grade_quota, which also requires a paid,
+ * granted or beta subscription to the subject). Any error means no: the
+ * request then runs as normal generation.
+ */
+async function claimStudentExamGrade(
+  adminDb: SupabaseClient, caller: Caller, subject: string, topicCodes: string[],
+  difficulty: unknown, count: number,
+): Promise<boolean> {
+  if (topicCodes.length !== 1 || !(Number(difficulty) >= 4)) return false;
+  try {
+    const { data: curr } = await adminDb
+      .from("curricula").select("id, features").eq("name", subject).maybeSingle();
+    const features = ((curr as { features?: Record<string, unknown> } | null)?.features ?? {});
+    if (!curr || features.exam_grade_topups !== true) return false;
+    const limit = Number(features.exam_grade_daily_limit) > 0
+      ? Number(features.exam_grade_daily_limit)
+      : DEFAULT_EXAM_GRADE_DAILY_LIMIT;
+    const { data, error } = await adminDb.rpc("use_exam_grade_quota", {
+      p_user: caller.userId,
+      p_curriculum: (curr as { id: string }).id,
+      p_count: Math.min(Math.max(1, count || 1), EXAM_GRADE_MAX_COUNT),
+      p_limit: limit,
+    });
+    if (error) {
+      logger.warn({ err: error }, "[generate-questions] exam-grade allowance check failed; using normal generation");
+      return false;
+    }
+    return data === true;
+  } catch (err) {
+    logger.warn({ err }, "[generate-questions] exam-grade allowance check failed; using normal generation");
+    return false;
+  }
+}
+
 router.post("/generate-questions", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
   const { stage, subject, topicCode: topicCodeRaw, topicCodes: topicCodesRaw, count = 10, difficulty = "mixed", autoApprove = false, questionTypes, includeDiagrams, includeGraphs } = req.body;
-  // The stronger exam-grade model costs far more per question: admins only.
-  const examGrade = !!req.body.examGrade && caller.isAdmin;
 
   const resolvedSubject: string = subject || stage;
   // Support both a single topicCode and a topicCodes array
@@ -698,12 +737,18 @@ router.post("/generate-questions", async (req, res) => {
     return;
   }
 
+  const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
+
+  // The stronger exam-grade model costs far more per question. Admins may ask
+  // for it freely; a student's request is honoured only within their subject's
+  // exam-grade top-up allowance, and otherwise falls back to normal generation.
+  const examGrade = !!req.body.examGrade && (caller.isAdmin ||
+    await claimStudentExamGrade(adminDb, caller, resolvedSubject, topicCodes, difficulty, Number(count)));
+
   if (examGrade && topicCodes.length > EXAM_GRADE_MAX_TOPICS) {
     res.status(400).json({ error: `Exam-grade generation takes up to ${EXAM_GRADE_MAX_TOPICS} subtopics per request` });
     return;
   }
-
-  const adminDb = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY!);
 
   // For multi-topic batches process codes in-process with bounded concurrency
   // and aggregate. We call generateForTopic directly rather than issuing a

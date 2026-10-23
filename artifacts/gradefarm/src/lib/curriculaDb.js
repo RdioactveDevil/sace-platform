@@ -105,7 +105,7 @@ export async function getCurriculumDetail(id) {
 /**
  * Save a curriculum's feature switches (see migration 20261015000002).
  * @param {string} id
- * @param {{ exam_mode?: boolean, exam_questions?: number, exam_minutes?: number, essay_marker?: boolean }} features
+ * @param {{ exam_mode?: boolean, exam_questions?: number, exam_minutes?: number, essay_marker?: boolean, exam_grade_topups?: boolean, exam_grade_daily_limit?: number }} features
  */
 export async function updateCurriculumFeatures(id, features) {
   const { error } = await supabase.from('curricula').update({ features: features || {} }).eq('id', id)

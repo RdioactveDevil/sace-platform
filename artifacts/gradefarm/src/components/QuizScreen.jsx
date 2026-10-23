@@ -489,6 +489,10 @@ export default function QuizScreen({
   const remediationAllowed = activeAssignment?.remediation !== false
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
+  // Background top-ups for a student working at 4+ ask for exam-grade questions
+  // (the server decides whether the subject and allowance permit it). Never
+  // while the student is waiting: exam-grade takes minutes.
+  const wantsExamGrade = (diff) => diff != null && diff >= 4
   const remediationQueue = Array.isArray(_remediationQueue) ? _remediationQueue : []
   const remediationStatus = _remediationStatus ?? 'idle'
   const remediationSource = _remediationSource ?? 'prebuilt'
@@ -857,7 +861,7 @@ export default function QuizScreen({
         bankExhaustionAttempted.current = false
         backgroundPrefetchAttempted.current = false
         // Background top-up: generate 10 more while the user answers the batch.
-        fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff)
+        fetchAndPersistMoreQuestions(subject, topicCode, 10, exhaustionDiff, { examGrade: wantsExamGrade(exhaustionDiff) })
           .then(moreQs => {
             if (moreQs.length && typeof onBankQuestionsAdded === 'function') {
               onBankQuestionsAdded(moreQs)
@@ -927,7 +931,7 @@ export default function QuizScreen({
     backgroundPrefetchAttempted.current = true
 
     // Fire-and-forget: no loading state, no UI change.
-    fetchAndPersistMoreQuestions(subject, topicCode, 10, prefetchDiff)
+    fetchAndPersistMoreQuestions(subject, topicCode, 10, prefetchDiff, { examGrade: wantsExamGrade(prefetchDiff) })
       .then(newQs => {
         if (newQs.length && typeof onBankQuestionsAdded === 'function') {
           onBankQuestionsAdded(newQs)
