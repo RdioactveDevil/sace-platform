@@ -795,9 +795,14 @@ export async function insertGeneratedQuestionsToBank(parentQuestion, variants = 
  * @param {string} subject   e.g. 'Chemistry Stage 1'
  * @param {string} topicCode e.g. '2.2'
  * @param {number} count
+ * @param {number|null} targetDifficulty
+ * @param {{ examGrade?: boolean }} [options] examGrade asks for the stronger
+ *   exam-grade generator (slower, at most 3 questions). The server honours it
+ *   only within the subject's exam-grade top-up allowance and otherwise
+ *   generates normally, so it is safe to ask.
  * @returns {Promise<object[]>}
  */
-export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 10, targetDifficulty = null) {
+export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 10, targetDifficulty = null, { examGrade = false } = {}) {
   // targetDifficulty: 1–5 numeric or null (→ 'mixed').  The API uses it to
   // bias the AI's difficulty distribution towards the student's current level.
   const difficulty = targetDifficulty != null ? targetDifficulty : 'mixed'
@@ -811,6 +816,7 @@ export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 1
     body: JSON.stringify({
       subject, topicCode, count, difficulty, autoApprove: true,
       includeGraphs: true, includeDiagrams: true,
+      ...(examGrade ? { examGrade: true } : {}),
     }),
   })
   if (!res.ok) {

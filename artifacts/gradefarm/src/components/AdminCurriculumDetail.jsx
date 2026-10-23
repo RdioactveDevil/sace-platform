@@ -1225,6 +1225,28 @@ function FeatureSwitches({ features, saving, onChange }) {
           <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>AI marking of persuasive, narrative and GAMSAT-style essays (Learn → Essay Marker).</span>
         </span>
       </label>
+
+      <label style={row}>
+        <input type="checkbox" checked={!!features.exam_grade_topups} onChange={e => onChange({ exam_grade_topups: e.target.checked || undefined })} />
+        <span>
+          <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>Exam-grade top-ups</span>
+          <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>
+            When a student working at difficulty 4–5 is running low on questions, the background top-up uses the exam-grade
+            generator (strongest model, graphs, strict answer check) instead of the everyday one. Paid, granted and beta
+            students only, never the free subject. Costs roughly 20–30c per question.
+          </span>
+        </span>
+      </label>
+      {features.exam_grade_topups && (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '0 0 8px 26px', fontSize: 12, color: '#94a3b8' }}>
+          <label>Per student per day{' '}
+            <input type="number" min={1} max={60} style={numInput}
+              defaultValue={features.exam_grade_daily_limit ?? 9}
+              onBlur={commitNumber('exam_grade_daily_limit')} />
+          </label>
+          <span style={{ color: '#475569' }}>questions. Past the limit, top-ups use the everyday generator.</span>
+        </div>
+      )}
     </div>
   )
 }
