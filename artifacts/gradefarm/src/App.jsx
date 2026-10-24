@@ -1572,7 +1572,7 @@ function AppInner() {
             setQuizShowAns(false)
             setQuizCorrect(null)
             setQuizEarnedXP(0)
-            setQuizStreak(profile?.streak || 0)
+            setQuizStreak(0)
             setQuizSessionXP(0)
             setQuizResults([])
             setQuizAnswered([])

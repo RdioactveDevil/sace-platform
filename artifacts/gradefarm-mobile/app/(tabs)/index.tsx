@@ -127,7 +127,7 @@ export default function QuizScreen() {
     try {
       await recordAnswer(user.id, currentQ.id, correct, index);
       const awarded = await addXP(user.id, xpEarned, newStreak, profile, correct);
-      setProfile({ ...profile, ...awarded, streak: newStreak });
+      setProfile({ ...profile, ...awarded });
     } catch {}
 
     if (!correct) {

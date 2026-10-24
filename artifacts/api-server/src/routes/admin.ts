@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { getStripe, removePaidSubject } from "./billing";
+import { currentStreak } from "../lib/streak";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -341,7 +342,7 @@ router.get("/admin/students", async (req, res) => {
           display_name: p?.display_name ?? null,
           school: p?.school ?? null,
           xp: p?.xp ?? 0,
-          streak: p?.streak ?? 0,
+          streak: currentStreak(p?.streak, p?.last_active),
           best_streak: p?.best_streak ?? 0,
           last_active: p?.last_active ?? null,
           onboarding_completed: !!(p?.onboarding_completed),
@@ -853,7 +854,7 @@ router.get("/admin/tutors/:id", async (req, res) => {
         display_name: r.profiles?.display_name || null,
         email: emailById.get(r.student_id) || null,
         xp: r.profiles?.xp ?? 0,
-        streak: r.profiles?.streak ?? 0,
+        streak: currentStreak(r.profiles?.streak, r.profiles?.last_active),
         last_active: r.profiles?.last_active || null,
         total_answers: acc.total,
         accuracy: acc.total > 0 ? Math.round((acc.correct / acc.total) * 100) : null,

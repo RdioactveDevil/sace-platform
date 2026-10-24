@@ -141,7 +141,7 @@ export async function addXP(
   newStreak: number,
   currentProfile: Profile,
   correct?: boolean
-): Promise<Pick<Profile, "xp" | "recent_correct" | "recent_answers">> {
+): Promise<Pick<Profile, "xp" | "streak" | "best_streak" | "recent_correct" | "recent_answers">> {
   let { data, error } = await supabase.rpc("award_xp", {
     p_xp_earned: Math.round(xpEarned),
     p_new_streak: newStreak,
@@ -155,6 +155,9 @@ export async function addXP(
   const row = (Array.isArray(data) ? data[0] : data) ?? {};
   return {
     xp: row.xp ?? Math.max(0, currentProfile.xp + xpEarned),
+    // The day streak, which award_xp works out itself.
+    streak: row.streak ?? currentProfile.streak,
+    best_streak: row.best_streak ?? currentProfile.best_streak,
     recent_correct: row.recent_correct ?? currentProfile.recent_correct,
     recent_answers: row.recent_answers ?? currentProfile.recent_answers,
   };

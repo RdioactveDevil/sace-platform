@@ -393,11 +393,11 @@ export default function QuizScreen({
   /** Award an answer's XP (server-side) and show the new totals; never throws. */
   const awardAnswerXP = (xpEarned, newStreak, isCorrect) =>
     addXP(profile.id, xpEarned, newStreak, profile, isCorrect)
-      .then(({ xp, recent_correct, recent_answers }) => setProfile(p => ({
+      .then(({ xp, streak, best_streak, recent_correct, recent_answers }) => setProfile(p => ({
         ...p,
         xp,
-        streak: newStreak,
-        best_streak: Math.max(p.best_streak || 0, newStreak),
+        // The day streak (award_xp works it out), not this quiz's run of right answers.
+        ...(streak != null && { streak, best_streak, last_active: new Date().toISOString() }),
         ...(recent_answers != null && { recent_correct, recent_answers }),
       })))
       .catch(() => {})
@@ -477,7 +477,7 @@ export default function QuizScreen({
   const showAns = _showAns ?? false
   const correct = _correct ?? null
   const earnedXP = _earnedXP ?? 0
-  const streak = _streak ?? (profile.streak || 0)
+  const streak = _streak ?? 0
   const sessionXP = _sessionXP ?? 0
   const sessionResults = _sessionResults ?? []
   const sessionAnswered = _sessionAnswered ?? []

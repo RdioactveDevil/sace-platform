@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireUser } from "../lib/auth";
+import { currentStreak } from "../lib/streak";
 
 const router = Router();
 
@@ -17,6 +18,7 @@ interface ProfileRow {
   xp: number | null;
   level: number | null;
   streak: number | null;
+  last_active: string | null;
   recent_correct: number | null;
   recent_answers: number | null;
 }
@@ -69,7 +71,7 @@ router.get("/leaderboard/classes", async (req, res) => {
     if (studentIds.length > 0) {
       const { data: profs, error: pErr } = await admin
         .from("profiles")
-        .select("id, display_name, xp, level, streak, recent_correct, recent_answers")
+        .select("id, display_name, xp, level, streak, last_active, recent_correct, recent_answers")
         .in("id", studentIds)
         .is("deactivated_at", null);
       if (pErr) return res.status(500).json({ error: pErr.message });
@@ -85,7 +87,7 @@ router.get("/leaderboard/classes", async (req, res) => {
           display_name: p.display_name || "Student",
           xp: p.xp ?? 0,
           level: p.level ?? null,
-          streak: p.streak ?? 0,
+          streak: currentStreak(p.streak, p.last_active),
           // Ranks need recent accuracy as well as XP; the app works it out from these.
           recent_correct: p.recent_correct ?? 0,
           recent_answers: p.recent_answers ?? 0,
