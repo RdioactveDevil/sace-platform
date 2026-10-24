@@ -328,7 +328,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {invites.map(inv => (
             <div key={inv.token} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
-              <div style={{ flex: 1, minWidth: 120, fontSize: 13, fontWeight: 700, color: t.text }}>{inv.tutor_name}</div>
+              <div style={{ flex: 1, minWidth: 120 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{inv.tutor_name}</div>
+                {inv.subjects?.length > 0 && <div style={{ fontSize: 11, color: GOLD, marginTop: 2 }}>{inv.subjects.join(', ')} included, free</div>}
+              </div>
               <button onClick={() => respondInvite(inv.token, true)} disabled={!!inviteBusy} style={btn(true)}>{inviteBusy === inv.token ? '…' : 'Accept'}</button>
               <button onClick={() => respondInvite(inv.token, false)} disabled={!!inviteBusy} style={btn(false)}>Decline</button>
             </div>

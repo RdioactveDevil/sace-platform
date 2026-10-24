@@ -4,11 +4,12 @@ import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export async function signUp(email, password, displayName, school, applyForTutor = false) {
+/** `redirectTo`: where the confirmation link lands (e.g. back on a tutor invite). */
+export async function signUp(email, password, displayName, school, applyForTutor = false, redirectTo = undefined) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName, signup_path: 'student' } }
+    options: { data: { display_name: displayName, signup_path: 'student' }, ...(redirectTo ? { emailRedirectTo: redirectTo } : {}) }
   })
   if (error) throw error
 
@@ -173,6 +174,14 @@ export async function adminListTutors() {
 
 export async function adminGetTutor(tutorId) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}`)
+}
+
+/** Let a tutor include subjects, free, for their students (or stop them). */
+export async function adminSetTutorIncludeSubject(tutorId, enabled) {
+  return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/include-subject`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  })
 }
 
 export async function adminListAssignmentSubjects() {
@@ -984,12 +993,35 @@ export async function fetchRoster(tutorId, { allTutors = false } = {}) {
 }
 
 /** Invite a student by email (or re-send their pending invite). They join
- *  the roster once they accept. Resolves to { invite, emailSent, emailError }. */
-export async function inviteStudent(studentEmail) {
-  return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify({ email: studentEmail }) })
+ *  the roster once they accept. `curriculumIds`: the subjects the invite comes
+ *  with, free ([] for none; left out, a re-send keeps the current ones).
+ *  Resolves to { invite, emailSent, emailError }. */
+export async function inviteStudent(studentEmail, curriculumIds) {
+  const body = { email: studentEmail }
+  if (curriculumIds !== undefined) body.curriculumIds = curriculumIds
+  return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify(body) })
 }
 
-/** The tutor's pending invites: [{ id, email, created_at, sent_at, expired }]. */
+/** Whether the tutor can include subjects for their students, and the subjects
+ *  to pick from: { canInclude, subjects: [{ id, name, stage, label }] }. */
+export async function fetchIncludableSubjects() {
+  return tutorFetch('/api/tutor/included-subjects')
+}
+
+const includedSubjectPath = (studentId, curriculumId) =>
+  `/api/tutor/students/${encodeURIComponent(studentId)}/included-subjects/${encodeURIComponent(curriculumId)}`
+
+/** Include a subject, free, for a roster student. Resolves to { label, outcome }. */
+export async function setIncludedSubject(studentId, curriculumId) {
+  return tutorFetch(includedSubjectPath(studentId, curriculumId), { method: 'PUT' })
+}
+
+/** Stop including a subject for a roster student. */
+export async function removeIncludedSubject(studentId, curriculumId) {
+  return tutorFetch(includedSubjectPath(studentId, curriculumId), { method: 'DELETE' })
+}
+
+/** The tutor's pending invites: [{ id, email, subjects, created_at, sent_at, expired }]. */
 export async function fetchPendingInvites() {
   const json = await tutorFetch('/api/tutor/invites')
   return json.invites || []
@@ -1000,13 +1032,13 @@ export async function cancelInvite(inviteId) {
   return tutorFetch(`/api/tutor/invites/${encodeURIComponent(inviteId)}`, { method: 'DELETE' })
 }
 
-/** Pending tutor invites for the signed-in student: [{ token, tutor_name, created_at }]. */
+/** Pending tutor invites for the signed-in student: [{ token, tutor_name, subjects, created_at }]. */
 export async function fetchMyInvites() {
   const json = await tutorFetch('/api/invites/mine')
   return json.invites || []
 }
 
-/** Who an invite link is from; works signed out. Resolves to { tutor_name, email, status }. */
+/** Who an invite link is from; works signed out. Resolves to { tutor_name, email, signup_email, subjects, status }. */
 export async function fetchInvite(token) {
   const res = await fetch(`/api/invites/${encodeURIComponent(token)}`)
   const json = await res.json().catch(() => ({}))
@@ -1014,7 +1046,8 @@ export async function fetchInvite(token) {
   return json
 }
 
-/** Accept or decline an invite as the signed-in user. */
+/** Accept or decline an invite as the signed-in user. Accepting resolves to
+ *  { ok, tutor_name, subjects, subjectError }: `subjects` are the ones it unlocked. */
 export async function respondToInvite(token, accept) {
   const json = await tutorFetch(`/api/invites/${encodeURIComponent(token)}/${accept ? 'accept' : 'decline'}`, { method: 'POST' })
   tutoringAccessCache.clear()

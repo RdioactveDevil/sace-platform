@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM, appUrl } from "../lib/email";
+import { IncludedSubjectError, canIncludeSubject, includeSubject, removeIncludedSubject } from "../lib/included-subject";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -967,6 +968,7 @@ interface StudentDetail {
   profile_year_level: number | null;      // set by the student at onboarding
   tutored: SubjectRow[];                   // subjects THIS tutor tutors (their selection)
   subscriptions: { subject_name: string; stage: string | null }[]; // student's onboarding subjects
+  included: { subject_name: string; stage: string | null }[]; // subjects THIS tutor includes (free)
 }
 
 // GET /tutor/roster-details — per-student year level + subjects (onboarding + tutor selection)
@@ -987,7 +989,7 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     const byStudent: Record<string, StudentDetail> = {};
     for (const r of (roster ?? []) as { student_id: string; year_level: string | null }[]) {
       if (byStudent[r.student_id]) continue; // a student with several tutors
-      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [] };
+      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: [] };
     }
 
     if (studentIds.length > 0) {
@@ -999,11 +1001,15 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
       // Student's onboarding subjects (the pick list)
       const { data: subs } = await admin
         .from("user_subscriptions")
-        .select("user_id, subject_name, stage, active")
+        .select("user_id, subject_name, stage, active, source, sponsor_tutor_id")
         .in("user_id", studentIds);
-      for (const s of (subs ?? []) as { user_id: string; subject_name: string; stage: string | null; active: boolean | null }[]) {
-        if (s.active === false) continue;
-        if (byStudent[s.user_id]) byStudent[s.user_id].subscriptions.push({ subject_name: s.subject_name, stage: s.stage });
+      type SubRow = { user_id: string; subject_name: string; stage: string | null; active: boolean | null; source: string; sponsor_tutor_id: string | null };
+      for (const s of (subs ?? []) as SubRow[]) {
+        if (s.active === false || !byStudent[s.user_id]) continue;
+        byStudent[s.user_id].subscriptions.push({ subject_name: s.subject_name, stage: s.stage });
+        if (s.source === "tutor" && s.sponsor_tutor_id === callerUserId) {
+          byStudent[s.user_id].included.push({ subject_name: s.subject_name, stage: s.stage });
+        }
       }
     }
 
@@ -1108,6 +1114,70 @@ router.delete("/tutor/students/:studentId/subjects/:subjectId", async (req: Requ
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ ok: true });
   } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// ── Included subjects (free for the student; see lib/included-subject.ts) ───
+
+// GET /tutor/included-subjects — whether the caller can include subjects, and the subjects to pick from.
+router.get("/tutor/included-subjects", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const canInclude = await canIncludeSubject(admin, callerUserId);
+    if (!canInclude) return res.json({ canInclude, subjects: [] });
+    const { data, error } = await admin
+      .from("curricula")
+      .select("id, name, level_label")
+      .in("status", ["live", "generating"])
+      .is("archived_at", null)
+      .order("name");
+    if (error) return res.status(500).json({ error: error.message });
+    const subjects = ((data ?? []) as { id: string; name: string; level_label: string | null }[]).map((c) => {
+      const stage = (c.level_label || "").trim();
+      return { id: c.id, name: c.name, stage, label: stage && !c.name.includes(stage) ? `${c.name} ${stage}` : c.name };
+    });
+    return res.json({ canInclude, subjects });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PUT /tutor/students/:studentId/included-subjects/:curriculumId — include a subject.
+router.put("/tutor/students/:studentId/included-subjects/:curriculumId", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const studentId = String(req.params.studentId);
+    if (!(await assertRostered(admin, callerUserId, studentId))) {
+      return res.status(403).json({ error: "Student not on your roster." });
+    }
+    if (!(await canIncludeSubject(admin, callerUserId))) {
+      return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
+    }
+    const result = await includeSubject(admin, callerUserId, studentId, String(req.params.curriculumId));
+    return res.json(result);
+  } catch (err) {
+    if (err instanceof IncludedSubjectError) return res.status(err.status).json({ error: err.message });
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /tutor/students/:studentId/included-subjects/:curriculumId — stop including a subject.
+router.delete("/tutor/students/:studentId/included-subjects/:curriculumId", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    await removeIncludedSubject(ctx.admin, ctx.callerUserId, String(req.params.studentId), String(req.params.curriculumId));
+    return res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof IncludedSubjectError) return res.status(err.status).json({ error: err.message });
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
   }

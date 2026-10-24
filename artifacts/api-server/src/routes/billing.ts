@@ -139,9 +139,9 @@ async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: s
   return sub && ACCESS_STATUSES.has(sub.status) ? sub : null;
 }
 
-type Curriculum = { id: string; name: string; stage: string; label: string };
+export type Curriculum = { id: string; name: string; stage: string; label: string };
 
-async function liveCurriculum(admin: SupabaseClient, id: unknown): Promise<Curriculum | null> {
+export async function liveCurriculum(admin: SupabaseClient, id: unknown): Promise<Curriculum | null> {
   if (typeof id !== "string" || !id) return null;
   const { data: cur } = await admin
     .from("curricula").select("id, name, level_label, status, archived_at").eq("id", id)
@@ -175,7 +175,7 @@ const subFields = (sub: Stripe.Subscription) => {
 
 /** Make `cur` a paid subject on `sub` (creating, converting or relinking the student's row). */
 async function attachPaidSubject(admin: SupabaseClient, userId: string, cur: Curriculum, sub: Stripe.Subscription) {
-  const fields = { source: "stripe", ...subFields(sub) };
+  const fields = { source: "stripe", sponsor_tutor_id: null, ...subFields(sub) };
   const existing = await accessRow(admin, userId, cur);
   if (existing) {
     const { error } = await admin.from("user_subscriptions").update(fields).eq("id", existing.id);
@@ -266,7 +266,7 @@ router.post("/billing/free-subject", async (req: Request, res: Response) => {
   const { error: delErr } = await admin.from("user_subscriptions").delete().eq("user_id", userId).eq("source", "free");
   if (delErr) return fail(res, 500, delErr.message);
   const free = {
-    source: "free", active: true, status: null, stripe_subscription_id: null, stripe_customer_id: null,
+    source: "free", active: true, status: null, stripe_subscription_id: null, stripe_customer_id: null, sponsor_tutor_id: null,
     current_period_end: null, cancel_at_period_end: false, updated_at: new Date().toISOString(),
   };
   const { error } = existing && existing.source !== "free"

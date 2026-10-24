@@ -15,7 +15,7 @@ test('no row means no access', () => {
 })
 
 test('paid, granted and beta rows give full access', () => {
-  for (const source of ['stripe', 'admin', 'beta']) assert.equal(subjectAccess([row(source)], chem), 'full')
+  for (const source of ['stripe', 'admin', 'beta', 'tutor']) assert.equal(subjectAccess([row(source)], chem), 'full')
 })
 
 test('the free subject is limited, unless something else covers it too', () => {
