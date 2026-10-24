@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal, Flame, Trophy, Zap, CalendarDays, Eye, EyeOff, Moon, Sun } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
+import { currentStreak } from '../lib/streak'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
 import { formatSubjectLabel } from '../lib/subjects'
 import { supabase } from '../lib/supabase'
@@ -429,9 +430,10 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
 
   const atarLabel = ATAR_TARGETS.find(a => a.value === Number(profile.atar_target))?.label
 
+  const dayStreak = currentStreak(profile.streak, profile.last_active)
   const stats = [
     { icon: Zap,          label: 'Total XP',       value: (profile.xp || 0).toLocaleString('en-AU') },
-    { icon: Flame,        label: 'Current streak', value: `${profile.streak || 0} day${profile.streak === 1 ? '' : 's'}` },
+    { icon: Flame,        label: 'Current streak', value: `${dayStreak} day${dayStreak === 1 ? '' : 's'}` },
     { icon: Trophy,       label: 'Best streak',    value: `${profile.best_streak || 0} day${profile.best_streak === 1 ? '' : 's'}` },
     { icon: CalendarDays, label: 'Member since',   value: memberSince ? new Date(memberSince).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }) : '—' },
   ]

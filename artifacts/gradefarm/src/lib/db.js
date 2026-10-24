@@ -1,4 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase'
+import { currentStreak } from './streak'
 import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 
@@ -955,12 +956,15 @@ export async function incrementQuestionVariantUsage(variantId) {
 export async function fetchRoster(tutorId, { allTutors = false } = {}) {
   let query = supabase
     .from('tutor_students')
-    .select('tutor_id, student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak)')
+    .select('tutor_id, student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak, last_active)')
     .order('invited_at', { ascending: false })
   if (!allTutors) query = query.eq('tutor_id', tutorId)
   const { data, error } = await query
   if (error) throw error
-  const rows = (data || []).map(r => ({ ...r, profiles: r.profiles || null }))
+  const rows = (data || []).map(r => ({
+    ...r,
+    profiles: r.profiles ? { ...r.profiles, streak: currentStreak(r.profiles.streak, r.profiles.last_active) } : null,
+  }))
   if (!allTutors) return rows
 
   const tutorIds = [...new Set(rows.map(r => r.tutor_id))]
@@ -1470,7 +1474,7 @@ export async function fetchStudentProgressForTutor(tutorId, studentId, { allTuto
   // Fetch profile stats (xp, streak)
   const { data: prof, error: profError } = await supabase
     .from('profiles')
-    .select('xp, streak, best_streak')
+    .select('xp, streak, best_streak, last_active')
     .eq('id', studentId)
     .single()
   if (profError) throw profError
@@ -1551,7 +1555,7 @@ export async function fetchStudentProgressForTutor(tutorId, studentId, { allTuto
 
   return {
     xp:              prof?.xp ?? 0,
-    streak:          prof?.streak ?? 0,
+    streak:          currentStreak(prof?.streak, prof?.last_active),
     best_streak:     prof?.best_streak ?? 0,
     accuracy,
     totalAttempts,

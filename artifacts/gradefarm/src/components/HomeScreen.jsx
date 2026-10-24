@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Flame, ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
+import { currentStreak } from '../lib/streak'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
@@ -646,7 +647,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 {[
                   { val: totalAttempts, label: 'answered' },
                   { val: `${accuracy}%`, label: 'correct' },
-                  { val: profile.streak || 0, label: 'streak' },
+                  { val: currentStreak(profile.streak, profile.last_active), label: 'streak' },
                 ].map(s => (
                   <div key={s.label} style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>{s.val}</div>

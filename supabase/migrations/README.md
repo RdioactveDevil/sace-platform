@@ -110,3 +110,13 @@ XP), and exposes the counts on the `leaderboard` view. Apply it before
 deploying the matching app change: until then the new app still awards XP
 (it falls back to the old `award_xp` call), but everyone's recent accuracy
 reads as 0, so nobody shows above Bronze I.
+
+## 20261024000003_day_streaks
+
+`profiles.streak` was meant to be a day streak but held the current run of
+right answers (the app sent its quiz streak to `award_xp`). This makes
+`award_xp()` count days itself (Adelaide time) and ignore `p_new_streak`,
+rebuilds `streak` / `best_streak` from `answer_log`, and shows a lapsed
+streak (last active before yesterday) as 0 on the `leaderboard` view. The
+app works either side of it: before it's applied, the stored streak keeps
+its old meaning.
