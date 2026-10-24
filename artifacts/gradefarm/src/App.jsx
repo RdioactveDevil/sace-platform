@@ -4,10 +4,10 @@ import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
 import { notify, notifyError } from './lib/notify'
-import { inviteAcceptPath, pendingInvite } from './lib/pendingInvite'
+import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
@@ -838,12 +838,33 @@ function AppInner() {
     countFreeQuestion().then(r => setFreeQuota({ used: r.used, limit: r.limit })).catch(() => {})
   }, [])
 
-  // Signed in after starting from a tutor invite (wherever sign-in or the
-  // confirmation link landed them): go back to it so it accepts itself.
+  // Signed in after starting from a tutor invite: accept it straight away,
+  // wherever sign-up or sign-in left them (onboarding, Home, …), so the
+  // subjects it includes are unlocked before they pick one. Not a redirect:
+  // sign-up navigates on to onboarding by itself and would win that race.
+  // On the invite page itself, the page does it.
+  const acceptingInvite = useRef(false)
   useEffect(() => {
-    if (!user || !profile) return
+    if (!user || !profile || acceptingInvite.current) return
     const token = pendingInvite()
-    if (token && !location.pathname.startsWith('/invite/')) navigate(inviteAcceptPath(token), { replace: true })
+    if (!token || location.pathname.startsWith('/invite/')) return
+    acceptingInvite.current = true
+    respondToInvite(token, true)
+      .then(async (res) => {
+        clearPendingInvite()
+        await refreshSubscriptions()
+        const subjects = res?.subjects || []
+        notify.success(subjects.length
+          ? `You're in! ${subjects.join(', ')} ${subjects.length > 1 ? 'are' : 'is'} included with your tutoring.`
+          : `You're in! ${res?.tutor_name || 'Your tutor'} is now your tutor.`)
+        if (res?.subjectError) notify.error(res.subjectError)
+      })
+      .catch(() => {
+        // Wrong account, expired, cancelled…: the invite page says which.
+        clearPendingInvite()
+        navigate(`/invite/${encodeURIComponent(token)}`)
+      })
+      .finally(() => { acceptingInvite.current = false })
   }, [user, profile, location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Back from Stripe Checkout (?checkout=success&session_id=… or ?checkout=cancelled).
