@@ -8,46 +8,54 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const SECTIONS = [
   {
     title: '1. Who We Are',
-    body: `GradeFarm is operated by Titanium Tutoring, based in South Australia, Australia. This Privacy Policy explains how we collect, use, store, and protect your personal information when you use our platform.`,
+    body: `GradeFarm is operated by Titanium Tutoring, based in South Australia, Australia. This Privacy Policy explains how we collect, use, share, store, and protect your personal information when you use our platform.`,
   },
   {
     title: '2. Information We Collect',
-    body: `We collect the following information when you register and use GradeFarm:\n\n• Identity data: full name, date of birth, year level\n• Contact data: email address\n• Academic data: school name, ATAR target, subjects studied\n• Usage data: questions answered, scores, session activity, and performance analytics\n• Technical data: IP address, browser type, and device information`,
+    body: `We collect the following information when you register and use GradeFarm:\n\n• Account and profile data: name, email address, date of birth, school, year level, ATAR target, study goals and study hours. Your password is managed by our authentication provider and is never visible to us.\n• Study data: questions answered, answers given, scores, time taken, XP and streaks, study plans, and assessments you add.\n• Content you create: Titan AI conversations, notes or documents you upload, essays and other writing you submit, and messages with your tutor.\n• Live lessons: video and audio during lessons you join, and recordings of lessons your tutor records.\n• Payment data: the subjects you pay for and the status of your subscription. Card details are handled by our payment provider, Stripe; we never see or store your card number.\n• Technical data: IP address, browser type, device information, and how you use the site (see Cookies, below).`,
   },
   {
     title: '3. How We Use Your Information',
-    body: `We use your information to:\n\n• Create and manage your account\n• Personalise your study experience and topic recommendations\n• Generate performance analytics and progress reports\n• Communicate platform updates and support responses\n• Improve the platform through aggregated, anonymised analytics\n\nWe do not sell your personal data to third parties.`,
+    body: `We use your information to:\n\n• Create and manage your account\n• Personalise your study experience, practice questions and topic recommendations\n• Provide AI features such as Titan AI explanations, feedback and essay marking\n• Generate performance analytics and progress reports, for you and for your tutor\n• Run live lessons and share lesson recordings with the people the lesson was for\n• Process payments for paid subjects\n• Send emails such as account messages, lesson and assignment reminders, and support responses\n• Improve the platform, including through aggregated analytics\n\nWe do not sell your personal data to third parties.`,
   },
   {
-    title: '4. Data Retention',
-    body: `We retain your personal data for as long as your account is active. You may request deletion of your account and associated data at any time by contacting support@titaniumtutoring.com.au. We will process deletion requests within 30 days.`,
+    title: '4. Who Can See Your Information',
+    body: `• Your tutor: if you are on a tutor's student list, they can see your profile, progress, answers, assignments, writing and your messages with them.\n• Your classmates: if you are in a class, other members can see your display name, XP, level and streak on the class leaderboard.\n• Titanium Tutoring staff: our administrators can access account and study data to run the platform and help with support requests.\n• Service providers: the companies listed in section 6 process data on our behalf to provide GradeFarm.`,
   },
   {
-    title: '5. Data Storage and Security',
-    body: `Your data is stored securely using Supabase (PostgreSQL), hosted on infrastructure compliant with industry security standards. We use row-level security and encrypted connections. While we take reasonable steps to protect your data, no internet transmission is 100% secure.`,
+    title: '5. AI Features',
+    body: `When you use Titan AI, AI feedback, AI essay marking or other AI features, the content needed to produce a response is sent to our AI provider, Anthropic. This can include your first name, your messages and questions, your answers, and any notes or writing you submit. Please don't include personal details in your messages or uploads that aren't needed for your study.`,
   },
   {
-    title: '6. Children\'s Privacy',
-    body: `GradeFarm is intended for students aged 13 and above. If you are under 18, we recommend reviewing this policy with a parent or guardian. We do not knowingly collect data from children under 13. If we become aware of such data, we will delete it promptly.`,
+    title: '6. Third-Party Services and Overseas Storage',
+    body: `We use the following third-party services, which process your data on our behalf:\n\n• Supabase — database, accounts and file storage\n• Vercel — website hosting and application servers\n• Anthropic — AI features\n• Stripe — payments\n• Resend — email delivery\n• LiveKit — live video lessons\n• Cloudflare — storage of lesson recordings\n• Google Analytics — website usage analytics\n\nSome of these providers store or process data outside Australia, including in Japan (where our database and application servers are located) and the United States. Each provider has its own privacy policy governing its data practices.`,
   },
   {
-    title: '7. Third-Party Services',
-    body: `We use the following third-party services which may process your data:\n\n• Supabase — database and authentication\n• OpenAI — AI-generated study tips (anonymised question context only, no personal identifiers)\n• Vercel — hosting infrastructure\n\nEach provider has their own privacy policy governing their data practices.`,
+    title: '7. Data Retention',
+    body: `We retain your personal data for as long as your account is active. You may request deletion of your account and associated data at any time by contacting support@titaniumtutoring.com.au. We will process deletion requests within 30 days. We may keep payment records for as long as the law requires.`,
   },
   {
-    title: '8. Your Rights',
-    body: `Under Australian Privacy Law (Privacy Act 1988) and applicable regulations, you have the right to:\n\n• Access the personal information we hold about you\n• Request correction of inaccurate data\n• Request deletion of your data\n• Opt out of non-essential communications\n\nTo exercise these rights, contact us at support@titaniumtutoring.com.au`,
+    title: '8. Data Storage and Security',
+    body: `Your data is stored in our Supabase (PostgreSQL) database, protected by row-level security so each user can only reach the data they are allowed to see, and all connections are encrypted. Payments are processed by Stripe. While we take reasonable steps to protect your data, no internet transmission is 100% secure.`,
   },
   {
-    title: '9. Cookies',
-    body: `GradeFarm uses local browser storage (localStorage) to remember your session preferences such as theme and selected subject. We do not use third-party tracking cookies or advertising cookies.`,
+    title: '9. Children and Parents',
+    body: `GradeFarm is used by school students, including primary school students. If you are under 18, a parent or guardian must agree to this policy on your behalf, and we recommend reading it together. A parent or guardian can contact us to access, correct or delete their child's information.`,
   },
   {
-    title: '10. Changes to This Policy',
+    title: '10. Your Rights',
+    body: `Under the Privacy Act 1988 (Cth) and the Australian Privacy Principles, you have the right to:\n\n• Access the personal information we hold about you\n• Request correction of inaccurate data\n• Request deletion of your data\n• Opt out of reminder emails, using the unsubscribe link in any reminder or the Email reminders setting in My Account\n\nTo exercise these rights, contact us at support@titaniumtutoring.com.au. If you are not satisfied with our response, you can complain to the Office of the Australian Information Commissioner (oaic.gov.au).`,
+  },
+  {
+    title: '11. Cookies and Local Storage',
+    body: `GradeFarm uses your browser's local storage to keep you signed in and to remember preferences such as your theme and selected subject. We use Google Analytics, which sets cookies, to understand how the site is used. You can block these cookies in your browser settings or with Google's Analytics opt-out browser add-on.`,
+  },
+  {
+    title: '12. Changes to This Policy',
     body: `We may update this Privacy Policy from time to time. We will notify registered users of material changes via email. Continued use of GradeFarm after changes are posted constitutes acceptance of the updated policy.`,
   },
   {
-    title: '11. Contact Us',
+    title: '13. Contact Us',
     body: `For privacy-related enquiries or to exercise your rights, contact:\n\nTitanium Tutoring\nEmail: support@titaniumtutoring.com.au\nLocation: Adelaide, South Australia`,
   },
 ]
@@ -75,7 +83,7 @@ export default function PrivacyScreen() {
         <div style={{ marginBottom: 40 }}>
           <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Legal</div>
           <h1 style={{ fontFamily: FONT_D, fontSize: 'clamp(26px,4vw,36px)', margin: '0 0 12px', color: '#f1f5f9', letterSpacing: 1 }}>PRIVACY POLICY</h1>
-          <p style={{ fontSize: 13, color: '#475569', margin: 0 }}>Last updated: April 2026 · Titanium Tutoring</p>
+          <p style={{ fontSize: 13, color: '#475569', margin: 0 }}>Last updated: October 2026 · Titanium Tutoring</p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
