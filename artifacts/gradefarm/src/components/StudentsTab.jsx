@@ -22,6 +22,7 @@ import {
   requireStudentDiagnostic,
   waiveStudentDiagnostic,
 } from '../lib/db'
+import { parseEmailList, gettingStartedStatus } from '../lib/rosterOnboarding'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -73,6 +74,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   const [fStage, setFStage] = useState('')
   const [fClass, setFClass] = useState('')
   const [attentionOnly, setAttentionOnly] = useState(false)
+  const [startingOnly, setStartingOnly] = useState(false) // not practising yet
 
   // add / edit / notify
   const [email, setEmail] = useState('')
@@ -157,6 +159,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       subscriptions: d.subscriptions || [],
       included: d.included || [],
       diagnostics: d.diagnostics || [],
+      start: gettingStartedStatus({ diagnostics: d.diagnostics || [], xp: r.profiles?.xp ?? 0 }),
       subjects,
       stages,
       classes: cls,
@@ -179,9 +182,14 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       if (fStage && !s.stages.includes(fStage)) return false
       if (fClass && !s.classNames.includes(fClass)) return false
       if (attentionOnly && s.overdue === 0) return false
+      if (startingOnly && s.start === 'practising') return false
       return true
     })
-  }, [students, search, fYear, fStage, fClass, attentionOnly])
+  }, [students, search, fYear, fStage, fClass, attentionOnly, startingOnly])
+  const startCounts = useMemo(() => ({
+    diagnostic: students.filter(s => s.start === 'diagnostic').length,
+    notStarted: students.filter(s => s.start === 'not_started').length,
+  }), [students])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -217,23 +225,43 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   }, [sorted, groupBy])
 
   // ── actions ──
+  // One address, or several pasted at once: each gets the same subjects.
+  const addresses = parseEmailList(email)
   const handleAdd = async (e) => {
     e.preventDefault()
-    if (!email.trim()) return
+    if (addLoading || !addresses.length) return
+    if (addresses.length > 50) { setAddError('Paste up to 50 addresses at a time.'); return }
     setAddError(''); setAddLoading(true)
     setAddNotice('')
-    try {
-      const sentTo = email.trim().toLowerCase()
-      const scope = Object.fromEntries(inviteSubjects.filter(id => inviteScope[id]?.length).map(id => [id, inviteScope[id]]))
-      const res = await inviteStudent(sentTo, includable.canInclude ? inviteSubjects : undefined, includable.canInclude ? scope : undefined)
-      if (!res.emailSent) setAddError(`Invite saved, but the email didn't send: ${String(res.emailError).replace(/\.+$/, '')}. Try Resend below.`)
-      else {
-        setEmail(''); setInviteSubjects([]); setInviteScope({})
-        const unlocked = res.invite?.subjects || []
-        setAddNotice(`Invite sent to ${sentTo}. They'll join your roster once they accept${unlocked.length ? `, with ${unlocked.join(', ')} unlocked` : ''}.`)
+    const scope = Object.fromEntries(inviteSubjects.filter(id => inviteScope[id]?.length).map(id => [id, inviteScope[id]]))
+    const results = []
+    for (const addr of addresses) {
+      try {
+        const res = await inviteStudent(addr, includable.canInclude ? inviteSubjects : undefined, includable.canInclude ? scope : undefined)
+        results.push({ addr, ok: !!res.emailSent, saved: true, error: res.emailError, subjects: res.invite?.subjects || [] })
+      } catch (err) {
+        results.push({ addr, ok: false, saved: false, error: err.message || 'Could not send the invite.' })
       }
-      fetchPendingInvites().then(setInvites).catch(() => {})
-    } catch (err) { setAddError(err.message || 'Could not send the invite.') }
+    }
+    const sent = results.filter(r => r.ok)
+    const failed = results.filter(r => !r.ok)
+    const unlocked = sent[0]?.subjects || []
+    const withSubjects = unlocked.length ? `, with ${unlocked.join(', ')} unlocked` : ''
+    if (sent.length) {
+      setAddNotice(sent.length === 1
+        ? `Invite sent to ${sent[0].addr}. They'll join your roster once they accept${withSubjects}.`
+        : `Invites sent to ${sent.length} students. They'll join your roster as they accept${withSubjects}.`)
+    }
+    if (failed.length === 1 && results.length === 1) {
+      const f = failed[0]
+      setAddError(f.saved ? `Invite saved, but the email didn't send: ${String(f.error).replace(/\.+$/, '')}. Try Resend below.` : f.error)
+    } else if (failed.length) {
+      setAddError(`${failed.length} didn't go out: ${failed.map(f => `${f.addr} (${String(f.error || 'error').replace(/\.+$/, '')})`).join('; ')}.`)
+    }
+    // Keep only the ones that didn't go out, to fix and retry.
+    setEmail(failed.filter(f => !f.saved).map(f => f.addr).join('\n'))
+    if (!failed.length) { setInviteSubjects([]); setInviteScope({}) }
+    fetchPendingInvites().then(setInvites).catch(() => {})
     setAddLoading(false)
   }
   const handleResend = async (inv) => {
@@ -282,7 +310,11 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
             <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0, fontSize: 13 }}>{s.name[0].toUpperCase()}</div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{s.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{s.name}</span>
+                {s.start === 'diagnostic' && tag('Diagnostic to do', GOLD)}
+                {s.start === 'not_started' && tag("Hasn't practised yet", t.textMuted)}
+              </div>
               {s.email && <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{s.email}</div>}
               {allTutors && s.tutors.length > 0 && (
                 <div style={{ fontSize: 11, color: t.textSub, marginTop: 2 }}>Tutor{s.tutors.length > 1 ? 's' : ''}: {s.tutors.map(tu => tu.display_name || 'Unnamed').join(', ')}</div>
@@ -377,8 +409,9 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
           <option value="">All classes</option>{classOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <button onClick={() => setAttentionOnly(v => !v)} style={{ ...chipStyle(attentionOnly), display: 'inline-flex', alignItems: 'center', gap: 5 }}><TriangleAlert size={13} aria-hidden="true" />Needs attention</button>
-        {(fYear || fStage || fClass || attentionOnly || search) && (
-          <button onClick={() => { setFYear(''); setFStage(''); setFClass(''); setAttentionOnly(false); setSearch('') }} style={{ ...chipStyle(false), color: t.textFaint }}>Clear</button>
+        <button onClick={() => setStartingOnly(v => !v)} style={chipStyle(startingOnly)}>Getting started</button>
+        {(fYear || fStage || fClass || attentionOnly || startingOnly || search) && (
+          <button onClick={() => { setFYear(''); setFStage(''); setFClass(''); setAttentionOnly(false); setStartingOnly(false); setSearch('') }} style={{ ...chipStyle(false), color: t.textFaint }}>Clear</button>
         )}
       </div>
 
@@ -390,8 +423,12 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
             {includable.canInclude && ' Pick the subjects you tutor them in and they unlock free for them when they accept.'}
           </div>
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }} placeholder="student@email.com" type="email" style={{ ...ctrl, flex: 1, minWidth: 220 }} />
-            <button type="submit" disabled={addLoading || !email.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Sending…' : 'Send invite'}</button>
+            <textarea className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleAdd(e) }}
+              placeholder="student@email.com (or paste several, one per line or comma-separated)" aria-label="Student email addresses"
+              rows={Math.min(5, Math.max(1, email.split('\n').length))} autoCapitalize="none" spellCheck={false}
+              style={{ ...ctrl, flex: 1, minWidth: 220, resize: 'vertical', lineHeight: 1.5 }} />
+            <button type="submit" disabled={addLoading || !addresses.length} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Sending…' : addresses.length > 1 ? `Send ${addresses.length} invites` : 'Send invite'}</button>
           </form>
           {includable.canInclude && (
             <div style={{ marginTop: 12 }}>
@@ -432,6 +469,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
                 <div style={{ fontSize: 11, color: inv.expired ? t.danger : t.textMuted }}>
                   {inv.expired ? 'Expired. Resend to renew' : inv.sent_at ? `Sent ${fmtDate(inv.sent_at)}` : 'Not sent yet'}
                   {inv.subjects?.length ? ` · ${inv.subjects.join(', ')} included` : ''}
+                  {inv.reminded_at && !inv.expired ? ` · Reminder sent ${fmtDate(inv.reminded_at)}` : ''}
                   {inviteMsg[inv.id] ? ` · ${inviteMsg[inv.id]}` : ''}
                 </div>
               </div>
@@ -446,7 +484,14 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       <div style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '13px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>My Students</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>{filtered.length}{filtered.length !== students.length ? ` of ${students.length}` : ''} student{students.length !== 1 ? 's' : ''}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>
+            {filtered.length}{filtered.length !== students.length ? ` of ${students.length}` : ''} student{students.length !== 1 ? 's' : ''}
+            {[
+              invites.length && `${invites.length} invite${invites.length === 1 ? '' : 's'} waiting`,
+              startCounts.diagnostic && `${startCounts.diagnostic} diagnostic${startCounts.diagnostic === 1 ? '' : 's'} to do`,
+              startCounts.notStarted && `${startCounts.notStarted} not practising yet`,
+            ].filter(Boolean).map(text => ` · ${text}`).join('')}
+          </div>
         </div>
         {loading ? (
           <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
