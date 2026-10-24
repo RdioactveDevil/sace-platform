@@ -655,7 +655,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                   </div>
                 </div>
                 <div className="lp-sace-text" style={{ flex:1, minWidth:240 }}>
-                  <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Subjects are built by Titanium Tutoring from the Australian Curriculum and SACE. Every question is mapped to your syllabus — nothing off-syllabus, nothing wasted — and the bank keeps growing as you practise.</p>
+                  <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Subjects are built by Titanium Tutoring from the Australian Curriculum, SACE and VCE. Every question is mapped to your syllabus — nothing off-syllabus, nothing wasted — and the bank keeps growing as you practise.</p>
                 </div>
                 <div className="lp-stats lp-sace-stats" style={{ display:'flex', gap:20, minWidth:0, flexWrap:'wrap' }}>
                   {[['∞','Questions'],['100%','Curriculum-aligned'],['24/7','AI tutor']].map(([n,l]) => (

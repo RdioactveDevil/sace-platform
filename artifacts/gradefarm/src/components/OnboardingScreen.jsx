@@ -161,9 +161,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
         {[
-          { num: '500+', label: 'Questions' },
-          { num: 'SACE', label: 'Aligned' },
-          { num: 'Free', label: 'Beta access' },
+          { num: '1,000+', label: 'Questions' },
+          { num: '24/7', label: 'AI tutor' },
+          { num: '1 free', label: 'Subject to start' },
         ].map((s, i) => (
           <div key={s.label} style={{
             flex: 1, padding: '12px 8px', borderRadius: 12,

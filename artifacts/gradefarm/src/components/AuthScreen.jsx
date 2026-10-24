@@ -106,7 +106,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
               <span style={{ color:GOLD }}>SCORE HIGHER.</span>
             </h2>
             <p style={{ fontSize:14, color:'rgba(255,255,255,0.45)', lineHeight:1.7, margin:0, maxWidth:340 }}>
-              The adaptive study platform built for SACE students who want results — not more hours grinding.
+              The adaptive study platform for students who want results — not more hours grinding.
             </p>
           </div>
 
@@ -126,8 +126,8 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
               ))}
             </div>
             <div>
-              <div style={{ fontSize:13, fontWeight:700, color:'#f1f5f9' }}>Joined by SACE students</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)' }}>Free during beta</div>
+              <div style={{ fontSize:13, fontWeight:700, color:'#f1f5f9' }}>Built by Titanium Tutoring</div>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)' }}>Your first subject is free</div>
             </div>
           </div>
         </div>
@@ -146,7 +146,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
             {mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : 'Create your account'}
           </h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', margin:'0 0 28px' }}>
-            {mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one." : 'Free during beta. No credit card required.'}
+            {mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one." : 'Your first subject is free. No credit card required.'}
           </p>
 
           {mode !== 'reset' && <div style={{ display:'flex', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:4, marginBottom:24, gap:4 }}>
@@ -220,7 +220,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
           )}
 
           {mode === 'signup' && (
-            <p style={{ margin:'14px 0 0', fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center' }}>Free during beta · No credit card needed</p>
+            <p style={{ margin:'14px 0 0', fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center' }}>First subject free · No credit card needed</p>
           )}
         </div>
       </div>
