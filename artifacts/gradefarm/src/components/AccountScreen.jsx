@@ -672,16 +672,22 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       <div style={{ ...card, borderColor: 'rgba(239,68,68,0.3)' }}>
         <CardTitle t={t} title="Delete account" sub={profile.is_admin
           ? 'Admin accounts can\'t be deleted here. Ask another admin to remove your admin access first.'
-          : 'Permanently delete your account and everything tied to it. This can\'t be undone.'} />
-        {!profile.is_admin && (!deleteOpen ? (
+          : profile.is_tutor
+            ? 'Your students rely on your classes, lessons and recordings, so tutor accounts are closed by our team. We\'ll move your classes over first.'
+            : 'Permanently delete your account and everything tied to it. This can\'t be undone.'} />
+        {profile.is_tutor && !profile.is_admin && (
+          <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Close my GradeFarm tutor account')}&body=${encodeURIComponent(`Hi,\n\nPlease close my GradeFarm tutor account.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`)}`}
+            style={{ ...btn('danger'), textDecoration: 'none', display: 'inline-block' }}>Contact support</a>
+        )}
+        {isStudent && (!deleteOpen ? (
           <button type="button" onClick={() => setDeleteOpen(true)} style={btn('danger')}>Delete my account…</button>
         ) : (
           <>
             <ul style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, margin: '0 0 14px', paddingLeft: 18 }}>
               <li>Your profile, XP, streaks, practice history, study plan and messages are deleted.</li>
-              {isStudent && <li>Any paid plan is cancelled straight away and you won't be charged again. There's no refund for the current week.</li>}
-              {isStudent && <li>You're removed from your tutors' rosters and classes.</li>}
-              {profile.is_tutor && <li>Classes, assignments and resources you created are deleted for your students too.</li>}
+              <li>Any paid plan is cancelled straight away and you won't be charged again. There's no refund for the current week.</li>
+              <li>You're removed from your tutors' rosters and classes.</li>
+              <li>Recordings of your one-on-one lessons are deleted. Class recordings stay available to the rest of your class.</li>
               <li>We may keep payment records for as long as the law requires.</li>
             </ul>
             <div className="acct-form">

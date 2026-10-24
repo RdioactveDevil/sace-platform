@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from "express";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, verifyPassword } from "../lib/auth";
 import { cancelAllSubscriptions, getStripe, syncCustomerEmail } from "./billing";
 import { getResend, sendEmail } from "../lib/email";
+import { r2DeleteObject } from "../lib/r2";
 import { logger } from "../lib/logger";
 
 // The signed-in user's own account: self-serve deletion, and keeping Stripe's
@@ -11,15 +13,61 @@ const router = Router();
 
 const fail = (res: Response, status: number, error: string) => void res.status(status).json({ error });
 
+/** Bucket for recordings kept on Supabase Storage (see routes/resources.ts). */
+const RESOURCES_BUCKET = "tutor-resources";
+
+type StoredFile = { path: string; backend: "r2" | "supabase" };
+
+/**
+ * Recording files of the student's one-on-one lessons. Their rows cascade away
+ * with the account, so nobody could reach the files afterwards, and they're the
+ * student's own face and voice. Class and group recordings have no student_id
+ * and are untouched: the rest of the class keeps them.
+ */
+async function oneOnOneRecordingFiles(admin: SupabaseClient, userId: string): Promise<StoredFile[]> {
+  const [{ data: resources, error: rErr }, { data: sessions, error: sErr }] = await Promise.all([
+    admin.from("tutor_resources").select("storage_path, storage_backend")
+      .eq("student_id", userId).eq("type", "recording").eq("kind", "file").not("storage_path", "is", null),
+    admin.from("tutoring_sessions").select("recording_storage_path, recording_storage_backend")
+      .eq("student_id", userId).not("recording_storage_path", "is", null),
+  ]);
+  if (rErr || sErr) throw new Error((rErr ?? sErr)!.message);
+  const files = new Map<string, StoredFile>();
+  const add = (path: string | null, backend: string | null) => {
+    if (!path) return;
+    const b = backend === "r2" ? "r2" : "supabase";
+    files.set(`${b}:${path}`, { path, backend: b });
+  };
+  for (const r of (resources ?? []) as { storage_path: string | null; storage_backend: string | null }[]) add(r.storage_path, r.storage_backend);
+  for (const s of (sessions ?? []) as { recording_storage_path: string | null; recording_storage_backend: string | null }[]) {
+    add(s.recording_storage_path, s.recording_storage_backend);
+  }
+  return [...files.values()];
+}
+
+async function deleteStoredFiles(admin: SupabaseClient, files: StoredFile[], userId: string): Promise<void> {
+  for (const f of files.filter((x) => x.backend === "r2")) await r2DeleteObject(f.path);
+  const onSupabase = files.filter((x) => x.backend === "supabase").map((x) => x.path);
+  if (onSupabase.length) {
+    const { error } = await admin.storage.from(RESOURCES_BUCKET).remove(onSupabase);
+    if (error) logger.warn({ userId, error: error.message }, "account: couldn't remove recording files");
+  }
+}
+
 // DELETE /account — { password }: permanently delete the caller's account.
-// Cancels any Stripe plan first, then deletes the auth user, which cascades to
-// profiles and every row that references it (same as the admin delete).
+// Students only. Cancels any Stripe plan first, then deletes the auth user,
+// which cascades to profiles and every row that references it (same as the
+// admin delete), then removes their one-on-one lesson recordings.
 router.delete("/account", async (req: Request, res: Response) => {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
   const { admin, userId } = ctx;
   if (userId === "service") return fail(res, 400, "Not a user account");
   if (ctx.isAdmin) return fail(res, 403, "Admin accounts can't be deleted here. Ask another admin to remove your admin access first.");
+  // A tutor's classes, sessions and recordings are what their students learn
+  // from, and deleting the tutor cascades all of it away. An admin hands those
+  // over first.
+  if (ctx.isTutor) return fail(res, 403, "Tutor accounts can't be deleted here. Contact support@titaniumtutoring.com.au and we'll move your classes over first.");
 
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!password) return fail(res, 400, "Enter your password to confirm.");
@@ -42,9 +90,12 @@ router.delete("/account", async (req: Request, res: Response) => {
     await admin.from("draft_questions").update({ reviewed_by: null }).eq("reviewed_by", userId);
 
     const { data: profile } = await admin.from("profiles").select("display_name").eq("id", userId).maybeSingle<{ display_name: string | null }>();
+    const recordings = await oneOnOneRecordingFiles(admin, userId);
     const { error: delErr } = await admin.auth.admin.deleteUser(userId);
     if (delErr) throw new Error(delErr.message);
-    logger.info({ userId }, "account: user deleted their account");
+    logger.info({ userId, recordings: recordings.length }, "account: user deleted their account");
+    // Only once the account is gone, so a failed delete never loses recordings.
+    await deleteStoredFiles(admin, recordings, userId);
 
     const resend = getResend();
     if (resend) {
