@@ -800,6 +800,10 @@ function AppInner() {
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
   const [welcomeCelebration, setWelcomeCelebration] = useState(false)
+  // The first-run feature tour. Latched open: onSeen records it as seen the
+  // moment it mounts (so it never shows twice), which would otherwise make
+  // tourDue false and close it before the student saw anything.
+  const [tourOpen, setTourOpen] = useState(false)
 
   const refreshSubscriptions = async () => {
     try {
@@ -1033,6 +1037,7 @@ function AppInner() {
 
   const handleSignOut = async () => {
     setWelcomeCelebration(false)
+    setTourOpen(false)
     await signOut()
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
@@ -1206,6 +1211,9 @@ function AppInner() {
     },
   }
 
+  const tourDue = !!(user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject)
+  useEffect(() => { if (tourDue) setTourOpen(true) }, [tourDue])
+
   // Also while a just-signed-in user's profile loads, so the landing or sign-in
   // page doesn't flash before the redirect into the app.
   if ((!bootstrapped || (user && !profile)) && loading) return (
@@ -1227,7 +1235,7 @@ function AppInner() {
   )
 
   const tutorialOverlay =
-    user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject
+    tourOpen && user && profile
       ? {
           isTutor: !!profile.is_tutor,
           theme,
@@ -1246,7 +1254,9 @@ function AppInner() {
               console.error('[tutorial seen]', e)
             }
           },
+          // Skip and Done both end here.
           onFinish: () => {
+            setTourOpen(false)
             setWelcomeCelebration(true)
           },
         }
