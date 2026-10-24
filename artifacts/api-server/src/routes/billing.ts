@@ -352,6 +352,42 @@ export async function removePaidSubject(
   return { endsAt: null };
 }
 
+/**
+ * End every subscription the student's Stripe customer still has, now, before
+ * their account is deleted, so nothing bills an account that no longer
+ * exists. The customer itself stays in Stripe for payment records.
+ */
+export async function cancelAllSubscriptions(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<void> {
+  const row = await customerRow(admin, userId);
+  if (!row) return;
+  const subs = await stripe.subscriptions
+    .list({ customer: row.stripe_customer_id, status: "all", limit: 100 })
+    .catch((err) => {
+      if (isMissing(err)) return null;
+      throw err;
+    });
+  for (const sub of subs?.data ?? []) {
+    if (sub.status === "canceled" || sub.status === "incomplete_expired") continue;
+    await stripe.subscriptions.cancel(sub.id);
+  }
+}
+
+/** Point the student's Stripe customer (receipts, portal) at their current sign-in email. */
+export async function syncCustomerEmail(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<boolean> {
+  const row = await customerRow(admin, userId);
+  if (!row) return false;
+  const { data } = await admin.auth.admin.getUserById(userId);
+  const email = data?.user?.email;
+  if (!email) return false;
+  const customer = await stripe.customers.retrieve(row.stripe_customer_id).catch((err) => {
+    if (isMissing(err)) return null;
+    throw err;
+  });
+  if (!customer || customer.deleted || customer.email === email) return false;
+  await stripe.customers.update(customer.id, { email });
+  return true;
+}
+
 // DELETE /billing/subjects/:rowId — the student stops paying for a subject.
 router.delete("/billing/subjects/:rowId", async (req: Request, res: Response) => {
   const ctx = await requireUser(req, res);

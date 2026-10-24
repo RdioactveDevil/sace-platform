@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal, Flame, Trophy, Zap, CalendarDays, Eye, EyeOff, Moon, Sun } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, RANKS, XP_LEVELS } from '../lib/engine'
-import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject } from '../lib/db'
+import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
 import { formatSubjectLabel } from '../lib/subjects'
 import { supabase } from '../lib/supabase'
 import RankIcon from './RankIcon'
@@ -222,9 +222,12 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   useEffect(() => {
     let cancelled = false
     supabase.auth.getUser().then(({ data }) => { if (!cancelled) setAuthUser(data?.user || null) }).catch(() => {})
+    // Receipts go to the email on the Stripe customer; keep it on the current sign-in email.
+    if (isStudent) syncBillingEmail().catch(() => {})
     return () => { cancelled = true }
-  }, [profile.id])
+  }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const email = authUser?.email || ''
+  const pendingEmail = authUser?.new_email || ''
   const memberSince = profile.created_at || authUser?.created_at
 
   // ── Profile form ──
@@ -251,6 +254,19 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const [savingPw, setSavingPw]         = useState(false)
   const [pwMsg, setPwMsg]               = useState(null) // { ok, text }
   const [signingOutAll, setSigningOutAll] = useState(false)
+
+  // ── Email change ──
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [newEmail, setNewEmail]         = useState('')
+  const [savingEmail, setSavingEmail]   = useState(false)
+  const [emailMsg, setEmailMsg]         = useState(null) // { ok, text }
+
+  // ── Delete account ──
+  const [deleteOpen, setDeleteOpen]     = useState(false)
+  const [deletePw, setDeletePw]         = useState('')
+  const [deleteWord, setDeleteWord]     = useState('')
+  const [deleting, setDeleting]         = useState(false)
+  const [deleteMsg, setDeleteMsg]       = useState('')
 
   const [replayTourBusy, setReplayTourBusy] = useState(false)
 
@@ -340,6 +356,38 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     onSignOut()
   }
 
+  const newEmailTrim = newEmail.trim()
+  const newEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmailTrim) && newEmailTrim.toLowerCase() !== email.toLowerCase()
+  const handleChangeEmail = async () => {
+    if (!newEmailValid || savingEmail) return
+    setSavingEmail(true); setEmailMsg(null)
+    try {
+      const user = await changeEmail(newEmailTrim)
+      if (user) setAuthUser(user)
+      setEditingEmail(false); setNewEmail('')
+      setEmailMsg({ ok: true, text: `Check ${newEmailTrim} for a confirmation link. If one also arrives at ${email}, confirm that too. Until then you keep signing in with ${email}.` })
+    } catch (e) {
+      setEmailMsg({ ok: false, text: e.message || "Couldn't start the email change." })
+    } finally {
+      setSavingEmail(false)
+    }
+  }
+
+  const canDelete = deletePw.length > 0 && deleteWord.trim().toUpperCase() === 'DELETE'
+  const handleDeleteAccount = async () => {
+    if (!canDelete || deleting) return
+    setDeleting(true); setDeleteMsg('')
+    try {
+      await deleteMyAccount(deletePw)
+    } catch (e) {
+      setDeleteMsg(e.message || "Couldn't delete your account.")
+      setDeleting(false)
+      return
+    }
+    window.alert('Your account has been deleted.')
+    onSignOut()
+  }
+
   const handleToggleReminders = async () => {
     const nextOn = !remindersOn
     setSavingReminders(true); setRemindersMsg('')
@@ -366,9 +414,6 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     }
   }
 
-  const deletionMailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Delete my GradeFarm account')}&body=${encodeURIComponent(
-    `Hi,\n\nPlease delete my GradeFarm account and the data tied to it.\n\nAccount email: ${email || '(the email I signed up with)'}\nName: ${profile.display_name || ''}\n\nThanks`,
-  )}`
   const exportMailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Copy of my GradeFarm data')}&body=${encodeURIComponent(
     `Hi,\n\nPlease send me a copy of the personal information GradeFarm holds about me.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`,
   )}`
@@ -492,7 +537,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
         <Field t={t} label="Display name">
           <input value={form.display_name} onChange={setField('display_name')} maxLength={60} style={{ ...inputStyle, borderColor: nameMissing ? 'rgba(248,113,113,0.5)' : t.border }} />
         </Field>
-        <Field t={t} label="Email" hint="Contact support to change the email you sign in with.">
+        <Field t={t} label="Email" hint={pendingEmail ? `Changing to ${pendingEmail}, waiting for confirmation.` : 'Change it under Security & privacy.'}>
           <input value={email} readOnly disabled style={{ ...inputStyle, opacity: 0.7, cursor: 'not-allowed' }} />
         </Field>
         {isStudent && (
@@ -548,6 +593,31 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     <>
       <div style={card}>
         <CardTitle t={t} title="Sign-in" sub={email ? <>You sign in as <strong style={{ color: t.text }}>{email}</strong>{authUser?.last_sign_in_at ? ` · last signed in ${longDate(authUser.last_sign_in_at)}` : ''}.</> : null} />
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Email address</div>
+        {pendingEmail && !emailMsg && (
+          <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 10, lineHeight: 1.5 }}>
+            Waiting for you to confirm <strong style={{ color: t.text }}>{pendingEmail}</strong> from the link we emailed.
+          </div>
+        )}
+        {editingEmail ? (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              type="email" autoComplete="email" aria-label="New email address" placeholder="New email address"
+              value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleChangeEmail()}
+              style={{ ...inputStyle, flex: '1 1 220px', width: 'auto' }} autoFocus
+            />
+            <button type="button" onClick={handleChangeEmail} disabled={!newEmailValid || savingEmail} style={btn('primary', !newEmailValid || savingEmail)}>
+              {savingEmail ? 'Sending…' : 'Send confirmation'}
+            </button>
+            <button type="button" onClick={() => { setEditingEmail(false); setNewEmail('') }} style={btn('secondary')}>Cancel</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { setEditingEmail(true); setEmailMsg(null) }} style={btn('secondary')}>Change email</button>
+        )}
+        {msgLine(emailMsg)}
+
+        <div style={{ height: 1, background: t.border, margin: '18px 0' }} />
         <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Change password</div>
         <div className="acct-form">
           <div style={{ position: 'relative' }}>
@@ -588,21 +658,49 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       </div>
 
       <div style={card}>
-        <CardTitle t={t} title="Your data" sub="You can ask for a copy of the information we hold about you, or for your account and its data to be deleted. We action requests within 30 days." />
+        <CardTitle t={t} title="Your data" sub="You can ask for a copy of the information we hold about you. We action requests within 30 days." />
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           <a href={exportMailto} style={{ ...btn('secondary'), textDecoration: 'none', display: 'inline-block' }}>Request a copy of my data</a>
-          <a href={deletionMailto} style={{ ...btn('danger'), textDecoration: 'none', display: 'inline-block' }}>Request account deletion</a>
         </div>
-        {isStudent && (
-          <p style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.5, marginBottom: 10 }}>
-            Deleting your account doesn't cancel a paid plan by itself — remove your paid subjects under Subjects &amp; billing first.
-          </p>
-        )}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12.5 }}>
           <button type="button" onClick={() => navigate('/privacy')} style={{ border: 'none', background: 'none', padding: 0, color: t.goldText || GOLD, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Privacy Policy</button>
           <button type="button" onClick={() => navigate('/terms')} style={{ border: 'none', background: 'none', padding: 0, color: t.goldText || GOLD, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Terms of Service</button>
           <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: t.textMuted, fontWeight: 600, textDecoration: 'none' }}>{SUPPORT_EMAIL}</a>
         </div>
+      </div>
+
+      <div style={{ ...card, borderColor: 'rgba(239,68,68,0.3)' }}>
+        <CardTitle t={t} title="Delete account" sub={profile.is_admin
+          ? 'Admin accounts can\'t be deleted here. Ask another admin to remove your admin access first.'
+          : 'Permanently delete your account and everything tied to it. This can\'t be undone.'} />
+        {!profile.is_admin && (!deleteOpen ? (
+          <button type="button" onClick={() => setDeleteOpen(true)} style={btn('danger')}>Delete my account…</button>
+        ) : (
+          <>
+            <ul style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, margin: '0 0 14px', paddingLeft: 18 }}>
+              <li>Your profile, XP, streaks, practice history, study plan and messages are deleted.</li>
+              {isStudent && <li>Any paid plan is cancelled straight away and you won't be charged again. There's no refund for the current week.</li>}
+              {isStudent && <li>You're removed from your tutors' rosters and classes.</li>}
+              {profile.is_tutor && <li>Classes, assignments and resources you created are deleted for your students too.</li>}
+              <li>We may keep payment records for as long as the law requires.</li>
+            </ul>
+            <div className="acct-form">
+              <Field t={t} label="Your password">
+                <input type="password" autoComplete="current-password" value={deletePw} onChange={e => setDeletePw(e.target.value)} style={inputStyle} />
+              </Field>
+              <Field t={t} label="Type DELETE to confirm">
+                <input value={deleteWord} onChange={e => setDeleteWord(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleDeleteAccount()} autoComplete="off" style={inputStyle} />
+              </Field>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+              <button type="button" onClick={handleDeleteAccount} disabled={!canDelete || deleting} style={{ ...btn('danger', !canDelete || deleting), ...(canDelete && !deleting ? { background: t.danger, color: '#fff', border: 'none' } : {}) }}>
+                {deleting ? 'Deleting…' : 'Permanently delete my account'}
+              </button>
+              <button type="button" onClick={() => { setDeleteOpen(false); setDeletePw(''); setDeleteWord(''); setDeleteMsg('') }} disabled={deleting} style={btn('secondary', deleting)}>Cancel</button>
+            </div>
+            {deleteMsg && <div role="alert" style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{deleteMsg}</div>}
+          </>
+        ))}
       </div>
     </>
   )

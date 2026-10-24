@@ -32,7 +32,7 @@ const SECTIONS = [
   },
   {
     title: '7. Data Retention',
-    body: `We retain your personal data for as long as your account is active. You may request deletion of your account and associated data at any time by contacting support@titaniumtutoring.com.au. We will process deletion requests within 30 days. We may keep payment records for as long as the law requires.`,
+    body: `We retain your personal data for as long as your account is active. You can delete your account and associated data at any time in My Account under Security & privacy, which takes effect immediately and cancels any paid plan. You can also ask us to delete it by contacting support@titaniumtutoring.com.au, and we will process emailed requests within 30 days. We may keep payment records for as long as the law requires.`,
   },
   {
     title: '8. Data Storage and Security',
