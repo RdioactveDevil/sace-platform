@@ -874,8 +874,10 @@ function AppInner() {
   // the background as soon as we know about it, so they're usually ready by
   // the time the student gets there.
   const [myDiagnostics, setMyDiagnostics] = useState([])
+  const [diagnosticsLoaded, setDiagnosticsLoaded] = useState(false)
   const refreshDiagnostics = useCallback(async () => {
     try { setMyDiagnostics(await fetchMyDiagnostics()) } catch {}
+    setDiagnosticsLoaded(true)
   }, [])
   const isStudent = !!(user && profile && !profile.is_tutor && !profile.is_admin)
   useEffect(() => { if (isStudent) refreshDiagnostics() }, [isStudent, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1125,6 +1127,8 @@ function AppInner() {
     setWelcomeCelebration(false)
     setTourOpen(false)
     await signOut()
+    setMyDiagnostics([])
+    setDiagnosticsLoaded(false)
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
     clearQuestions()
@@ -1297,7 +1301,11 @@ function AppInner() {
     },
   }
 
-  const tourDue = !!(user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject)
+  // A student's tour waits for their diagnostics to load and for any due on
+  // this subject to be done: the tour lives in the app shell, which the
+  // check-in screen replaces, and it counts as seen the moment it opens.
+  const tourDue = !!(user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject &&
+    (!isStudent || (diagnosticsLoaded && !diagnosticDue)))
   useEffect(() => { if (tourDue) setTourOpen(true) }, [tourDue])
 
   // Also while a just-signed-in user's profile loads, so the landing or sign-in
