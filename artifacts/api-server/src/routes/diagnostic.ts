@@ -4,6 +4,8 @@ import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { latexPromptRule } from "../lib/math-prompt";
 import { repairLatexJson } from "../lib/json-latex";
 import { logger } from "../lib/logger";
+import { requireUser } from "../lib/auth";
+import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -55,6 +57,13 @@ interface DiagnosticAssessment {
   report: DiagnosticReport | null;
   score_total: number | null;
   score_max: number;
+  // Set for a tutor-included subject's diagnostic (lib/student-diagnostic.ts).
+  student_id: string | null;
+  curriculum_id: string | null;
+  subtopic_ids: string[];
+  generation_started_at: string | null;
+  questions_ready_at: string | null;
+  waived_at: string | null;
 }
 
 interface QuestionResult {
@@ -74,6 +83,10 @@ interface TopicBreakdown {
   percentage: number;
 }
 
+interface SubtopicBreakdown extends TopicBreakdown {
+  subtopic: string;
+}
+
 interface DiagnosticReport {
   total_score: number;
   max_score: number;
@@ -87,6 +100,7 @@ interface DiagnosticReport {
   exam_max: number;
   question_results: QuestionResult[];
   topic_breakdown: TopicBreakdown[];
+  subtopic_breakdown?: SubtopicBreakdown[];
   pain_points: string[];
   patterns: string[];
   recommendations: string[];
@@ -303,6 +317,91 @@ Return a JSON object: { "questions": [ ...array of question objects... ] }`;
   return questions;
 }
 
+// ── Curriculum diagnostic (tutor-included subjects) ───────────────────────────
+
+/** Questions in a tutor-included subject's diagnostic, by section. */
+const STUDENT_DIAGNOSTIC_SECTIONS = { easy: 8, moderate: 7, exam: 5 } as const;
+const STUDENT_DIAGNOSTIC_QUESTIONS = 20;
+
+const isWritingSubject = (name: string) => /english|writing|literature|essay|history|legal|humanities/i.test(name);
+
+/** A generated question the student can actually answer and we can mark, or null. */
+function validQuestion(q: Partial<DiagnosticQuestion>): DiagnosticQuestion | null {
+  if (!q || typeof q.question !== "string" || !q.question.trim() || typeof q.topic !== "string") return null;
+  if (!["multiple_choice", "short_answer", "extended_response"].includes(q.type ?? "")) return null;
+  if (!["easy", "moderate", "exam"].includes(q.difficulty ?? "")) return null;
+  const correct = String(q.correct_answer ?? "").trim();
+  if (q.type === "multiple_choice" && (!Array.isArray(q.options) || q.options.length !== 4 || !/^[A-D]$/i.test(correct))) return null;
+  if (!correct) return null;
+  return {
+    ...(q as DiagnosticQuestion),
+    correct_answer: q.type === "multiple_choice" ? correct.toUpperCase() : correct,
+    marks: Math.max(1, Math.round(Number(q.marks) || 1)),
+  };
+}
+
+/**
+ * Write a tutor-included subject's 20-question diagnostic, spread across the
+ * curriculum topics and subtopics it covers. Each question carries the exact
+ * topic and subtopic names, so the results point back to what to practise.
+ */
+async function generateCurriculumDiagnostic(subject: string, level: string, scope: ScopeTopic[]): Promise<DiagnosticQuestion[]> {
+  if (!scope.length) throw new Error("This subject has no topics to build a diagnostic from yet.");
+  const outline = scope.map((t) => (t.subtopics.length ? `- ${t.topic}: ${t.subtopics.join("; ")}` : `- ${t.topic}`)).join("\n");
+  const { easy, moderate, exam } = STUDENT_DIAGNOSTIC_SECTIONS;
+  const writing = isWritingSubject(subject);
+
+  const system = `You are an expert Australian curriculum test designer. You write diagnostic assessments that show a tutor exactly what a new student knows and where their gaps are. Always return strict, parseable JSON — no markdown fences, no extra commentary.
+
+${latexPromptRule("$$\\int_0^1 x^2\\,dx$$")}`;
+
+  const user = `Write a ${STUDENT_DIAGNOSTIC_QUESTIONS}-question diagnostic for a ${level} student in ${subject}, covering these topics and subtopics (topic: subtopic; subtopic; …):
+
+${outline}
+
+Exactly ${STUDENT_DIAGNOSTIC_QUESTIONS} questions in three sections, in this order:
+- ${easy} "easy" questions: "multiple_choice", 1 mark each. Core facts, definitions and routine one-step skills.
+- ${moderate} "moderate" questions: 2 marks each, "multiple_choice" or "short_answer". Applying a skill in a familiar context.
+- ${exam} "exam" questions: 3 marks each, "short_answer"${writing ? ' or "extended_response" (a paragraph)' : ""}. Exam-style, multi-step reasoning.
+
+Each question object has exactly these fields:
+{
+  "id": <integer starting at 1>,
+  "question": "<full question text>",
+  "type": "multiple_choice" | "short_answer" | "extended_response",
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],  (multiple_choice only)
+  "correct_answer": "<the letter for multiple_choice, else a full model answer>",
+  "marks": <integer>,
+  "difficulty": "easy" | "moderate" | "exam",
+  "topic": "<topic name, copied exactly from the list>",
+  "subtopic": "<subtopic name, copied exactly from the list>",
+  "solution_notes": "<brief explanation of the correct answer, for marking>"
+}
+
+Rules:
+1. Spread the questions across as many different subtopics as possible, every topic at least once. If there are more subtopics than questions, pick the most fundamental ones.
+2. Copy topic and subtopic names exactly as written in the list.
+3. Multiple choice: exactly 4 options labelled A–D, a single uppercase letter as correct_answer, and distractors based on common misconceptions.
+4. Every question must stand alone: no diagrams, graphs or tables the student can't see.
+5. Pitch each section at ${level}, as described above.
+6. ALL mathematical expressions use LaTeX with $ delimiters.
+
+Return a JSON object: { "questions": [ ... ] }`;
+
+  const raw = await callClaude(system, user, 16000, true);
+  const parsed = extractJson(raw) as { questions?: unknown } | unknown[] | null;
+  const list = Array.isArray(parsed) ? parsed : Array.isArray((parsed as { questions?: unknown })?.questions) ? (parsed as { questions: unknown[] }).questions : [];
+  const order = { easy: 0, moderate: 1, exam: 2 } as const;
+  const questions = list
+    .map((q) => validQuestion(q as Partial<DiagnosticQuestion>))
+    .filter((q): q is DiagnosticQuestion => !!q)
+    .sort((a, b) => order[a.difficulty] - order[b.difficulty])
+    .slice(0, STUDENT_DIAGNOSTIC_QUESTIONS)
+    .map((q, i) => ({ ...q, id: i + 1 }));
+  if (questions.length < 15) throw new Error("The diagnostic couldn't be written just now. Please try again.");
+  return questions;
+}
+
 // ── AI Marking ────────────────────────────────────────────────────────────────
 
 async function markAssessment(
@@ -410,6 +509,20 @@ Return JSON: { "results": [ { "id": <int>, "marks_awarded": <int>, "feedback": "
     percentage: possible > 0 ? Math.round((awarded / possible) * 100) : 0,
   }));
 
+  const subtopicMap: Record<string, SubtopicBreakdown> = {};
+  for (const r of allResults) {
+    const q = questions.find((q) => q.id === r.id);
+    if (!q?.subtopic) continue;
+    const key = `${q.topic}\u0000${q.subtopic}`;
+    subtopicMap[key] ??= { topic: q.topic, subtopic: q.subtopic, marks_awarded: 0, marks_possible: 0, percentage: 0 };
+    subtopicMap[key].marks_awarded  += r.marks_awarded;
+    subtopicMap[key].marks_possible += r.marks_possible;
+  }
+  const subtopicBreakdown = Object.values(subtopicMap).map((s) => ({
+    ...s,
+    percentage: s.marks_possible > 0 ? Math.round((s.marks_awarded / s.marks_possible) * 100) : 0,
+  }));
+
   // Generate AI report narrative
   const weakTopics = topicBreakdown.filter((t) => t.percentage < 60).map((t) => t.topic);
   const reportSystem = `You are an expert educational diagnostician. Write a concise, actionable diagnostic report for a tutor based on a student's assessment results. Be specific and practical.`;
@@ -461,6 +574,7 @@ Be specific. Reference actual topics and marks. Limit to 4–5 items per array.`
     exam_max:      sum(examResults,  "marks_possible"),
     question_results: allResults,
     topic_breakdown: topicBreakdown,
+    subtopic_breakdown: subtopicBreakdown,
     pain_points:      reportParsed?.pain_points      || weakTopics.map((t) => `Needs work on ${t}`),
     patterns:         reportParsed?.patterns         || [],
     recommendations:  reportParsed?.recommendations  || [],
@@ -599,17 +713,23 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     const { data, error } = await admin
       .from("diagnostic_assessments")
-      .select("id, token, year_level, subjects, questions, status, student_name, score_max, pre_call_form_url, completed_at")
+      .select("id, token, year_level, subjects, questions, status, student_name, score_max, pre_call_form_url, completed_at, student_id, questions_ready_at, report")
       .eq("token", token)
-      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "status" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at">>();
+      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "status" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "student_id" | "questions_ready_at" | "report">>();
 
     if (error || !data) return res.status(404).json({ error: "Assessment not found" });
 
+    const { student_id, questions_ready_at, report, ...rest } = data;
     // Never send correct answers to the student
     return res.json({
       assessment: {
-        ...data,
+        ...rest,
         questions: sanitiseQuestionsForStudent(data.questions),
+        // A tutor-included subject's diagnostic: written on first use
+        // (POST …/prepare), and the student sees a summary when it's done.
+        linked: !!student_id,
+        ready: !student_id || !!questions_ready_at,
+        summary: student_id && report ? studentSummary(report) : null,
       },
     });
   } catch (err) {
@@ -640,6 +760,7 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
     if (data.status === "completed") {
       return res.status(400).json({ error: "This assessment has already been submitted." });
     }
+    if (!data.questions?.length) return res.status(409).json({ error: "This diagnostic isn't ready yet." });
 
     // Run AI marking
     const report = await markAssessment(data.questions, answers, data.year_level, data.subjects);
@@ -650,7 +771,7 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       .update({
         status:            "completed",
         completed_at:      new Date().toISOString(),
-        submitted_by_name: (studentName || "").trim() || null,
+        submitted_by_name: (studentName || "").trim() || data.student_name || null,
         student_answers:   answers,
         report:            report,
         score_total:       report.total_score,
@@ -658,6 +779,9 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       .eq("token", token);
 
     if (updateError) throw new Error(updateError.message);
+
+    // A student's own diagnostic: they get the summary; the tutor gets the report.
+    if (data.student_id) return res.json({ linked: true, summary: studentSummary(report) });
 
     return res.json({
       score:    report.total_score,
@@ -670,6 +794,87 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
+  }
+});
+
+// ── Diagnostics for tutor-included subjects (lib/student-diagnostic.ts) ──────
+
+/** GET /diagnostics/mine — the signed-in student's diagnostics, one per subject. */
+router.get("/diagnostics/mine", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireUser(req, res);
+    if (!caller) return;
+    const { data, error } = await caller.admin
+      .from("diagnostic_assessments")
+      .select("token, curriculum_id, subjects, status, questions_ready_at, waived_at, completed_at, report")
+      .eq("student_id", caller.userId);
+    if (error) throw new Error(error.message);
+    type Row = Pick<DiagnosticAssessment, "token" | "curriculum_id" | "subjects" | "status" | "questions_ready_at" | "waived_at" | "completed_at" | "report">;
+    return res.json({
+      diagnostics: ((data ?? []) as Row[]).map((d) => ({
+        token: d.token,
+        curriculum_id: d.curriculum_id,
+        subject: d.subjects?.[0]?.name ?? null,
+        status: d.status === "completed" ? "completed" : d.waived_at ? "waived" : "pending",
+        ready: !!d.questions_ready_at,
+        completed_at: d.completed_at,
+        summary: d.report ? studentSummary(d.report) : null,
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** Someone else started writing the questions this recently: wait for them rather than start again. */
+const GENERATION_CLAIM_MS = 5 * 60 * 1000;
+
+/**
+ * POST /diagnostic/:token/prepare — write a tutor-included subject's
+ * diagnostic questions, once. { ready: true } when they're written (now or
+ * before); 202 { ready: false } while another request is writing them.
+ */
+router.post("/diagnostic/:token/prepare", async (req: Request, res: Response) => {
+  try {
+    const admin = getAdminClient();
+    const { data } = await admin
+      .from("diagnostic_assessments")
+      .select("id, student_id, curriculum_id, subtopic_ids, subjects, year_level, status, questions_ready_at")
+      .eq("token", String(req.params.token))
+      .maybeSingle<Pick<DiagnosticAssessment, "id" | "student_id" | "curriculum_id" | "subtopic_ids" | "subjects" | "year_level" | "status" | "questions_ready_at">>();
+    if (!data) return res.status(404).json({ error: "Assessment not found" });
+    if (!data.student_id || !data.curriculum_id) return res.status(400).json({ error: "This assessment is already written." });
+    if (data.questions_ready_at || data.status === "completed") return res.json({ ready: true });
+
+    const staleBefore = new Date(Date.now() - GENERATION_CLAIM_MS).toISOString();
+    const { data: claimed, error: claimErr } = await admin
+      .from("diagnostic_assessments")
+      .update({ generation_started_at: new Date().toISOString() })
+      .eq("id", data.id)
+      .is("questions_ready_at", null)
+      .or(`generation_started_at.is.null,generation_started_at.lt."${staleBefore}"`)
+      .select("id");
+    if (claimErr) throw new Error(claimErr.message);
+    if (!claimed?.length) return res.status(202).json({ ready: false });
+
+    try {
+      const { topics } = await diagnosticScope(admin, data.curriculum_id, data.subtopic_ids ?? []);
+      const questions = await generateCurriculumDiagnostic(data.subjects?.[0]?.name || "this subject", data.year_level, topics);
+      const { error } = await admin
+        .from("diagnostic_assessments")
+        .update({ questions, score_max: questions.reduce((n, q) => n + q.marks, 0), questions_ready_at: new Date().toISOString() })
+        .eq("id", data.id);
+      if (error) throw new Error(error.message);
+    } catch (err) {
+      await admin.from("diagnostic_assessments").update({ generation_started_at: null }).eq("id", data.id);
+      throw err;
+    }
+    return res.json({ ready: true });
+  } catch (err) {
+    logger.error({ err }, "diagnostic: could not prepare a student diagnostic");
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(502).json({ error: message });
   }
 });
 

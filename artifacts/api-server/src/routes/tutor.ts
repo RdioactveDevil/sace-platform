@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM, appUrl } from "../lib/email";
 import { IncludedSubjectError, canIncludeSubject, includeSubject, removeIncludedSubject } from "../lib/included-subject";
+import { createStudentDiagnostic, waiveDiagnostic } from "../lib/student-diagnostic";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -969,6 +970,8 @@ interface StudentDetail {
   tutored: SubjectRow[];                   // subjects THIS tutor tutors (their selection)
   subscriptions: { subject_name: string; stage: string | null }[]; // student's onboarding subjects
   included: { subject_name: string; stage: string | null }[]; // subjects THIS tutor includes (free)
+  // Diagnostics on tutor-included subjects (lib/student-diagnostic.ts), by any tutor.
+  diagnostics: { curriculum_id: string; status: "pending" | "waived" | "completed"; percentage: number | null }[];
 }
 
 // GET /tutor/roster-details — per-student year level + subjects (onboarding + tutor selection)
@@ -989,7 +992,7 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     const byStudent: Record<string, StudentDetail> = {};
     for (const r of (roster ?? []) as { student_id: string; year_level: string | null }[]) {
       if (byStudent[r.student_id]) continue; // a student with several tutors
-      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: [] };
+      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: [], diagnostics: [] };
     }
 
     if (studentIds.length > 0) {
@@ -1010,6 +1013,21 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
         if (s.source === "tutor" && s.sponsor_tutor_id === callerUserId) {
           byStudent[s.user_id].included.push({ subject_name: s.subject_name, stage: s.stage });
         }
+      }
+    }
+
+    if (studentIds.length > 0) {
+      const { data: diags } = await admin
+        .from("diagnostic_assessments")
+        .select("student_id, curriculum_id, status, waived_at, report")
+        .in("student_id", studentIds);
+      type DiagRow = { student_id: string; curriculum_id: string; status: string; waived_at: string | null; report: { percentage?: number } | null };
+      for (const d of (diags ?? []) as DiagRow[]) {
+        byStudent[d.student_id]?.diagnostics.push({
+          curriculum_id: d.curriculum_id,
+          status: d.status === "completed" ? "completed" : d.waived_at ? "waived" : "pending",
+          percentage: d.report?.percentage ?? null,
+        });
       }
     }
 
@@ -1160,7 +1178,10 @@ router.put("/tutor/students/:studentId/included-subjects/:curriculumId", async (
     if (!(await canIncludeSubject(admin, callerUserId))) {
       return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
     }
-    const result = await includeSubject(admin, callerUserId, studentId, String(req.params.curriculumId));
+    const curriculumId = String(req.params.curriculumId);
+    const result = await includeSubject(admin, callerUserId, studentId, curriculumId);
+    // The student does a diagnostic on it before practising (unless they already have one).
+    await createStudentDiagnostic(admin, callerUserId, studentId, curriculumId);
     return res.json(result);
   } catch (err) {
     if (err instanceof IncludedSubjectError) return res.status(err.status).json({ error: err.message });
@@ -1178,6 +1199,75 @@ router.delete("/tutor/students/:studentId/included-subjects/:curriculumId", asyn
     return res.json({ ok: true });
   } catch (err) {
     if (err instanceof IncludedSubjectError) return res.status(err.status).json({ error: err.message });
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// ── Diagnostics on included subjects (lib/student-diagnostic.ts) ────────────
+
+// GET /tutor/subjects/:curriculumId/topics — topics and subtopics, for choosing what a diagnostic covers.
+router.get("/tutor/subjects/:curriculumId/topics", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { data: topics, error } = await admin
+      .from("curriculum_topics").select("id, name").eq("curriculum_id", String(req.params.curriculumId)).order("order_index");
+    if (error) return res.status(500).json({ error: error.message });
+    const topicRows = (topics ?? []) as { id: string; name: string }[];
+    const { data: subs, error: subErr } = topicRows.length
+      ? await admin.from("curriculum_subtopics").select("id, topic_id, name").in("topic_id", topicRows.map((t) => t.id)).order("order_index")
+      : { data: [], error: null };
+    if (subErr) return res.status(500).json({ error: subErr.message });
+    const subRows = (subs ?? []) as { id: string; topic_id: string; name: string }[];
+    return res.json({
+      topics: topicRows.map((t) => ({
+        id: t.id,
+        name: t.name,
+        subtopics: subRows.filter((st) => st.topic_id === t.id).map((st) => ({ id: st.id, name: st.name })),
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /tutor/students/:studentId/diagnostics/:curriculumId — set a diagnostic on an included subject.
+router.post("/tutor/students/:studentId/diagnostics/:curriculumId", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const studentId = String(req.params.studentId);
+    if (!(await assertRostered(admin, callerUserId, studentId))) {
+      return res.status(403).json({ error: "Student not on your roster." });
+    }
+    if (!(await canIncludeSubject(admin, callerUserId))) {
+      return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
+    }
+    await createStudentDiagnostic(admin, callerUserId, studentId, String(req.params.curriculumId));
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /tutor/students/:studentId/diagnostics/:curriculumId/waive — let them practise without it.
+router.post("/tutor/students/:studentId/diagnostics/:curriculumId/waive", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const studentId = String(req.params.studentId);
+    if (!(await assertRostered(admin, callerUserId, studentId))) {
+      return res.status(403).json({ error: "Student not on your roster." });
+    }
+    await waiveDiagnostic(admin, studentId, String(req.params.curriculumId));
+    return res.json({ ok: true });
+  } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
   }

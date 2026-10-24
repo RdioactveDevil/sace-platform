@@ -995,11 +995,46 @@ export async function fetchRoster(tutorId, { allTutors = false } = {}) {
 /** Invite a student by email (or re-send their pending invite). They join
  *  the roster once they accept. `curriculumIds`: the subjects the invite comes
  *  with, free ([] for none; left out, a re-send keeps the current ones).
+ *  `diagnosticSubtopics`: { curriculumId: [subtopicId] } each subject's
+ *  diagnostic covers (left out: the whole subject).
  *  Resolves to { invite, emailSent, emailError }. */
-export async function inviteStudent(studentEmail, curriculumIds) {
+export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics) {
   const body = { email: studentEmail }
   if (curriculumIds !== undefined) body.curriculumIds = curriculumIds
+  if (diagnosticSubtopics !== undefined) body.diagnosticSubtopics = diagnosticSubtopics
   return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify(body) })
+}
+
+/** A subject's topics and subtopics: [{ id, name, subtopics: [{ id, name }] }]. */
+export async function fetchSubjectTopics(curriculumId) {
+  const json = await tutorFetch(`/api/tutor/subjects/${encodeURIComponent(curriculumId)}/topics`)
+  return json.topics || []
+}
+
+/** Set a diagnostic on a roster student's included subject. */
+export async function requireStudentDiagnostic(studentId, curriculumId) {
+  return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/diagnostics/${encodeURIComponent(curriculumId)}`, { method: 'POST' })
+}
+
+/** Let a roster student practise an included subject without its diagnostic. */
+export async function waiveStudentDiagnostic(studentId, curriculumId) {
+  return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/diagnostics/${encodeURIComponent(curriculumId)}/waive`, { method: 'POST' })
+}
+
+/** The signed-in student's diagnostics on tutor-included subjects:
+ *  [{ token, curriculum_id, subject, status: 'pending'|'waived'|'completed', ready, completed_at, summary }]. */
+export async function fetchMyDiagnostics() {
+  const json = await tutorFetch('/api/diagnostics/mine')
+  return json.diagnostics || []
+}
+
+/** Write a tutor-included subject's diagnostic questions if they aren't yet.
+ *  Resolves to true when they're ready, false while someone else is writing them. */
+export async function prepareDiagnostic(token) {
+  const res = await fetch(`/api/diagnostic/${encodeURIComponent(token)}/prepare`, { method: 'POST' })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Your diagnostic couldn\'t be prepared. Please try again.')
+  return !!json.ready
 }
 
 /** Whether the tutor can include subjects for their students, and the subjects

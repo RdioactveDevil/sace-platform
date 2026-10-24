@@ -18,6 +18,9 @@ import {
   fetchIncludableSubjects,
   setIncludedSubject,
   removeIncludedSubject,
+  fetchSubjectTopics,
+  requireStudentDiagnostic,
+  waiveStudentDiagnostic,
 } from '../lib/db'
 
 const GOLD = '#f1be43'
@@ -80,6 +83,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   // Whether this tutor can include subjects (free for the student), and the subjects.
   const [includable, setIncludable] = useState({ canInclude: false, subjects: [] })
   const [inviteSubjects, setInviteSubjects] = useState([]) // curriculum ids
+  const [inviteScope, setInviteScope] = useState({})       // { curriculumId: [subtopicId] } each diagnostic covers; none = all
   const [inviteBusy, setInviteBusy] = useState(null)
   const [inviteMsg, setInviteMsg] = useState({})        // { inviteId: text }
   const [showAdd, setShowAdd] = useState(false)
@@ -152,6 +156,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       profileYear: d.profile_year_level ?? null,
       subscriptions: d.subscriptions || [],
       included: d.included || [],
+      diagnostics: d.diagnostics || [],
       subjects,
       stages,
       classes: cls,
@@ -219,10 +224,11 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     setAddNotice('')
     try {
       const sentTo = email.trim().toLowerCase()
-      const res = await inviteStudent(sentTo, includable.canInclude ? inviteSubjects : undefined)
+      const scope = Object.fromEntries(inviteSubjects.filter(id => inviteScope[id]?.length).map(id => [id, inviteScope[id]]))
+      const res = await inviteStudent(sentTo, includable.canInclude ? inviteSubjects : undefined, includable.canInclude ? scope : undefined)
       if (!res.emailSent) setAddError(`Invite saved, but the email didn't send: ${String(res.emailError).replace(/\.+$/, '')}. Try Resend below.`)
       else {
-        setEmail(''); setInviteSubjects([])
+        setEmail(''); setInviteSubjects([]); setInviteScope({})
         const unlocked = res.invite?.subjects || []
         setAddNotice(`Invite sent to ${sentTo}. They'll join your roster once they accept${unlocked.length ? `, with ${unlocked.join(', ')} unlocked` : ''}.`)
       }
@@ -392,6 +398,19 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
               <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 6 }}>Subjects included free</div>
               <SubjectChips subjects={includable.subjects} selected={inviteSubjects} theme={theme}
                 onToggle={id => setInviteSubjects(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))} />
+              {inviteSubjects.length > 0 && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 12, color: t.textMuted }}>
+                    Before practising, they do a 20-question diagnostic on each subject. Choose what it covers, or leave it on all topics.
+                  </div>
+                  {inviteSubjects.map(id => (
+                    <DiagnosticScopePicker key={id} theme={theme}
+                      subject={includable.subjects.find(su => su.id === id)}
+                      selected={inviteScope[id] || []}
+                      onChange={ids => setInviteScope(prev => ({ ...prev, [id]: ids }))} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {addError && <div style={{ marginTop: 8, fontSize: 12, color: t.danger }}>{addError}</div>}
@@ -612,6 +631,115 @@ function IncludedSubjectsPicker({ student, subjects, theme, onChange }) {
       </div>
       <SubjectChips subjects={subjects} selected={selected} onToggle={toggle} busyId={busyId} theme={theme} />
       {msg && <div style={{ marginTop: 8, fontSize: 12, color: msg.tone, fontWeight: 600 }}>{msg.text}</div>}
+      {selected.length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {selected.map(id => (
+            <DiagnosticStatus key={id} student={student} subject={subjects.find(su => su.id === id)} theme={theme} onChange={onChange} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── An included subject's diagnostic: how it went, or waive / set one ──────────
+function DiagnosticStatus({ student, subject, theme, onChange }) {
+  const t = THEMES[theme]
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  if (!subject) return null
+  const diag = student.diagnostics.find(d => d.curriculum_id === subject.id)
+  const run = async (fn) => {
+    setBusy(true); setError('')
+    try { await fn(); onChange() } catch (e) { setError(e.message || 'Could not update the diagnostic.') }
+    setBusy(false)
+  }
+  const btn = { padding: '4px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }
+  const text = !diag ? 'No diagnostic'
+    : diag.status === 'completed' ? `Diagnostic: ${diag.percentage ?? '—'}%. Full report in the Diagnostic tab`
+    : diag.status === 'waived' ? 'Diagnostic waived'
+    : 'Diagnostic not done yet. They can\'t practise it until it is'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
+      <span style={{ fontWeight: 700, color: t.text }}>{subject.label}</span>
+      <span style={{ color: diag?.status === 'completed' ? t.success : t.textMuted }}>{text}</span>
+      {diag?.status === 'pending' && <button disabled={busy} onClick={() => run(() => waiveStudentDiagnostic(student.id, subject.id))} style={btn}>{busy ? '…' : 'Waive'}</button>}
+      {!diag && <button disabled={busy} onClick={() => run(() => requireStudentDiagnostic(student.id, subject.id))} style={btn}>{busy ? '…' : 'Set diagnostic'}</button>}
+      {error && <span style={{ color: t.danger }}>{error}</span>}
+    </div>
+  )
+}
+
+// ── What an invited subject's diagnostic covers: all topics, or the ones picked ──
+function DiagnosticScopePicker({ subject, selected, onChange, theme }) {
+  const t = THEMES[theme]
+  const [open, setOpen] = useState(false)
+  const [topics, setTopics] = useState(null)
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState({}) // topicId: bool
+  useEffect(() => {
+    if (!open || topics || !subject) return
+    fetchSubjectTopics(subject.id).then(setTopics).catch(e => setError(e.message || 'Could not load the topics.'))
+  }, [open, topics, subject])
+  if (!subject) return null
+
+  const chosen = new Set(selected)
+  const setTopic = (topic, on) => {
+    const ids = topic.subtopics.map(st => st.id)
+    onChange(on ? [...new Set([...selected, ...ids])] : selected.filter(id => !ids.includes(id)))
+  }
+  const toggleSub = (id) => onChange(chosen.has(id) ? selected.filter(x => x !== id) : [...selected, id])
+  const summary = selected.length ? `${selected.length} subtopic${selected.length === 1 ? '' : 's'}` : 'All topics'
+
+  return (
+    <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, padding: '8px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{subject.label}</span>
+        <span style={{ fontSize: 12, color: t.textMuted }}>· Diagnostic covers: {summary}</span>
+        <button type="button" onClick={() => setOpen(o => !o)}
+          style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 7, border: `1px solid ${open ? GOLD : t.border}`, background: 'transparent', color: open ? GOLD : t.textSub, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+          {open ? 'Done' : 'Choose topics'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
+          {error && <div style={{ fontSize: 12, color: t.danger }}>{error}</div>}
+          {!topics && !error && <div style={{ fontSize: 12, color: t.textMuted }}>Loading topics…</div>}
+          {topics?.length === 0 && <div style={{ fontSize: 12, color: t.textMuted }}>This subject has no topics yet, so the diagnostic covers the whole subject.</div>}
+          {selected.length > 0 && (
+            <button type="button" onClick={() => onChange([])} style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', color: t.textSub, fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: FONT_B, textDecoration: 'underline' }}>
+              Back to all topics
+            </button>
+          )}
+          {topics?.map(topic => {
+            const ids = topic.subtopics.map(st => st.id)
+            const count = ids.filter(id => chosen.has(id)).length
+            return (
+              <div key={topic.id}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" disabled={!ids.length} checked={ids.length > 0 && count === ids.length}
+                    ref={el => { if (el) el.indeterminate = count > 0 && count < ids.length }}
+                    onChange={e => setTopic(topic, e.target.checked)} aria-label={topic.name} style={{ accentColor: GOLD }} />
+                  <button type="button" onClick={() => setExpanded(x => ({ ...x, [topic.id]: !x[topic.id] }))} disabled={!ids.length}
+                    style={{ border: 'none', background: 'transparent', color: t.text, fontSize: 12, fontWeight: 600, cursor: ids.length ? 'pointer' : 'default', padding: 0, fontFamily: FONT_B, textAlign: 'left' }}>
+                    {topic.name}{ids.length ? ` (${count ? `${count}/` : ''}${ids.length}) ${expanded[topic.id] ? '▾' : '▸'}` : ''}
+                  </button>
+                </div>
+                {expanded[topic.id] && (
+                  <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
+                    {topic.subtopics.map(st => (
+                      <label key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: t.textSub, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={chosen.has(st.id)} onChange={() => toggleSub(st.id)} style={{ accentColor: GOLD }} />
+                        {st.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

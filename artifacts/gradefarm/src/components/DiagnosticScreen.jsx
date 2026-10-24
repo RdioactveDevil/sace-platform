@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { loadDiagnosticByToken, submitDiagnosticAnswers } from '../lib/db'
+import { loadDiagnosticByToken, submitDiagnosticAnswers, prepareDiagnostic } from '../lib/db'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'mathlive'
 import 'mathlive/fonts.css'
 import MathText from './MathText'
-import { Check, GraduationCap, Hourglass, TriangleAlert, ClipboardList, PenLine, Star, Target, Bot } from 'lucide-react'
+import { Check, GraduationCap, Hourglass, TriangleAlert, ClipboardList, PenLine, Star, Target, Bot, TrendingUp } from 'lucide-react'
 
 const GOLD  = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -428,6 +428,40 @@ function SubmittedScreen({ preCallFormUrl, onRedirect }) {
   )
 }
 
+/** What a student sees after their tutor-included subject's diagnostic: the tutor gets the full report. */
+function LinkedResult({ summary, subject }) {
+  const list = (title, items, color) => items.length > 0 && (
+    <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px 20px', textAlign: 'left', width: '100%' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 8 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map(item => <li key={item} style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>{item}</li>)}
+      </ul>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '56px 0', textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80' }}>
+        <Check size={34} aria-hidden="true" />
+      </div>
+      <div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Diagnostic done</div>
+        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }}>
+          {subject ? `${subject} · ` : ''}<strong style={{ color: GOLD }}>{summary.percentage}%</strong> · {summary.band}
+        </div>
+      </div>
+      {list("You're strong at", summary.strong || [], '#4ade80')}
+      {list("What we'll work on", summary.work_on || [], GOLD)}
+      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+        Your tutor has your full results. Your practice now starts with the areas that need it most.
+      </div>
+      <button onClick={() => window.location.assign('/home')}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '13px 28px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+        <TrendingUp size={18} aria-hidden="true" />Start practising →
+      </button>
+    </div>
+  )
+}
+
 // ── Main DiagnosticScreen ──────────────────────────────────────────────────────
 
 export default function DiagnosticScreen() {
@@ -444,17 +478,29 @@ export default function DiagnosticScreen() {
   const [groups, setGroups]         = useState([])
   const [activeGroup, setActiveGroup] = useState(0)
   const [isMath, setIsMath]         = useState(true)
+  const [prepareError, setPrepareError] = useState('')
+  const [prepareAttempt, setPrepareAttempt] = useState(0)
   const topRef = useRef(null)
+  // A tutor-included subject's diagnostic (signed-in student): no name to
+  // enter, written on first use, and they get a summary at the end.
+  const linked = !!assessment?.linked
 
-  useEffect(() => {
+  const load = useCallback(() => {
     loadDiagnosticByToken(token)
       .then(({ assessment: a }) => {
         if (a.status === 'completed') {
+          if (a.linked && a.summary) {
+            setAssessment(a)
+            setResult({ linked: true, summary: a.summary })
+            setPhase('result')
+            return
+          }
           setPhase('error')
           setError('This assessment has already been completed.')
           return
         }
         setAssessment(a)
+        if (a.linked && !a.ready) { setPhase('preparing'); return }
         setGroups(difficultyGroups(a.questions))
         setIsMath(detectIsMath(a.subjects || []))
         setPhase('intro')
@@ -464,6 +510,27 @@ export default function DiagnosticScreen() {
         setPhase('error')
       })
   }, [token])
+  useEffect(() => { load() }, [load])
+
+  // Still being written: write it (or wait for whoever is), then load it.
+  useEffect(() => {
+    if (phase !== 'preparing') return
+    let cancelled = false
+    let timer
+    const attempt = async () => {
+      try {
+        const ready = await prepareDiagnostic(token)
+        if (cancelled) return
+        if (ready) load()
+        else timer = setTimeout(attempt, 5000)
+      } catch (err) {
+        if (!cancelled) setPrepareError(err.message)
+      }
+    }
+    setPrepareError('')
+    attempt()
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [phase, token, load, prepareAttempt])
 
   const handleAnswer = (questionId, value) => {
     setAnswers(prev => ({ ...prev, [String(questionId)]: value }))
@@ -481,7 +548,7 @@ export default function DiagnosticScreen() {
 
   const handleSubmit = async () => {
     setSubmitError('')
-    if (!studentName.trim()) { setSubmitError('Please enter your name before submitting.'); return }
+    if (!linked && !studentName.trim()) { setSubmitError('Please enter your name before submitting.'); return }
     setPhase('submitting')
     try {
       const res = await submitDiagnosticAnswers(token, { studentName: studentName.trim(), answers })
@@ -558,6 +625,30 @@ export default function DiagnosticScreen() {
           </div>
         )}
 
+        {/* ─ Preparing (a tutor-included subject's diagnostic, written on first use) ─ */}
+        {phase === 'preparing' && (
+          <div style={{ paddingTop: 80, textAlign: 'center' }}>
+            {prepareError ? (
+              <>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: GOLD }}><TriangleAlert size={36} aria-hidden="true" /></div>
+                <div style={{ fontSize: 16, color: '#fff', marginBottom: 16 }}>{prepareError}</div>
+                <button onClick={() => setPrepareAttempt(n => n + 1)} style={{ padding: '11px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Try again</button>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center', color: GOLD }}><Bot size={36} aria-hidden="true" /></div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Preparing your diagnostic…</div>
+                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>We're writing questions on the topics your tutor picked. This takes about a minute.</div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4, animation: `pulse 1.2s ${i * 0.4}s infinite` }} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* ─ Error ─ */}
         {phase === 'error' && (
           <div style={{ paddingTop: 80, textAlign: 'center' }}>
@@ -573,7 +664,7 @@ export default function DiagnosticScreen() {
             <div style={{ textAlign: 'center' }}>
               <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: GOLD }}><ClipboardList size={36} aria-hidden="true" /></div>
               <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 8 }}>
-                {assessment.year_level} Diagnostic Assessment
+                {linked ? 'Your diagnostic' : `${assessment.year_level} Diagnostic Assessment`}
               </div>
               <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }}>{subjectNames}</div>
             </div>
@@ -598,12 +689,14 @@ export default function DiagnosticScreen() {
                 <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>This diagnostic covers {subjectNames} at the {assessment.year_level} level.</li>
                 <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>There are 3 sections: Foundation (easy), Core Skills (moderate), and Exam Style (challenging).</li>
                 <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>Work through each section at your own pace. There is no time limit.</li>
-                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>Your results will be sent to your tutor to help plan your lessons.</li>
+                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+                  {linked ? 'Your results go to your tutor, and your practice starts with what needs it most.' : 'Your results will be sent to your tutor to help plan your lessons.'}
+                </li>
                 <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>Answer every question as best you can — it's okay if you're unsure!</li>
               </ul>
             </div>
 
-            <div>
+            {!linked && <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: 8 }}>
                 Your Name
               </label>
@@ -617,12 +710,12 @@ export default function DiagnosticScreen() {
                 onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
                 onKeyDown={e => { if (e.key === 'Enter' && studentName.trim()) setPhase('test') }}
               />
-            </div>
+            </div>}
 
             <button
-              onClick={() => { if (studentName.trim()) setPhase('test') }}
-              disabled={!studentName.trim()}
-              style={{ padding: '14px 32px', borderRadius: 10, border: 'none', background: studentName.trim() ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.1)', color: studentName.trim() ? NAVY : 'rgba(255,255,255,0.3)', fontSize: 15, fontWeight: 800, cursor: studentName.trim() ? 'pointer' : 'not-allowed', fontFamily: FONT }}
+              onClick={() => { if (linked || studentName.trim()) setPhase('test') }}
+              disabled={!linked && !studentName.trim()}
+              style={{ padding: '14px 32px', borderRadius: 10, border: 'none', background: linked || studentName.trim() ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.1)', color: linked || studentName.trim() ? NAVY : 'rgba(255,255,255,0.3)', fontSize: 15, fontWeight: 800, cursor: linked || studentName.trim() ? 'pointer' : 'not-allowed', fontFamily: FONT }}
             >
               Start Assessment →
             </button>
@@ -720,7 +813,10 @@ export default function DiagnosticScreen() {
         )}
 
         {/* ─ Result ─ */}
-        {phase === 'result' && (
+        {phase === 'result' && result?.linked && (
+          <LinkedResult summary={result.summary} subject={subjectNames} />
+        )}
+        {phase === 'result' && !result?.linked && (
           <SubmittedScreen
             preCallFormUrl={result?.preCallFormUrl || assessment?.pre_call_form_url}
             onRedirect={handleRedirect}

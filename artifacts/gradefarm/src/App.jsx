@@ -7,12 +7,12 @@ import { notify, notifyError } from './lib/notify'
 import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert, Radio, Video } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
@@ -446,6 +446,37 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
   )
 }
 
+/** A tutor-included subject whose diagnostic the student hasn't done yet: it comes first. */
+function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
+  const t = THEMES[theme]
+  const navigate = useNavigate()
+  const FONT = "'Plus Jakarta Sans', sans-serif"
+  return (
+    <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: FONT, textAlign: 'center' }}>
+      <ClipboardList size={48} color={GOLD} aria-hidden="true" />
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>First, a quick check-in</h2>
+      <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 420, lineHeight: 1.6, margin: 0 }}>
+        Your tutor wants to see where you're at in <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> before you start practising.
+        It's 20 questions with no time limit. Your results go to your tutor and set up your practice.
+      </p>
+      <button onClick={() => navigate(`/diagnostic/${encodeURIComponent(diagnostic.token)}`)} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+        Start the diagnostic →
+      </button>
+      <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+        ← Back to subject picker
+      </button>
+    </div>
+  )
+}
+
+/** Year level (7–12) a subject's stage points to: "Year 11" → 11, SACE "Stage 1"/"Stage 2" → 11/12. */
+function yearFromStage(stage) {
+  const year = /year\s*(\d{1,2})/i.exec(stage || '')
+  if (year) return Number(year[1])
+  const sace = /stage\s*([12])/i.exec(stage || '')
+  return sace ? 10 + Number(sace[1]) : null
+}
+
 // ── AppShell ──────────────────────────────────────────────────────────────────
 /** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
 function SectionTabs({ theme, subject }) {
@@ -838,6 +869,30 @@ function AppInner() {
     countFreeQuestion().then(r => setFreeQuota({ used: r.used, limit: r.limit })).catch(() => {})
   }, [])
 
+  // Diagnostics on tutor-included subjects. One that isn't done (or waived)
+  // stands in front of practising that subject; its questions are written in
+  // the background as soon as we know about it, so they're usually ready by
+  // the time the student gets there.
+  const [myDiagnostics, setMyDiagnostics] = useState([])
+  const refreshDiagnostics = useCallback(async () => {
+    try { setMyDiagnostics(await fetchMyDiagnostics()) } catch {}
+  }, [])
+  const isStudent = !!(user && profile && !profile.is_tutor && !profile.is_admin)
+  useEffect(() => { if (isStudent) refreshDiagnostics() }, [isStudent, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const preparing = useRef(new Set())
+  useEffect(() => {
+    const todo = myDiagnostics.filter(d => d.status === 'pending' && !d.ready && !preparing.current.has(d.token))
+    if (!todo.length) return
+    todo.forEach(d => preparing.current.add(d.token))
+    ;(async () => {
+      for (const d of todo) await prepareDiagnostic(d.token).catch(() => {}) // the diagnostic page retries
+    })()
+  }, [myDiagnostics])
+  const selectedCurriculumId = String(selectedSubject?.id || '').replace(/^curriculum_/, '')
+  const diagnosticDue = isStudent && selectedCurriculumId
+    ? myDiagnostics.find(d => d.status === 'pending' && d.curriculum_id === selectedCurriculumId) || null
+    : null
+
   // Signed in after starting from a tutor invite: accept it straight away,
   // wherever sign-up or sign-in left them (onboarding, Home, …), so the
   // subjects it includes are unlocked before they pick one. Not a redirect:
@@ -852,7 +907,7 @@ function AppInner() {
     respondToInvite(token, true)
       .then(async (res) => {
         clearPendingInvite()
-        await refreshSubscriptions()
+        await Promise.all([refreshSubscriptions(), refreshDiagnostics()])
         const subjects = res?.subjects || []
         notify.success(subjects.length
           ? `You're in! ${subjects.join(', ')} ${subjects.length > 1 ? 'are' : 'is'} included with your tutoring.`
@@ -1389,7 +1444,9 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path === 'tutor'
             ? <Navigate to="/onboarding/tutor" replace />
-            : <OnboardingScreen profile={profile} userEmail={user?.email} onDone={async () => {
+            : <OnboardingScreen profile={profile} userEmail={user?.email}
+                suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
+                onDone={async () => {
                 try {
                   const subs = await getSubscriptions(profile.id)
                   setSubscriptions(subs)
@@ -1533,6 +1590,9 @@ function AppInner() {
         !profile.onboarding_completed ? <Navigate to={onboardingDest} replace /> :
         !selectedSubject ? <Navigate to="/subject-picker" replace /> :
         subjectLocked ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
+        // The portal (lessons, messages to their tutor) stays open meanwhile.
+        diagnosticDue && !PORTAL_PATHS.includes(location.pathname)
+          ? <DiagnosticDueScreen subject={selectedSubject} diagnostic={diagnosticDue} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         <AppShellScreens {...shellProps} {...learnState}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
@@ -1569,7 +1629,7 @@ function AppInner() {
             // Assignment entries may be topic names OR subtopic names. Expand topic
             // names to their matching subtopics; keep direct subtopic matches as-is.
             let expandedSubtopics = nextSubtopics
-            if (opts?.assignment && nextSubtopics.length > 0) {
+            if ((opts?.assignment || opts?.expandTopics) && nextSubtopics.length > 0) {
               const { normFn } = getTopicConfigForSubject(activeSubject)
               const allSubtopicsLower = new Map()
               activeQuestions.forEach(q => {

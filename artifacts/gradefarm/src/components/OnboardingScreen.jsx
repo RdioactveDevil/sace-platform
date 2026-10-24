@@ -29,7 +29,8 @@ const inp = {
   fontFamily: FONT_B, boxSizing: 'border-box', width: '100%',
 }
 
-export default function OnboardingScreen({ profile, userEmail, onDone }) {
+/** `suggestedYearLevel`: from the subjects their tutor included, pre-selected until they pick one. */
+export default function OnboardingScreen({ profile, userEmail, onDone, suggestedYearLevel = null }) {
   const [step, setStep]       = useState(0)
   const [saving, setSaving]   = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -41,7 +42,11 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [dob, setDob]                 = useState('')
   const [school, setSchool]           = useState(profile.school || '')
-  const [yearLevel, setYearLevel]     = useState(null)
+  const [yearLevel, setYearLevel]     = useState(() => (YEAR_LEVELS.includes(suggestedYearLevel) ? suggestedYearLevel : null))
+  // The tutor's subjects can arrive just after this mounts (the invite is accepted in the background).
+  useEffect(() => {
+    if (YEAR_LEVELS.includes(suggestedYearLevel)) setYearLevel(y => y ?? suggestedYearLevel)
+  }, [suggestedYearLevel])
   const [atarTarget, setAtarTarget]   = useState(null)
   const [goals, setGoals]             = useState('')
   const [studyHours, setStudyHours]   = useState(null)
