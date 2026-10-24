@@ -19,8 +19,10 @@ const STATUS_TEXT = {
 /**
  * /invite/:token — a student accepts (or declines) a tutor's invite. Signed
  * out, it sends them to sign up (email pre-filled) or sign in and remembers
- * the invite; it accepts itself when they come back signed in, either from
- * the app (pendingInvite) or from the sign-up confirmation link (?accept=1).
+ * the invite (pendingInvite); once they're signed in the app accepts it
+ * wherever they are (App.jsx). It accepts itself when they're signed in on
+ * this page with it remembered, or arrive from the sign-up confirmation
+ * link (?accept=1).
  */
 export default function InviteScreen({ signedIn }) {
   const { token } = useParams()
@@ -48,17 +50,19 @@ export default function InviteScreen({ signedIn }) {
       if (accept) setAccepted({ subjects: res?.subjects || [], subjectError: res?.subjectError || null })
       setDone(accept ? 'accepted' : 'declined')
     } catch (e) { setError(e.message) }
+    if (pendingInvite() === token) clearPendingInvite() // answered, one way or the other
     setBusy(null)
   }
 
   // Back signed in after signing up or in from this page: accept it for them.
   useEffect(() => {
-    if (!signedIn) return
-    if (pendingInvite() === token) autoAccept.current = true
-    clearPendingInvite()
-  }, [signedIn, token])
-  useEffect(() => {
-    if (!signedIn || invite?.status !== 'pending' || !autoAccept.current) return
+    if (!signedIn || !invite || busy || done) return
+    const remembered = pendingInvite() === token
+    if (invite.status !== 'pending') {
+      if (remembered) clearPendingInvite()
+      return
+    }
+    if (!autoAccept.current && !remembered) return
     autoAccept.current = false
     respond(true)
   }, [signedIn, invite]) // eslint-disable-line react-hooks/exhaustive-deps
