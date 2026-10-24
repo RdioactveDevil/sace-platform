@@ -100,3 +100,13 @@ Adds `tutor_profiles` (what a tutor shows students on "My Tutor") and
 `tutor_messages` (tutor ↔ student conversations). Both are new tables used only
 through the API, so applying it changes nothing for the current app; apply it
 before deploying the Student Portal.
+
+## 20261024000002_rank_accuracy
+
+Ranks now need accuracy as well as XP. Adds `profiles.recent_correct` /
+`recent_answers` (decayed answer counts, backfilled from `answer_log`), adds a
+`p_correct` argument to `award_xp()` (and lets a wrong answer cost up to 60
+XP), and exposes the counts on the `leaderboard` view. Apply it before
+deploying the matching app change: until then the new app still awards XP
+(it falls back to the old `award_xp` call), but everyone's recent accuracy
+reads as 0, so nobody shows above Bronze I.

@@ -100,27 +100,54 @@ export function nextReviewTime(attempts: number, wrong: number): Date {
   return new Date(Date.now() + 1000 * 60 * 60 * 168);
 }
 
-export const XP_LEVELS = [0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200, 4000, 5000];
-export const RANKS = [
-  "Rookie", "Bronze II", "Bronze I", "Silver II", "Silver I",
-  "Gold", "Platinum", "Diamond", "Master", "Grandmaster", "SACE Legend",
+// Same tiers as the web app (artifacts/gradefarm/src/lib/engine.js): a rank
+// needs its XP and, from Silver up, a minimum recent accuracy.
+export const RANK_TIERS = [
+  { name: "Rookie", xp: 0, accuracy: 0 },
+  { name: "Bronze II", xp: 200, accuracy: 0 },
+  { name: "Bronze I", xp: 500, accuracy: 0 },
+  { name: "Silver II", xp: 1200, accuracy: 0.5 },
+  { name: "Silver I", xp: 2200, accuracy: 0.55 },
+  { name: "Gold", xp: 4000, accuracy: 0.6 },
+  { name: "Platinum", xp: 7000, accuracy: 0.65 },
+  { name: "Diamond", xp: 12000, accuracy: 0.7 },
+  { name: "Master", xp: 20000, accuracy: 0.75 },
+  { name: "Grandmaster", xp: 30000, accuracy: 0.8 },
+  { name: "Legend", xp: 50000, accuracy: 0.85 },
 ];
+export const RANKS = RANK_TIERS.map((r) => r.name);
+export const XP_LEVELS = RANK_TIERS.map((r) => r.xp);
 
-export function getLevel(xp: number): number {
-  const idx = XP_LEVELS.findIndex((v, i) => xp >= v && xp < (XP_LEVELS[i + 1] ?? Infinity));
-  return idx < 0 ? XP_LEVELS.length - 1 : idx;
+/** Recent accuracy (0–1) from a profile's decayed answer counts; 0 with no answers. */
+export function rankAccuracy(p?: { recent_correct?: number | null; recent_answers?: number | null } | null): number {
+  const answers = Number(p?.recent_answers) || 0;
+  if (answers <= 0) return 0;
+  return Math.min(1, Math.max(0, (Number(p?.recent_correct) || 0) / answers));
 }
 
-export function getLevelProgress(xp: number) {
-  const level = getLevel(xp);
-  const current = XP_LEVELS[level] ?? 0;
-  const next = XP_LEVELS[level + 1] ?? current + 500;
-  return { level, current, next, pct: ((xp - current) / (next - current)) * 100 };
+/** The highest rank whose XP and accuracy requirements are both met. */
+export function getLevel(xp: number, accuracy = 0): number {
+  let level = 0;
+  RANK_TIERS.forEach((tier, i) => {
+    if ((xp || 0) >= tier.xp && accuracy >= tier.accuracy) level = i;
+  });
+  return level;
 }
 
+export function getLevelProgress(xp: number, accuracy = 0) {
+  const level = getLevel(xp, accuracy);
+  const current = XP_LEVELS[level];
+  const nextTier = RANK_TIERS[level + 1];
+  if (!nextTier) return { level, current, next: current, pct: 100, maxed: true, needsAccuracy: null as number | null };
+  const pct = Math.min(100, Math.max(0, (((xp || 0) - current) / (nextTier.xp - current)) * 100));
+  const needsAccuracy = (xp || 0) >= nextTier.xp && accuracy < nextTier.accuracy ? nextTier.accuracy : null;
+  return { level, current, next: nextTier.xp, pct, maxed: false, needsAccuracy };
+}
+
+// A wrong answer costs as much as a right one earns before the streak bonus.
 export function calcXP(correct: boolean, difficulty: number, streak: number): number {
-  if (!correct) return -(difficulty * 4);
+  if (!correct) return -(difficulty * 12);
   const base = difficulty * 12;
-  const multi = Math.min(1 + streak * 0.12, 2.2);
+  const multi = Math.min(1 + streak * 0.1, 2);
   return Math.round(base * multi);
 }

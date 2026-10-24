@@ -18,7 +18,7 @@ import { useApp } from "@/contexts/AppContext";
 import { useColors } from "@/hooks/useColors";
 import { addXP, recordAnswer } from "@/lib/db";
 import { apiHeaders } from "@/lib/supabase";
-import { calcXP, getLevelProgress, type Question, selectNextQuestion } from "@/lib/engine";
+import { calcXP, getLevelProgress, rankAccuracy, type Question, selectNextQuestion } from "@/lib/engine";
 
 const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN ?? "localhost"}`;
 
@@ -126,8 +126,8 @@ export default function QuizScreen() {
 
     try {
       await recordAnswer(user.id, currentQ.id, correct, index);
-      const newXP = await addXP(user.id, xpEarned, newStreak, profile);
-      setProfile({ ...profile, xp: newXP, streak: newStreak });
+      const awarded = await addXP(user.id, xpEarned, newStreak, profile, correct);
+      setProfile({ ...profile, ...awarded, streak: newStreak });
     } catch {}
 
     if (!correct) {
@@ -185,7 +185,7 @@ export default function QuizScreen() {
 
   if (!currentQ) return null;
 
-  const levelInfo = profile ? getLevelProgress(profile.xp) : null;
+  const levelInfo = profile ? getLevelProgress(profile.xp, rankAccuracy(profile)) : null;
 
   return (
     <ScrollView

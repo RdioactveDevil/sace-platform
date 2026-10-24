@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { fetchClassLeaderboards } from '../lib/db'
-import { getLevel } from '../lib/engine'
+import { getLevel, rankAccuracy } from '../lib/engine'
 import { Trophy, Medal, Flame } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
@@ -126,7 +126,7 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                 {visibleBoard.map((p) => {
                   const isMe = p.id === profile.id
                   const i = p.position - 1
-                  const lvl = getLevel(p.xp)
+                  const lvl = getLevel(p.xp, rankAccuracy(p))
                   return (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: isMe ? 'rgba(241,190,67,0.08)' : t.bgCard, border: `1px solid ${isMe ? 'rgba(241,190,67,0.4)' : t.border}`, borderRadius: 12, boxShadow: theme === 'light' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}>
                       <div style={{ fontSize: 14, fontWeight: 800, width: 28, textAlign: 'center', color: i < 3 ? [t.xp, t.textSub, '#cd7c2f'][i] : t.textFaint }}>{i + 1}</div>

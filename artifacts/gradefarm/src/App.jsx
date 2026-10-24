@@ -10,7 +10,7 @@ import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSub
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
-import { getLevelProgress, RANKS } from './lib/engine'
+import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, TriangleAlert, Radio, Video } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
@@ -224,8 +224,8 @@ function PortalLink({ icon, title, subtitle, active, badge = 0, target, onClick 
 function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const { level, pct, next } = getLevelProgress(profile.xp)
-  const rank = RANKS[Math.min(level, RANKS.length - 1)]
+  const { level, pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
+  const rank = RANKS[level]
 
   const go = (path) => { navigate(path); onClose?.() }
 

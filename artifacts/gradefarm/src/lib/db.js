@@ -509,14 +509,25 @@ export async function updateSession(sessionId, updates) {
 // â”€â”€â”€ XP & STREAK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // XP and streaks are awarded server-side (award_xp clamps the amount and derives
 // the streak) — the profiles row itself is not writable for these columns.
-export async function addXP(userId, xpEarned, newStreak, currentProfile) {
-  const { data, error } = await supabase.rpc('award_xp', {
+// `correct` is true/false for a graded answer, which also updates the recent
+// accuracy ranks need, and null for a bonus. Resolves to the profile fields
+// award_xp changed: { xp, streak, best_streak, recent_correct?, recent_answers? }.
+export async function addXP(userId, xpEarned, newStreak, currentProfile, correct = null) {
+  let { data, error } = await supabase.rpc('award_xp', {
     p_xp_earned: Math.round(xpEarned),
     p_new_streak: newStreak,
+    ...(correct == null ? {} : { p_correct: correct }),
   })
+  // Before the rank-accuracy migration award_xp has no p_correct; still award the XP.
+  if (error?.code === 'PGRST202' && correct != null) {
+    ;({ data, error } = await supabase.rpc('award_xp', { p_xp_earned: Math.round(xpEarned), p_new_streak: newStreak }))
+  }
   if (error) throw error
-  const row = Array.isArray(data) ? data[0] : data
-  return row?.xp ?? Math.max(0, (currentProfile?.xp ?? 0) + xpEarned)
+  const row = (Array.isArray(data) ? data[0] : data) || {}
+  return {
+    ...row,
+    xp: row.xp ?? Math.max(0, (currentProfile?.xp ?? 0) + xpEarned),
+  }
 }
 
 // â”€â”€â”€ QUESTION FLAGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -6,6 +6,7 @@ import {
   calcRemediationXP,
   getRemediationCompletionBonus,
   getLevelProgress,
+  rankAccuracy,
   getQuestionCounts,
   getQuestionConceptTag,
   seenQuestionChecker,
@@ -389,10 +390,16 @@ export default function QuizScreen({
     freeQuota?.onAnswered?.()
     return recordAnswer(...args)
   }
-  /** Award a main answer's XP (server-side) and show the new total; never throws. */
-  const awardAnswerXP = (xpEarned, newStreak) =>
-    addXP(profile.id, xpEarned, newStreak, profile)
-      .then(newXP => setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) })))
+  /** Award an answer's XP (server-side) and show the new totals; never throws. */
+  const awardAnswerXP = (xpEarned, newStreak, isCorrect) =>
+    addXP(profile.id, xpEarned, newStreak, profile, isCorrect)
+      .then(({ xp, recent_correct, recent_answers }) => setProfile(p => ({
+        ...p,
+        xp,
+        streak: newStreak,
+        best_streak: Math.max(p.best_streak || 0, newStreak),
+        ...(recent_answers != null && { recent_correct, recent_answers }),
+      })))
       .catch(() => {})
 
   const [floatXP, setFloatXP] = useState(null)
@@ -1198,7 +1205,7 @@ export default function QuizScreen({
     if (completed) {
       const bonus = getRemediationCompletionBonus()
       try {
-        const newXP = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
+        const { xp: newXP } = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
         setProfile(p => ({ ...p, xp: newXP }))
         setSessionXP(s => s + bonus)
       } catch {}
@@ -1244,7 +1251,7 @@ export default function QuizScreen({
 
     // The XP award and the answer record are independent writes; neither the
     // remediation queue nor the AI tip needs them, so don't make those wait.
-    const xpWrite = awardAnswerXP(xpEarned, newStreak)
+    const xpWrite = awardAnswerXP(xpEarned, newStreak, isCorrect)
 
     if (isRemediationQuestion) {
       await xpWrite
@@ -1327,7 +1334,7 @@ export default function QuizScreen({
     let remediationCompleted = false
     if (isVariant) remediationCompleted = decideRemediationVariantOutcome(isCorrect)
 
-    const xpWrite = awardAnswerXP(xpEarned, newStreak)
+    const xpWrite = awardAnswerXP(xpEarned, newStreak, isCorrect)
 
     // Remediation variant: persist attempt + completion bonus (decision already
     // committed above).
@@ -1764,7 +1771,7 @@ export default function QuizScreen({
     )
   }
 
-  const { pct } = getLevelProgress(profile.xp)
+  const { pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
   const baseQuestionId = remediationMode && remediationParentId ? remediationParentId : currentQ.id
   const isStruggle = (struggleMap[baseQuestionId]?.wrong ?? 0) >= 2
   const sessionCorrect = sessionResults.filter(r => r.correct).length

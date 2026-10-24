@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal, Flame, Trophy, Zap, CalendarDays, Eye, EyeOff, Moon, Sun } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getLevelProgress, RANKS, XP_LEVELS } from '../lib/engine'
+import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
 import { formatSubjectLabel } from '../lib/subjects'
 import { supabase } from '../lib/supabase'
@@ -189,8 +189,9 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
 export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut, onChangeSubject, onReplayFeatureTour, onProfileUpdated }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  const { level, pct, next } = getLevelProgress(profile.xp)
-  const rank     = RANKS[Math.min(level, RANKS.length - 1)]
+  const recentAccuracy = rankAccuracy(profile)
+  const { level, pct, next, maxed } = getLevelProgress(profile.xp, recentAccuracy)
+  const rank     = RANKS[level]
   const isStudent = !profile.is_tutor && !profile.is_admin
 
   const TABS = [
@@ -418,11 +419,12 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     `Hi,\n\nPlease send me a copy of the personal information GradeFarm holds about me.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`,
   )}`
 
-  const levelBadges = RANKS.map((r, i) => ({
-    rank: r, level: i,
-    xpRequired: XP_LEVELS[i] || 0,
-    unlocked: profile.xp >= (XP_LEVELS[i] || 0),
-    current: i === Math.min(level, RANKS.length - 1),
+  const levelBadges = RANK_TIERS.map((tier, i) => ({
+    rank: tier.name, level: i,
+    xpRequired: tier.xp,
+    accuracyRequired: tier.accuracy,
+    unlocked: i <= level,
+    current: i === level,
   }))
 
   const atarLabel = ATAR_TARGETS.find(a => a.value === Number(profile.atar_target))?.label
@@ -462,14 +464,14 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
         <div style={{ marginBottom: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
             <span style={{ fontSize: 11, color: t.textMuted }}>Level {level}</span>
-            <span style={{ fontSize: 11, color: t.textMuted }}>{profile.xp} / {next} XP</span>
+            <span style={{ fontSize: 11, color: t.textMuted }}>{maxed ? `${profile.xp.toLocaleString('en-AU')} XP` : `${profile.xp} / ${next} XP`}</span>
           </div>
           <div style={{ background: t.border, borderRadius: 999, height: 6, overflow: 'hidden' }}>
             <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, borderRadius: 999, transition: 'width 0.8s' }} />
           </div>
         </div>
         <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
-          {Math.max(0, next - profile.xp)} XP to {RANKS[Math.min(level + 1, RANKS.length - 1)]}
+          {nextRankHint(profile.xp, recentAccuracy)}
         </div>
       </div>
 
@@ -511,7 +513,11 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
 
       {/* ── Rank progression ── */}
       <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Rank Progression</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Rank Progression</div>
+        <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.55, marginBottom: 14 }}>
+          Each rank needs its XP and, from Silver up, a minimum accuracy over your recent answers.
+          Yours is <strong style={{ color: t.text }}>{profile.recent_answers > 0 ? `${Math.round(recentAccuracy * 100)}%` : 'not set yet'}</strong>.
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
           {levelBadges.map(b => (
             <div key={b.rank} style={{
@@ -521,7 +527,9 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
             }}>
               <div style={{ marginBottom: 4, display: 'flex' }}><RankIcon level={b.level} size={18} color={b.unlocked ? GOLD : t.textMuted} /></div>
               <div style={{ fontSize: 12, fontWeight: 700, color: b.current ? GOLD : t.text }}>{b.rank}</div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{b.xpRequired} XP</div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>
+                {b.xpRequired.toLocaleString('en-AU')} XP{b.accuracyRequired > 0 && ` · ${Math.round(b.accuracyRequired * 100)}%`}
+              </div>
               {b.current && <div style={{ fontSize: 9, color: GOLD, fontWeight: 700, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div>}
             </div>
           ))}
