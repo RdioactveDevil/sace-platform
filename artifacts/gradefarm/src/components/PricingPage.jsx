@@ -136,7 +136,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
         { text: 'Session recordings', included: false },
         { text: 'Parent progress reports', included: false },
         { text: 'Unlimited students', included: false },
-        { text: 'All SACE subjects', included: false },
+        { text: 'All subjects', included: false },
         { text: 'Priority support', included: false },
       ],
     },
@@ -158,7 +158,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
         { text: 'Session recordings', included: true },
         { text: 'Parent progress reports', included: true },
         { text: 'Unlimited students', included: false },
-        { text: 'All SACE subjects', included: false },
+        { text: 'All subjects', included: false },
         { text: 'Priority support', included: false },
       ],
     },
@@ -176,11 +176,11 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
         { text: 'Session scheduling', included: true },
         { text: 'Assignment creation', included: true },
         { text: 'Student roster management', included: true },
-        { text: 'All SACE subjects', included: true },
+        { text: 'All subjects', included: true },
         { text: 'Session recordings', included: true },
         { text: 'Parent progress reports', included: true },
         { text: 'Unlimited students', included: true },
-        { text: 'All SACE subjects', included: true },
+        { text: 'All subjects', included: true },
         { text: 'Priority support', included: true },
       ],
     },
@@ -458,7 +458,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                     <div style={{ fontSize: 12, fontWeight: 700, color: plan.hi ? PURPLE : '#475569', marginBottom: 24, padding: '6px 12px', background: plan.hi ? 'rgba(167,139,250,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${plan.hi ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.05)'}`, borderRadius: 8, display: 'inline-block' }}>{plan.limits}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
                       {plan.features.filter((f, i, arr) => {
-                        // Remove duplicate "All SACE subjects" entries
+                        // Remove duplicate "All subjects" entries
                         return arr.findIndex(x => x.text === f.text) === i
                       }).map(f => (
                         <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: f.included ? (plan.hi ? '#cbd5e1' : '#94a3b8') : '#334155' }}>
