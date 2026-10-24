@@ -635,6 +635,7 @@ function AppShellScreens({
   assignmentsVersion, lastSessionAt, onOpenLearn,
   tutorialOverlay,
   onReplayFeatureTour,
+  onProfileUpdated,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
@@ -713,7 +714,7 @@ function AppShellScreens({
         <HistoryScreen {...commonProps} profile={profile} embedded />
       </div>}
       {wasOpened('my-account') && <div style={show('my-account')}>
-        <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} />
+        <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} onProfileUpdated={onProfileUpdated} />
       </div>}
     </AppShell>
   )
@@ -1508,6 +1509,7 @@ function AppInner() {
           assignmentsVersion={assignmentsVersion}
           lastSessionAt={lastSessionAt}
           onReplayFeatureTour={handleReplayFeatureTour}
+          onProfileUpdated={(updates) => setProfile(prev => (prev ? { ...prev, ...updates } : prev))}
           onOpenLearn={(nextTopic) => {
             if (nextTopic) setLearnTopic(nextTopic)
             setLearnPhase('setup')
