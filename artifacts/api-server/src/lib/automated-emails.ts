@@ -5,6 +5,12 @@
  *   • session_reminder_1h   – students and the tutor, about an hour before
  *   • assignment_due        – the day before an unfinished assignment is due
  *   • assignment_overdue    – the day after, if it is still unfinished
+ *   • invite_reminder       – once, if a tutor's invite isn't accepted after a
+ *                             few days (recorded on the invite: the invitee may
+ *                             have no account, so no email_log row)
+ *   • diagnostic_reminder   – once, if a student hasn't done the diagnostic on a
+ *                             tutor-included subject after a couple of days
+ *   • diagnostic_done       – the tutor, when their student finishes one
  *
  * The job is safe to run at any cadence: each email is claimed in email_log
  * (claim_email RPC) before it is sent, so it goes out at most once. Reminders
@@ -14,6 +20,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Resend } from "resend";
 import { logger } from "./logger";
 import { appUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
+import { subjectLabel } from "./included-subject";
+import { studentSummary } from "./student-diagnostic";
 
 export const TIME_ZONE = "Australia/Adelaide";
 
@@ -22,7 +30,10 @@ export type EmailKind =
   | "session_reminder_24h"
   | "session_reminder_1h"
   | "assignment_due"
-  | "assignment_overdue";
+  | "assignment_overdue"
+  | "invite_reminder"
+  | "diagnostic_reminder"
+  | "diagnostic_done";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -39,8 +50,23 @@ const DAY_REMINDER_MIN_LEAD = 2 * HOUR;
  */
 const DAY_REMINDER_MIN_BOOKING_LEAD = 36 * HOUR;
 const SOON_REMINDER_MIN_BOOKING_LEAD = 2 * HOUR;
-/** Assignment reminders only go out during the day, Adelaide time. */
+/** Assignment, invite and diagnostic reminders only go out during the day, Adelaide time. */
 const ASSIGNMENT_SEND_HOURS = { from: 8, to: 20 };
+const DAY = 24 * HOUR;
+/** Remind an invitee this long after the invite was (last) sent… */
+const INVITE_REMINDER_AFTER = 3 * DAY;
+/** …while the invite still works (invites expire 30 days after sending). */
+const INVITE_TTL = 30 * DAY;
+/** Remind a student about an undone diagnostic this long after it was set, once. */
+const DIAGNOSTIC_REMINDER_AFTER = 2 * DAY;
+/** Don't remind about diagnostics set longer ago than this (or tell tutors about old results). */
+const DIAGNOSTIC_LOOKBACK = 30 * DAY;
+const DIAGNOSTIC_DONE_LOOKBACK = 2 * DAY;
+
+const daytime = (job: Job) => {
+  const hour = localHour(job.now);
+  return hour >= ASSIGNMENT_SEND_HOURS.from && hour < ASSIGNMENT_SEND_HOURS.to;
+};
 
 export interface RunOptions {
   now?: Date;
@@ -514,6 +540,180 @@ function assignmentEmail(
   };
 }
 
+// ── Invite reminders ────────────────────────────────────────────────────────
+
+interface InviteRow {
+  id: string;
+  tutor_id: string;
+  email: string;
+  token: string;
+  curriculum_ids: string[] | null;
+  sent_at: string;
+}
+
+async function runInviteReminders(job: Job) {
+  if (!daytime(job)) return;
+  const nowMs = job.now.getTime();
+  const { data, error } = await job.admin
+    .from("tutor_invites")
+    .select("id, tutor_id, email, token, curriculum_ids, sent_at")
+    .eq("status", "pending")
+    .is("reminded_at", null)
+    .lte("sent_at", new Date(nowMs - INVITE_REMINDER_AFTER).toISOString())
+    .gt("sent_at", new Date(nowMs - INVITE_TTL + DAY).toISOString()) // at least a day left on it
+    .limit(500);
+  if (error) throw new Error(`tutor_invites: ${error.message}`);
+  const rows = (data ?? []) as InviteRow[];
+  if (rows.length === 0) return;
+
+  const tutors = await loadRecipients(job, rows.map((r) => r.tutor_id));
+  for (const inv of rows) {
+    const tutor = tutors.get(inv.tutor_id);
+    if (!tutor) continue; // tutor deactivated
+    if (job.budget <= 0) {
+      job.summary.budgetExhausted = true;
+      return;
+    }
+    const labels = (await Promise.all((inv.curriculum_ids ?? []).map((id) => subjectLabel(job.admin, id)))).filter((l): l is string => !!l);
+    const { subject, content } = inviteReminderEmail(inv, tutor.name, labels);
+    if (job.dryRun) {
+      job.summary.planned!.push({ kind: "invite_reminder", to: inv.email, subject });
+      job.budget--;
+      continue;
+    }
+    // Claim it: another run may be here too.
+    const remindedAt = new Date().toISOString();
+    const { data: claimed, error: claimErr } = await job.admin
+      .from("tutor_invites").update({ reminded_at: remindedAt })
+      .eq("id", inv.id).eq("status", "pending").is("reminded_at", null).select("id");
+    if (claimErr) throw new Error(`tutor_invites: ${claimErr.message}`);
+    if (!claimed?.length) continue;
+    job.budget--;
+    const result = await sendEmail(job.resend!, { to: inv.email, subject, content, idempotencyKey: `invite_reminder:${inv.id}:${inv.sent_at}` });
+    if (result.error) {
+      await job.admin.from("tutor_invites").update({ reminded_at: null }).eq("id", inv.id).eq("reminded_at", remindedAt);
+      bump(job.summary.failed, "invite_reminder");
+      logger.warn({ inviteId: inv.id, error: result.error }, "emails: invite reminder failed");
+    } else {
+      bump(job.summary.sent, "invite_reminder");
+    }
+  }
+}
+
+function listSubjects(labels: string[]): string {
+  return labels.length <= 1 ? (labels[0] ?? "") : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+function inviteReminderEmail(inv: InviteRow, tutorName: string, subjects: string[]): { subject: string; content: EmailContent } {
+  const included = subjects.length
+    ? ` ${listSubjects(subjects)} ${subjects.length > 1 ? "are" : "is"} included with your tutoring, so there's nothing to pay for ${subjects.length > 1 ? "them" : "it"}.`
+    : "";
+  return {
+    subject: `Reminder: ${tutorName} invited you to gradefarm.`,
+    content: {
+      heading: `${tutorName} is waiting for you`,
+      paragraphs: [
+        `${tutorName} invited you to gradefarm. a few days ago and you haven't accepted yet.${included}`,
+        `New to gradefarm.? The button takes you to create your account with this email address (${inv.email}). The invite is accepted as soon as you're in.`,
+      ],
+      cta: { label: "Accept invite", url: `${appUrl()}/invite/${encodeURIComponent(inv.token)}` },
+      footer: `You're receiving this because ${tutorName} invited you on gradefarm. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,
+    },
+  };
+}
+
+// ── Diagnostics on tutor-included subjects ──────────────────────────────────
+
+interface DiagnosticRow {
+  id: string;
+  token: string;
+  tutor_id: string;
+  student_id: string;
+  subjects: { name?: string }[] | null;
+  created_at: string;
+  completed_at: string | null;
+  report: Parameters<typeof studentSummary>[0] | null;
+}
+
+const diagnosticSubject = (d: DiagnosticRow) => d.subjects?.[0]?.name || "your subject";
+
+async function runDiagnosticReminders(job: Job) {
+  if (!daytime(job)) return;
+  const nowMs = job.now.getTime();
+  const { data, error } = await job.admin
+    .from("diagnostic_assessments")
+    .select("id, token, tutor_id, student_id, subjects, created_at, completed_at, report")
+    .not("student_id", "is", null)
+    .eq("status", "pending")
+    .is("waived_at", null)
+    .lte("created_at", new Date(nowMs - DIAGNOSTIC_REMINDER_AFTER).toISOString())
+    .gte("created_at", new Date(nowMs - DIAGNOSTIC_LOOKBACK).toISOString())
+    .limit(1000);
+  if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
+  const rows = (data ?? []) as DiagnosticRow[];
+  if (rows.length === 0) return;
+
+  const done = await loadDone(job, "diagnostic_reminder", rows.map((d) => d.id));
+  const pending = rows.filter((d) => !done.has(`${d.id}:${d.student_id}`));
+  const people = await loadRecipients(job, [...pending.map((d) => d.student_id), ...pending.map((d) => d.tutor_id)]);
+  for (const d of pending) {
+    const r = people.get(d.student_id);
+    if (!r || r.unsubscribed) continue;
+    const tutorName = people.get(d.tutor_id)?.name ?? "Your tutor";
+    await deliver(job, "diagnostic_reminder", r, [d.id], () => ({
+      subject: `Your ${diagnosticSubject(d)} check-in is waiting`,
+      content: {
+        heading: "Your check-in is waiting",
+        paragraphs: [
+          `Hi ${r.name}, ${tutorName} has set you a short diagnostic on ${diagnosticSubject(d)}: 20 questions, no time limit. It shows where you're at so your practice starts in the right place.`,
+          `You can practise ${diagnosticSubject(d)} as soon as it's done.`,
+        ],
+        cta: { label: "Start the diagnostic", url: `${appUrl()}/diagnostic/${encodeURIComponent(d.token)}` },
+        footer: "You're receiving this because your tutor set you a diagnostic on gradefarm.",
+        unsubscribe: unsubscribeUrl(r.id),
+      },
+    }));
+  }
+}
+
+async function runDiagnosticDone(job: Job) {
+  const { data, error } = await job.admin
+    .from("diagnostic_assessments")
+    .select("id, token, tutor_id, student_id, subjects, created_at, completed_at, report")
+    .not("student_id", "is", null)
+    .eq("status", "completed")
+    .gte("completed_at", new Date(job.now.getTime() - DIAGNOSTIC_DONE_LOOKBACK).toISOString())
+    .limit(500);
+  if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
+  const rows = ((data ?? []) as DiagnosticRow[]).filter((d) => d.report);
+  if (rows.length === 0) return;
+
+  const done = await loadDone(job, "diagnostic_done", rows.map((d) => d.id));
+  const pending = rows.filter((d) => !done.has(`${d.id}:${d.tutor_id}`));
+  const people = await loadRecipients(job, [...pending.map((d) => d.tutor_id), ...pending.map((d) => d.student_id)]);
+  for (const d of pending) {
+    const tutor = people.get(d.tutor_id);
+    if (!tutor || tutor.unsubscribed) continue;
+    const studentName = people.get(d.student_id)?.name ?? "Your student";
+    const sum = studentSummary(d.report!);
+    await deliver(job, "diagnostic_done", tutor, [d.id], () => ({
+      subject: `${studentName} finished their ${diagnosticSubject(d)} diagnostic: ${sum.percentage}%`,
+      content: {
+        heading: `${studentName}'s diagnostic is in`,
+        paragraphs: [`Hi ${tutor.name}, ${studentName} has finished their ${diagnosticSubject(d)} diagnostic.`],
+        details: [
+          ["Score", `${sum.percentage}% (${sum.band})`],
+          ...(sum.work_on.length ? ([["Work on", sum.work_on.join(", ")]] as Array<[string, string]>) : []),
+          ...(sum.strong.length ? ([["Strong at", sum.strong.join(", ")]] as Array<[string, string]>) : []),
+        ],
+        cta: { label: "See the full report", url: `${appUrl()}/tutor?tab=diagnostic` },
+        footer: "You're receiving this because you set this diagnostic on gradefarm.",
+        unsubscribe: unsubscribeUrl(tutor.id),
+      },
+    }));
+  }
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend | null, opts: RunOptions = {}): Promise<RunSummary> {
@@ -534,6 +734,9 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
   const steps: Array<[string, (j: Job) => Promise<void>]> = [
     ["session reminders", runSessionReminders],
     ["assignment reminders", runAssignmentReminders],
+    ["diagnostic results", runDiagnosticDone],
+    ["diagnostic reminders", runDiagnosticReminders],
+    ["invite reminders", runInviteReminders],
     ["welcome", runWelcome],
   ];
   const errors: string[] = [];

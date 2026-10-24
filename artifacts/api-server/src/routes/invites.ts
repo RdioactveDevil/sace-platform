@@ -51,6 +51,7 @@ interface InviteRow {
   created_at: string;
   sent_at: string | null;
   responded_at: string | null;
+  reminded_at: string | null;
 }
 
 function fail(res: Response, err: unknown) {
@@ -120,7 +121,10 @@ async function sendInviteEmail(invite: InviteRow, tutorName: string, subjects: s
 }
 
 function tutorView(invite: InviteRow, subjects: string[]) {
-  return { id: invite.id, email: invite.email, subjects, created_at: invite.created_at, sent_at: invite.sent_at, expired: isExpired(invite) };
+  return {
+    id: invite.id, email: invite.email, subjects, created_at: invite.created_at, sent_at: invite.sent_at,
+    reminded_at: invite.reminded_at, expired: isExpired(invite),
+  };
 }
 
 /** Labels of these invites' subjects, by curriculum id (subjects no longer live are left out). */
@@ -245,8 +249,9 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     const subjects = labelsOf(invite, labels);
     const emailError = await sendInviteEmail(invite, tutorName, subjects, sentAt);
     if (!emailError) {
-      await admin.from("tutor_invites").update({ sent_at: sentAt }).eq("id", invite.id);
-      invite = { ...invite, sent_at: sentAt };
+      // A fresh send gets its own reminder later (lib/automated-emails.ts).
+      await admin.from("tutor_invites").update({ sent_at: sentAt, reminded_at: null }).eq("id", invite.id);
+      invite = { ...invite, sent_at: sentAt, reminded_at: null };
     }
     return res.json({ invite: tutorView(invite, subjects), emailSent: !emailError, emailError });
   } catch (err) {

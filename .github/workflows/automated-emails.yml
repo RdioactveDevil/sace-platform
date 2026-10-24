@@ -1,8 +1,9 @@
 name: Automated emails
 
 # Every 15 minutes, asks the API to send any automated emails that are due:
-# welcome emails, session reminders (≈24h and ≈1h before) and assignment
-# due / overdue reminders. The API records every email it sends, so a late,
+# welcome emails, session reminders (≈24h and ≈1h before), assignment
+# due / overdue reminders, invite and diagnostic reminders, and diagnostic
+# results to tutors. The API records every email it sends, so a late,
 # skipped or repeated run never sends one twice.
 #
 # Also runnable from the Actions tab → this workflow → "Run workflow", where
