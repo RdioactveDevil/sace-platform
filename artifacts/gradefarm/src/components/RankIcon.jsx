@@ -1,7 +1,7 @@
 import { Sprout, Swords, Shield, Star, Gem, Diamond, Crown, Flame, Trophy } from 'lucide-react'
 import { RANKS } from '../lib/engine'
 
-// One icon per rank in RANKS (Rookie … SACE Legend).
+// One icon per rank in RANKS (Rookie … Legend).
 const RANK_ICON_COMPONENTS = [Sprout, Swords, Swords, Shield, Shield, Star, Gem, Diamond, Crown, Flame, Trophy]
 
 /** The icon for a player level, sized to sit inline with text. */

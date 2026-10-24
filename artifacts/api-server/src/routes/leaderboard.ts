@@ -17,6 +17,8 @@ interface ProfileRow {
   xp: number | null;
   level: number | null;
   streak: number | null;
+  recent_correct: number | null;
+  recent_answers: number | null;
 }
 
 // GET /api/leaderboard/classes — one leaderboard per class, ranked by XP.
@@ -67,7 +69,7 @@ router.get("/leaderboard/classes", async (req, res) => {
     if (studentIds.length > 0) {
       const { data: profs, error: pErr } = await admin
         .from("profiles")
-        .select("id, display_name, xp, level, streak")
+        .select("id, display_name, xp, level, streak, recent_correct, recent_answers")
         .in("id", studentIds)
         .is("deactivated_at", null);
       if (pErr) return res.status(500).json({ error: pErr.message });
@@ -84,6 +86,9 @@ router.get("/leaderboard/classes", async (req, res) => {
           xp: p.xp ?? 0,
           level: p.level ?? null,
           streak: p.streak ?? 0,
+          // Ranks need recent accuracy as well as XP; the app works it out from these.
+          recent_correct: p.recent_correct ?? 0,
+          recent_answers: p.recent_answers ?? 0,
         }))
         .sort((a, b) => b.xp - a.xp);
       // Equal XP shares a position (1, 2, 2, 4), like the old global board.

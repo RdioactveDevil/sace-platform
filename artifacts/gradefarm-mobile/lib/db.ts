@@ -10,6 +10,8 @@ export interface Profile {
   best_streak: number;
   last_active?: string;
   onboarding_completed?: boolean;
+  recent_correct?: number;
+  recent_answers?: number;
 }
 
 export interface LeaderboardEntry {
@@ -18,6 +20,8 @@ export interface LeaderboardEntry {
   school?: string;
   xp: number;
   rank?: number;
+  recent_correct?: number;
+  recent_answers?: number;
 }
 
 export async function signUp(
@@ -129,20 +133,31 @@ export async function recordAnswer(
   });
 }
 
-// XP and streaks are awarded server-side by the award_xp RPC.
+// XP and streaks are awarded server-side by the award_xp RPC. `correct` also
+// updates the recent accuracy that ranks need.
 export async function addXP(
   _userId: string,
   xpEarned: number,
   newStreak: number,
-  currentProfile: Profile
-): Promise<number> {
-  const { data, error } = await supabase.rpc("award_xp", {
+  currentProfile: Profile,
+  correct?: boolean
+): Promise<Pick<Profile, "xp" | "recent_correct" | "recent_answers">> {
+  let { data, error } = await supabase.rpc("award_xp", {
     p_xp_earned: Math.round(xpEarned),
     p_new_streak: newStreak,
+    ...(correct === undefined ? {} : { p_correct: correct }),
   });
+  // Before the rank-accuracy migration award_xp has no p_correct; still award the XP.
+  if (error?.code === "PGRST202" && correct !== undefined) {
+    ({ data, error } = await supabase.rpc("award_xp", { p_xp_earned: Math.round(xpEarned), p_new_streak: newStreak }));
+  }
   if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  return row?.xp ?? Math.max(0, currentProfile.xp + xpEarned);
+  const row = (Array.isArray(data) ? data[0] : data) ?? {};
+  return {
+    xp: row.xp ?? Math.max(0, currentProfile.xp + xpEarned),
+    recent_correct: row.recent_correct ?? currentProfile.recent_correct,
+    recent_answers: row.recent_answers ?? currentProfile.recent_answers,
+  };
 }
 
 export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {

@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/contexts/AppContext";
 import { useColors } from "@/hooks/useColors";
 import { getLeaderboard, type LeaderboardEntry } from "@/lib/db";
-import { getLevelProgress, RANKS } from "@/lib/engine";
+import { getLevelProgress, rankAccuracy, RANKS } from "@/lib/engine";
 
 function PodiumItem({
   entry,
@@ -130,8 +130,8 @@ export default function LeaderboardScreen() {
   const renderEntry = ({ item, index }: { item: LeaderboardEntry; index: number }) => {
     const rank = index + 4;
     const isMe = item.id === profile?.id;
-    const { level } = getLevelProgress(item.xp);
-    const rankLabel = RANKS[Math.min(level, RANKS.length - 1)];
+    const { level } = getLevelProgress(item.xp, rankAccuracy(item));
+    const rankLabel = RANKS[level];
     const initials = (item.display_name ?? "?")
       .split(" ")
       .map((n) => n[0])

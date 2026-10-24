@@ -180,3 +180,55 @@ test('an assignment run without remediation says so in its label', () => {
   assert.equal(assignmentGoalLabel({ question_count: 10, progress_count: 0, difficulty: 'medium', remediation: false }), '0/10 questions · Medium · No remediation')
   assert.equal(assignmentGoalLabel({ question_count: 10, progress_count: 0, difficulty: 'medium', remediation: true }), '0/10 questions · Medium')
 })
+
+// ─── Ranks & XP ──────────────────────────────────────────────────────────────
+import { RANKS, RANK_TIERS, getLevel, getLevelProgress, rankAccuracy, nextRankHint, calcXP, calcRemediationXP, getRemediationCompletionBonus } from './engine.js'
+
+test('every rank has one tier, and the top rank is Legend', () => {
+  assert.equal(RANKS.length, RANK_TIERS.length)
+  assert.equal(RANKS.at(-1), 'Legend')
+  assert.ok(!RANKS.some(r => /SACE/.test(r)))
+})
+
+test('XP alone stops short of the ranks that need accuracy', () => {
+  // Plenty of XP at 50% recent accuracy: Silver II (needs 50%) is the ceiling.
+  assert.equal(RANKS[getLevel(9912, 0.5)], 'Silver II')
+  assert.equal(RANKS[getLevel(9912, 0.49)], 'Bronze I')
+  assert.equal(RANKS[getLevel(9912, 0.7)], 'Platinum')
+  assert.equal(RANKS[getLevel(60000, 0.9)], 'Legend')
+  assert.equal(RANKS[getLevel(60000, 0.84)], 'Grandmaster')
+})
+
+test('rankAccuracy reads the decayed counts and handles a new profile', () => {
+  assert.equal(rankAccuracy({ recent_correct: 30, recent_answers: 40 }), 0.75)
+  assert.equal(rankAccuracy({}), 0)
+  assert.equal(rankAccuracy(null), 0)
+})
+
+test('progress is capped, full at the top rank, and says when accuracy is the blocker', () => {
+  const blocked = getLevelProgress(9912, 0.5)
+  assert.equal(blocked.pct, 100)
+  assert.equal(blocked.needsAccuracy, 0.55)
+  assert.match(nextRankHint(9912, 0.5), /55% recent accuracy for Silver I/)
+
+  const top = getLevelProgress(80000, 0.95)
+  assert.equal(top.maxed, true)
+  assert.equal(top.pct, 100)
+  assert.equal(nextRankHint(80000, 0.95), 'Top rank reached')
+
+  const mid = getLevelProgress(1700, 0.9)
+  assert.equal(RANKS[mid.level], 'Silver II')
+  assert.equal(mid.pct, 50)
+  assert.equal(nextRankHint(1700, 0.9), '500 XP to Silver I')
+})
+
+test('a wrong answer costs what a right one earns before the streak bonus', () => {
+  for (const d of [1, 3, 5]) assert.equal(calcXP(false, d, 0), -calcXP(true, d, 0))
+  assert.equal(calcXP(true, 5, 100), 120) // streak bonus caps at 2x
+})
+
+test('a wrong answer plus a full remediation still loses XP', () => {
+  const wrong = calcXP(false, 1, 0)
+  const remediation = 3 * calcRemediationXP(true) + getRemediationCompletionBonus()
+  assert.ok(wrong + remediation < 0)
+})

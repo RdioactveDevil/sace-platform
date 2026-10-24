@@ -271,30 +271,82 @@ export function nextReviewTime(attempts, wrong) {
 }
 
 // ─── XP SYSTEM ───────────────────────────────────────────────────────────────
-export const XP_LEVELS = [0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200, 4000, 5000]
-export const RANKS = ['Rookie', 'Bronze II', 'Bronze I', 'Silver II', 'Silver I', 'Gold', 'Platinum', 'Diamond', 'Master', 'Grandmaster', 'SACE Legend']
+// A rank needs its XP AND, from Silver up, a minimum recent accuracy, so XP
+// earned at a low hit rate can't carry anyone to the top. Recent accuracy is
+// read from the profile's decayed answer counts (see rankAccuracy), which the
+// award_xp RPC keeps up to date.
+export const RANK_TIERS = [
+  { name: 'Rookie',      xp: 0,      accuracy: 0 },
+  { name: 'Bronze II',   xp: 200,    accuracy: 0 },
+  { name: 'Bronze I',    xp: 500,    accuracy: 0 },
+  { name: 'Silver II',   xp: 1200,   accuracy: 0.5 },
+  { name: 'Silver I',    xp: 2200,   accuracy: 0.55 },
+  { name: 'Gold',        xp: 4000,   accuracy: 0.6 },
+  { name: 'Platinum',    xp: 7000,   accuracy: 0.65 },
+  { name: 'Diamond',     xp: 12000,  accuracy: 0.7 },
+  { name: 'Master',      xp: 20000,  accuracy: 0.75 },
+  { name: 'Grandmaster', xp: 30000,  accuracy: 0.8 },
+  { name: 'Legend',      xp: 50000,  accuracy: 0.85 },
+]
+export const RANKS = RANK_TIERS.map(r => r.name)
+export const XP_LEVELS = RANK_TIERS.map(r => r.xp)
 // Rank icons are drawn by components/RankIcon.jsx.
 
-export function getLevel(xp) {
-  return XP_LEVELS.findIndex((v, i) => xp >= v && xp < (XP_LEVELS[i + 1] ?? Infinity))
+/** Recent accuracy (0–1) from a profile's decayed answer counts; 0 with no answers. */
+export function rankAccuracy(profile) {
+  const answers = Number(profile?.recent_answers) || 0
+  if (answers <= 0) return 0
+  return Math.min(1, Math.max(0, (Number(profile.recent_correct) || 0) / answers))
 }
 
-export function getLevelProgress(xp) {
-  const level = getLevel(xp)
-  const current = XP_LEVELS[level] ?? 0
-  const next = XP_LEVELS[level + 1] ?? current + 500
+/** The highest rank whose XP and accuracy requirements are both met. */
+export function getLevel(xp, accuracy = 0) {
+  let level = 0
+  RANK_TIERS.forEach((tier, i) => {
+    if ((xp || 0) >= tier.xp && accuracy >= tier.accuracy) level = i
+  })
+  return level
+}
+
+/**
+ * Progress toward the next rank. `next` is that rank's XP; `pct` is XP
+ * progress (capped at 100). When the XP is there but accuracy isn't,
+ * `needsAccuracy` is the accuracy the next rank needs. At the top rank
+ * `maxed` is true and the bar is full.
+ */
+export function getLevelProgress(xp, accuracy = 0) {
+  const level = getLevel(xp, accuracy)
+  const current = XP_LEVELS[level]
+  const nextTier = RANK_TIERS[level + 1]
+  if (!nextTier) return { level, current, next: current, pct: 100, maxed: true, needsAccuracy: null }
+  const pct = Math.min(100, Math.max(0, (((xp || 0) - current) / (nextTier.xp - current)) * 100))
   return {
     level,
     current,
-    next,
-    pct: ((xp - current) / (next - current)) * 100,
+    next: nextTier.xp,
+    pct,
+    maxed: false,
+    needsAccuracy: (xp || 0) >= nextTier.xp && accuracy < nextTier.accuracy ? nextTier.accuracy : null,
   }
 }
 
+/** One line describing what the next rank needs, for under an XP bar. */
+export function nextRankHint(xp, accuracy = 0) {
+  const { level, next, maxed, needsAccuracy } = getLevelProgress(xp, accuracy)
+  if (maxed) return 'Top rank reached'
+  const nextRank = RANKS[level + 1]
+  if (needsAccuracy != null) return `Reach ${Math.round(needsAccuracy * 100)}% recent accuracy for ${nextRank}`
+  const tier = RANK_TIERS[level + 1]
+  const xpLeft = `${Math.max(0, next - (xp || 0)).toLocaleString('en-AU')} XP to ${nextRank}`
+  return accuracy < tier.accuracy ? `${xpLeft}, plus ${Math.round(tier.accuracy * 100)}% recent accuracy` : xpLeft
+}
+
+// A wrong answer costs as much as a right one earns before the streak bonus,
+// so XP only builds up when more answers are right than wrong.
 export function calcXP(correct, difficulty, streak) {
-  if (!correct) return -(difficulty * 4)   // lose XP on wrong — harder questions cost more
+  if (!correct) return -(difficulty * 12)
   const base = difficulty * 12
-  const multi = Math.min(1 + streak * 0.12, 2.2)
+  const multi = Math.min(1 + streak * 0.1, 2)
   return Math.round(base * multi)
 }
 
@@ -350,10 +402,11 @@ export function buildRemediationQueue({
   return sorted.slice(0, limit)
 }
 
+// Remediation earns back a little of a wrong answer's cost, never more than it.
 export function calcRemediationXP(correct) {
-  return correct ? 5 : 0
+  return correct ? 2 : 0
 }
 
 export function getRemediationCompletionBonus() {
-  return 20
+  return 5
 }

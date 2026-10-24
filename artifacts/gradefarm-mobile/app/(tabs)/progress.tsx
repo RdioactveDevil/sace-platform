@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SUBJECTS, useApp } from "@/contexts/AppContext";
 import { useColors } from "@/hooks/useColors";
-import { getLevelProgress, RANKS } from "@/lib/engine";
+import { getLevelProgress, rankAccuracy, RANKS } from "@/lib/engine";
 
 export default function ProgressScreen() {
   const colors = useColors();
@@ -34,8 +34,8 @@ export default function ProgressScreen() {
     );
   }
 
-  const { level, pct, next, current } = getLevelProgress(profile.xp);
-  const rank = RANKS[Math.min(level, RANKS.length - 1)];
+  const { level, pct, next, current, maxed, needsAccuracy } = getLevelProgress(profile.xp, rankAccuracy(profile));
+  const rank = RANKS[level];
 
   const totalAttempts = Object.values(struggleMap).reduce((a, s) => a + s.attempts, 0);
   const totalWrong = Object.values(struggleMap).reduce((a, s) => a + s.wrong, 0);
@@ -111,12 +111,18 @@ export default function ProgressScreen() {
       <View style={styles.xpCard}>
         <View style={styles.xpRow}>
           <Text style={styles.xpLabel}>XP Progress</Text>
-          <Text style={styles.xpNumbers}>{profile.xp} / {next}</Text>
+          <Text style={styles.xpNumbers}>{maxed ? profile.xp : `${profile.xp} / ${next}`}</Text>
         </View>
         <View style={styles.xpTrack}>
           <View style={[styles.xpFill, { width: `${Math.min(pct, 100)}%` as `${number}%` }]} />
         </View>
-        <Text style={styles.xpSub}>{next - profile.xp} XP to Level {level + 1}</Text>
+        <Text style={styles.xpSub}>
+          {maxed
+            ? "Top rank reached"
+            : needsAccuracy != null
+              ? `Reach ${Math.round(needsAccuracy * 100)}% recent accuracy for ${RANKS[level + 1]}`
+              : `${next - profile.xp} XP to ${RANKS[level + 1]}`}
+        </Text>
       </View>
 
       <View style={styles.statsRow}>

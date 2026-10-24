@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { THEMES, FONTS } from '../lib/theme'
-import { getLevelProgress, RANKS } from '../lib/engine'
+import { getLevelProgress, rankAccuracy, RANKS } from '../lib/engine'
 import { Zap, GraduationCap, ChartColumn, Trophy, BookOpen, Clock, Sun, Moon } from 'lucide-react'
 import RankIcon from './RankIcon'
 
@@ -39,8 +39,8 @@ export default function Layout({
     if (mobile) setOpen(false)
   }
 
-  const { level, pct, next } = getLevelProgress(profile.xp)
-  const rank = RANKS[Math.min(level, RANKS.length - 1)]
+  const { level, pct, next, maxed } = getLevelProgress(profile.xp, rankAccuracy(profile))
+  const rank = RANKS[level]
 
   const SidebarInner = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bgNav }}>
@@ -80,7 +80,7 @@ export default function Layout({
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 10, color: t.textMuted }}>Level {level}</span>
-          <span style={{ fontSize: 10, color: t.textFaint }}>{profile.xp}/{next} XP</span>
+          <span style={{ fontSize: 10, color: t.textFaint }}>{maxed ? `${profile.xp.toLocaleString()} XP` : `${profile.xp}/${next} XP`}</span>
         </div>
       </div>
 

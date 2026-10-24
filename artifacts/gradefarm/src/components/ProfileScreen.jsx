@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getLevelProgress, RANKS } from '../lib/engine'
+import { getLevelProgress, nextRankHint, rankAccuracy, RANKS } from '../lib/engine'
 import { Flame, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogLast30Days, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
@@ -37,9 +37,10 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
     return () => { cancelled = true }
   }, [profile.id])
 
-  const { level, pct } = getLevelProgress(profile.xp)
-  const rank = RANKS[Math.min(level, RANKS.length - 1)]
-  const nextRank = RANKS[Math.min(level + 1, RANKS.length - 1)]
+  const recentAccuracy = rankAccuracy(profile)
+  const { level, pct, maxed } = getLevelProgress(profile.xp, recentAccuracy)
+  const rank = RANKS[level]
+  const nextRank = RANKS[level + 1]
 
   const topicStats = {}
   const topicSubtopics = {}
@@ -153,7 +154,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                   <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Current Rank</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>{rank}</div>
                   <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>Level {level} · {profile.xp.toLocaleString()} XP</div>
-                  {nextRank !== rank && <div style={{ fontSize: 11, color: GOLD, marginTop: 6 }}>Next up: {nextRank}</div>}
+                  {nextRank && <div style={{ fontSize: 11, color: GOLD, marginTop: 6 }}>Next up: {nextRank}</div>}
                 </div>
                 <div style={{ display: 'flex', color: GOLD }}><RankIcon level={level} size={40} /></div>
               </div>
@@ -167,14 +168,14 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                 <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>XP Progress</div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{profile.xp.toLocaleString()} XP total</div>
               </div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>Level {level} → Level {level + 1}</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>{maxed ? `Level ${level}` : `Level ${level} → Level ${level + 1}`}</div>
             </div>
             <div style={{ background: t.border, borderRadius: 999, height: 10, overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${GOLD}, ${GOLDL})`, borderRadius: 999, transition: 'width 0.8s ease' }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
               <div style={{ fontSize: 11, color: t.textMuted }}>Current rank: <span style={{ color: GOLD, fontWeight: 700 }}>{rank}</span></div>
-              <div style={{ fontSize: 11, color: t.textMuted }}>{Math.max(0, 100 - Math.round(pct))}% to next level</div>
+              <div style={{ fontSize: 11, color: t.textMuted }}>{nextRankHint(profile.xp, recentAccuracy)}</div>
             </div>
           </div>
 
