@@ -389,6 +389,11 @@ export default function QuizScreen({
     freeQuota?.onAnswered?.()
     return recordAnswer(...args)
   }
+  /** Award a main answer's XP (server-side) and show the new total; never throws. */
+  const awardAnswerXP = (xpEarned, newStreak) =>
+    addXP(profile.id, xpEarned, newStreak, profile)
+      .then(newXP => setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) })))
+      .catch(() => {})
 
   const [floatXP, setFloatXP] = useState(null)
   const [showExit, setShowExit] = useState(false)
@@ -1237,12 +1242,12 @@ export default function QuizScreen({
       enterRemediationStateSync(currentQ)
     }
 
-    try {
-      const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
-      setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
-    } catch {}
+    // The XP award and the answer record are independent writes; neither the
+    // remediation queue nor the AI tip needs them, so don't make those wait.
+    const xpWrite = awardAnswerXP(xpEarned, newStreak)
 
     if (isRemediationQuestion) {
+      await xpWrite
       await persistRemediationVariantOutcome(isCorrect, idx, timeTakenMs, remediationCompleted, newStreak, xpEarned)
       return
     }
@@ -1260,7 +1265,8 @@ export default function QuizScreen({
       }
     })
 
-    await recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
+    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
+      .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
 
     if (!isCorrect) {
       // Remediation state was already set synchronously above. Load the queue in
@@ -1285,6 +1291,7 @@ export default function QuizScreen({
       }
       setLoadingTip(false)
     }
+    await Promise.all([xpWrite, answerWrite])
   }
 
   // Outcome handler for non-MCQ question types (numeric, multi-select, short
@@ -1320,14 +1327,12 @@ export default function QuizScreen({
     let remediationCompleted = false
     if (isVariant) remediationCompleted = decideRemediationVariantOutcome(isCorrect)
 
-    try {
-      const newXP = await addXP(profile.id, xpEarned, newStreak, profile)
-      setProfile(p => ({ ...p, xp: newXP, streak: newStreak, best_streak: Math.max(p.best_streak || 0, newStreak) }))
-    } catch {}
+    const xpWrite = awardAnswerXP(xpEarned, newStreak)
 
     // Remediation variant: persist attempt + completion bonus (decision already
     // committed above).
     if (isVariant) {
+      await xpWrite
       await persistRemediationVariantOutcome(isCorrect, null, timeTakenMs, remediationCompleted, newStreak, xpEarned)
       return
     }
@@ -1345,7 +1350,7 @@ export default function QuizScreen({
       }
     })
 
-    try { await recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs) } catch {}
+    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs).catch(() => {})
 
     if (!isCorrect) {
       setLoadingTip(true)
@@ -1366,6 +1371,7 @@ export default function QuizScreen({
       }
       setLoadingTip(false)
     }
+    await Promise.all([xpWrite, answerWrite])
   }
 
   const loadNextRemediationQuestion = async () =>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { signIn, signUp } from '../lib/db'
+import { signIn, signUp, sendPasswordReset } from '../lib/db'
 import { Zap, GraduationCap, ChartColumn, Trophy } from 'lucide-react'
 
 const GOLD  = '#f1be43'
@@ -28,18 +28,37 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const [school, setSchool]   = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  // Shown instead of an error when there's nothing wrong but the user has to
+  // go to their inbox (confirm sign-up, reset password).
+  const [notice, setNotice]   = useState('')
 
-  const submit = async () => {
+  const switchMode = (m) => { setMode(m); setError(''); setNotice('') }
+
+  const submit = async (e) => {
+    e?.preventDefault()
+    if (loading) return
     setError('')
+    setNotice('')
+    // Phone keyboards often add a trailing space after autocompleting an email.
+    const addr = email.trim()
     setLoading(true)
     try {
-      if (mode === 'signin') {
-        await signIn(email, pass)
+      if (mode === 'reset') {
+        if (!addr) throw new Error('Enter the email address you signed up with.')
+        await sendPasswordReset(addr)
+        setNotice(`If ${addr} has an account, we've emailed it a link to choose a new password.`)
+      } else if (mode === 'signin') {
+        await signIn(addr, pass)
         onAuth(false)
       } else {
         if (!name.trim()) throw new Error('Please enter your name.')
-        await signUp(email, pass, name, school)
-        onAuth(true)
+        const data = await signUp(addr, pass, name.trim(), school.trim())
+        // With email confirmation on there is no session until the link is clicked.
+        if (data?.session) onAuth(true)
+        else {
+          setNotice(`Almost there — we've sent a confirmation link to ${addr}. Open it to finish creating your account, then sign in.`)
+          setMode('signin')
+        }
       }
     } catch (e) {
       setError(e.message)
@@ -124,30 +143,39 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
           </div>
 
           <h2 style={{ fontSize:22, fontWeight:800, color:'#f1f5f9', margin:'0 0 4px', letterSpacing:'-0.02em' }}>
-            {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+            {mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : 'Create your account'}
           </h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', margin:'0 0 28px' }}>
-            {mode === 'signin' ? 'Sign in to continue your study sessions.' : 'Free during beta. No credit card required.'}
+            {mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one." : 'Free during beta. No credit card required.'}
           </p>
 
-          <div style={{ display:'flex', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:4, marginBottom:24, gap:4 }}>
+          {mode !== 'reset' && <div style={{ display:'flex', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:4, marginBottom:24, gap:4 }}>
             {['signin', 'signup'].map(m => (
-              <button key={m} onClick={() => { setMode(m); setError('') }}
+              <button key={m} type="button" onClick={() => switchMode(m)}
                 style={{ flex:1, padding:'9px', borderRadius:8, border:'none', background: mode === m ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent', color: mode === m ? NAVYD : 'rgba(255,255,255,0.4)', fontSize:13, fontWeight:800, cursor:'pointer', transition:'all 0.2s', fontFamily:FONT_B }}>
                 {m === 'signin' ? 'Sign In' : 'Sign Up'}
               </button>
             ))}
-          </div>
+          </div>}
 
+          <form onSubmit={submit} noValidate>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             {mode === 'signup' && (
               <>
-                <input className="auth-inp" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} />
-                <input className="auth-inp" placeholder="School (optional)" value={school} onChange={e => setSchool(e.target.value)} />
+                <input className="auth-inp" placeholder="Your name" aria-label="Your name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} />
+                <input className="auth-inp" placeholder="School (optional)" aria-label="School (optional)" autoComplete="organization" value={school} onChange={e => setSchool(e.target.value)} />
               </>
             )}
-            <input className="auth-inp" placeholder="Email address" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} />
-            <input className="auth-inp" placeholder="Password" type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} />
+            <input className="auth-inp" placeholder="Email address" aria-label="Email address" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
+            {mode !== 'reset' && (
+              <input className="auth-inp" placeholder="Password" aria-label="Password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={pass} onChange={e => setPass(e.target.value)} />
+            )}
+            {mode === 'signin' && (
+              <button type="button" onClick={() => switchMode('reset')}
+                style={{ alignSelf:'flex-end', background:'transparent', border:'none', padding:'2px 0', color:'rgba(255,255,255,0.45)', fontSize:12, cursor:'pointer', fontFamily:FONT_B }}>
+                Forgot password?
+              </button>
+            )}
             {mode === 'signup' && (
               <button
                 type="button"
@@ -172,13 +200,24 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
           </div>
 
           {error && (
-            <div style={{ marginTop:12, padding:'10px 14px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.28)', borderRadius:8, fontSize:13, color:'#f87171' }}>{error}</div>
+            <div role="alert" style={{ marginTop:12, padding:'10px 14px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.28)', borderRadius:8, fontSize:13, color:'#f87171' }}>{error}</div>
+          )}
+          {notice && (
+            <div role="status" style={{ marginTop:12, padding:'10px 14px', background:'rgba(241,190,67,0.08)', border:'1px solid rgba(241,190,67,0.3)', borderRadius:8, fontSize:13, color:GOLDL, lineHeight:1.5 }}>{notice}</div>
           )}
 
-          <button onClick={submit} disabled={loading}
+          <button type="submit" disabled={loading}
             style={{ width:'100%', marginTop:16, padding:'14px', borderRadius:12, border:'none', background: loading ? 'rgba(255,255,255,0.05)' : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: loading ? '#475569' : NAVYD, fontSize:15, fontWeight:800, cursor: loading ? 'default' : 'pointer', fontFamily:FONT_B, boxShadow: loading ? 'none' : `0 6px 22px rgba(241,190,67,0.30)`, transition:'all 0.2s', letterSpacing:'-0.01em' }}>
-            {loading ? 'Loading…' : mode === 'signin' ? 'Sign In →' : 'Create Account →'}
+            {loading ? 'Loading…' : mode === 'signin' ? 'Sign In →' : mode === 'reset' ? 'Send reset link →' : 'Create Account →'}
           </button>
+          </form>
+
+          {mode === 'reset' && (
+            <button type="button" onClick={() => switchMode('signin')}
+              style={{ display:'block', margin:'14px auto 0', background:'transparent', border:'none', color:'rgba(255,255,255,0.45)', fontSize:12.5, cursor:'pointer', fontFamily:FONT_B }}>
+              ← Back to sign in
+            </button>
+          )}
 
           {mode === 'signup' && (
             <p style={{ margin:'14px 0 0', fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center' }}>Free during beta · No credit card needed</p>

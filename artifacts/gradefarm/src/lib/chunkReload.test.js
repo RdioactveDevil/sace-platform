@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isChunkLoadError, reloadForNewVersion } from './chunkReload.js'
+import { isChunkLoadError, reloadForNewVersion, preloadable } from './chunkReload.js'
 
 test('recognises stale-chunk errors from each browser', () => {
   // The live error that prompted this.
@@ -27,4 +27,23 @@ test('reloads at most once per cooldown', () => {
 test('does not reload when storage is unavailable', () => {
   const broken = { getItem: () => { throw new Error('blocked') }, setItem: () => {} }
   assert.equal(reloadForNewVersion(broken, 1_000_000), false)
+})
+
+test('preloadable imports once and resolves synchronously once loaded', async () => {
+  let calls = 0
+  const mod = { default: 'Screen' }
+  const loader = preloadable(() => { calls++; return Promise.resolve(mod) })
+  await Promise.all([loader.load(), loader.load()])
+  assert.equal(calls, 1)
+  let got = null
+  loader.load().then(m => { got = m })
+  assert.equal(got, mod) // no tick needed
+})
+
+test('preloadable retries after a failed import', async () => {
+  let calls = 0
+  const loader = preloadable(() => (++calls === 1 ? Promise.reject(new Error('offline')) : Promise.resolve({ default: 1 })))
+  await assert.rejects(loader.load())
+  assert.deepEqual(await loader.load(), { default: 1 })
+  assert.equal(calls, 2)
 })

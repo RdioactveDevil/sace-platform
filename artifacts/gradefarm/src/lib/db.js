@@ -198,6 +198,19 @@ export async function signOut() {
   await supabase.auth.signOut()
 }
 
+/** Email a password-reset link that brings the user back to /reset-password. */
+export async function sendPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  })
+  if (error) throw error
+}
+
+export async function updatePassword(password) {
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) throw error
+}
+
 export async function getSession() {
   const { data } = await supabase.auth.getSession()
   return data.session
@@ -417,36 +430,9 @@ export async function getStruggleMap(userId) {
 }
 
 export async function recordAnswer(userId, questionId, correct, selected = 0, sessionId = null, timeTakenMs = null) {
-  const { data: existing } = await supabase
-    .from('struggle_profiles')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('question_id', questionId)
-    .single()
-
-  const attempts = (existing?.attempts ?? 0) + 1
-  const wrong = (existing?.wrong ?? 0) + (correct ? 0 : 1)
-  const next_review = nextReviewTime(attempts, wrong).toISOString()
-  const last_seen = new Date().toISOString()
-
-  if (existing) {
-    await supabase
-      .from('struggle_profiles')
-      .update({ attempts, wrong, last_seen, next_review })
-      .eq('user_id', userId)
-      .eq('question_id', questionId)
-  } else {
-    await supabase.from('struggle_profiles').insert({
-      user_id: userId,
-      question_id: questionId,
-      attempts,
-      wrong,
-      last_seen,
-      next_review,
-    })
-  }
-
-  await supabase.from('answer_log').insert({
+  // The answer log doesn't depend on the struggle row, so write it alongside
+  // the read-then-write below instead of after it.
+  const logInsert = supabase.from('answer_log').insert({
     user_id: userId,
     session_id: sessionId,
     question_id: questionId,
@@ -454,6 +440,40 @@ export async function recordAnswer(userId, questionId, correct, selected = 0, se
     correct,
     time_taken_ms: timeTakenMs,
   })
+
+  const updateStruggle = async () => {
+    // maybeSingle: a first attempt has no row yet, which .single() reports as an error.
+    const { data: existing } = await supabase
+      .from('struggle_profiles')
+      .select('attempts, wrong')
+      .eq('user_id', userId)
+      .eq('question_id', questionId)
+      .maybeSingle()
+
+    const attempts = (existing?.attempts ?? 0) + 1
+    const wrong = (existing?.wrong ?? 0) + (correct ? 0 : 1)
+    const next_review = nextReviewTime(attempts, wrong).toISOString()
+    const last_seen = new Date().toISOString()
+
+    if (existing) {
+      await supabase
+        .from('struggle_profiles')
+        .update({ attempts, wrong, last_seen, next_review })
+        .eq('user_id', userId)
+        .eq('question_id', questionId)
+    } else {
+      await supabase.from('struggle_profiles').insert({
+        user_id: userId,
+        question_id: questionId,
+        attempts,
+        wrong,
+        last_seen,
+        next_review,
+      })
+    }
+  }
+
+  await Promise.all([updateStruggle(), logInsert])
 }
 
 // â”€â”€â”€ SESSION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
