@@ -4,6 +4,7 @@ import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
 import { notify, notifyError } from './lib/notify'
+import { inviteAcceptPath, pendingInvite } from './lib/pendingInvite'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion } from './lib/db'
@@ -836,6 +837,14 @@ function AppInner() {
     setFreeQuota(q => (q ? { ...q, used: q.used + 1 } : q))
     countFreeQuestion().then(r => setFreeQuota({ used: r.used, limit: r.limit })).catch(() => {})
   }, [])
+
+  // Signed in after starting from a tutor invite (wherever sign-in or the
+  // confirmation link landed them): go back to it so it accepts itself.
+  useEffect(() => {
+    if (!user || !profile) return
+    const token = pendingInvite()
+    if (token && !location.pathname.startsWith('/invite/')) navigate(inviteAcceptPath(token), { replace: true })
+  }, [user, profile, location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Back from Stripe Checkout (?checkout=success&session_id=… or ?checkout=cancelled).
   useEffect(() => {

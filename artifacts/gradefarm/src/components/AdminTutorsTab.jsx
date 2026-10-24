@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { adminListTutors, adminGetTutor, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
+import { adminListTutors, adminGetTutor, adminSetTutorIncludeSubject, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -58,6 +58,19 @@ export default function AdminTutorsTab() {
       .catch(e => { setError(e.message); setDetailLoading(false) })
   }
   const closeDetail = () => { setSelected(null); setDetail(null); setAddStudentId('') }
+
+  // Whether the open tutor can include a subject, free, for their students.
+  const [includeBusy, setIncludeBusy] = useState(false)
+  const toggleIncludeSubject = async () => {
+    const enabled = !selected.can_include_subject
+    setIncludeBusy(true); setError('')
+    try {
+      await adminSetTutorIncludeSubject(selected.id, enabled)
+      setSelected(s => ({ ...s, can_include_subject: enabled }))
+      setTutors(ts => ts.map(x => (x.id === selected.id ? { ...x, can_include_subject: enabled } : x)))
+    } catch (e) { setError(e.message) }
+    setIncludeBusy(false)
+  }
 
   useEffect(() => {
     if (!selected || allStudents) return
@@ -143,6 +156,7 @@ export default function AdminTutorsTab() {
                     <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{t.display_name || '—'}</div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{t.email || '—'}</div>
                     {t.school && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{t.school}</div>}
+                    {t.can_include_subject && <div style={{ fontSize: 10, color: '#4ade80', marginTop: 2, fontWeight: 700 }}>Includes a free subject</div>}
                   </td>
                   <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.roster_size}</span></td>
                   <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.assignments_total}</span></td>
@@ -173,6 +187,20 @@ export default function AdminTutorsTab() {
                 <div style={{ fontSize: 11, color: '#64748b' }}>{selected.email}</div>
               </div>
               <button onClick={closeDetail} style={closeBtn}>×</button>
+            </div>
+
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Include a free subject</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                  Lets this tutor give each of their students the subject they tutor them in, free, while they're on their roster. Turning it off keeps subjects already included.
+                </div>
+              </div>
+              <button onClick={toggleIncludeSubject} disabled={includeBusy} role="switch" aria-checked={!!selected.can_include_subject}
+                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: includeBusy ? 'default' : 'pointer',
+                  background: selected.can_include_subject ? '#4ade80' : 'rgba(255,255,255,0.08)', color: selected.can_include_subject ? '#0c1037' : '#94a3b8' }}>
+                {includeBusy ? '…' : selected.can_include_subject ? 'On' : 'Off'}
+              </button>
             </div>
 
             <div style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>

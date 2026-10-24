@@ -20,9 +20,10 @@ const TRUST_ITEMS = [
 export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const navigate = useNavigate()
   const location = useLocation()
-  // The tutor-invite page links here with { mode: 'signup' }.
+  // The tutor-invite page links here with { mode, email, redirectTo, invitedBy }.
+  const invite = location.state?.invitedBy !== undefined ? location.state : null
   const [mode, setMode]       = useState(location.state?.mode === 'signup' ? 'signup' : 'signin')
-  const [email, setEmail]     = useState('')
+  const [email, setEmail]     = useState(location.state?.email || '')
   const [pass, setPass]       = useState('')
   const [name, setName]       = useState('')
   const [school, setSchool]   = useState('')
@@ -52,11 +53,13 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
         onAuth(false)
       } else {
         if (!name.trim()) throw new Error('Please enter your name.')
-        const data = await signUp(addr, pass, name.trim(), school.trim())
+        const data = await signUp(addr, pass, name.trim(), school.trim(), false, invite?.redirectTo)
         // With email confirmation on there is no session until the link is clicked.
         if (data?.session) onAuth(true)
         else {
-          setNotice(`Almost there — we've sent a confirmation link to ${addr}. Open it to finish creating your account, then sign in.`)
+          setNotice(invite
+            ? `Almost there — we've sent a confirmation link to ${addr}. Open it and we'll accept your invite${invite.invitedBy ? ` from ${invite.invitedBy}` : ''} straight away.`
+            : `Almost there — we've sent a confirmation link to ${addr}. Open it to finish creating your account, then sign in.`)
           setMode('signin')
         }
       }
@@ -146,7 +149,9 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
             {mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : 'Create your account'}
           </h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', margin:'0 0 28px' }}>
-            {mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one." : 'Your first subject is free. No credit card required.'}
+            {invite?.invitedBy && mode !== 'reset'
+              ? `${mode === 'signin' ? 'Sign in' : 'Create your account'} to accept ${invite.invitedBy}'s invite.`
+              : mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one." : 'Your first subject is free. No credit card required.'}
           </p>
 
           {mode !== 'reset' && <div style={{ display:'flex', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:4, marginBottom:24, gap:4 }}>

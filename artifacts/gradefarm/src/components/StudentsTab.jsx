@@ -15,6 +15,9 @@ import {
   setStudentYearLevel,
   addStudentSubject,
   removeStudentSubject,
+  fetchIncludableSubjects,
+  setIncludedSubject,
+  removeIncludedSubject,
 } from '../lib/db'
 
 const GOLD = '#f1be43'
@@ -74,6 +77,9 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   const [addLoading, setAddLoading] = useState(false)
   const [addNotice, setAddNotice] = useState('')
   const [invites, setInvites] = useState([])
+  // Whether this tutor can include a subject (free for the student), and the subjects.
+  const [includable, setIncludable] = useState({ canInclude: false, subjects: [] })
+  const [inviteSubject, setInviteSubject] = useState('')
   const [inviteBusy, setInviteBusy] = useState(null)
   const [inviteMsg, setInviteMsg] = useState({})        // { inviteId: text }
   const [showAdd, setShowAdd] = useState(false)
@@ -97,6 +103,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       } else setEmails({})
       fetchRosterDetails({ allTutors }).then(setDetails).catch(() => {})
       fetchPendingInvites().then(setInvites).catch(() => {})
+      if (!allTutors) fetchIncludableSubjects().then(setIncludable).catch(() => {})
     } catch {}
     setLoading(false)
   }
@@ -144,6 +151,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       overrideYear: d.override_year_level || '',
       profileYear: d.profile_year_level ?? null,
       subscriptions: d.subscriptions || [],
+      included: d.included || null,
       subjects,
       stages,
       classes: cls,
@@ -211,9 +219,12 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     setAddNotice('')
     try {
       const sentTo = email.trim().toLowerCase()
-      const res = await inviteStudent(sentTo)
+      const res = await inviteStudent(sentTo, includable.canInclude ? (inviteSubject || null) : undefined)
       if (!res.emailSent) setAddError(`Invite saved, but the email didn't send: ${String(res.emailError).replace(/\.+$/, '')}. Try Resend below.`)
-      else { setEmail(''); setAddNotice(`Invite sent to ${sentTo}. They'll join your roster once they accept.`) }
+      else {
+        setEmail(''); setInviteSubject('')
+        setAddNotice(`Invite sent to ${sentTo}. They'll join your roster once they accept${res.invite?.subject ? `, with ${res.invite.subject} unlocked` : ''}.`)
+      }
       fetchPendingInvites().then(setInvites).catch(() => {})
     } catch (err) { setAddError(err.message || 'Could not send the invite.') }
     setAddLoading(false)
@@ -275,7 +286,10 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         <td style={{ padding: '12px 16px', fontSize: 13, color: s.year_level ? t.text : t.textFaint, whiteSpace: 'nowrap' }}>{s.year_level || '—'}</td>
         <td style={{ padding: '12px 16px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {s.subjects.length ? s.subjects.map(su => tag(`${su.subject_name}${su.stage ? ` · ${su.stage}` : ''}`, GOLD, su.id)) : <span style={{ color: t.textFaint, fontSize: 13 }}>—</span>}
+            {s.subjects.length ? s.subjects.map(su => {
+              const free = s.included && s.included.subject_name === su.subject_name && (s.included.stage || '') === (su.stage || '')
+              return tag(`${su.subject_name}${su.stage ? ` · ${su.stage}` : ''}${free ? ' · included' : ''}`, free ? t.success : GOLD, su.id)
+            }) : <span style={{ color: t.textFaint, fontSize: 13 }}>—</span>}
           </div>
         </td>
         <td style={{ padding: '12px 16px' }}>
@@ -297,7 +311,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
 
       {editId === s.id && (
         <tr><td colSpan={colCount} style={{ padding: '0 16px 16px', background: t.bgSubtle }}>
-          <StudentEditor student={s} theme={theme} onChange={load} />
+          <StudentEditor student={s} theme={theme} onChange={load} includable={includable} />
         </td></tr>
       )}
       {confirmRemove === s.id && (
@@ -364,9 +378,18 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       {/* Add form */}
       {showAdd && (
         <div style={{ ...card, padding: '16px 18px' }}>
-          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 10 }}>Enter the student's email and we'll send them an invite. They join your roster (and get the Student Portal) once they accept. They don't need an account yet.</div>
+          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 10 }}>
+            Enter the student's email and we'll send them an invite. They join your roster (and get the Student Portal) once they accept. They don't need an account yet.
+            {includable.canInclude && ' Pick the subject you tutor them in and it unlocks free for them when they accept.'}
+          </div>
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <input className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }} placeholder="student@email.com" type="email" style={{ ...ctrl, flex: 1, minWidth: 220 }} />
+            {includable.canInclude && (
+              <select className="td-input-gold" value={inviteSubject} onChange={e => setInviteSubject(e.target.value)} aria-label="Subject included free" style={{ ...ctrl, flex: '1 1 200px', minWidth: 180, color: inviteSubject ? t.text : t.textMuted }}>
+                <option value="">No included subject</option>
+                {includable.subjects.map(su => <option key={su.id} value={su.id}>{su.label} (included free)</option>)}
+              </select>
+            )}
             <button type="submit" disabled={addLoading || !email.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Sending…' : 'Send invite'}</button>
           </form>
           {addError && <div style={{ marginTop: 8, fontSize: 12, color: t.danger }}>{addError}</div>}
@@ -387,6 +410,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.email}</div>
                 <div style={{ fontSize: 11, color: inv.expired ? t.danger : t.textMuted }}>
                   {inv.expired ? 'Expired. Resend to renew' : inv.sent_at ? `Sent ${fmtDate(inv.sent_at)}` : 'Not sent yet'}
+                  {inv.subject ? ` · ${inv.subject} included` : ''}
                   {inviteMsg[inv.id] ? ` · ${inviteMsg[inv.id]}` : ''}
                 </div>
               </div>
@@ -439,7 +463,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
 }
 
 // ── Inline editor: year-level override + pick which subjects you tutor ──────────
-function StudentEditor({ student, theme, onChange }) {
+function StudentEditor({ student, theme, onChange, includable }) {
   const t = THEMES[theme]
   const [year, setYear] = useState(student.overrideYear || '')
   const [savingYear, setSavingYear] = useState(false)
@@ -490,6 +514,8 @@ function StudentEditor({ student, theme, onChange }) {
         {savingYear && <span style={{ fontSize: 12, color: t.textMuted }}>Saving…</span>}
       </div>
 
+      {includable?.canInclude && <IncludedSubjectPicker student={student} subjects={includable.subjects} theme={theme} onChange={onChange} />}
+
       <div>
         <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
           Subjects you tutor {firstName} in
@@ -515,6 +541,60 @@ function StudentEditor({ student, theme, onChange }) {
             </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── The subject this tutor includes, free, for the student ──────────────────────
+function IncludedSubjectPicker({ student, subjects, theme, onChange }) {
+  const t = THEMES[theme]
+  const current = student.included
+    ? subjects.find(su => su.name === student.included.subject_name && (su.stage || '') === (student.included.stage || ''))
+    : null
+  const [value, setValue] = useState(current?.id || '')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null) // { text, tone }
+  const firstName = student.name.split(' ')[0]
+  const ctrl = { padding: '8px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
+
+  const save = async (id) => {
+    const prev = value
+    setValue(id); setBusy(true); setMsg(null)
+    try {
+      if (!id) {
+        await removeIncludedSubject(student.id)
+        setMsg({ text: `${firstName} no longer gets a subject included.`, tone: t.textMuted })
+      } else {
+        const res = await setIncludedSubject(student.id, id)
+        if (res.outcome === 'covered') {
+          setValue(prev)
+          setMsg({ text: `${firstName} already has free access to ${res.label}, so there's nothing to include.`, tone: t.textMuted })
+        } else setMsg({ text: `${res.label} is unlocked for ${firstName}.`, tone: t.success })
+      }
+      onChange()
+    } catch (e) {
+      setValue(prev)
+      setMsg({ text: e.message || 'Could not update the included subject.', tone: t.danger })
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+        Included subject
+      </div>
+      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 8 }}>
+        Free for {firstName}, with unlimited questions, while they're on your roster. If they pay for it now, it comes off their plan.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <select value={value} onChange={e => save(e.target.value)} disabled={busy} aria-label={`Subject included for ${firstName}`} style={{ ...ctrl, minWidth: 220 }}>
+          <option value="">None</option>
+          {subjects.map(su => <option key={su.id} value={su.id}>{su.label}</option>)}
+        </select>
+        {busy && <span style={{ fontSize: 12, color: t.textMuted }}>Saving…</span>}
+        {msg && <span style={{ fontSize: 12, color: msg.tone, fontWeight: 600 }}>{msg.text}</span>}
       </div>
     </div>
   )

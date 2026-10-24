@@ -33,6 +33,7 @@ const longDate  = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { da
 function accessLine(sub, freeDaily) {
   if (sub.source === 'beta') return { text: 'Free — beta member', tone: 'success' }
   if (sub.source === 'free') return { text: `Free subject — ${freeDaily} questions a day`, tone: 'success' }
+  if (sub.source === 'tutor') return { text: 'Included with your tutoring', tone: 'success' }
   if (sub.source !== 'stripe') return { text: 'Included by Titanium Tutoring', tone: 'success' }
   if (sub.status === 'past_due') return { text: 'Payment failed — update your card', tone: 'danger' }
   if (sub.cancel_at_period_end) return { text: `Ends ${shortDate(sub.current_period_end)}`, tone: 'muted' }

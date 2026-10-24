@@ -489,7 +489,7 @@ router.post("/admin/students/:id/subscriptions", async (req, res) => {
       {
         user_id: req.params.id, subject_name: cur.name, stage, active: true, beta: false, source: "admin",
         status: null, stripe_subscription_id: null, stripe_customer_id: null, current_period_end: null,
-        cancel_at_period_end: false, updated_at: new Date().toISOString(),
+        cancel_at_period_end: false, sponsor_tutor_id: null, updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,subject_name,stage" },
     );
@@ -646,13 +646,13 @@ router.get("/admin/tutors", async (req, res) => {
 
     const { data: tutors, error: tutorErr } = await admin
       .from("profiles")
-      .select("id, display_name, school, last_active, created_at")
+      .select("id, display_name, school, last_active, created_at, can_include_subject")
       .eq("is_tutor", true);
     if (tutorErr) return res.status(500).json({ error: tutorErr.message });
 
     const tutorList = (tutors || []) as {
       id: string; display_name: string | null; school: string | null;
-      last_active: string | null; created_at: string;
+      last_active: string | null; created_at: string; can_include_subject: boolean | null;
     }[];
     if (tutorList.length === 0) return res.json({ tutors: [] });
 
@@ -696,6 +696,7 @@ router.get("/admin/tutors", async (req, res) => {
         last_active: t.last_active,
         created_at: t.created_at,
         roster_size: rosterCount[t.id] || 0,
+        can_include_subject: !!t.can_include_subject,
         assignments_total:     stats[t.id].total,
         assignments_completed: stats[t.id].completed,
         assignments_pending:   stats[t.id].pending,
@@ -708,6 +709,25 @@ router.get("/admin/tutors", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/tutors/:id/include-subject — { enabled }: whether this tutor can
+// include a subject, free, for their students (lib/included-subject.ts).
+// Turning it off keeps the subjects already included.
+router.patch("/admin/tutors/:id/include-subject", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const enabled = req.body?.enabled === true;
+    const { data, error } = await ctx.admin
+      .from("profiles").update({ can_include_subject: enabled })
+      .eq("id", req.params.id).eq("is_tutor", true).select("id");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "Tutor not found" });
+    return res.json({ ok: true, can_include_subject: enabled });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
   }
 });
 
