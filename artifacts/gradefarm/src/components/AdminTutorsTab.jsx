@@ -59,7 +59,7 @@ export default function AdminTutorsTab() {
   }
   const closeDetail = () => { setSelected(null); setDetail(null); setAddStudentId('') }
 
-  // Whether the open tutor can include a subject, free, for their students.
+  // Whether the open tutor can include subjects, free, for their students.
   const [includeBusy, setIncludeBusy] = useState(false)
   const toggleIncludeSubject = async () => {
     const enabled = !selected.can_include_subject
@@ -156,7 +156,7 @@ export default function AdminTutorsTab() {
                     <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{t.display_name || '—'}</div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{t.email || '—'}</div>
                     {t.school && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{t.school}</div>}
-                    {t.can_include_subject && <div style={{ fontSize: 10, color: '#4ade80', marginTop: 2, fontWeight: 700 }}>Includes a free subject</div>}
+                    {t.can_include_subject && <div style={{ fontSize: 10, color: '#4ade80', marginTop: 2, fontWeight: 700 }}>Includes free subjects</div>}
                   </td>
                   <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.roster_size}</span></td>
                   <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.assignments_total}</span></td>
@@ -191,9 +191,9 @@ export default function AdminTutorsTab() {
 
             <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Include a free subject</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Include free subjects</div>
                 <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                  Lets this tutor give each of their students the subject they tutor them in, free, while they're on their roster. Turning it off keeps subjects already included.
+                  Lets this tutor give their students the subjects they tutor them in, free, while they're on their roster. Turning it off keeps subjects already included.
                 </div>
               </div>
               <button onClick={toggleIncludeSubject} disabled={includeBusy} role="switch" aria-checked={!!selected.can_include_subject}

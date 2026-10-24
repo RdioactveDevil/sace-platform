@@ -968,7 +968,7 @@ interface StudentDetail {
   profile_year_level: number | null;      // set by the student at onboarding
   tutored: SubjectRow[];                   // subjects THIS tutor tutors (their selection)
   subscriptions: { subject_name: string; stage: string | null }[]; // student's onboarding subjects
-  included: { subject_name: string; stage: string | null } | null; // the subject THIS tutor includes (free)
+  included: { subject_name: string; stage: string | null }[]; // subjects THIS tutor includes (free)
 }
 
 // GET /tutor/roster-details — per-student year level + subjects (onboarding + tutor selection)
@@ -989,7 +989,7 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     const byStudent: Record<string, StudentDetail> = {};
     for (const r of (roster ?? []) as { student_id: string; year_level: string | null }[]) {
       if (byStudent[r.student_id]) continue; // a student with several tutors
-      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: null };
+      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: [] };
     }
 
     if (studentIds.length > 0) {
@@ -1008,7 +1008,7 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
         if (s.active === false || !byStudent[s.user_id]) continue;
         byStudent[s.user_id].subscriptions.push({ subject_name: s.subject_name, stage: s.stage });
         if (s.source === "tutor" && s.sponsor_tutor_id === callerUserId) {
-          byStudent[s.user_id].included = { subject_name: s.subject_name, stage: s.stage };
+          byStudent[s.user_id].included.push({ subject_name: s.subject_name, stage: s.stage });
         }
       }
     }
@@ -1119,9 +1119,9 @@ router.delete("/tutor/students/:studentId/subjects/:subjectId", async (req: Requ
   }
 });
 
-// ── Included subject (free for the student; see lib/included-subject.ts) ────
+// ── Included subjects (free for the student; see lib/included-subject.ts) ───
 
-// GET /tutor/included-subjects — whether the caller can include a subject, and the subjects to pick from.
+// GET /tutor/included-subjects — whether the caller can include subjects, and the subjects to pick from.
 router.get("/tutor/included-subjects", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
@@ -1147,8 +1147,8 @@ router.get("/tutor/included-subjects", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /tutor/students/:studentId/included-subject — { curriculumId }: include (or switch) the subject.
-router.put("/tutor/students/:studentId/included-subject", async (req: Request, res: Response) => {
+// PUT /tutor/students/:studentId/included-subjects/:curriculumId — include a subject.
+router.put("/tutor/students/:studentId/included-subjects/:curriculumId", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
@@ -1158,9 +1158,9 @@ router.put("/tutor/students/:studentId/included-subject", async (req: Request, r
       return res.status(403).json({ error: "Student not on your roster." });
     }
     if (!(await canIncludeSubject(admin, callerUserId))) {
-      return res.status(403).json({ error: "Your account can't include a subject yet. Ask an admin to turn it on." });
+      return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
     }
-    const result = await includeSubject(admin, callerUserId, studentId, (req.body as { curriculumId?: unknown })?.curriculumId);
+    const result = await includeSubject(admin, callerUserId, studentId, String(req.params.curriculumId));
     return res.json(result);
   } catch (err) {
     if (err instanceof IncludedSubjectError) return res.status(err.status).json({ error: err.message });
@@ -1169,14 +1169,15 @@ router.put("/tutor/students/:studentId/included-subject", async (req: Request, r
   }
 });
 
-// DELETE /tutor/students/:studentId/included-subject — stop including it.
-router.delete("/tutor/students/:studentId/included-subject", async (req: Request, res: Response) => {
+// DELETE /tutor/students/:studentId/included-subjects/:curriculumId — stop including a subject.
+router.delete("/tutor/students/:studentId/included-subjects/:curriculumId", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    await removeIncludedSubject(ctx.admin, ctx.callerUserId, String(req.params.studentId));
+    await removeIncludedSubject(ctx.admin, ctx.callerUserId, String(req.params.studentId), String(req.params.curriculumId));
     return res.json({ ok: true });
   } catch (err) {
+    if (err instanceof IncludedSubjectError) return res.status(err.status).json({ error: err.message });
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
   }

@@ -30,7 +30,7 @@ export default function InviteScreen({ signedIn }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(null) // 'accept' | 'decline'
   const [done, setDone] = useState(null) // 'accepted' | 'declined'
-  const [accepted, setAccepted] = useState(null) // { subject, subjectError } from accepting
+  const [accepted, setAccepted] = useState(null) // { subjects, subjectError } from accepting
   const autoAccept = useRef(searchParams.get('accept') === '1')
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function InviteScreen({ signedIn }) {
     setBusy(accept ? 'accept' : 'decline'); setError('')
     try {
       const res = await respondToInvite(token, accept)
-      if (accept) setAccepted({ subject: res?.subject || null, subjectError: res?.subjectError || null })
+      if (accept) setAccepted({ subjects: res?.subjects || [], subjectError: res?.subjectError || null })
       setDone(accept ? 'accepted' : 'declined')
     } catch (e) { setError(e.message) }
     setBusy(null)
@@ -86,7 +86,7 @@ export default function InviteScreen({ signedIn }) {
   })
 
   const tutor = invite?.tutor_name || 'Your tutor'
-  const subject = invite?.subject || null
+  const subjects = invite?.subjects || []
   let body
   if (!invite && !error) {
     body = <p style={{ color: '#94a3b8', fontSize: 14 }}>Loading invite…</p>
@@ -96,8 +96,8 @@ export default function InviteScreen({ signedIn }) {
     body = (
       <>
         <Notice icon={Check} color="#4ade80" text={`You're in. ${tutor} is now your tutor.`} />
-        {accepted?.subject && (
-          <div style={{ marginTop: 10 }}><Notice icon={BookOpen} color={GOLD} text={`${accepted.subject} is unlocked, included with your tutoring.`} /></div>
+        {accepted?.subjects?.length > 0 && (
+          <div style={{ marginTop: 10 }}><Notice icon={BookOpen} color={GOLD} text={`${listSubjects(accepted.subjects)} ${accepted.subjects.length > 1 ? 'are' : 'is'} unlocked, included with your tutoring.`} /></div>
         )}
         {accepted?.subjectError && (
           <div style={{ marginTop: 10 }}><Notice icon={TriangleAlert} color={GOLD} text={accepted.subjectError} /></div>
@@ -119,11 +119,11 @@ export default function InviteScreen({ signedIn }) {
   } else {
     body = (
       <>
-        {subject && (
+        {subjects.length > 0 && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '0 0 16px', padding: '12px 14px', borderRadius: 12, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.3)' }}>
             <BookOpen size={18} color={GOLD} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ fontSize: 14, lineHeight: 1.5, color: '#f1f5f9' }}>
-              <strong>{subject}</strong> is included with your tutoring. There's nothing to pay for it.
+              <strong>{listSubjects(subjects)}</strong> {subjects.length > 1 ? 'are' : 'is'} included with your tutoring. There's nothing to pay for {subjects.length > 1 ? 'them' : 'it'}.
             </div>
           </div>
         )}
@@ -165,6 +165,11 @@ export default function InviteScreen({ signedIn }) {
       </div>
     </div>
   )
+}
+
+/** "Chemistry", "Chemistry and Physics", "Chemistry, Physics and Biology". */
+function listSubjects(labels) {
+  return labels.length <= 1 ? (labels[0] || '') : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
 }
 
 function Notice({ icon: Icon, color, text }) {

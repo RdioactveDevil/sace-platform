@@ -5,8 +5,8 @@
  * row is what lets the tutor see the student's progress and opens the Lessons
  * section of the Student Portal.
  *
- * An invite can come with the subject the tutor teaches the student
- * (curriculum_id); it unlocks, free, when they accept. See
+ * An invite can come with the subjects the tutor teaches the student
+ * (curriculum_ids); they unlock, free, when they accept. See
  * lib/included-subject.ts.
  *
  *   POST   /tutor/invites           invite (or re-send to) an email address
@@ -23,7 +23,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, getServiceClient, type Caller } from "../lib/auth";
 import { appUrl, getResend, sendEmail } from "../lib/email";
 import { logger } from "../lib/logger";
-import { canIncludeSubject, includeSubject, subjectLabel } from "../lib/included-subject";
+import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { liveCurriculum } from "./billing";
 
 const router = Router();
@@ -42,7 +42,7 @@ interface InviteRow {
   token: string;
   status: "pending" | "accepted" | "declined" | "cancelled";
   student_id: string | null;
-  curriculum_id: string | null;
+  curriculum_ids: string[];
   created_at: string;
   sent_at: string | null;
   responded_at: string | null;
@@ -85,7 +85,13 @@ function inviteUrl(token: string): string {
   return `${appUrl()}/invite/${encodeURIComponent(token)}`;
 }
 
-async function sendInviteEmail(invite: InviteRow, tutorName: string, subject: string | null, sentAt: string): Promise<string | null> {
+/** "Chemistry", "Chemistry and Physics", "Chemistry, Physics and Biology". */
+function listSubjects(labels: string[]): string {
+  return labels.length <= 1 ? (labels[0] ?? "") : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+async function sendInviteEmail(invite: InviteRow, tutorName: string, subjects: string[], sentAt: string): Promise<string | null> {
+  const subject = subjects.length ? listSubjects(subjects) : null;
   const resend = getResend();
   if (!resend) return "Email service not configured. Please add RESEND_API_KEY.";
   const { error } = await sendEmail(resend, {
@@ -95,7 +101,7 @@ async function sendInviteEmail(invite: InviteRow, tutorName: string, subject: st
       heading: `${tutorName} wants to be your tutor`,
       paragraphs: [
         subject
-          ? `${tutorName} has invited you to join them on gradefarm. ${subject} is included with your tutoring, so there's nothing to pay for it.`
+          ? `${tutorName} has invited you to join them on gradefarm. ${subject} ${subjects.length > 1 ? "are" : "is"} included with your tutoring, so there's nothing to pay for ${subjects.length > 1 ? "them" : "it"}.`
           : `${tutorName} has invited you to join them on gradefarm.`,
         `Accept the invite to open the Student Portal: your lessons, class resources and recordings, and the work ${tutorName} sets you. Once you accept, ${tutorName} will also be able to see your practice progress.`,
         `New to gradefarm.? The button takes you to create your account with this email address (${invite.email}). The invite is accepted as soon as you confirm it.`,
@@ -108,13 +114,13 @@ async function sendInviteEmail(invite: InviteRow, tutorName: string, subject: st
   return error;
 }
 
-function tutorView(invite: InviteRow, subject: string | null) {
-  return { id: invite.id, email: invite.email, subject, created_at: invite.created_at, sent_at: invite.sent_at, expired: isExpired(invite) };
+function tutorView(invite: InviteRow, subjects: string[]) {
+  return { id: invite.id, email: invite.email, subjects, created_at: invite.created_at, sent_at: invite.sent_at, expired: isExpired(invite) };
 }
 
-/** Subject labels for these invites' curriculum ids. */
+/** Labels of these invites' subjects, by curriculum id (subjects no longer live are left out). */
 async function subjectLabels(admin: SupabaseClient, invites: InviteRow[]): Promise<Record<string, string>> {
-  const ids = [...new Set(invites.map((i) => i.curriculum_id).filter((id): id is string => !!id))];
+  const ids = [...new Set(invites.flatMap((i) => i.curriculum_ids ?? []))];
   const labels: Record<string, string> = {};
   await Promise.all(ids.map(async (id) => {
     const label = await subjectLabel(admin, id);
@@ -122,6 +128,12 @@ async function subjectLabels(admin: SupabaseClient, invites: InviteRow[]): Promi
   }));
   return labels;
 }
+
+const labelsOf = (invite: InviteRow, labels: Record<string, string>) =>
+  (invite.curriculum_ids ?? []).map((id) => labels[id]).filter((l): l is string => !!l);
+
+/** Both ways of holding the same subjects compare equal. */
+const sameIds = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
 // ── Tutor side ──────────────────────────────────────────────────────────────
 
@@ -141,19 +153,23 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     if (!caller) return;
     const { admin, userId } = caller;
 
-    const body = (req.body ?? {}) as { email?: string; curriculumId?: string | null };
+    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown };
     const email = String(body.email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
 
-    // The subject the invite comes with. Left out (a plain re-send) keeps the
-    // invite's current one; null takes it off.
-    const setsSubject = "curriculumId" in body;
-    const curriculumId = body.curriculumId ? String(body.curriculumId) : null;
-    if (curriculumId) {
+    // The subjects the invite comes with. Left out (a plain re-send) keeps the
+    // invite's current ones; [] takes them off.
+    const setsSubjects = "curriculumIds" in body;
+    const curriculumIds = Array.isArray(body.curriculumIds)
+      ? [...new Set(body.curriculumIds.filter((id): id is string => typeof id === "string" && !!id))]
+      : [];
+    if (curriculumIds.length > 20) return res.status(400).json({ error: "That's too many subjects for one invite." });
+    if (curriculumIds.length) {
       if (!(await canIncludeSubject(admin, userId))) {
-        return res.status(403).json({ error: "Your account can't include a subject yet. Ask an admin to turn it on." });
+        return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
       }
-      if (!(await liveCurriculum(admin, curriculumId))) return res.status(400).json({ error: "That subject isn't available." });
+      const live = await Promise.all(curriculumIds.map((id) => liveCurriculum(admin, id)));
+      if (live.some((c) => !c)) return res.status(400).json({ error: "One of those subjects isn't available." });
     }
 
     const existingUserId = await findUserIdByEmail(admin, email);
@@ -167,8 +183,8 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
         .maybeSingle();
       if (rostered) {
         return res.status(409).json({
-          error: curriculumId
-            ? "That student is already on your roster. Use Edit on their row to include the subject."
+          error: curriculumIds.length
+            ? "That student is already on your roster. Use Edit on their row to include subjects."
             : "That student is already on your roster.",
         });
       }
@@ -190,28 +206,29 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     if (!invite) {
       const { data: created, error: insertErr } = await admin
         .from("tutor_invites")
-        .insert({ tutor_id: userId, email, token: randomBytes(24).toString("base64url"), curriculum_id: curriculumId })
+        .insert({ tutor_id: userId, email, token: randomBytes(24).toString("base64url"), curriculum_ids: curriculumIds })
         .select("*")
         .single<InviteRow>();
       if (insertErr || !created) return res.status(500).json({ error: insertErr?.message ?? "Could not create the invite." });
       invite = created;
-    } else if (setsSubject && invite.curriculum_id !== curriculumId) {
-      const { error: subjErr } = await admin.from("tutor_invites").update({ curriculum_id: curriculumId }).eq("id", invite.id);
+    } else if (setsSubjects && !sameIds(invite.curriculum_ids ?? [], curriculumIds)) {
+      const { error: subjErr } = await admin.from("tutor_invites").update({ curriculum_ids: curriculumIds }).eq("id", invite.id);
       if (subjErr) return res.status(500).json({ error: subjErr.message });
-      invite = { ...invite, curriculum_id: curriculumId };
+      invite = { ...invite, curriculum_ids: curriculumIds };
     }
 
     const sentAt = new Date().toISOString();
-    const [tutorName, subject] = await Promise.all([
+    const [tutorName, labels] = await Promise.all([
       displayName(admin, userId).then((n) => n ?? "Your tutor"),
-      subjectLabel(admin, invite.curriculum_id),
+      subjectLabels(admin, [invite]),
     ]);
-    const emailError = await sendInviteEmail(invite, tutorName, subject, sentAt);
+    const subjects = labelsOf(invite, labels);
+    const emailError = await sendInviteEmail(invite, tutorName, subjects, sentAt);
     if (!emailError) {
       await admin.from("tutor_invites").update({ sent_at: sentAt }).eq("id", invite.id);
       invite = { ...invite, sent_at: sentAt };
     }
-    return res.json({ invite: tutorView(invite, subject), emailSent: !emailError, emailError });
+    return res.json({ invite: tutorView(invite, subjects), emailSent: !emailError, emailError });
   } catch (err) {
     return fail(res, err);
   }
@@ -230,7 +247,7 @@ router.get("/tutor/invites", async (req: Request, res: Response) => {
     if (error) return res.status(500).json({ error: error.message });
     const invites = (data ?? []) as InviteRow[];
     const labels = await subjectLabels(caller.admin, invites);
-    return res.json({ invites: invites.map((i) => tutorView(i, (i.curriculum_id && labels[i.curriculum_id]) || null)) });
+    return res.json({ invites: invites.map((i) => tutorView(i, labelsOf(i, labels))) });
   } catch (err) {
     return fail(res, err);
   }
@@ -284,7 +301,7 @@ router.get("/invites/mine", async (req: Request, res: Response) => {
       invites: invites.map((i) => ({
         token: i.token,
         tutor_name: names[i.tutor_id] || "A tutor",
-        subject: (i.curriculum_id && labels[i.curriculum_id]) || null,
+        subjects: labelsOf(i, labels),
         created_at: i.created_at,
       })),
     });
@@ -312,7 +329,7 @@ router.get("/invites/:token", async (req: Request, res: Response) => {
       // Pre-fills sign-up. Only while the invite is usable: whoever has the
       // link was sent it at this address.
       signup_email: status === "pending" ? invite.email : null,
-      subject: await subjectLabel(admin, invite.curriculum_id),
+      subjects: labelsOf(invite, await subjectLabels(admin, [invite])),
       status,
     });
   } catch (err) {
@@ -371,21 +388,23 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
       .eq("id", invite.id);
     if (error) return res.status(500).json({ error: error.message });
 
-    // Unlock the subject the invite came with, if the tutor can still include one.
-    // The student is on the roster either way; the tutor can retry from there.
-    let subject: string | null = null;
+    // Unlock the subjects the invite came with, if the tutor can still include
+    // them. The student is on the roster either way; the tutor can retry from there.
+    let subjects: string[] = [];
     let subjectError: string | null = null;
-    if (invite.curriculum_id) {
+    if (invite.curriculum_ids?.length) {
       try {
         if (await canIncludeSubject(caller.admin, invite.tutor_id)) {
-          subject = (await includeSubject(caller.admin, invite.tutor_id, caller.userId, invite.curriculum_id)).label;
+          const result = await includeSubjects(caller.admin, invite.tutor_id, caller.userId, invite.curriculum_ids);
+          subjects = result.labels;
+          if (result.failed) subjectError = "Some of your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
         }
       } catch (err) {
-        logger.error({ err, inviteId: invite.id }, "invites: could not include the invite's subject");
-        subjectError = "Your tutor's subject couldn't be unlocked just now. Ask them to include it again from their roster.";
+        logger.error({ err, inviteId: invite.id }, "invites: could not include the invite's subjects");
+        subjectError = "Your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
       }
     }
-    return res.json({ ok: true, tutor_name: (await displayName(caller.admin, invite.tutor_id)) ?? "your tutor", subject, subjectError });
+    return res.json({ ok: true, tutor_name: (await displayName(caller.admin, invite.tutor_id)) ?? "your tutor", subjects, subjectError });
   } catch (err) {
     return fail(res, err);
   }

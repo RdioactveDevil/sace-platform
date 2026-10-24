@@ -1,16 +1,16 @@
 -- Tutor-included subjects.
 --
--- A Titanium Tutoring student doesn't pay for the subject their tutor teaches
--- them. The tutor picks that subject when inviting the student (or later, from
--- the roster) and it unlocks as soon as the student is on their roster.
+-- A Titanium Tutoring student doesn't pay for the subjects their tutor teaches
+-- them. The tutor picks those subjects when inviting the student (or later,
+-- from the roster) and they unlock as soon as the student is on their roster.
 --
 -- 1. profiles.can_include_subject: which tutors may do this. Set by an admin
 --    (Admin → Tutors); admins can always include a subject.
--- 2. tutor_invites.curriculum_id: the subject an invite comes with. Unlocked
---    when the student accepts.
+-- 2. tutor_invites.curriculum_ids: the subjects an invite comes with.
+--    Unlocked when the student accepts.
 -- 3. user_subscriptions source 'tutor': unlimited access, like an admin grant,
---    tied to the tutor who gave it (sponsor_tutor_id). At most one per tutor
---    and student; it doesn't use up the student's own free subject.
+--    tied to the tutor who gave it (sponsor_tutor_id). Doesn't use up the
+--    student's own free subject.
 -- 4. The access lasts while the student is on that tutor's roster: removing
 --    them (tutor, admin, or account deletion) deletes the row.
 
@@ -46,9 +46,10 @@ begin
 end;
 $$;
 
--- ── 2. The subject an invite comes with ─────────────────────────────────────
+-- ── 2. The subjects an invite comes with ────────────────────────────────────
+-- Curricula ids; checked against the live subjects when the student accepts.
 alter table public.tutor_invites
-  add column if not exists curriculum_id uuid references public.curricula (id) on delete set null;
+  add column if not exists curriculum_ids uuid[] not null default '{}';
 
 -- ── 3. 'tutor' access rows ──────────────────────────────────────────────────
 alter table public.user_subscriptions
@@ -63,8 +64,8 @@ do $$ begin
     add constraint user_subscriptions_tutor_has_sponsor check (source <> 'tutor' or sponsor_tutor_id is not null);
 exception when duplicate_object then null; end $$;
 
-create unique index if not exists user_subscriptions_one_tutor_subject
-  on public.user_subscriptions (user_id, sponsor_tutor_id) where source = 'tutor';
+create index if not exists user_subscriptions_sponsor_idx
+  on public.user_subscriptions (sponsor_tutor_id, user_id) where source = 'tutor';
 
 -- ── 4. Leaving the roster ends the access ───────────────────────────────────
 -- SECURITY DEFINER: tutors remove roster rows from the browser, and students

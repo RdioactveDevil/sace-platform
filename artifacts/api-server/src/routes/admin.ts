@@ -713,7 +713,7 @@ router.get("/admin/tutors", async (req, res) => {
 });
 
 // PATCH /admin/tutors/:id/include-subject — { enabled }: whether this tutor can
-// include a subject, free, for their students (lib/included-subject.ts).
+// include subjects, free, for their students (lib/included-subject.ts).
 // Turning it off keeps the subjects already included.
 router.patch("/admin/tutors/:id/include-subject", async (req, res) => {
   try {

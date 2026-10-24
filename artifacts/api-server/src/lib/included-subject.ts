@@ -1,16 +1,17 @@
 /**
- * Tutor-included subjects: a tutor's student doesn't pay for the subject the
- * tutor teaches them. The tutor picks it on the invite (unlocked when the
- * student accepts) or later from their roster. It's a user_subscriptions row
- * with source 'tutor' and sponsor_tutor_id = the tutor: unlimited, separate
- * from the student's own free subject, at most one per tutor and student, and
- * deleted by a database trigger when the student leaves that tutor's roster.
+ * Tutor-included subjects: a tutor's student doesn't pay for the subjects the
+ * tutor teaches them. The tutor picks them on the invite (unlocked when the
+ * student accepts) or later from their roster. Each is a user_subscriptions
+ * row with source 'tutor' and sponsor_tutor_id = the tutor: unlimited,
+ * separate from the student's own free subject, and deleted by a database
+ * trigger when the student leaves that tutor's roster.
  *
  * Only tutors with profiles.can_include_subject (set by an admin) and admins
  * can include a subject.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStripe, liveCurriculum, removePaidSubject } from "../routes/billing";
+import { logger } from "./logger";
 
 export class IncludedSubjectError extends Error {
   constructor(public status: number, message: string) {
@@ -47,10 +48,10 @@ type AccessRow = {
 };
 
 /**
- * Make `curriculumId` the subject `tutorId` includes for `studentId`, replacing
- * the one they included before. A free-subject or lapsed row for it becomes
- * the tutor's; a paid one comes off the student's plan first, so they stop
- * paying for it. The caller checks the roster and canIncludeSubject.
+ * Include `curriculumId` for `studentId` on `tutorId`'s behalf. A free-subject
+ * or lapsed row for it becomes the tutor's; a paid one comes off the student's
+ * plan first, so they stop paying for it. The caller checks the roster and
+ * canIncludeSubject.
  */
 export async function includeSubject(
   admin: SupabaseClient, tutorId: string, studentId: string, curriculumId: unknown,
@@ -75,12 +76,6 @@ export async function includeSubject(
       if (!stripe) throw new IncludedSubjectError(503, "The student pays for this subject and payments aren't set up here, so it can't be switched over.");
       await removePaidSubject(admin, stripe, { id: existing.id, stripe_subscription_id: existing.stripe_subscription_id }, { endNow: true });
     }
-
-    // One included subject per tutor and student: drop the previous one.
-    const { error: swapErr } = await admin
-      .from("user_subscriptions").delete()
-      .eq("user_id", studentId).eq("source", "tutor").eq("sponsor_tutor_id", tutorId);
-    if (swapErr) throw new Error(swapErr.message);
 
     const { error } = await admin.from("user_subscriptions").upsert(
       {
@@ -110,10 +105,40 @@ export async function includeSubject(
   return { label: cur.label, outcome: "included" };
 }
 
-/** Stop including a subject for this student (it locks again unless they pay or pick it as their free subject). */
-export async function removeIncludedSubject(admin: SupabaseClient, tutorId: string, studentId: string): Promise<void> {
+/**
+ * Include each of `curriculumIds` (an invite's subjects). One at a time, since
+ * each can change the student's Stripe plan. Returns the labels unlocked and
+ * how many couldn't be.
+ */
+export async function includeSubjects(
+  admin: SupabaseClient, tutorId: string, studentId: string, curriculumIds: string[],
+): Promise<{ labels: string[]; failed: number }> {
+  const labels: string[] = [];
+  let failed = 0;
+  for (const id of curriculumIds) {
+    try {
+      labels.push((await includeSubject(admin, tutorId, studentId, id)).label);
+    } catch (err) {
+      if (err instanceof IncludedSubjectError && err.status === 404) continue; // retired since the invite went out
+      logger.error({ err, tutorId, studentId, curriculumId: id }, "included-subject: could not include a subject");
+      failed++;
+    }
+  }
+  return { labels, failed };
+}
+
+/** Stop including one subject for this student (it locks again unless they pay or pick it as their free subject). */
+export async function removeIncludedSubject(
+  admin: SupabaseClient, tutorId: string, studentId: string, curriculumId: string,
+): Promise<void> {
+  // Any curriculum, live or not: a subject archived since still comes off.
+  const { data: cur } = await admin
+    .from("curricula").select("name, level_label").eq("id", curriculumId)
+    .maybeSingle<{ name: string; level_label: string | null }>();
+  if (!cur) throw new IncludedSubjectError(404, "Subject not found.");
   const { error } = await admin
     .from("user_subscriptions").delete()
-    .eq("user_id", studentId).eq("source", "tutor").eq("sponsor_tutor_id", tutorId);
+    .eq("user_id", studentId).eq("source", "tutor").eq("sponsor_tutor_id", tutorId)
+    .eq("subject_name", cur.name).eq("stage", (cur.level_label || "").trim());
   if (error) throw new Error(error.message);
 }
