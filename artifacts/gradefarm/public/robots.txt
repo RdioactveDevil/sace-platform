@@ -23,4 +23,4 @@ Disallow: /session
 Disallow: /room
 Disallow: /diagnostic
 
-Sitemap: https://gradefarm.com.au/sitemap.xml
+Sitemap: https://www.gradefarm.com.au/sitemap.xml

@@ -32,6 +32,7 @@ const inp = {
 export default function OnboardingScreen({ profile, userEmail, onDone }) {
   const [step, setStep]       = useState(0)
   const [saving, setSaving]   = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [mounted, setMounted] = useState(false)
   const navigate = useNavigate()
 
@@ -53,6 +54,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
 
   const finish = async () => {
     setSaving(true)
+    setSaveError('')
     try {
       const profileUpdates = {}
       if (displayName.trim()) profileUpdates.display_name = displayName.trim()
@@ -64,7 +66,12 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
       if (studyHours)         profileUpdates.study_hours_per_week = studyHours
       await completeOnboarding(profile.id, profileUpdates)
     } catch (e) {
+      // Carrying on would send them back through onboarding on their next
+      // visit with everything they entered lost, so stay here and say so.
       console.error('Onboarding save error:', e)
+      setSaveError("We couldn't save your details. Check your connection and try again.")
+      setSaving(false)
+      return
     }
     setSaving(false)
     onDone()
@@ -343,6 +350,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone }) {
           . I confirm I am 13 years or older, or have parental consent.
         </span>
       </div>
+      {saveError && (
+        <div role="alert" style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: 8, fontSize: 13, color: '#f87171' }}>{saveError}</div>
+      )}
       {navButtons({ onNext: finish, nextLabel: saving ? 'Setting up…' : "Let's start!", nextDisabled: !termsAccepted || saving })}
     </div>
   )

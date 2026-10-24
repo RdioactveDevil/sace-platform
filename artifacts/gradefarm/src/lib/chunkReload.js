@@ -38,13 +38,43 @@ export function reloadForNewVersion(storage = globalThis.sessionStorage, now = D
   return true
 }
 
-/** React.lazy that reloads the page instead of erroring on a stale chunk. */
+/**
+ * React.lazy that reloads the page instead of erroring on a stale chunk.
+ * `.preload()` fetches the code ahead of time; a screen whose code is already
+ * here renders straight away instead of flashing the Suspense fallback.
+ */
 export function lazyWithReload(factory) {
-  return lazy(() =>
-    factory().catch((err) => {
+  const loader = preloadable(factory)
+  const Component = lazy(() => {
+    const loading = loader.load()
+    if (!(loading instanceof Promise)) return loading // already loaded
+    return loading.catch((err) => {
       // Keep the Suspense fallback up while the page reloads.
       if (isChunkLoadError(err) && reloadForNewVersion()) return new Promise(() => {})
       throw err
-    }),
-  )
+    })
+  })
+  Component.preload = () => Promise.resolve(loader.load()).catch(() => {})
+  return Component
+}
+
+/**
+ * Wraps a dynamic import so it runs once. After it has resolved, load()
+ * returns a thenable that calls back synchronously, which React.lazy treats
+ * as already resolved (a real promise always settles a tick later, so lazy
+ * suspends at least once and React holds the fallback for ~300 ms).
+ */
+export function preloadable(factory) {
+  let module = null
+  let pending = null
+  return {
+    load() {
+      if (module) return { then: (resolve) => resolve(module) }
+      pending ??= factory().then(
+        (m) => { module = m; return m },
+        (err) => { pending = null; throw err },
+      )
+      return pending
+    },
+  }
 }

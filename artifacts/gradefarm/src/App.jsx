@@ -13,17 +13,8 @@ import { THEMES } from './lib/theme'
 import { getLevelProgress, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, TriangleAlert, Radio, Video } from 'lucide-react'
 import RankIcon from './components/RankIcon'
-import SubjectPicker     from './components/SubjectPicker'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
-import HomeScreen        from './components/HomeScreen'
-import QuizScreen        from './components/QuizScreen'
-import LearnScreen       from './components/LearnScreen'
-import LeaderboardScreen from './components/LeaderboardScreen'
-import ProfileScreen     from './components/ProfileScreen'
-import AccountScreen from './components/AccountScreen'
-import HistoryScreen     from './components/HistoryScreen'
-import StudyPlanScreen   from './components/StudyPlanScreen'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
 import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
@@ -62,6 +53,31 @@ const ExamModeScreen        = lazyWithReload(() => import('./components/ExamMode
 const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
+const ResetPasswordScreen   = lazyWithReload(() => import('./components/ResetPasswordScreen'))
+
+// The signed-in study screens are split out too, so the landing and sign-in
+// pages don't download the quiz engine, KaTeX and every progress screen.
+// prefetchStudyScreens() warms them once someone signs in.
+const SubjectPicker     = lazyWithReload(() => import('./components/SubjectPicker'))
+const HomeScreen        = lazyWithReload(() => import('./components/HomeScreen'))
+const QuizScreen        = lazyWithReload(() => import('./components/QuizScreen'))
+const LearnScreen       = lazyWithReload(() => import('./components/LearnScreen'))
+const LeaderboardScreen = lazyWithReload(() => import('./components/LeaderboardScreen'))
+const ProfileScreen     = lazyWithReload(() => import('./components/ProfileScreen'))
+const AccountScreen     = lazyWithReload(() => import('./components/AccountScreen'))
+const HistoryScreen     = lazyWithReload(() => import('./components/HistoryScreen'))
+const StudyPlanScreen   = lazyWithReload(() => import('./components/StudyPlanScreen'))
+
+let studyScreensPrefetched = false
+function prefetchStudyScreens() {
+  if (studyScreensPrefetched) return
+  studyScreensPrefetched = true
+  // Most-used first.
+  const run = () => [HomeScreen, QuizScreen, SubjectPicker, LearnScreen, ProfileScreen,
+    StudyPlanScreen, HistoryScreen, LeaderboardScreen, AccountScreen].forEach(s => s.preload())
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 3000 })
+  else setTimeout(run, 1500)
+}
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -597,7 +613,9 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
         )}
         <LiveLessonBanner profile={profile} theme={theme} />
         <SectionTabs theme={theme} subject={subject} />
-        <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>{children}</div>
+        <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Suspense fallback={<RouteFallback theme={theme} />}>{children}</Suspense>
+        </div>
       </div>
       {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
       {portalWelcome && <PortalWelcome theme={theme} onTour={() => closePortalWelcome(true)} onClose={() => closePortalWelcome(false)} />}
@@ -607,8 +625,10 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-// ── AppShellScreens — all screens always mounted, toggled via display:none ───
-// This prevents unmount/remount on tab switch — no reload flashes, state preserved
+// ── AppShellScreens — screens stay mounted once opened, toggled via display:none ───
+// This prevents unmount/remount on tab switch — no reload flashes, state preserved.
+// A screen isn't mounted until it's first opened, so landing on the Question
+// Bank doesn't also load History, the leaderboard, Titan AI's quota, etc.
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
   onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
@@ -633,6 +653,9 @@ function AppShellScreens({
   const onPortal = PORTAL_PATHS.includes(location.pathname)
   const hasTutoring = useHasTutoring(profile?.id)
   const show = (s) => screen === s ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'visible' } : { display: 'none' }
+  const opened = useRef(new Set())
+  opened.current.add(screen)
+  const wasOpened = (s) => opened.current.has(s)
 
   // Writing workspace — only for subjects with Writing switched on.
   const writingSubject = writingSubjectFor(subject)
@@ -647,23 +670,23 @@ function AppShellScreens({
           <WritingScreen subject={writingSubject} profile={profile} theme={theme} onBack={onChangeSubject} />
         </div>
       )}
-      <div style={show('question-bank')}>
+      {wasOpened('question-bank') && <div style={show('question-bank')}>
         <HomeScreen {...commonProps}
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
           assignmentsVersion={assignmentsVersion}
           onStartSession={onStartSession} />
-      </div>
-      <div style={show('learn')}>
+      </div>}
+      {wasOpened('learn') && <div style={show('learn')}>
         <LearnScreen {...commonProps} {...learnState}
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
           onBack={() => navigate('/question-bank')} />
-      </div>
-      <div style={show('leaderboard')}>
+      </div>}
+      {wasOpened('leaderboard') && <div style={show('leaderboard')}>
         <LeaderboardScreen {...commonProps} profile={profile} embedded />
-      </div>
-      <div style={show('my-progress')}>
+      </div>}
+      {wasOpened('my-progress') && <div style={show('my-progress')}>
         <ProfileScreen {...commonProps}
           profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
@@ -673,25 +696,25 @@ function AppShellScreens({
             setPhase('setup')
             navigate('/learn')
           }} />
-      </div>
-      <div style={show('study-plan')}>
+      </div>}
+      {wasOpened('study-plan') && <div style={show('study-plan')}>
         <StudyPlanScreen
           profile={profile} questions={questions} struggleMap={struggleMap}
           theme={theme} onStartSession={onStartSession} subject={subject}
           lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
-      </div>
+      </div>}
       <div style={onPortal ? show(screen) : { display: 'none' }}>
         <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} />
       </div>
       <div style={onLessons ? show(screen) : { display: 'none' }}>
         <StudentLessonsScreen theme={theme} active={onLessons} />
       </div>
-      <div style={show('history')}>
+      {wasOpened('history') && <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} embedded />
-      </div>
-      <div style={show('my-account')}>
+      </div>}
+      {wasOpened('my-account') && <div style={show('my-account')}>
         <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} />
-      </div>
+      </div>}
     </AppShell>
   )
 }
@@ -777,6 +800,10 @@ function AppInner() {
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
   const [welcomeCelebration, setWelcomeCelebration] = useState(false)
+  // The first-run feature tour. Latched open: onSeen records it as seen the
+  // moment it mounts (so it never shows twice), which would otherwise make
+  // tourDue false and close it before the student saw anything.
+  const [tourOpen, setTourOpen] = useState(false)
 
   const refreshSubscriptions = async () => {
     try {
@@ -899,12 +926,18 @@ function AppInner() {
       setUser(session?.user ?? null)
       if (!session?.user) { setLoading(false); setBootstrapped(true) }
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
       if (!session?.user) { setProfile(null); setLoading(false); setBootstrapped(true) }
+      // A reset link that came back to the site root (redirect URL not allow-listed) still lands here.
+      if (event === 'PASSWORD_RECOVERY' && window.location.pathname !== '/reset-password') navigate('/reset-password', { replace: true })
     })
     return () => subscription.unsubscribe()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once someone is signed in, fetch the study screens' code in idle time so
+  // the first tab switch doesn't wait on the network.
+  useEffect(() => { if (user?.id) prefetchStudyScreens() }, [user?.id])
 
   // Load managed curriculum topics cache on login so the student-facing quiz
   // can look up topic codes for bank exhaustion / infinite question generation.
@@ -954,18 +987,37 @@ function AppInner() {
     return () => { cancelled = true }
   }, [selectedSubject?.id])
 
-  // Reload questions if subject was persisted but questions are empty
+  // One request per subject bank (they run to ~1 MB): picking a subject, the
+  // reload effect below and the tile refresh above all ask for the same bank.
+  const questionsLoad = useRef({ key: null, promise: null })
+  const loadQuestions = useCallback((tile) => {
+    const key = tile?.id ?? null
+    if (questionsLoad.current.key !== key || !questionsLoad.current.promise) {
+      const promise = getQuestionsForSubjectTile(tile)
+      promise.catch(() => { if (questionsLoad.current.promise === promise) questionsLoad.current = { key: null, promise: null } })
+      questionsLoad.current = { key, promise }
+    }
+    return questionsLoad.current.promise
+  }, [])
+  const clearQuestions = () => {
+    questionsLoad.current = { key: null, promise: null }
+    setQuestions([])
+  }
+
+  // Load the bank for a subject remembered from last time (signed in only;
+  // the question bank is not readable signed out).
   useEffect(() => {
-    if (!selectedSubject || questions.length > 0) return
-    getQuestionsForSubjectTile(selectedSubject)
-      .then(qs => setQuestions(qs))
+    if (!user?.id || !selectedSubject || questions.length > 0) return
+    const key = selectedSubject.id
+    loadQuestions(selectedSubject)
+      .then(qs => { if (questionsLoad.current.key === key) setQuestions(qs) })
       .catch(() => {})
-  }, [selectedSubject])
+  }, [user?.id, selectedSubject?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectSubject = async (subject) => {
     setSelectedSubject(subject)
     localStorage.setItem('gf-subject', JSON.stringify(subject))
-    const qs = await getQuestionsForSubjectTile(subject)
+    const qs = await loadQuestions(subject)
     setQuestions(qs)
     navigate('/home')
   }
@@ -985,16 +1037,34 @@ function AppInner() {
 
   const handleSignOut = async () => {
     setWelcomeCelebration(false)
+    setTourOpen(false)
     await signOut()
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
-    setQuestions([])
+    clearQuestions()
+    // Nothing of this account may carry over to the next one on this device.
+    setStruggleMap({})
+    setSubscriptions([])
+    setSubscriptionsLoaded(false)
+    setFreeQuota(null)
+    setActiveAssignment(null)
+    setLastSessionAt(null)
     setLearnPhase('setup')
     setLearnMessages([])
     setLearnTopic('')
+    setLearnInterests(null)
+    setLearnDocContext('')
+    setLearnDocName('')
     setQuestionContext(null)
     setConsolidateSubtopic(null)
     setQuizQ(null)
+    setQuizSelected(null)
+    setQuizShowAns(false)
+    setQuizCorrect(null)
+    setQuizEarnedXP(0)
+    setQuizStreak(0)
+    setQuizAiTip('')
+    setQuizLoadingTip(false)
     setQuizResults([])
     setQuizAnswered([])
     setQuizQNumber(1)
@@ -1017,13 +1087,13 @@ function AppInner() {
     setQuizRemediationOriginalQ(null)
     setQuizRemediationUsedIds([])
     setQuizRemediationWrongCount(0)
-    navigate('/home')
+    navigate('/home', { replace: true })
   }
 
   const handleChangeSubject = () => {
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
-    setQuestions([])
+    clearQuestions()
     setQuizQ(null)
     setQuizSelected(null)
     setQuizShowAns(false)
@@ -1141,7 +1211,12 @@ function AppInner() {
     },
   }
 
-  if (!bootstrapped && loading) return (
+  const tourDue = !!(user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject)
+  useEffect(() => { if (tourDue) setTourOpen(true) }, [tourDue])
+
+  // Also while a just-signed-in user's profile loads, so the landing or sign-in
+  // page doesn't flash before the redirect into the app.
+  if ((!bootstrapped || (user && !profile)) && loading) return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <style>{`@keyframes gf-bootspin { to { transform: rotate(360deg); } }`}</style>
       <div
@@ -1160,7 +1235,7 @@ function AppInner() {
   )
 
   const tutorialOverlay =
-    user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject
+    tourOpen && user && profile
       ? {
           isTutor: !!profile.is_tutor,
           theme,
@@ -1179,7 +1254,9 @@ function AppInner() {
               console.error('[tutorial seen]', e)
             }
           },
+          // Skip and Done both end here.
           onFinish: () => {
+            setTourOpen(false)
             setWelcomeCelebration(true)
           },
         }
@@ -1207,6 +1284,7 @@ function AppInner() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
+      <Route path="/reset-password" element={<ResetPasswordScreen signedIn={!!user} />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
 
       {/* Question Lab — public preview of the multi-format question engine */}
@@ -1449,7 +1527,7 @@ function AppInner() {
               if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))
-                const qs = await getQuestionsForSubjectTile(matchingSubject)
+                const qs = await loadQuestions(matchingSubject)
                 setQuestions(qs)
                 activeQuestions = qs
                 activeSubject = matchingSubject

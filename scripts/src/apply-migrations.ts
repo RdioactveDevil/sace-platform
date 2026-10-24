@@ -65,6 +65,9 @@ async function main() {
         version text primary key,
         applied_at timestamptz not null default now()
       );
+      -- public is exposed through the Supabase API; keep the ledger out of it.
+      alter table schema_migrations enable row level security;
+      revoke all on schema_migrations from anon, authenticated;
     `);
 
     const { rows } = await client.query<{ version: string }>("select version from schema_migrations");
