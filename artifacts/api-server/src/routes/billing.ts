@@ -90,8 +90,26 @@ async function customerRow(admin: SupabaseClient, userId: string): Promise<Custo
   return data ?? null;
 }
 
-async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<string> {
+/** Stripe has no such object in this account and mode, e.g. a sandbox ID after switching to live keys. */
+const isMissing = (err: unknown) => err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing";
+
+/** The student's billing row, dropped (→ null) if Stripe doesn't have its customer, so a new one gets made. */
+async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<CustomerRow | null> {
   const row = await customerRow(admin, userId);
+  if (!row) return null;
+  const customer = await stripe.customers.retrieve(row.stripe_customer_id).catch((err) => {
+    if (isMissing(err)) return null;
+    throw err;
+  });
+  if (customer && !customer.deleted) return row;
+  logger.warn({ userId }, "billing: dropping a Stripe customer this account doesn't have");
+  const { error } = await admin.from("billing_customers").delete().eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  return null;
+}
+
+async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<string> {
+  const row = await currentCustomerRow(admin, stripe, userId);
   if (row) return row.stripe_customer_id;
   const [{ data: authUser }, { data: profile }] = await Promise.all([
     admin.auth.admin.getUserById(userId),
@@ -114,8 +132,11 @@ async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string
 async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<Stripe.Subscription | null> {
   const row = await customerRow(admin, userId);
   if (!row?.stripe_subscription_id) return null;
-  const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
-  return ACCESS_STATUSES.has(sub.status) ? sub : null;
+  const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id).catch((err) => {
+    if (isMissing(err)) return null;
+    throw err;
+  });
+  return sub && ACCESS_STATUSES.has(sub.status) ? sub : null;
 }
 
 type Curriculum = { id: string; name: string; stage: string; label: string };
@@ -380,9 +401,9 @@ router.post("/billing/portal", async (req: Request, res: Response) => {
   if (!ctx) return;
   const stripe = getStripe();
   if (!stripe) return notConfigured(res);
-  const row = await customerRow(ctx.admin, ctx.userId);
-  if (!row) return fail(res, 404, "No billing account yet.");
   try {
+    const row = await currentCustomerRow(ctx.admin, stripe, ctx.userId);
+    if (!row) return fail(res, 404, "No billing account yet.");
     const portal = await stripe.billingPortal.sessions.create({ customer: row.stripe_customer_id, return_url: `${appUrl()}/my-account` });
     res.json({ url: portal.url });
   } catch (err) {
