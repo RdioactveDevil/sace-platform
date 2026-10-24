@@ -5,7 +5,7 @@ import { THEMES } from '../lib/theme'
 import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
 import { currentStreak } from '../lib/streak'
 import { supabase } from '../lib/supabase'
-import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite } from '../lib/db'
+import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
@@ -30,6 +30,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [assignments, setAssignments] = useState([])
   const [resources, setResources] = useState([])
   const [invites, setInvites] = useState([])
+  const [diagnostics, setDiagnostics] = useState([])
+  const [dismissedDiagnostic, setDismissedDiagnostic] = useState(null)
   const [inviteBusy, setInviteBusy] = useState(null)
   const [inviteError, setInviteError] = useState('')
 
@@ -39,6 +41,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     fetchAssignmentsForStudent(profile.id).then(rows => { if (!cancelled) setAssignments(rows) }).catch(() => {})
     fetchStudentResources().then(rows => { if (!cancelled) setResources(rows) }).catch(() => {})
     fetchMyInvites().then(rows => { if (!cancelled) setInvites(rows) }).catch(() => {})
+    fetchMyDiagnostics().then(rows => { if (!cancelled) setDiagnostics(rows) }).catch(() => {})
     return () => { cancelled = true }
   }, [profile.id, assignmentsVersion])
 
@@ -316,6 +319,44 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       setInvites(prev => prev.filter(i => i.token !== token))
     } catch (e) { setInviteError(e.message) }
     setInviteBusy(null)
+  }
+
+  // The diagnostic on this subject, for 30 days after it was done (until dismissed).
+  const subjectCurriculumId = String(subject?.id || '').replace(/^curriculum_/, '')
+  const diagnostic = diagnostics.find(d =>
+    d.curriculum_id === subjectCurriculumId && d.status === 'completed' && d.summary &&
+    Date.now() - new Date(d.completed_at).getTime() < 30 * 24 * 60 * 60 * 1000)
+  const diagnosticDismissed = !!diagnostic && (dismissedDiagnostic === diagnostic.token || (() => {
+    try { return localStorage.getItem(`gf-diagnostic-dismissed-${diagnostic.token}`) === '1' } catch { return false }
+  })())
+  const dismissDiagnostic = () => {
+    try { localStorage.setItem(`gf-diagnostic-dismissed-${diagnostic.token}`, '1') } catch {}
+    setDismissedDiagnostic(diagnostic.token)
+  }
+
+  const DiagnosticResultsCard = () => {
+    if (!diagnostic || diagnosticDismissed) return null
+    const { percentage, band, work_on: workOn = [], practise = [] } = diagnostic.summary
+    return (
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.35)`, background: theme === 'dark' ? 'rgba(241,190,67,0.06)' : t.bgCard }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><Target size={16} aria-hidden="true" />Your diagnostic</div>
+          <button onClick={dismissDiagnostic} aria-label="Hide your diagnostic results" style={{ border: 'none', background: 'transparent', color: t.textFaint, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
+        </div>
+        <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>{percentage}% · {band}</div>
+        {workOn.length > 0 && (
+          <div style={{ fontSize: 13, color: t.text, marginBottom: 12, lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 700 }}>Work on: </span>{workOn.join(', ')}
+          </div>
+        )}
+        {practise.length > 0 && (
+          <button onClick={() => onStartSession({ mode: 'new', subtopics: practise, expandTopics: true })}
+            style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+            Practise these →
+          </button>
+        )}
+      </div>
+    )
   }
 
   const TutorInvitesCard = () => {
@@ -819,6 +860,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
           <div className="hs-mobile-cards">
             <TutorInvitesCard />
+            <DiagnosticResultsCard />
             <AssignedTasksCard />
             <ClassResourcesCard />
             <ExamCountdownCard />
@@ -831,6 +873,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
         <div className="hs-right">
           <TutorInvitesCard />
+          <DiagnosticResultsCard />
           <AssignedTasksCard />
           <ClassResourcesCard />
           <ExamCountdownCard />

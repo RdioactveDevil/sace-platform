@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStripe, liveCurriculum, removePaidSubject } from "../routes/billing";
 import { logger } from "./logger";
+import { deletePendingDiagnostic } from "./student-diagnostic";
 
 export class IncludedSubjectError extends Error {
   constructor(public status: number, message: string) {
@@ -107,27 +108,33 @@ export async function includeSubject(
 
 /**
  * Include each of `curriculumIds` (an invite's subjects). One at a time, since
- * each can change the student's Stripe plan. Returns the labels unlocked and
- * how many couldn't be.
+ * each can change the student's Stripe plan. Returns the ones unlocked (ids
+ * and labels) and how many couldn't be.
  */
 export async function includeSubjects(
   admin: SupabaseClient, tutorId: string, studentId: string, curriculumIds: string[],
-): Promise<{ labels: string[]; failed: number }> {
+): Promise<{ ids: string[]; labels: string[]; failed: number }> {
+  const ids: string[] = [];
   const labels: string[] = [];
   let failed = 0;
   for (const id of curriculumIds) {
     try {
       labels.push((await includeSubject(admin, tutorId, studentId, id)).label);
+      ids.push(id);
     } catch (err) {
       if (err instanceof IncludedSubjectError && err.status === 404) continue; // retired since the invite went out
       logger.error({ err, tutorId, studentId, curriculumId: id }, "included-subject: could not include a subject");
       failed++;
     }
   }
-  return { labels, failed };
+  return { ids, labels, failed };
 }
 
-/** Stop including one subject for this student (it locks again unless they pay or pick it as their free subject). */
+/**
+ * Stop including one subject for this student (it locks again unless they pay
+ * or pick it as their free subject), and drop the diagnostic on it this tutor
+ * set if it wasn't done.
+ */
 export async function removeIncludedSubject(
   admin: SupabaseClient, tutorId: string, studentId: string, curriculumId: string,
 ): Promise<void> {
@@ -141,4 +148,5 @@ export async function removeIncludedSubject(
     .eq("user_id", studentId).eq("source", "tutor").eq("sponsor_tutor_id", tutorId)
     .eq("subject_name", cur.name).eq("stage", (cur.level_label || "").trim());
   if (error) throw new Error(error.message);
+  await deletePendingDiagnostic(admin, tutorId, studentId, curriculumId);
 }

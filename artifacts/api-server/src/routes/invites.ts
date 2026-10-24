@@ -6,8 +6,10 @@
  * section of the Student Portal.
  *
  * An invite can come with the subjects the tutor teaches the student
- * (curriculum_ids); they unlock, free, when they accept. See
- * lib/included-subject.ts.
+ * (curriculum_ids); they unlock, free, when they accept (see
+ * lib/included-subject.ts), each with a diagnostic to do first covering the
+ * subtopics the tutor picked (diagnostic_subtopics; see
+ * lib/student-diagnostic.ts).
  *
  *   POST   /tutor/invites           invite (or re-send to) an email address
  *   GET    /tutor/invites           the caller's pending invites
@@ -24,6 +26,7 @@ import { requireUser, getServiceClient, type Caller } from "../lib/auth";
 import { appUrl, getResend, sendEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
+import { createStudentDiagnostic } from "../lib/student-diagnostic";
 import { liveCurriculum } from "./billing";
 
 const router = Router();
@@ -43,6 +46,8 @@ interface InviteRow {
   status: "pending" | "accepted" | "declined" | "cancelled";
   student_id: string | null;
   curriculum_ids: string[];
+  /** Subtopics each subject's diagnostic covers, by curriculum id (none: the whole subject). */
+  diagnostic_subtopics: Record<string, string[]>;
   created_at: string;
   sent_at: string | null;
   responded_at: string | null;
@@ -132,8 +137,18 @@ async function subjectLabels(admin: SupabaseClient, invites: InviteRow[]): Promi
 const labelsOf = (invite: InviteRow, labels: Record<string, string>) =>
   (invite.curriculum_ids ?? []).map((id) => labels[id]).filter((l): l is string => !!l);
 
-/** Both ways of holding the same subjects compare equal. */
-const sameIds = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
+/** { curriculumId: [subtopicId, …] } from the request, for this invite's subjects only. */
+function pickDiagnosticSubtopics(raw: unknown, curriculumIds: string[]): Record<string, string[]> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string[]> = {};
+  for (const id of curriculumIds) {
+    const list = (raw as Record<string, unknown>)[id];
+    if (!Array.isArray(list)) continue;
+    const ids = [...new Set(list.filter((s): s is string => typeof s === "string" && !!s))].slice(0, 500);
+    if (ids.length) out[id] = ids;
+  }
+  return out;
+}
 
 // ── Tutor side ──────────────────────────────────────────────────────────────
 
@@ -153,7 +168,7 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     if (!caller) return;
     const { admin, userId } = caller;
 
-    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown };
+    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown; diagnosticSubtopics?: unknown };
     const email = String(body.email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
 
@@ -164,6 +179,7 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
       ? [...new Set(body.curriculumIds.filter((id): id is string => typeof id === "string" && !!id))]
       : [];
     if (curriculumIds.length > 20) return res.status(400).json({ error: "That's too many subjects for one invite." });
+    const diagnosticSubtopics = pickDiagnosticSubtopics(body.diagnosticSubtopics, curriculumIds);
     if (curriculumIds.length) {
       if (!(await canIncludeSubject(admin, userId))) {
         return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
@@ -206,15 +222,19 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     if (!invite) {
       const { data: created, error: insertErr } = await admin
         .from("tutor_invites")
-        .insert({ tutor_id: userId, email, token: randomBytes(24).toString("base64url"), curriculum_ids: curriculumIds })
+        .insert({
+          tutor_id: userId, email, token: randomBytes(24).toString("base64url"),
+          curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics,
+        })
         .select("*")
         .single<InviteRow>();
       if (insertErr || !created) return res.status(500).json({ error: insertErr?.message ?? "Could not create the invite." });
       invite = created;
-    } else if (setsSubjects && !sameIds(invite.curriculum_ids ?? [], curriculumIds)) {
-      const { error: subjErr } = await admin.from("tutor_invites").update({ curriculum_ids: curriculumIds }).eq("id", invite.id);
+    } else if (setsSubjects) {
+      const { error: subjErr } = await admin
+        .from("tutor_invites").update({ curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics }).eq("id", invite.id);
       if (subjErr) return res.status(500).json({ error: subjErr.message });
-      invite = { ...invite, curriculum_ids: curriculumIds };
+      invite = { ...invite, curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics };
     }
 
     const sentAt = new Date().toISOString();
@@ -398,6 +418,11 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
           const result = await includeSubjects(caller.admin, invite.tutor_id, caller.userId, invite.curriculum_ids);
           subjects = result.labels;
           if (result.failed) subjectError = "Some of your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
+          // Each comes with a diagnostic to do before practising it.
+          for (const id of result.ids) {
+            await createStudentDiagnostic(caller.admin, invite.tutor_id, caller.userId, id, invite.diagnostic_subtopics?.[id] ?? [])
+              .catch((err) => logger.error({ err, inviteId: invite.id, curriculumId: id }, "invites: could not set a diagnostic"));
+          }
         }
       } catch (err) {
         logger.error({ err, inviteId: invite.id }, "invites: could not include the invite's subjects");
