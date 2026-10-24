@@ -22,6 +22,7 @@ import emailRouter from "./email";
 import invitesRouter from "./invites";
 import portalRouter from "./portal";
 import assignmentReportsRouter from "./assignment-reports";
+import accountRouter from "./account";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(emailRouter);
 router.use(invitesRouter);
 router.use(portalRouter);
 router.use(assignmentReportsRouter);
+router.use(accountRouter);
 
 export default router;

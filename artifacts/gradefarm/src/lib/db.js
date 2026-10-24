@@ -211,6 +211,20 @@ export async function updatePassword(password) {
   if (error) throw error
 }
 
+/**
+ * Start changing the sign-in email. Supabase emails a confirmation link (to
+ * the new address, and to the current one too when secure email change is
+ * on); the email only changes once it's confirmed.
+ */
+export async function changeEmail(newEmail) {
+  const { data, error } = await supabase.auth.updateUser(
+    { email: newEmail },
+    { emailRedirectTo: `${window.location.origin}/my-account?tab=profile` },
+  )
+  if (error) throw error
+  return data?.user || null
+}
+
 export async function getSession() {
   const { data } = await supabase.auth.getSession()
   return data.session
@@ -990,6 +1004,18 @@ export async function respondToInvite(token, accept) {
   const json = await tutorFetch(`/api/invites/${encodeURIComponent(token)}/${accept ? 'accept' : 'decline'}`, { method: 'POST' })
   tutoringAccessCache.clear()
   return json
+}
+
+// ── OWN ACCOUNT ──────────────────────────────────────────────────────────────
+
+/** Permanently delete the signed-in account (cancels any plan first). */
+export async function deleteMyAccount(password) {
+  return tutorFetch('/api/account', { method: 'DELETE', body: JSON.stringify({ password }) })
+}
+
+/** Copy the current sign-in email onto the Stripe customer, so receipts follow an email change. */
+export async function syncBillingEmail() {
+  return tutorFetch('/api/account/sync-email', { method: 'POST' })
 }
 
 // ── STUDENT PORTAL & MESSAGES ────────────────────────────────────────────────

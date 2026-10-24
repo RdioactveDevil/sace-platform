@@ -63,6 +63,19 @@ export async function requireUser(req: Request, res: Response): Promise<Caller |
   };
 }
 
+/**
+ * Check an email/password pair against Supabase Auth, for re-confirming a
+ * destructive action. Uses a throwaway client: signing in swaps a client's
+ * key for the user's token, which would strip the service role from `admin`.
+ */
+export async function verifyPassword(email: string, password: string): Promise<boolean> {
+  const client = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "", {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  return !error && !!data?.user;
+}
+
 /** Like requireUser, but also requires `profiles.is_admin`. Sends 403 otherwise. */
 export async function requireAdmin(req: Request, res: Response): Promise<Caller | null> {
   const caller = await requireUser(req, res);
