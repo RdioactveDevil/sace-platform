@@ -56,6 +56,8 @@ const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMar
 const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
 const ResetPasswordScreen   = lazyWithReload(() => import('./components/ResetPasswordScreen'))
+const StartScreen           = lazyWithReload(() => import('./components/StartScreen'))
+const WelcomeScreen         = lazyWithReload(() => import('./components/WelcomeScreen'))
 
 // The signed-in study screens are split out too, so the landing and sign-in
 // pages don't download the quiz engine, KaTeX and every progress screen.
@@ -1475,6 +1477,9 @@ function AppInner() {
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen signedIn={!!user} />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
+      {/* Pay first, sign up after: /start → Stripe Checkout → /welcome. Signed in, subjects are bought from the picker. */}
+      <Route path="/start" element={user ? <Navigate to="/subject-picker" replace /> : <StartScreen />} />
+      <Route path="/welcome" element={<WelcomeScreen signedIn={!!user} />} />
 
       {/* Question Lab — public preview of the multi-format question engine */}
       <Route path="/question-lab" element={<AdminRoute profile={profile}><QuestionLabScreen theme={theme} onExit={() => navigate('/admin')} /></AdminRoute>} />

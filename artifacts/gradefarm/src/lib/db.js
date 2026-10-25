@@ -698,6 +698,28 @@ export async function openTutorBillingPortal() {
   return json.url
 }
 
+// Pay first, sign up after (/start → Stripe Checkout → /welcome). No sign-in.
+
+/** Set by /welcome before the sign-in link, so /reset-password asks for a first password. */
+export const WELCOME_PASSWORD_FLAG = 'gf-welcome-password'
+
+async function publicPost(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`)
+  return json
+}
+
+/** Stripe Checkout for one subject without an account; resolves to { url }. */
+export async function startGuestCheckout(curriculumId, interval) {
+  return publicPost('/api/billing/guest-checkout', { curriculumId, interval })
+}
+
+/** After a pay-first checkout: { status: 'pending' } or { status: 'ready', email, newAccount, signInUrl }. */
+export async function claimGuestCheckout(sessionId) {
+  return publicPost('/api/billing/guest-claim', { sessionId })
+}
+
 /** Make a subject the student's one free subject (replaces any other). */
 export async function chooseFreeSubject(curriculumId) {
   return tutorFetch('/api/billing/free-subject', { method: 'POST', body: JSON.stringify({ curriculumId }) })

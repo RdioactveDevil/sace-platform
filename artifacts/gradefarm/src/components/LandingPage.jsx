@@ -974,6 +974,9 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
                 </div>
               ))}
             </div>
+            <button onClick={() => navigate('/start')} className="ctab" style={{ padding:'13px 32px', borderRadius:11, border:'none', background:GOLD, color:'#0c1037', fontSize:14, fontWeight:800, cursor:'pointer', fontFamily:FONT_B, marginRight:10, marginBottom:10 }}>
+              Start now from ${tiers[0]}/week →
+            </button>
             <button onClick={() => navigate('/pricing')} className="ctab" style={{ padding:'13px 32px', borderRadius:11, border:`1px solid rgba(241,190,67,0.3)`, background:'rgba(241,190,67,0.06)', color:GOLD, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:FONT_B }}>
               See full pricing →
             </button>

@@ -119,6 +119,8 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       hi: true,
       accentColor: GOLD,
       cta: 'Start learning →',
+      // Pay straight away, sign up after (/start).
+      href: '/start',
       features: [
         { text: 'Unlimited questions — fresh AI questions, no daily cap', included: true },
         { text: 'Exam Mode', included: true },
@@ -341,7 +343,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                       ))}
                     </div>
                     <button
-                      onClick={handleGetStarted}
+                      onClick={plan.href ? () => navigate(plan.href) : handleGetStarted}
                       className={plan.hi ? 'pp-shimmer' : ''}
                       style={{
                         width: '100%', padding: '14px', borderRadius: 12, border: plan.hi ? 'none' : '1px solid rgba(255,255,255,0.1)',

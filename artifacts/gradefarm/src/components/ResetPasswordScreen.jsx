@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { updatePassword } from '../lib/db'
+import { updatePassword, WELCOME_PASSWORD_FLAG } from '../lib/db'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -25,6 +25,10 @@ export default function ResetPasswordScreen({ signedIn }) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [done, setDone]       = useState(false)
+  // Signed in from /welcome after paying: a first password, not a reset.
+  const [welcome] = useState(() => {
+    try { return sessionStorage.getItem(WELCOME_PASSWORD_FLAG) === '1' } catch { return false }
+  })
 
   const submit = async (e) => {
     e.preventDefault()
@@ -35,6 +39,7 @@ export default function ResetPasswordScreen({ signedIn }) {
     setLoading(true)
     try {
       await updatePassword(pass)
+      try { sessionStorage.removeItem(WELCOME_PASSWORD_FLAG) } catch { /* nothing to clear */ }
       setDone(true)
     } catch (err) {
       setError(err.message || 'Could not update your password.')
@@ -59,14 +64,14 @@ export default function ResetPasswordScreen({ signedIn }) {
           </>
         ) : done ? (
           <>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', margin: '0 0 8px' }}>Password updated</h2>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6, margin: '0 0 24px' }}>You're signed in with your new password.</p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', margin: '0 0 8px' }}>{welcome ? "You're all set" : 'Password updated'}</h2>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6, margin: '0 0 24px' }}>{welcome ? 'Next, a few quick questions to set up your practice.' : "You're signed in with your new password."}</p>
             <button type="button" onClick={() => navigate('/home', { replace: true })} style={primaryBtn(false)}>Continue →</button>
           </>
         ) : (
           <form onSubmit={submit} noValidate>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', margin: '0 0 4px' }}>Choose a new password</h2>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', margin: '0 0 24px' }}>At least 6 characters.</p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', margin: '0 0 4px' }}>{welcome ? 'Payment received. Choose a password' : 'Choose a new password'}</h2>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', margin: '0 0 24px' }}>{welcome ? 'You’ll use it to sign in next time. At least 6 characters.' : 'At least 6 characters.'}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input style={inp} type="password" placeholder="New password" aria-label="New password" autoComplete="new-password" value={pass} onChange={e => setPass(e.target.value)} />
               <input style={inp} type="password" placeholder="Confirm new password" aria-label="Confirm new password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} />

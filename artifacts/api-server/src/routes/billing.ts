@@ -5,6 +5,7 @@ import { requireUser, getServiceClient } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { ACCESS_STATUSES, periodEnd, priceByLookupKey } from "../lib/stripe-plans";
 import { TUTOR_PLAN_KIND, syncTutorSubscription } from "../lib/tutor-plan";
+import { GUEST_CHECKOUT, claimGuestCheckout } from "../lib/guest-checkout";
 
 // Student access and billing.
 //
@@ -32,7 +33,7 @@ const DEFAULT_TIERS_AUD = { week: [7, 6, 5], month: [27, 23, 19] };
 
 export type Interval = "week" | "month";
 const INTERVALS: readonly Interval[] = ["week", "month"];
-const isInterval = (v: unknown): v is Interval => INTERVALS.includes(v as Interval);
+export const isInterval = (v: unknown): v is Interval => INTERVALS.includes(v as Interval);
 const per = (interval: Interval) => `/${interval}`;
 
 export const appUrl = () => (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/$/, "");
@@ -60,7 +61,7 @@ const positiveNumbers = (raw: unknown) =>
   Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number" && n > 0) : [];
 
 /** $ per week and per month for the 1st, 2nd, … subject; the last tier applies to every further subject. */
-async function readTiers(admin: SupabaseClient): Promise<Record<Interval, number[]>> {
+export async function readTiers(admin: SupabaseClient): Promise<Record<Interval, number[]>> {
   const pricing = await readPricing(admin);
   const week = positiveNumbers(pricing.student_tiers);
   const month = positiveNumbers(pricing.student_monthly_tiers);
@@ -74,7 +75,7 @@ export const planTotal = (tiers: number[], count: number) =>
   Array.from({ length: count }, (_, i) => tierPrice(tiers, i + 1)).reduce((a, b) => a + b, 0);
 
 /** The graduated weekly or monthly price for these tiers. */
-async function planPriceId(stripe: Stripe, tiers: number[], interval: Interval): Promise<string> {
+export async function planPriceId(stripe: Stripe, tiers: number[], interval: Interval): Promise<string> {
   const cents = tiers.map((d) => Math.round(d * 100));
   return priceByLookupKey(stripe, `gradefarm_subjects_${interval}ly_aud_${cents.join("_")}`, {
     currency: "aud",
@@ -547,7 +548,9 @@ router.post("/billing/webhook", async (req: Request, res: Response) => {
     if (event.type === "checkout.session.completed") {
       const s = event.data.object;
       const subId = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
-      if (subId) await syncSubscription(getServiceClient(), stripe, subId);
+      // Paid before signing up: make their account first (lib/guest-checkout.ts).
+      if (s.metadata?.checkout === GUEST_CHECKOUT) await claimGuestCheckout(getServiceClient(), stripe, s.id);
+      else if (subId) await syncSubscription(getServiceClient(), stripe, subId);
     } else if (event.type.startsWith("customer.subscription.")) {
       await syncSubscription(getServiceClient(), stripe, (event.data.object as Stripe.Subscription).id);
     }
