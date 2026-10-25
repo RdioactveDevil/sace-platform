@@ -163,8 +163,6 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
         @keyframes sp-fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         .sp-scroll { flex: 1; min-height: 0; overflow-y: auto; }
         .sp-inner  { padding: 28px 32px 32px; animation: sp-fadeUp 0.3s ease; }
-        .sp-focus-card { transition: border-color 0.15s, box-shadow 0.15s; cursor: pointer; }
-        .sp-focus-card:hover { border-color: ${GOLD} !important; box-shadow: 0 0 0 1px ${GOLD}22; }
         @media (max-width: 860px) { .sp-inner { padding: 18px 14px 22px; } }
       `}</style>
 
@@ -258,13 +256,26 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                       return (
                         <div
                           key={f.topic}
-                          className="sp-focus-card"
-                          onClick={() => onStartSession?.({ mode, subtopics: [...f.subtopics] })}
-                          style={{ flex: '1 1 180px', padding: '14px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
+                          style={{ flex: '1 1 220px', padding: '14px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
                         >
                           <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>{f.topic}</div>
                           <div style={{ fontSize: 11, color: t.textMuted }}>{f.dueCount} due{f.wrongCount > 0 ? ` · ${f.wrongCount} wrong` : ''}</div>
-                          <div style={{ marginTop: 10, fontSize: 11, color: GOLD, fontWeight: 600 }}>Start session →</div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => onStartSession?.({ mode, subtopics: [...f.subtopics] })}
+                              style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+                            >
+                              Start session
+                            </button>
+                            {onOpenLearn && (
+                              <button
+                                onClick={() => onOpenLearn(f.topic)}
+                                style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                              >
+                                Review with Titan
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )
                     })}
@@ -273,7 +284,7 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
               )}
 
               {/* Weekly Schedule */}
-              <section style={{ marginBottom: 28 }}>
+              <section>
                 <div style={{ fontSize: 12, fontWeight: 700, color: t.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Review Schedule — Next 7 Days</div>
                 <div style={{ padding: '20px 20px 14px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 88 }}>
@@ -296,104 +307,6 @@ export default function StudyPlanScreen({ profile, questions, struggleMap, theme
                 </div>
               </section>
 
-              {/* Topic Mastery */}
-              <section>
-                <div style={{ fontSize: 12, fontWeight: 700, color: t.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Topic Mastery</div>
-                {y7Config ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {y7Config.macroGroups.map(macro => {
-                      const macroTopics = topicStats.filter(ts => macro.topics.includes(ts.topic))
-                      if (macroTopics.length === 0) return null
-                      const macroAttempts = macroTopics.reduce((s, ts) => s + ts.attempts, 0)
-                      const macroWrong    = macroTopics.reduce((s, ts) => s + ts.wrong, 0)
-                      const macroMastery  = macroAttempts > 0 ? Math.max(0, Math.round((1 - macroWrong / macroAttempts) * 100)) : null
-                      const macroColor    = macroMastery >= 70 ? '#4ade80' : macroMastery >= 40 ? GOLD : '#f87171'
-                      return (
-                        <div key={macro.id}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, letterSpacing: '0.05em' }}>{macro.label}</div>
-                            {macroMastery !== null && (
-                              <div style={{ fontSize: 12, fontWeight: 700, color: macroColor }}>{macroMastery}% strand avg</div>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {macroTopics.map(topic => {
-                              const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
-                              const shortLabel = topic.topic || ''
-                              const ti = macro.topics.indexOf(topic.topic)
-                              const prefix = ti >= 0 ? `${macro.num}.${ti + 1}` : null
-                              return (
-                                <div
-                                  key={topic.topic}
-                                  className="sp-focus-card"
-                                  onClick={() => onStartSession?.({ mode: topic.attempts > 0 ? 'wrong' : 'new', subtopics: topic.subtopics })}
-                                  title={topic.topic}
-                                  style={{ padding: '12px 16px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10 }}
-                                >
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: topic.attempts > 0 ? 8 : 0 }}>
-                                    <div>
-                                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text }} aria-label={topic.topic}>
-                                        {prefix && <span style={{ opacity: 0.55, fontWeight: 600, marginRight: 6 }}>{prefix}</span>}
-                                        {shortLabel}
-                                      </div>
-                                      <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
-                                        {topic.total} questions · {topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}
-                                      </div>
-                                    </div>
-                                    {topic.attempts > 0 ? (
-                                      <div style={{ fontSize: 16, fontWeight: 800, color: barColor, flexShrink: 0 }}>{topic.mastery}%</div>
-                                    ) : (
-                                      <div style={{ fontSize: 11, color: t.textFaint, fontStyle: 'italic', flexShrink: 0 }}>Not started</div>
-                                    )}
-                                  </div>
-                                  {topic.attempts > 0 && (
-                                    <div style={{ background: t.bg, borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                                      <div style={{ width: `${topic.mastery}%`, height: '100%', background: barColor, transition: 'width 0.6s ease' }} />
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {topicStats.map(topic => {
-                      const barColor = topic.mastery >= 70 ? '#4ade80' : topic.mastery >= 40 ? GOLD : '#f87171'
-                      return (
-                        <div
-                          key={topic.topic}
-                          className="sp-focus-card"
-                          onClick={() => onStartSession?.({ mode: topic.attempts > 0 ? 'wrong' : 'new', subtopics: topic.subtopics })}
-                          style={{ padding: '14px 18px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: topic.attempts > 0 ? 10 : 0 }}>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{topic.topic}</div>
-                              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
-                                {topic.total} questions · {topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}
-                              </div>
-                            </div>
-                            {topic.attempts > 0 ? (
-                              <div style={{ fontSize: 18, fontWeight: 800, color: barColor, flexShrink: 0 }}>{topic.mastery}%</div>
-                            ) : (
-                              <div style={{ fontSize: 11, color: t.textFaint, fontStyle: 'italic', flexShrink: 0 }}>Not started</div>
-                            )}
-                          </div>
-                          {topic.attempts > 0 && (
-                            <div style={{ background: t.bg, borderRadius: 4, height: 5, overflow: 'hidden' }}>
-                              <div style={{ width: `${topic.mastery}%`, height: '100%', background: barColor, transition: 'width 0.6s ease' }} />
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </section>
             </>
           )}
         </div>

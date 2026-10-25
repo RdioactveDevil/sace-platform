@@ -1,8 +1,9 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flame, ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
+import { ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
+import { priorityTopics } from '../lib/priorityTopics'
 import { currentStreak } from '../lib/streak'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
@@ -163,15 +164,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           .map(tn => (topicNormFn ? (topicNormFn(tn) ?? tn) : tn) || '')
           .join(', ')
 
-  const topStruggles = Object.entries(currentStruggleMap)
-    .map(([qid, s]) => {
-      const q = questions.find(x => x.id === qid)
-      if (!q || s.attempts === 0) return null
-      return { q, rate: s.wrong / s.attempts, ...s }
-    })
-    .filter(x => x && x.rate >= 0.4)
-    .sort((a, b) => b.rate - a.rate)
-    .slice(0, 5)
+  const topStruggles = priorityTopics(normTopicGroups)
 
   const totalAttempts = Object.values(currentStruggleMap).reduce((s, v) => s + (v.attempts || 0), 0)
   const totalWrong = Object.values(currentStruggleMap).reduce((s, v) => s + (v.wrong || 0), 0)
@@ -279,36 +272,28 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     <div style={{ ...card, padding: '18px 20px' }}>
       <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Focus</div>
       <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text, marginBottom: 2 }}>Priority Topics</div>
-      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Hit first in your next session</div>
-      {topStruggles.map((s, i) => (
-        <div key={s.q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
-          <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${t.danger}15`, border: `1px solid ${t.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: t.danger, flexShrink: 0 }}>{i+1}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topicNorm(s.q.topic) || s.q.topic}</div>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.danger, flexShrink: 0 }}>{Math.round(s.rate*100)}%</div>
-        </div>
-      ))}
+      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Your lowest-scoring topics — tap one to practise it</div>
+      {topStruggles.map((s, i) => {
+        const pct = Math.round(s.accuracy * 100)
+        const tone = pct >= 40 ? GOLD : t.danger
+        return (
+          <button
+            key={s.topic}
+            onClick={() => onStartSession({ mode: 'new', subtopics: normTopicToSubs[s.topic] || [] })}
+            title={`Practise ${s.topic}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 0', border: 'none', borderBottom: `1px solid ${t.border}`, background: 'transparent', cursor: 'pointer', textAlign: 'left', fontFamily: FONT_B }}
+          >
+            <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${tone}15`, border: `1px solid ${tone}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: tone, flexShrink: 0 }}>{i+1}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.topic}</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 1 }}>{s.correct}/{s.answers} correct</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: tone, flexShrink: 0 }}>{pct}%</div>
+          </button>
+        )
+      })}
     </div>
   ) : null
-
-  const StatsCard = () => (
-    <div style={{ ...card, padding: '18px 20px' }}>
-      <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Performance</div>
-      <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text, marginBottom: 12 }}>Your Stats</div>
-      {[
-        { label: 'Total XP',       val: profile.xp.toLocaleString(),         color: GOLD },
-        { label: 'Best streak',    val: <>{profile.best_streak||0} days <Flame size={16} style={{ verticalAlign: '-3px' }} aria-hidden="true" /></>, color: GOLD },
-        { label: 'Questions done', val: totalAttempts,                        color: t.text },
-        { label: 'Accuracy',       val: `${accuracy}%`,                      color: accuracy > 70 ? t.success : accuracy > 40 ? GOLD : t.danger },
-      ].map(s => (
-        <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>
-          <span style={{ fontSize: 15, color: t.textMuted }}>{s.label}</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.val}</span>
-        </div>
-      ))}
-    </div>
-  )
 
   const respondInvite = async (token, accept) => {
     setInviteBusy(token); setInviteError('')
@@ -471,7 +456,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const SprintCard = () => (
     <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}><BookOpen size={16} aria-hidden="true" />Study Plan</div>
-      <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>See your personalised review schedule and topic mastery.</div>
+      <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>See what to review today and your schedule for the week.</div>
       <button
         onClick={() => navigate('/study-plan')}
         style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
@@ -866,7 +851,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <ExamCountdownCard />
             <MissionsCard />
             <PriorityCard />
-            <StatsCard />
             <SprintCard />
           </div>
         </div>
@@ -879,7 +863,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <ExamCountdownCard />
           <MissionsCard />
           <PriorityCard />
-          <StatsCard />
           <SprintCard />
         </div>
       </div>

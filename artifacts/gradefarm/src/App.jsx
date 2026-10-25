@@ -724,11 +724,7 @@ function AppShellScreens({
           profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
-          onOpenLearn={(nextTopic) => {
-            if (nextTopic) setTopic(nextTopic)
-            setPhase('setup')
-            navigate('/learn')
-          }} />
+          onOpenStudyPlan={() => navigate('/study-plan')} />
       </div>}
       {wasOpened('study-plan') && <div style={show('study-plan')}>
         <StudyPlanScreen
