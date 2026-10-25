@@ -12,8 +12,8 @@ import { buildRemediationQueue, getQuestionConceptTag } from './engine.js'
 import { parseLatexJson } from './mathMarkup.js'
 
 export const REMEDIATION_DB_TIMEOUT_MS = 5000
-export const AI_TIMEOUT_MS = 8000
-export const BANK_PERSIST_TIMEOUT_MS = 5000
+// The server adds an access check and reference exemplars around the Claude call.
+export const AI_TIMEOUT_MS = 12000
 
 export function withTimeout(promise, ms, label = 'operation') {
   return new Promise((resolve, reject) => {
@@ -182,69 +182,43 @@ export function pickClosestDifficulty(queue = [], wantDiff = 3) {
   return bestIdx
 }
 
+/**
+ * Ask the server for AI "similar questions" to a missed bank question. Returns
+ * { variants, batch, signature }: the variants are served straight away, and
+ * batch + signature go to storeRemediationVariants (db.js), which checks their
+ * answer keys and saves the ones that pass to the shared bank. Never throws;
+ * { variants: [] } on any failure.
+ */
 export async function generateRemediationVariantsViaAI(
   parentQuestion,
-  conceptTag,
+  _conceptTag,
   targetDifficulty = null,
   { fetchImpl, timeoutMs = AI_TIMEOUT_MS } = {},
 ) {
   const fetchFn = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null)
-  if (!fetchFn) return []
+  if (!fetchFn || !parentQuestion?.id) return { variants: [] }
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
-
-    const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
     const diffTarget = Math.max(1, Math.min(5, targetDifficulty ?? (parentQuestion.difficulty ?? 3)))
-    const subjectLabel = parentQuestion?.subject || 'SACE'
-    const system = [
-      `You are generating adaptive remediation MCQs for a ${subjectLabel} student.`,
-      'Return only a valid JSON array containing exactly 5 objects.',
-      'Each object must have these keys: question, options, answer_index, solution, tip, difficulty, topic, subtopic, concept_tag, variant_type.',
-      'Each options array must contain exactly 4 strings.',
-      'Every question MUST be on the SAME topic and SAME subtopic as the original.',
-      'Keep the same underlying concept, but vary wording, values, or structure.',
-      'Do not include markdown or commentary outside the JSON array.',
-    ].join(' ')
 
-    const user = [
-      `Topic: ${parentQuestion.topic}`,
-      `Subtopic: ${parentQuestion.subtopic}`,
-      `Concept tag: ${conceptTag}`,
-      `Original question: ${parentQuestion.question}`,
-      `Correct answer: ${correctAnswer}`,
-      `Original solution: ${parentQuestion.solution}`,
-      `Centre the difficulty around ${diffTarget} out of 5, but VARY it: include some at difficulty ${Math.max(1, diffTarget - 1)} and some at ${Math.min(5, diffTarget + 1)} so the student is stretched whether they get questions right or wrong.`,
-      `Generate 5 questions that all test the "${parentQuestion.subtopic}" subtopic — same topic and subtopic as the original, not copies.`,
-      'Vary wording, values, or scenario across the 5 questions.',
-    ].join('\n')
-
-    const res = await fetchFn('/api/chat', {
+    const res = await fetchFn('/api/remediation/variants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({
-        max_tokens: 2000,
-        system,
-        messages: [{ role: 'user', content: user }],
-        // Steer the fallback "similar question" generation by the subject's
-        // uploaded reference resources. The server injects the exemplars (with
-        // the service role) so they match the textbooks/exams for this subtopic.
-        ...(parentQuestion?.subject && parentQuestion?.subtopic
-          ? { exemplarsFor: { subject: parentQuestion.subject, subtopic: parentQuestion.subtopic } }
-          : {}),
-      }),
+      body: JSON.stringify({ parentQuestionId: parentQuestion.id, targetDifficulty: diffTarget }),
     })
-
     clearTimeout(timeout)
-
-    if (!res.ok) return []
+    if (!res.ok) return { variants: [] }
 
     const data = await res.json()
-    const rawText = data?.content?.[0]?.text || ''
-    return extractJsonArray(rawText)
+    return {
+      variants: Array.isArray(data?.variants) ? data.variants : [],
+      batch: data?.batch,
+      signature: data?.signature,
+    }
   } catch {
-    return []
+    return { variants: [] }
   }
 }
 
@@ -267,7 +241,7 @@ function trackBackground(ctx, promise) {
     ctx.pendingBackground.add(promise)
     promise.finally(() => {
       try { ctx.pendingBackground.delete(promise) } catch {}
-    })
+    }).catch(() => {})
   }
   // Always swallow rejections so they don't surface as unhandled.
   promise.catch(() => {})
@@ -343,10 +317,11 @@ export async function runGenerateRemediationQueue(ctx) {
 
     const aiPromise = (async () => {
       try {
-        const generated = await deps.generateAIVariants(parentQuestion, conceptTag, diffTarget)
-        if (!generated || !generated.length) {
+        const result = await deps.generateAIVariants(parentQuestion, conceptTag, diffTarget)
+        const generated = Array.isArray(result) ? result : (result?.variants || [])
+        if (!generated.length) {
           console.warn('[gradefarm] AI variant generation returned 0 variants')
-          return { normalized: [], generated: [] }
+          return { normalized: [] }
         }
 
         const normalized = generated.map((v, i) => ({
@@ -356,55 +331,37 @@ export async function runGenerateRemediationQueue(ctx) {
           variant_type: v.variant_type || 'ai_variant',
         }))
 
-        // Background bank persistence — bounded, off the critical path.
-        trackBackground(ctx, (async () => {
-          try {
-            const bankRows = await withTimeout(
-              deps.insertToBank(parentQuestion, generated),
-              deps.bankTimeoutMs ?? BANK_PERSIST_TIMEOUT_MS,
-              'insertGeneratedQuestionsToBank',
-            )
-            if (!bankRows || !bankRows.length) return
-            if (typeof onBankQuestionsAdded === 'function') {
-              try { onBankQuestionsAdded(bankRows) } catch {}
+        // Background: the server checks the answer keys and saves the ones that
+        // pass to the bank, off the critical path. Until then each variant's
+        // bank id is a promise, so recording an answer to it can wait for it.
+        if (result?.batch && deps.storeVariants) {
+          const storing = trackBackground(ctx, (async () => {
+            const { stored = [] } = await deps.storeVariants(result.batch, result.signature)
+            const rows = stored.map(s => s.question).filter(Boolean)
+            if (rows.length && typeof onBankQuestionsAdded === 'function') {
+              try { onBankQuestionsAdded(rows) } catch {}
             }
-            bankRows.forEach((row, i) => {
-              const vid = normalized[i]?.variant_record_id
-              if (vid && pendingBankIds) pendingBankIds.set(vid, row.id)
-            })
-          } catch (bankErr) {
-            console.warn('[gradefarm] background bank persistence failed:', bankErr?.message || bankErr)
+            return new Map(stored.map(s => [s.variant_id, s.question?.id || null]))
+          })())
+          if (pendingBankIds) {
+            for (const v of normalized) {
+              const vid = v.variant_record_id
+              pendingBankIds.set(vid, storing.then(ids => ids.get(vid) || null, () => null))
+            }
           }
-        })())
+          storing.catch(err => console.warn('[gradefarm] storing remediation variants failed:', err?.message || err))
+        }
 
-        return { normalized, generated }
+        return { normalized }
       } catch (aiErr) {
         console.warn('[gradefarm] AI variant generation failed (generateRemediationQueue):', aiErr?.message || aiErr)
-        return { normalized: [], generated: [] }
+        return { normalized: [] }
       }
     })()
 
-    // Persistence to question_variants table — also background.
-    trackBackground(ctx, aiPromise.then(async ({ generated }) => {
-      if (!generated.length) return
-      try {
-        const saved = await deps.insertVariants(parentQuestion, generated)
-        if (saved.length < generated.length) {
-          console.error(
-            `[gradefarm] variant storage partial: ${saved.length}/${generated.length} saved for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}".`
-          )
-        }
-      } catch (insertErr) {
-        console.error(
-          `[gradefarm] variant storage failed (0/${generated.length} saved) for concept "${parentQuestion.concept_tag || parentQuestion.subtopic}":`,
-          insertErr?.message || insertErr,
-        )
-      }
-    }))
-
     // Await AI so the student gets same-subtopic questions (never off-subtopic
-    // fallbacks). The generated questions are persisted to the bank in the
-    // background (see aiPromise) so the bank grows and API calls taper off.
+    // fallbacks). The ones that pass the answer-key check are saved to the bank
+    // in the background (see aiPromise) so the bank grows and API calls taper off.
     const { normalized: aiQueue } = await aiPromise
 
     if (aiQueue.length) {

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeWeights, selectNextQuestion, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts, ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel, assignmentStanding, applyAssignmentAnswer } from './engine.js'
+import { computeWeights, selectNextQuestion, STARTING_DIFFICULTY, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts, ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel, assignmentStanding, applyAssignmentAnswer } from './engine.js'
 
 // A spread of unseen questions across the full difficulty range.
 const bank = [
@@ -45,6 +45,25 @@ test('selection lands on a near-target question across many draws', () => {
     if (Math.abs(q.difficulty - 4) <= 1) nearTarget++
   }
   assert.ok(nearTarget / trials > 0.95, `only ${nearTarget}/${trials} near target`)
+})
+
+test('a new session opens near the starting difficulty, not on the hardest questions', () => {
+  const bigBank = []
+  for (let d = 1; d <= 5; d++) {
+    for (let i = 0; i < 4; i++) bigBank.push({ id: `d${d}_${i}`, difficulty: d, subtopic: 'x' })
+  }
+  for (let i = 0; i < 200; i++) {
+    const q = selectNextQuestion(bigBank, {}, [], 'new', [], null)
+    assert.ok(Math.abs(q.difficulty - STARTING_DIFFICULTY) <= 1, `opened on ${q.difficulty}★`)
+  }
+})
+
+test('a content key follows an edit to the question it was cached for', () => {
+  const q = { id: 'a', question: 'What is 2+2?', options: ['3', '4'] }
+  const before = questionContentKey(q)
+  q.question = 'What is 3+3?'
+  assert.notEqual(questionContentKey(q), before)
+  assert.equal(questionContentKey(q), questionContentKey({ ...q }))
 })
 
 test('a genuinely struggled question still outranks an on-target unseen one', () => {

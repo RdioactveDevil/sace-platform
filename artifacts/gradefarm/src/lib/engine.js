@@ -55,6 +55,10 @@ export function computeWeights(questions, struggleMap, targetDifficulty = null) 
   })
 }
 
+// Keys are cached per question object: the engine asks for every question's
+// key on each pick and each count, which was the bulk of their cost.
+const contentKeyCache = new WeakMap()
+
 /**
  * Identity of a question's content, so the same question stored under two ids
  * (word-for-word duplicates in the bank, or an AI variant saved both as a
@@ -65,13 +69,17 @@ export function computeWeights(questions, struggleMap, targetDifficulty = null) 
  */
 export function questionContentKey(q) {
   if (!q?.question) return null
+  const cached = contentKeyCache.get(q)
+  if (cached?.question === q.question && cached.options === q.options && cached.passage_id === q.passage_id) return cached.key
   const norm = (s) => String(s ?? '').toLowerCase().replace(/\$/g, '').replace(/\s+/g, '')
   let options = q.options
   if (typeof options === 'string') {
     try { options = JSON.parse(options) } catch { options = [options] }
   }
   const opts = Array.isArray(options) ? options.map(norm).join('|') : ''
-  return `${q.passage_id || ''}::${norm(q.question)}::${opts}`
+  const key = `${q.passage_id || ''}::${norm(q.question)}::${opts}`
+  contentKeyCache.set(q, { key, question: q.question, options: q.options, passage_id: q.passage_id })
+  return key
 }
 
 /**
@@ -149,6 +157,13 @@ export function assignmentGoalLabel(a) {
 }
 
 /**
+ * The difficulty a new-questions session aims for before the student has
+ * answered anything. Without one, the small bonus unseen questions get for
+ * difficulty decided the first pick, so every session opened on a 5★ question.
+ */
+export const STARTING_DIFFICULTY = 2
+
+/**
  * Pick the next question using weighted random selection.
  *
  * mode:
@@ -157,7 +172,8 @@ export function assignmentGoalLabel(a) {
  *   'all'    — all questions including already-seen
  *
  * targetDifficulty (1–5 or null): when provided, biases selection towards
- *   questions at that difficulty level for adaptive pacing.
+ *   questions at that difficulty level for adaptive pacing. In 'new' mode a
+ *   null target means STARTING_DIFFICULTY.
  *
  * difficultyRange ({ min, max } or null): restricts the pool to questions in
  *   that star range when any are left; otherwise the whole pool is used.
@@ -188,6 +204,8 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
   }
 
   if (!pool.length) return null
+
+  if (targetDifficulty == null && mode === 'new') targetDifficulty = STARTING_DIFFICULTY
 
   // Finish the reading passage the student is part-way through before moving on.
   const sibling = nextPassageSibling(questions, pool, sessionAnsweredIds)

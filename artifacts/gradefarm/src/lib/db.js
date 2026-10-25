@@ -453,14 +453,28 @@ export async function getStruggleMap(userId) {
   return Object.fromEntries(data.map(r => [r.question_id, r]))
 }
 
-export async function recordAnswer(userId, questionId, correct, selected = 0, sessionId = null, timeTakenMs = null) {
+// `selected` is the chosen option index for an MCQ, null for other types.
+export async function recordAnswer(userId, questionId, correct, selected = null, sessionId = null, timeTakenMs = null) {
+  // One call logs the answer and updates the struggle row (migration
+  // 20261025000004_record_answer.sql).
+  const { error } = await supabase.rpc('record_answer', {
+    p_question_id: questionId,
+    p_correct: !!correct,
+    p_selected: Number.isInteger(selected) ? selected : null,
+    p_session_id: sessionId,
+    p_time_ms: Number.isFinite(timeTakenMs) ? Math.round(timeTakenMs) : null,
+  })
+  if (!error) return
+  if (error.code !== 'PGRST202') throw error
+
+  // Before that migration: three requests, and answer_log.selected is NOT NULL.
   // The answer log doesn't depend on the struggle row, so write it alongside
   // the read-then-write below instead of after it.
   const logInsert = supabase.from('answer_log').insert({
     user_id: userId,
     session_id: sessionId,
     question_id: questionId,
-    selected,
+    selected: Number.isInteger(selected) ? selected : 0,
     correct,
     time_taken_ms: timeTakenMs,
   })
@@ -746,100 +760,30 @@ export async function getRemediationVariants(parentQuestionId, conceptTag, exclu
   return { directVariants, conceptVariants }
 }
 
-export async function insertGeneratedQuestionVariants(parentQuestion, variants = []) {
-  if (!variants.length) return []
-
-  const payload = variants.map(v => ({
-    parent_question_id: v.parent_question_id || parentQuestion.id,
-    variant_type: v.variant_type || 'generated',
-    subject: v.subject || parentQuestion.subject || 'Chemistry',
-    topic: parentQuestion.topic,
-    subtopic: parentQuestion.subtopic,
-    concept_tag: v.concept_tag || parentQuestion.concept_tag,
-    difficulty: v.difficulty || parentQuestion.difficulty || 1,
-    question: v.question,
-    options: v.options,
-    answer_index: v.answer_index,
-    solution: v.solution || parentQuestion.solution,
-    tip: v.tip || null,
-    source: 'ai_generated',
-  }))
-
-  const { data, error } = await supabase
-    .from('question_variants')
-    .insert(payload)
-    .select('*')
-
-  if (error) throw error
-  return (data || []).map(v => normalizeVariant(v, parentQuestion.id, parentQuestion.concept_tag))
-}
-
 /**
- * Persist AI-generated remediation questions into the main `questions` bank so they
- * become reusable across sessions and users (rather than being one-time remediation
- * variants). Returns the inserted rows with their real DB-assigned ids so callers can
- * use those ids when recording answers (which keeps the no-repeat rule intact via
- * struggle_profiles).
- *
- * Each row is given an explicit difficulty (clamped 1..5, falling back to the parent
- * question's difficulty) so the adaptive engine can identify which topics/subtopics
- * the student is struggling with.
+ * Hand a batch from generateRemediationVariantsViaAI back to the server, which
+ * checks each answer key and saves the questions that pass to the bank and to
+ * question_variants. Resolves to { stored: [{ variant_id, question }] } where
+ * `question` is the new bank row. Takes tens of seconds, so don't make the
+ * student wait on it.
  */
-export async function insertGeneratedQuestionsToBank(parentQuestion, variants = []) {
-  if (!Array.isArray(variants) || variants.length === 0) return []
-
-  // Fetch existing question texts for this subject+topic to avoid content duplicates.
-  const subject = parentQuestion.subject || 'Chemistry'
-  const topic   = parentQuestion.topic   || ''
-  const { data: existing } = await supabase
-    .from('questions')
-    .select('question')
-    .eq('subject', subject)
-    .eq('topic', topic)
-    .limit(1000)
-  const existingTexts = new Set((existing || []).map(q => (q.question || '').trim().toLowerCase()))
-
-  const now = new Date().toISOString()
-  const payload = variants
-    .filter(v => v.question && !existingTexts.has(v.question.trim().toLowerCase()))
-    .map(v => {
-      const sub = parentQuestion.subject || subject
-      const top = parentQuestion.topic
-      const stp = parentQuestion.subtopic || top
-      return {
-        id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        subject: sub,
-        topic: top,
-        subtopic: stp,
-        concept_tag:
-          parentQuestion.concept_tag ||
-          `${sub}|${top}|${stp}`.toLowerCase(),
-        difficulty: Math.max(1, Math.min(5, Number(v.difficulty || parentQuestion.difficulty || 1))),
-        question: v.question,
-        options: v.options,
-        answer_index: v.answer_index,
-        solution: v.solution || parentQuestion.solution || '',
-        tip: null,
-        created_at: now,
-      }
-    })
-
-  if (!payload.length) return []
-
-  const { data, error } = await supabase
-    .from('questions')
-    .insert(payload)
-    .select('*')
-
-  if (error) throw error
-
-  return (data || []).map(q => ({
-    ...q,
-    options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
-    concept_tag:
-      q.concept_tag ||
-      `${q.subject}|${q.topic}|${q.subtopic}`.toLowerCase(),
-  }))
+export async function storeRemediationVariants(batch, signature) {
+  const res = await fetch('/api/remediation/store', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batch, signature }),
+  })
+  if (!res.ok) throw new Error(`remediation/store ${res.status}`)
+  const data = await res.json()
+  return {
+    stored: (data?.stored || []).map(s => ({
+      ...s,
+      question: s.question && {
+        ...s.question,
+        options: typeof s.question.options === 'string' ? JSON.parse(s.question.options) : s.question.options,
+      },
+    })),
+  }
 }
 
 /**
@@ -882,6 +826,8 @@ export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 1
       const body = await res.json()
       detail = body?.detail || body?.error || ''
     } catch { /* non-JSON error body */ }
+    // The daily limit's message is written for the student; show it as is.
+    if (res.status === 429 && detail) throw new Error(detail)
     throw new Error(`generate-questions API error ${res.status}${detail ? `: ${detail}` : ''}`)
   }
   const data = await res.json()
@@ -934,8 +880,15 @@ export async function getVariantCountsByConceptTags(conceptTags) {
 }
 
 export async function incrementQuestionVariantUsage(variantId) {
-  if (!variantId) return
+  // Only stored variants (uuid ids) have a usage count; bank questions served
+  // as remediation and concept-builders don't.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(variantId || ''))) return
 
+  const { error: rpcError } = await supabase.rpc('bump_variant_usage', { p_variant_id: variantId })
+  if (!rpcError) return
+  if (rpcError.code !== 'PGRST202') throw rpcError
+
+  // Before migration 20261025000005 there is no RPC; update the row directly.
   const { data: existing, error: fetchError } = await supabase
     .from('question_variants')
     .select('id, usage_count')

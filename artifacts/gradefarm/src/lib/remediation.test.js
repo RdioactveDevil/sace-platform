@@ -105,11 +105,9 @@ function makeBankQuestion(id, overrides = {}) {
 
 const baseDeps = () => ({
   getRemediationVariants: async () => ({ directVariants: [], conceptVariants: [] }),
-  generateAIVariants: async () => [],
-  insertVariants: async () => [],
-  insertToBank: async () => [],
+  generateAIVariants: async () => ({ variants: [] }),
+  storeVariants: async () => ({ stored: [] }),
   dbTimeoutMs: 50,
-  bankTimeoutMs: 50,
 })
 
 async function flushBackground(ctx) {
@@ -354,12 +352,12 @@ describe('runGenerateRemediationQueue', () => {
       questions: [],
       deps: {
         ...baseDeps(),
-        generateAIVariants: async () => [
-          { question: 'ai 1', options: ['a', 'b', 'c', 'd'], answer_index: 0, difficulty: 2 },
-          { question: 'ai 2', options: ['a', 'b', 'c', 'd'], answer_index: 1, difficulty: 2 },
-        ],
-        insertVariants: async (_p, gen) => gen,
-        insertToBank: async () => [],
+        generateAIVariants: async () => ({
+          variants: [
+            { question: 'ai 1', options: ['a', 'b', 'c', 'd'], answer_index: 0, difficulty: 2 },
+            { question: 'ai 2', options: ['a', 'b', 'c', 'd'], answer_index: 1, difficulty: 2 },
+          ],
+        }),
       },
       pendingBackground: new Set(),
       ...rec,
@@ -370,6 +368,75 @@ describe('runGenerateRemediationQueue', () => {
     assert.equal(queue.length, 2)
     assert.ok(queue.every(v => v.source === 'ai_generated'))
     assert.equal(rec.calls.status.at(-1), 'activated')
+  })
+
+  test('AI variants are served at once and saved by the server in the background', async () => {
+    const rec = makeStateRecorder()
+    const pendingBankIds = new Map()
+    const added = []
+    let release
+    const storeCalls = []
+    const ctx = {
+      parentQuestion: makeParent(),
+      questions: [],
+      deps: {
+        ...baseDeps(),
+        generateAIVariants: async () => ({
+          variants: [
+            { id: 'v-pass', variant_record_id: 'v-pass', question: 'ai 1', options: ['a', 'b', 'c', 'd'], answer_index: 0, difficulty: 2 },
+            { id: 'v-fail', variant_record_id: 'v-fail', question: 'ai 2', options: ['a', 'b', 'c', 'd'], answer_index: 1, difficulty: 2 },
+          ],
+          batch: 'BATCH',
+          signature: 'SIG',
+        }),
+        // Only the first passes the answer-key check.
+        storeVariants: (batch, signature) => {
+          storeCalls.push([batch, signature])
+          return new Promise(r => { release = () => r({ stored: [{ variant_id: 'v-pass', question: { id: 'ai_bank_1', question: 'ai 1' } }] }) })
+        },
+      },
+      pendingBankIds,
+      onBankQuestionsAdded: rows => added.push(...rows),
+      pendingBackground: new Set(),
+      ...rec,
+    }
+
+    // The queue doesn't wait on the answer-key check.
+    const queue = await runGenerateRemediationQueue(ctx)
+    assert.deepEqual(queue.map(v => v.variant_record_id), ['v-pass', 'v-fail'])
+    assert.deepEqual(storeCalls, [['BATCH', 'SIG']])
+    assert.equal(added.length, 0)
+
+    release()
+    await flushBackground(ctx)
+    assert.equal(await pendingBankIds.get('v-pass'), 'ai_bank_1')
+    assert.equal(await pendingBankIds.get('v-fail'), null)
+    assert.deepEqual(added.map(r => r.id), ['ai_bank_1'])
+  })
+
+  test('a failed save leaves the served variants with no bank id', async () => {
+    const rec = makeStateRecorder()
+    const pendingBankIds = new Map()
+    const ctx = {
+      parentQuestion: makeParent(),
+      questions: [],
+      deps: {
+        ...baseDeps(),
+        generateAIVariants: async () => ({
+          variants: [{ id: 'v1', variant_record_id: 'v1', question: 'ai 1', options: ['a', 'b', 'c', 'd'], answer_index: 0 }],
+          batch: 'BATCH',
+          signature: 'SIG',
+        }),
+        storeVariants: async () => { throw new Error('store 500') },
+      },
+      pendingBankIds,
+      pendingBackground: new Set(),
+      ...rec,
+    }
+    const queue = await runGenerateRemediationQueue(ctx)
+    await flushBackground(ctx)
+    assert.equal(queue.length, 1)
+    assert.equal(await pendingBankIds.get('v1'), null)
   })
 
   test('AI throwing is caught — does not strand status on generating', async () => {

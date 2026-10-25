@@ -20,8 +20,7 @@ import {
   addXP,
   createSession,
   getRemediationVariants,
-  insertGeneratedQuestionVariants,
-  insertGeneratedQuestionsToBank,
+  storeRemediationVariants,
   fetchAndPersistMoreQuestions,
   incrementQuestionVariantUsage,
   flagQuestion,
@@ -51,6 +50,7 @@ import PassageView from './PassageView'
 import QuizToolsDock from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
+import { buildQuestionHelpContext } from '../lib/questionHelp'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -434,9 +434,9 @@ export default function QuizScreen({
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
   const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
-  // Maps variant_record_id -> real questions.id once background bank
-  // persistence finishes; lets handleAnswer still record variant attempts
-  // even when the queue item rendered before persistence completed.
+  // Maps variant_record_id -> promise of its real questions.id (null if the
+  // server's answer-key check rejected it); lets handleAnswer record variant
+  // attempts even when the question was served before it was saved.
   const pendingBankIdsRef = useRef(new Map())
   // Per-question prefetched DB variants — filled in the background while
   // the student reads the question, consumed by enterRemediation.
@@ -616,9 +616,9 @@ export default function QuizScreen({
     }
     clearRemediation()
     setQNumber(n => n + 1)
-    const _targetDiff = getTargetDifficulty(sessionAnswered, questions)
+    const _targetDiff = getTargetDifficulty(sessionResults, questions)
     setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, _targetDiff); return prev })
-  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, questions, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
+  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, questions, remediationConcept, remediationOriginalQ, sessionAnswered, sessionResults, setQNumber, setStruggleMap])
 
   // "Has this student already answered this question?" (by id or by content),
   // so remediation never re-serves a question from an earlier session. Kept in
@@ -645,8 +645,7 @@ export default function QuizScreen({
   const remediationDeps = {
     getRemediationVariants: getUnseenRemediationVariants,
     generateAIVariants: generateRemediationVariantsViaAI,
-    insertVariants: insertGeneratedQuestionVariants,
-    insertToBank: insertGeneratedQuestionsToBank,
+    storeVariants: storeRemediationVariants,
     dbTimeoutMs: REMEDIATION_DB_TIMEOUT_MS,
   }
 
@@ -1059,30 +1058,21 @@ export default function QuizScreen({
             return
           }
 
-          const generated = await generateRemediationVariantsViaAI(
+          const { variants, batch, signature } = await generateRemediationVariantsViaAI(
             parent, tag, parent.difficulty
           )
-          if (!generated.length) return
+          if (!variants.length || !batch) return
 
-          // Persist to the main bank (so they show up in future sessions).
-          try {
-            const bankRows = await withTimeout(
-              insertGeneratedQuestionsToBank(parent, generated),
-              5000,
-              `prewarm-bank(${tag})`
-            )
-            if (bankRows.length && typeof onBankQuestionsAdded === 'function') {
-              try { onBankQuestionsAdded(bankRows) } catch {}
-            }
-          } catch (bErr) {
-            console.warn(`[gradefarm] prewarm bank persist failed for "${tag}":`, bErr?.message || bErr)
+          // The server checks the answer keys and saves the ones that pass to
+          // the bank and to question_variants, so getRemediationVariants finds
+          // them next time a student gets this parent wrong.
+          const { stored = [] } = await storeRemediationVariants(batch, signature)
+          const bankRows = stored.map(s => s.question).filter(Boolean)
+          if (bankRows.length && typeof onBankQuestionsAdded === 'function') {
+            try { onBankQuestionsAdded(bankRows) } catch {}
           }
 
-          // Also persist to question_variants so getRemediationVariants finds
-          // them next time the student gets this same parent wrong.
-          try { await insertGeneratedQuestionVariants(parent, generated) } catch {}
-
-          console.info(`[gradefarm] pre-warmed ${generated.length} variant(s) for "${tag}"`)
+          console.info(`[gradefarm] pre-warmed ${bankRows.length}/${variants.length} variant(s) for "${tag}"`)
         } catch (err) {
           console.warn(`[gradefarm] prewarm failed for "${tag}":`, err?.message || err)
         }
@@ -1173,11 +1163,14 @@ export default function QuizScreen({
 
     // Track the variant attempt against its real bank id so this question is
     // excluded from future non-'all' sessions. Only when we have a real
-    // questions.id — synthetic queue keys would violate the answer_log FK.
+    // questions.id — synthetic queue keys would violate the struggle row's FK.
+    // A freshly generated variant's id arrives once the server has checked and
+    // saved it (null if it didn't pass).
     const contentKey = questionContentKey(currentQ)
+    const pendingBankId = currentQ.variant_record_id && pendingBankIdsRef.current.get(currentQ.variant_record_id)
     const trackId =
       currentQ.bank_question_id ||
-      (currentQ.variant_record_id && pendingBankIdsRef.current.get(currentQ.variant_record_id)) ||
+      (pendingBankId && await pendingBankId) ||
       // A stored variant's bank copy has the same content under its own id.
       (contentKey && questions.find(q => questionContentKey(q) === contentKey)?.id) ||
       null
@@ -1486,7 +1479,14 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
   }
 
-  const counts = getQuestionCounts(questions, struggleMap, effectiveSubtopics)
+  // Walks the whole bank, so only redo it when the inputs change (not on every
+  // keystroke in an answer box or tick of the exam timer).
+  const subtopicsKey = effectiveSubtopics.join('\u0000')
+  const counts = useMemo(
+    () => getQuestionCounts(questions, struggleMap, effectiveSubtopics),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questions, struggleMap, subtopicsKey],
+  )
 
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode) => {
@@ -2060,12 +2060,7 @@ export default function QuizScreen({
                     </button>
                     {onOpenLearn && !examMode && (
                       <button
-                        onClick={() => onOpenLearn(currentQ.topic, {
-                          question: currentQ.question,
-                          correctAnswer: currentQ.options?.[currentQ.answer_index] || '',
-                          subtopic: currentQ.subtopic,
-                          topic: currentQ.topic,
-                        })}
+                        onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))}
                         title="Explain this concept with Titan AI"
                         style={{
                           flexShrink: 0,
