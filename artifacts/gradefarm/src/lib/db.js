@@ -643,7 +643,7 @@ export async function getSubscriptions(userId) {
 // ─── ACCESS & BILLING ────────────────────────────────────────────────────────
 // Students can't write user_subscriptions; access comes from an admin grant,
 // their one free subject, or their Stripe plan (one subscription, quantity =
-// paid subjects, $5 / $4 / $3+ per week), all through these endpoints.
+// paid subjects, $7 / $6 / $5+ per week by default), all through these endpoints.
 
 /** { enabled, tiers, paidCount, weeklyTotal, nextPrice, hasPlan, renewsAt, endsAtPeriodEnd, freeDailyQuestions } */
 export async function getBillingConfig() {

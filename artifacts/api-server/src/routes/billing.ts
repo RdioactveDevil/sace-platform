@@ -9,8 +9,10 @@ import { logger } from "../lib/logger";
 // Every student may pick one free subject (limited questions per day, counted
 // by the use_free_question() database function). Paid subjects live on ONE
 // Stripe subscription per student whose quantity is the number of paid
-// subjects, on a graduated weekly AUD price: $5 for the first subject, $4 for
-// the second, $3 for each one after (platform_settings.pricing.student_tiers).
+// subjects, on a graduated weekly AUD price: $7 for the first subject, $6 for
+// the second, $5 for each one after (platform_settings.pricing.student_tiers).
+// A plan keeps the price it started on when the prices change; what the app
+// shows a student with a plan comes from their own Stripe price.
 // The first paid subject goes through Stripe Checkout; later ones are added to
 // (or removed from) the existing subscription in-app, prorated.
 //
@@ -22,7 +24,7 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
-const DEFAULT_TIERS_AUD = [5, 4, 3];
+const DEFAULT_TIERS_AUD = [7, 6, 5];
 /** Statuses that keep paid subjects unlocked (past_due: Stripe is still retrying the card). */
 const ACCESS_STATUSES = new Set<Stripe.Subscription.Status>(["trialing", "active", "past_due"]);
 
@@ -82,6 +84,13 @@ async function planPriceId(stripe: Stripe, tiers: number[]): Promise<string> {
   }
 }
 
+/** $ per subject on the plan's own Stripe price (needs `items.data.price.tiers` expanded). */
+function subscriptionTiers(sub: Stripe.Subscription): number[] | null {
+  const tiers = sub.items.data[0]?.price.tiers;
+  if (!tiers?.length) return null;
+  return tiers.map((t) => (t.unit_amount ?? 0) / 100);
+}
+
 type CustomerRow = { stripe_customer_id: string; stripe_subscription_id: string | null };
 
 async function customerRow(admin: SupabaseClient, userId: string): Promise<CustomerRow | null> {
@@ -128,11 +137,11 @@ async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string
   return customer.id;
 }
 
-/** The student's subscription if it can still carry subjects (not cancelled / expired). */
+/** The student's subscription if it can still carry subjects (not cancelled / expired), with its price's tiers. */
 async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<Stripe.Subscription | null> {
   const row = await customerRow(admin, userId);
   if (!row?.stripe_subscription_id) return null;
-  const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id).catch((err) => {
+  const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id, { expand: ["items.data.price.tiers"] }).catch((err) => {
     if (isMissing(err)) return null;
     throw err;
   });
@@ -237,14 +246,25 @@ router.get("/billing/config", async (req: Request, res: Response) => {
     .from("user_subscriptions").select("source, active, cancel_at_period_end, current_period_end")
     .eq("user_id", ctx.userId).eq("source", "stripe").eq("active", true);
   const paid = rows ?? [];
+  const stripe = getStripe();
+  // A plan started before a price change is still charged its old prices.
+  let planTiers = tiers;
+  if (stripe && paid.length > 0) {
+    const sub = await liveSubscription(ctx.admin, stripe, ctx.userId).catch((err) => {
+      logger.warn({ err }, "billing: couldn't read the student's plan prices");
+      return null;
+    });
+    planTiers = (sub && subscriptionTiers(sub)) ?? tiers;
+  }
   const { data: freeLimit } = await ctx.admin.rpc("free_question_limit");
   res.json({
-    enabled: !!getStripe(),
+    enabled: !!stripe,
     currency: "AUD",
     tiers,
+    planTiers,
     paidCount: paid.length,
-    weeklyTotal: planTotal(tiers, paid.length),
-    nextPrice: tierPrice(tiers, paid.length + 1),
+    weeklyTotal: planTotal(planTiers, paid.length),
+    nextPrice: tierPrice(planTiers, paid.length + 1),
     hasPlan: paid.length > 0,
     renewsAt: paid[0]?.current_period_end ?? null,
     endsAtPeriodEnd: paid.length > 0 && paid.every((r) => r.cancel_at_period_end),
@@ -303,7 +323,7 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
         throw err;
       }
       await admin.from("user_subscriptions").update(subFields(updated)).eq("stripe_subscription_id", updated.id).eq("source", "stripe");
-      return void res.json({ added: true, weeklyTotal: planTotal(tiers, before + 1) });
+      return void res.json({ added: true, weeklyTotal: planTotal(subscriptionTiers(sub) ?? tiers, before + 1) });
     }
 
     const [priceId, customer] = await Promise.all([planPriceId(stripe, tiers), customerFor(admin, stripe, userId)]);

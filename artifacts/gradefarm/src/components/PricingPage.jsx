@@ -4,6 +4,7 @@ import { getPlatformSettings } from '../lib/db'
 import { Lightbulb, GraduationCap, Menu, X, Infinity as InfinityIcon } from 'lucide-react'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { formatSubjectLabel } from '../lib/subjects'
+import { DEFAULT_STUDENT_TIERS, studentTiers, extraLadder, planTotal } from '../lib/pricing'
 import { SubjectIconByName } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
@@ -45,7 +46,7 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_tiers: [5, 4, 3], free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -68,12 +69,12 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
   const annualDiscount = dbPricing.annual_discount ?? 0.2
 
-  const tiers = Array.isArray(dbPricing.student_tiers) && dbPricing.student_tiers.length ? dbPricing.student_tiers : [5, 4, 3]
+  const tiers = studentTiers(dbPricing.student_tiers)
   const studentWeekly = tiers[0]
   const freeDaily = dbPricing.free_daily_questions ?? 20
   const freeAi = dbPricing.free_daily_ai_messages ?? 10
-  const extraLadder = tiers.length > 1 ? `$${tiers.slice(1).join(', then $')}` : `$${studentWeekly}`
-  const threeSubjects = [0, 1, 2].map(i => tiers[Math.min(i, tiers.length - 1)]).reduce((a, b) => a + b, 0)
+  const extraSubjects = `$${extraLadder(tiers)}`
+  const threeSubjects = planTotal(tiers, 3)
   // Students pay weekly per subject; the monthly/annual toggle is for tutor plans.
   const studentPlans = [
     {
@@ -100,7 +101,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       price: studentWeekly,
       fixed: true,
       unit: '/wk',
-      sub: `first subject · extra subjects ${extraLadder}/week each · AUD`,
+      sub: `first subject · extra subjects ${extraSubjects}/week each · AUD`,
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: GOLD,
@@ -510,7 +511,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                 { q: 'Are the questions really unlimited?', a: `Yes. When you've worked through a topic's question bank, Titan writes brand-new questions for it, pitched at your level and checked before you see them — so you never run out. The free plan is capped at ${freeDaily} questions a day; paid subjects have no cap.` },
                 { q: 'Can I try before I pay?', a: `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
                 { q: 'Can I cancel anytime?', a: "Absolutely. Remove a subject from My Account whenever you like — unused time is credited to your next bill. Removing your last paid subject ends your plan at the end of the week you've paid for." },
-                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one weekly bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraLadder}/week. Two subjects are $${tiers[0] + tiers[Math.min(1, tiers.length - 1)]}/week.` },
+                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one weekly bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraSubjects}/week. Two subjects are $${planTotal(tiers, 2)}/week.` },
                 { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student subscriptions are always weekly." },
                 { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },

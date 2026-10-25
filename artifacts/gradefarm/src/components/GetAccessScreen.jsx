@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getBillingConfig, addPaidSubject, chooseFreeSubject } from '../lib/db'
 import { notify } from '../lib/notify'
 import { formatSubjectLabel, subjectAccess } from '../lib/subjects'
+import { DEFAULT_STUDENT_TIERS, studentTiers, extraLadder } from '../lib/pricing'
 import { SubjectIcon } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
@@ -32,7 +33,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
   const [billing, setBilling] = useState(null)
   const [busy, setBusy] = useState(null) // 'free' | 'paid'
   useEffect(() => {
-    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, tiers: [5, 4, 3], nextPrice: 5, weeklyTotal: 0, hasPlan: false, freeDailyQuestions: 20 }))
+    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, tiers: DEFAULT_STUDENT_TIERS, nextPrice: DEFAULT_STUDENT_TIERS[0], weeklyTotal: 0, hasPlan: false, freeDailyQuestions: 20 }))
   }, [])
 
   if (!subj) {
@@ -43,11 +44,11 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
   const color = subj.color ?? GOLD
 
   const curriculumId = String(subj.id || '').replace(/^curriculum_/, '')
-  const nextPrice = billing?.nextPrice ?? 5
+  const tiers = studentTiers(billing?.tiers)
+  const nextPrice = billing?.nextPrice ?? tiers[0]
   const freeDaily = billing?.freeDailyQuestions ?? 20
   const currentFree = subscriptions.find(sub => sub.source === 'free')
   const currentFreeLabel = currentFree ? formatSubjectLabel({ name: currentFree.subject_name, stage: currentFree.stage }) : null
-  const tiers = billing?.tiers ?? [5, 4, 3]
   // Opened from the free subject's daily limit: only the paid option applies.
   const isFreeSubject = subjectAccess(subscriptions, subj) === 'free'
 
@@ -192,7 +193,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginBottom: 16, lineHeight: 1.5 }}>
             {billing?.hasPlan
               ? `Added to your plan: $${billing.weeklyTotal} → $${billing.weeklyTotal + nextPrice}/week, prorated from today.`
-              : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${tiers.slice(1).join(', then $')}/week each.`}
+              : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${extraLadder(tiers)}/week each.`}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
             {[

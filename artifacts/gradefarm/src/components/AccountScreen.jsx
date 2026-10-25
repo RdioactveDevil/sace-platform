@@ -6,6 +6,7 @@ import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from 
 import { currentStreak } from '../lib/streak'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
 import { formatSubjectLabel } from '../lib/subjects'
+import { studentTiers, planTotal, extraLadder } from '../lib/pricing'
 import { supabase } from '../lib/supabase'
 import RankIcon from './RankIcon'
 
@@ -98,11 +99,9 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
 
   const paid = (subs || []).filter(s => s.source === 'stripe')
   const freeDaily = plan?.freeDailyQuestions ?? 20
-  const tiers = plan?.tiers ?? [5, 4, 3]
-  const totalAfterRemoving = () => {
-    const n = paid.length - 1
-    return Array.from({ length: n }, (_, i) => tiers[Math.min(i, tiers.length - 1)]).reduce((a, b) => a + b, 0)
-  }
+  // A plan started before a price change keeps its own prices.
+  const tiers = studentTiers(plan?.hasPlan ? plan.planTiers ?? plan.tiers : plan?.tiers)
+  const totalAfterRemoving = () => planTotal(tiers, paid.length - 1)
 
   const openPortal = async () => {
     setBusy('portal'); setError('')
@@ -168,7 +167,7 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
       </div>
 
       <div style={card}>
-        <CardTitle t={t} title="Pricing" sub={`$${tiers[0]}/week for your first paid subject${tiers.length > 1 ? `, then $${tiers.slice(1).join(', then $')}/week for each extra one` : ''}. Your one free subject has ${freeDaily} questions a day.`} />
+        <CardTitle t={t} title="Pricing" sub={`$${tiers[0]}/week for your first paid subject${tiers.length > 1 ? `, then $${extraLadder(tiers)}/week for each extra one` : ''}. Your one free subject has ${freeDaily} questions a day.`} />
         {paid.length > 0 ? (
           <>
             <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
