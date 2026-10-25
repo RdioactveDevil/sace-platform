@@ -7,15 +7,18 @@ import { logger } from "./logger";
 // Tutor plans: what a tutor pays for the tutor portal.
 //
 // The plans are platform_settings.pricing.tutor_plans ({ name, price: $/month,
-// students, subjects, recordings, parent_reports }) plus annual_discount for
-// paying yearly; Admin → Settings edits them. A tutor subscribes through
+// students, subjects, subject_swaps, recordings, parent_reports }) plus
+// annual_discount for paying yearly; Admin → Settings edits them. A tutor subscribes through
 // Stripe (routes/tutor-billing.ts) and the plan is recorded in tutor_billing,
 // keeping the limits and features it was bought with. A tutor needs a live
 // plan to use the tutor portal, and the plan decides:
 //   • students       – roster + pending invites (studentLimitError)
 //   • subjects       – how many subjects they tutor in; a subject joins their
 //                      list (tutor_billing.subjects) the first time they use it
-//                      (claimTutorSubject) and they can drop one in Plan & billing
+//                      (claimTutorSubjects). With subject_swaps they can drop
+//                      one in Plan & billing to make room for another; without
+//                      (Starter) the first ones are theirs until they upgrade
+//                      or an admin clears them
 //   • recordings     – recording live lessons
 //   • parent_reports – the weekly progress email to a student's parent
 // Admins don't need a plan, and an admin can mark a tutor exempt (no plan,
@@ -37,6 +40,8 @@ export type TutorPlanOption = {
   students: number | null;
   /** Most subjects the tutor can tutor in; null = unlimited. */
   subjects: number | null;
+  /** Whether the tutor can drop a subject to make room for another. */
+  subjectSwaps: boolean;
   recordings: boolean;
   parentReports: boolean;
 };
@@ -44,9 +49,9 @@ export type TutorPlanOption = {
 export type TutorFeature = "recordings" | "parentReports";
 
 const DEFAULT_PLANS = [
-  { name: "Starter", price: 29, students: 10, subjects: 1, recordings: false, parent_reports: false },
-  { name: "Pro", price: 59, students: 25, subjects: 3, recordings: true, parent_reports: true },
-  { name: "Agency", price: 99, students: null, subjects: null, recordings: true, parent_reports: true },
+  { name: "Starter", price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+  { name: "Pro", price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: "Agency", price: 99, students: null, subjects: null, subject_swaps: true, recordings: true, parent_reports: true },
 ];
 const DEFAULT_ANNUAL_DISCOUNT = 0.15;
 /** A limit this high (the settings use 999) means unlimited. */
@@ -62,7 +67,7 @@ export function tutorPlanOptions(pricing: Record<string, unknown>): { plans: Tut
   const annualDiscount = typeof d === "number" && d >= 0 && d < 1 ? d : DEFAULT_ANNUAL_DISCOUNT;
   const raw = Array.isArray(pricing.tutor_plans) ? pricing.tutor_plans : DEFAULT_PLANS;
   const plans = raw.flatMap((p): TutorPlanOption[] => {
-    const { name, price, students, subjects, recordings, parent_reports } = (p ?? {}) as Record<string, unknown>;
+    const { name, price, students, subjects, subject_swaps, recordings, parent_reports } = (p ?? {}) as Record<string, unknown>;
     if (typeof name !== "string" || !name.trim() || typeof price !== "number" || !(price > 0)) return [];
     return [{
       name: name.trim(),
@@ -70,6 +75,7 @@ export function tutorPlanOptions(pricing: Record<string, unknown>): { plans: Tut
       annual: Math.round(price * 12 * (1 - annualDiscount)),
       students: limitOf(students),
       subjects: limitOf(subjects),
+      subjectSwaps: subject_swaps !== false,
       // A plan from before these switches existed keeps every feature.
       recordings: recordings !== false,
       parentReports: parent_reports !== false,
@@ -84,6 +90,7 @@ export type TutorBillingRow = {
   plan: string | null;
   student_limit: number | null;
   subject_limit: number | null;
+  subject_swaps: boolean;
   recordings: boolean;
   parent_reports: boolean;
   /** Subject names the tutor tutors in, filled as they use them (claimTutorSubject). */
@@ -157,24 +164,43 @@ export async function claimTutorSubjects(admin: SupabaseClient, tutorId: string,
   if (isAdmin) return null;
   const row = await tutorBillingRow(admin, tutorId);
   if (!row || row.exempt || row.subject_limit == null) return null;
+  const limit = row.subject_limit;
+  // After a move to a smaller plan the list can be longer than the limit:
+  // only the first `limit` are covered until the tutor removes the others.
   const current = row.subjects ?? [];
+  const covered = current.slice(0, limit);
   const added: string[] = [];
+  const refused: string[] = [];
   for (const raw of names) {
     const name = raw.trim();
-    if (!name || [...current, ...added].some((s) => sameSubject(s, name))) continue;
-    added.push(name);
+    if (!name || [...covered, ...added, ...refused].some((s) => sameSubject(s, name))) continue;
+    if (current.some((s) => sameSubject(s, name))) refused.push(name); // on the list, past the limit
+    else added.push(name);
   }
-  if (!added.length) return null;
-  if (current.length + added.length > row.subject_limit) {
-    const covered = current.length ? ` (${current.join(", ")})` : "";
-    const plural = row.subject_limit === 1 ? "subject" : "subjects";
-    return `Your ${row.plan ?? "tutor"} plan covers ${row.subject_limit} ${plural}${covered}. To tutor ${added.join(", ")}, swap a subject or upgrade in Plan & billing.`;
+  if (!added.length && !refused.length) return null;
+  if (refused.length || current.length + added.length > limit) {
+    const plural = limit === 1 ? "subject" : "subjects";
+    const how = row.subject_swaps
+      ? "remove a subject in Plan & billing or upgrade your plan"
+      : "upgrade your plan in Plan & billing";
+    return `Your ${row.plan ?? "tutor"} plan covers ${limit} ${plural}${covered.length ? ` (${covered.join(", ")})` : ""}. To tutor ${[...refused, ...added].join(", ")}, ${how}.`;
   }
   const { error } = await admin
     .from("tutor_billing").update({ subjects: [...current, ...added], updated_at: new Date().toISOString() })
     .eq("tutor_id", tutorId);
   if (error) throw new Error(error.message);
   return null;
+}
+
+/**
+ * Whether the tutor may drop `name` from their plan's subjects: on a plan
+ * with swaps, or when it's one past their limit (after a move to a smaller
+ * plan, the extra ones go and the first ones stay).
+ */
+export function canDropSubject(row: TutorBillingRow, name: string): boolean {
+  if (row.exempt || row.subject_limit == null || row.subject_swaps) return true;
+  const index = row.subjects.findIndex((s) => sameSubject(s, name));
+  return index >= row.subject_limit;
 }
 
 /** Stripe metadata for a plan: what syncTutorSubscription records on purchase. */
@@ -185,6 +211,7 @@ export function planMetadata(tutorId: string, plan: TutorPlanOption): Record<str
     plan: plan.name,
     students: plan.students == null ? "" : String(plan.students),
     subjects: plan.subjects == null ? "" : String(plan.subjects),
+    subject_swaps: plan.subjectSwaps ? "1" : "0",
     recordings: plan.recordings ? "1" : "0",
     parent_reports: plan.parentReports ? "1" : "0",
   };
@@ -239,6 +266,7 @@ export async function syncTutorSubscription(admin: SupabaseClient, sub: Stripe.S
     plan: meta.plan || null,
     student_limit: limitOf(Number(meta.students)),
     subject_limit: limitOf(Number(meta.subjects)),
+    subject_swaps: meta.subject_swaps !== "0",
     recordings: meta.recordings !== "0",
     parent_reports: meta.parent_reports !== "0",
     interval: isTutorPlanInterval(interval) ? interval : null,

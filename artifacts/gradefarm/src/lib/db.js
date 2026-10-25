@@ -176,6 +176,11 @@ export async function adminGetTutor(tutorId) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}`)
 }
 
+/** Take a subject off a tutor's plan subjects; resolves to { plan_subjects }. */
+export async function adminRemoveTutorPlanSubject(tutorId, name) {
+  return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/plan-subjects/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
 /** Let a tutor use the tutor portal without a plan (or make them need one). */
 export async function adminSetTutorBillingExempt(tutorId, exempt) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/billing-exempt`, {

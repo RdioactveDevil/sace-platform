@@ -16,7 +16,7 @@ const subjectsText = (n) => (n == null ? 'Every subject' : n === 1 ? '1 subject'
 /** What a plan includes, for its card: [text, included]. */
 const planFeatures = (plan) => [
   [studentsText(plan.students), true],
-  [subjectsText(plan.subjects), true],
+  [`${subjectsText(plan.subjects)}${plan.subjects != null && !plan.subjectSwaps ? ' (can’t be swapped)' : ''}`, true],
   ['Assignments, sessions, messages & progress', true],
   ['Lesson recordings', plan.recordings],
   ['Weekly parent progress reports', plan.parentReports],
@@ -216,19 +216,27 @@ export function TutorPlanTab({ theme }) {
           <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
             {billing.subjectLimit == null
               ? 'Your plan covers every subject.'
-              : `Your plan covers ${subjectsText(billing.subjectLimit).toLowerCase()}. A subject is added the first time you set an assignment, include it for a student or add it to a student's subjects. Remove one to make room for another; your past work in it stays.`}
+              : `Your plan covers ${subjectsText(billing.subjectLimit).toLowerCase()}. A subject is added the first time you set an assignment, include it for a student or add it to a student's subjects. ${billing.subjectSwaps
+                ? 'Remove one to make room for another; your past work in it stays.'
+                : `On ${billing.plan || 'your plan'} the subjects you start with can't be swapped: upgrade to tutor more or change them.`}`}
           </div>
           {billing.subjectLimit != null && (billing.subjects.length === 0
             ? <div style={{ fontSize: 13, color: t.textMuted }}>None yet.</div>
             : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {billing.subjects.map(name => (
-                  <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px 6px 12px', borderRadius: 99, border: `1px solid ${t.border}`, fontSize: 13, fontWeight: 700, color: t.text }}>
-                    {name}
-                    <button type="button" onClick={() => dropSubject(name)} disabled={busy} aria-label={`Remove ${name}`}
-                      style={{ border: 'none', background: 'none', padding: 0, color: t.textMuted, cursor: busy ? 'default' : 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
-                  </span>
-                ))}
+                {billing.subjects.map((name, i) => {
+                  // Past the limit after moving to a smaller plan: not covered, and removable even without swaps.
+                  const over = i >= billing.subjectLimit
+                  return (
+                    <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: billing.subjectSwaps || over ? '6px 10px 6px 12px' : '6px 12px', borderRadius: 99, border: `1px solid ${over ? t.danger : t.border}`, fontSize: 13, fontWeight: 700, color: over ? t.danger : t.text }}>
+                      {name}{over ? ' · not on your plan' : ''}
+                      {(billing.subjectSwaps || over) && (
+                        <button type="button" onClick={() => dropSubject(name)} disabled={busy} aria-label={`Remove ${name}`}
+                          style={{ border: 'none', background: 'none', padding: 0, color: t.textMuted, cursor: busy ? 'default' : 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+                      )}
+                    </span>
+                  )
+                })}
               </div>
             ))}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, fontSize: 13, color: t.textSub }}>

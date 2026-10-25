@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { adminListTutors, adminGetTutor, adminSetTutorIncludeSubject, adminSetTutorBillingExempt, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
+import { adminListTutors, adminGetTutor, adminSetTutorIncludeSubject, adminSetTutorBillingExempt, adminRemoveTutorPlanSubject, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -89,6 +89,18 @@ export default function AdminTutorsTab() {
       const update = x => ({ ...x, billing_exempt: exempt, plan_active: exempt || ['active', 'trialing', 'past_due'].includes(x.plan_status) })
       setSelected(update)
       setTutors(ts => ts.map(x => (x.id === selected.id ? update(x) : x)))
+    } catch (e) { setError(e.message) }
+    setExemptBusy(false)
+  }
+
+  // Take a subject off the open tutor's plan (e.g. a Starter tutor who can't swap it themselves).
+  const removePlanSubject = async (name) => {
+    if (!window.confirm(`Take ${name} off ${selected.display_name || 'this tutor'}'s plan? They can then use another subject in its place.`)) return
+    setExemptBusy(true); setError('')
+    try {
+      const { plan_subjects } = await adminRemoveTutorPlanSubject(selected.id, name)
+      setSelected(s => ({ ...s, plan_subjects }))
+      setTutors(ts => ts.map(x => (x.id === selected.id ? { ...x, plan_subjects } : x)))
     } catch (e) { setError(e.message) }
     setExemptBusy(false)
   }
@@ -238,6 +250,24 @@ export default function AdminTutorsTab() {
                 {exemptBusy ? '…' : selected.billing_exempt ? 'On' : 'Off'}
               </button>
             </div>
+
+            {selected.plan_subjects?.length > 0 && (
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Plan subjects</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, marginBottom: 8 }}>
+                  The subjects this tutor's plan covers, in the order they started using them. Removing one lets them use another in its place.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {selected.plan_subjects.map(name => (
+                    <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>
+                      {name}
+                      <button onClick={() => removePlanSubject(name)} disabled={exemptBusy} aria-label={`Remove ${name}`}
+                        style={{ border: 'none', background: 'none', padding: 0, color: '#94a3b8', cursor: exemptBusy ? 'default' : 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               {[['roster', `Roster${detail ? ` (${detail.roster.length})` : ''}`], ['assignments', `Assignments${detail ? ` (${detail.assignments.length})` : ''}`]].map(([key, label]) => (

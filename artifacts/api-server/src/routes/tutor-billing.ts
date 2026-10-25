@@ -4,7 +4,7 @@ import { requireUser } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { ACCESS_STATUSES, priceByLookupKey } from "../lib/stripe-plans";
 import {
-  isTutorPlanInterval, planIsLive, planMetadata, studentsUsed, syncTutorSubscription, tutorBillingRow, tutorPlanOptions,
+  canDropSubject, isTutorPlanInterval, planIsLive, planMetadata, studentsUsed, syncTutorSubscription, tutorBillingRow, tutorPlanOptions,
   type TutorPlanInterval, type TutorPlanOption,
 } from "../lib/tutor-plan";
 import { appUrl, currentCustomerRow, customerFor, getStripe, isMissing, notConfigured, readPricing } from "./billing";
@@ -83,6 +83,8 @@ router.get("/tutor-billing/status", async (req: Request, res: Response) => {
       // What the tutor's plan includes (everything when exempt).
       subjectLimit: exempt || !paying ? null : row?.subject_limit ?? null,
       subjects: row?.subjects ?? [],
+      // Whether the tutor can remove subjects to make room for others.
+      subjectSwaps: exempt || !paying || row?.subject_swaps !== false,
       features: {
         recordings: exempt || (paying && !!row?.recordings),
         parentReports: exempt || (paying && !!row?.parent_reports),
@@ -155,7 +157,8 @@ router.post("/tutor-billing/plan", async (req: Request, res: Response) => {
 });
 
 // DELETE /tutor-billing/subjects/:name — drop a subject from the tutor's list,
-// freeing a place on their plan for another. Their past work in it stays.
+// freeing a place on their plan for another. Their past work in it stays. A
+// plan without subject swaps (Starter) only drops the ones past its limit.
 router.delete("/tutor-billing/subjects/:name", async (req: Request, res: Response) => {
   const caller = await requireTutorCaller(req, res);
   if (!caller) return;
@@ -164,6 +167,9 @@ router.delete("/tutor-billing/subjects/:name", async (req: Request, res: Respons
     const name = String(req.params.name).trim().toLowerCase();
     const subjects = (row?.subjects ?? []).filter((s) => s.trim().toLowerCase() !== name);
     if (!row || subjects.length === row.subjects.length) return fail(res, 404, "That subject isn't on your plan.");
+    if (!canDropSubject(row, name)) {
+      return fail(res, 403, `Your ${row.plan ?? "tutor"} plan keeps the subjects you started with. Upgrade to change them.`);
+    }
     const { error } = await caller.admin
       .from("tutor_billing").update({ subjects, updated_at: new Date().toISOString() }).eq("tutor_id", caller.userId);
     if (error) throw new Error(error.message);

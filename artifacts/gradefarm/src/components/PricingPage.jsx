@@ -54,9 +54,9 @@ const TUTOR_PLAN_LOOKS = [
 ]
 
 const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
-  { name: 'Starter', price: 29, students: 10, subjects: 1, recordings: false, parent_reports: false },
-  { name: 'Pro', price: 59, students: 25, subjects: 3, recordings: true, parent_reports: true },
-  { name: 'Agency', price: 99, students: 999, subjects: 999, recordings: true, parent_reports: true },
+  { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+  { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
 ], annual_discount: 0.15 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
@@ -152,7 +152,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
         { text: 'Assignment creation', included: true },
         { text: 'Student roster management', included: true },
         { text: students, included: true },
-        { text: subjects, included: true },
+        { text: subjects !== 'All subjects' && p.subject_swaps === false ? `${subjects} (can’t be swapped)` : subjects, included: true },
         { text: 'Lesson recordings', included: p.recordings !== false },
         { text: 'Weekly parent progress reports', included: p.parent_reports !== false },
         { text: 'Priority support', included: !!look.prioritySupport },

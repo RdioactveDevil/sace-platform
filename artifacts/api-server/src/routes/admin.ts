@@ -707,6 +707,7 @@ router.get("/admin/tutors", async (req, res) => {
         plan: billingById.get(t.id)?.plan ?? null,
         plan_interval: billingById.get(t.id)?.interval ?? null,
         plan_status: billingById.get(t.id)?.status ?? null,
+        plan_subjects: billingById.get(t.id)?.subjects ?? [],
         assignments_total:     stats[t.id].total,
         assignments_completed: stats[t.id].completed,
         assignments_pending:   stats[t.id].pending,
@@ -755,6 +756,27 @@ router.patch("/admin/tutors/:id/billing-exempt", async (req, res) => {
       .from("tutor_billing").upsert({ tutor_id: req.params.id, exempt, updated_at: new Date().toISOString() }, { onConflict: "tutor_id" });
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ ok: true, billing_exempt: exempt });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// DELETE /admin/tutors/:id/plan-subjects/:name — take a subject off a tutor's
+// plan, e.g. a Starter tutor (no swaps) who picked the wrong one.
+router.delete("/admin/tutors/:id/plan-subjects/:name", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { data: row, error: readErr } = await ctx.admin
+      .from("tutor_billing").select("subjects").eq("tutor_id", req.params.id).maybeSingle<{ subjects: string[] }>();
+    if (readErr) return res.status(500).json({ error: readErr.message });
+    const name = String(req.params.name).trim().toLowerCase();
+    const subjects = (row?.subjects ?? []).filter((s) => s.trim().toLowerCase() !== name);
+    if (!row || subjects.length === row.subjects.length) return res.status(404).json({ error: "That subject isn't on the tutor's plan." });
+    const { error } = await ctx.admin
+      .from("tutor_billing").update({ subjects, updated_at: new Date().toISOString() }).eq("tutor_id", req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true, plan_subjects: subjects });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
   }
