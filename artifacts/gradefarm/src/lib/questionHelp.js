@@ -89,30 +89,39 @@ export function questionHelpSystemSection(ctx) {
     lines.push(`The student answered: ${ctx.studentAnswer}${verdict}`)
   }
   if (ctx.solution) lines.push(`Worked solution: ${ctx.solution}`)
+  const choseWrong = ctx.answeredCorrectly === false && ctx.studentAnswer
   lines.push(
     '',
-    'When the student asks about this question, explain why the correct answer is right, and why each of the other options is wrong (what misconception or slip would lead someone to pick it).' +
-      (ctx.answeredCorrectly === false && ctx.studentAnswer ? ' Pay most attention to the answer they chose and the thinking that likely led to it.' : ''),
+    'HOW TO HELP WITH THIS QUESTION (tutor it; don\'t solve it for them):',
+    '- Guide them one step at a time. Each reply covers ONE step: a short hint or question that gets them to do the next bit themselves. 3–4 sentences at most, then wait for their answer.',
+    '- Never write out the full working or reveal the correct option up front. Check each answer they give before moving on; if they\'re stuck after a nudge, give a slightly bigger hint.',
+    ...(choseWrong ? ['- Start from the answer they chose: say what makes it tempting, then guide them to where that thinking goes wrong.'] : []),
+    ...(ctx.options?.length > 1
+      ? ['- Once they\'ve reached the correct answer themselves, go through why the other options are wrong, one or two at a time, asking them to spot the slip behind each (e.g. "What mistake would give that answer?").']
+      : []),
+    '- If they ask outright for the full solution, give it clearly and concisely, then check they follow it.',
   )
   return lines.join('\n')
 }
 
-/** The hidden first message that starts the chat from a quiz question. */
+/**
+ * The hidden first message that starts the chat from a quiz question: a short
+ * opener that starts guiding, not the worked answer (see "How to help with
+ * this question" in the instructions).
+ */
 export function questionHelpOpeningPrompt(ctx, firstName) {
-  const hasOptions = ctx?.options?.length > 1
-  const chose = ctx?.answeredCorrectly === false && ctx?.studentAnswer
-    ? `They answered ${ctx.studentAnswer}, which was incorrect.`
-    : ctx?.answeredCorrectly === true
-      ? 'They got it right, but want to understand it properly.'
-      : ''
+  const choseWrong = ctx?.answeredCorrectly === false && ctx?.studentAnswer
+  const gotItRight = ctx?.answeredCorrectly === true
   return [
-    `${firstName || 'The student'} just answered the quiz question in your instructions and asked for help with it. ${chose}`,
-    'Greet them warmly by first name, then explain:',
-    '1. Why the correct answer is right, working it through step by step.',
-    hasOptions
-      ? '2. Why each of the other options is wrong, one short line per option naming the mistake or misconception behind it.'
-      : '2. If their answer was wrong, what most likely went wrong in their working.',
-    'This first reply can be longer than your usual 3–4 sentences so it covers every option, but stay concise.',
-    'Finish by asking one short question that checks they understood the key idea.',
+    `${firstName || 'The student'} just answered the quiz question in your instructions and asked for help with it.` +
+      (choseWrong ? ` They answered ${ctx.studentAnswer}, which was incorrect.` : gotItRight ? ' They got it right, but want to understand it properly.' : ''),
+    'Greet them warmly by first name and start tutoring it, following "How to help with this question":',
+    choseWrong
+      ? `- In one sentence, acknowledge their answer (${ctx.studentAnswer}) without saying what the right answer is.`
+      : gotItRight
+        ? '- Ask them to explain in a sentence how they got their answer, so you can build on their thinking.'
+        : '- Say in one sentence what the question is really asking.',
+    '- Then ask ONE short question that gets them thinking about the first step.',
+    'Keep this reply to 2–4 sentences. Don\'t give the answer or any working yet.',
   ].join('\n')
 }
