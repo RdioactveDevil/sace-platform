@@ -826,6 +826,8 @@ export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 1
       const body = await res.json()
       detail = body?.detail || body?.error || ''
     } catch { /* non-JSON error body */ }
+    // The daily limit's message is written for the student; show it as is.
+    if (res.status === 429 && detail) throw new Error(detail)
     throw new Error(`generate-questions API error ${res.status}${detail ? `: ${detail}` : ''}`)
   }
   const data = await res.json()

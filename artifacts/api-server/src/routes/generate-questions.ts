@@ -9,6 +9,7 @@ import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exe
 import { latexPromptRule } from "../lib/math-prompt";
 import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireUser, type Caller } from "../lib/auth";
+import { checkAiQuota } from "../lib/ai-quota";
 import { isMathSubject, topicWantsFigures, figureInstructions, diagramColumn } from "../lib/figure";
 import { sanitizeGraph } from "../lib/graph-spec";
 
@@ -734,6 +735,15 @@ router.post("/generate-questions", async (req, res) => {
   // AI credits or flood the live bank.
   if (!caller.isAdmin && (topicCodes.length > 1 || Number(count) > 10)) {
     res.status(403).json({ error: "Bulk generation is admin only" });
+    return;
+  }
+
+  // A top-up counts towards the student's daily AI allowance like every other
+  // AI call, so a script can't call this in a loop. Real students running out
+  // of questions stay well inside it. (Admins and tutors aren't limited.)
+  const quotaCheck = await checkAiQuota(caller, false);
+  if ("blocked" in quotaCheck) {
+    res.status(429).json({ code: "ai_daily_limit", error: "You've reached today's limit for new questions. It resets tomorrow." });
     return;
   }
 

@@ -50,6 +50,7 @@ import PassageView from './PassageView'
 import QuizToolsDock from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
+import { buildQuestionHelpContext } from '../lib/questionHelp'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -2059,12 +2060,7 @@ export default function QuizScreen({
                     </button>
                     {onOpenLearn && !examMode && (
                       <button
-                        onClick={() => onOpenLearn(currentQ.topic, {
-                          question: currentQ.question,
-                          correctAnswer: currentQ.options?.[currentQ.answer_index] || '',
-                          subtopic: currentQ.subtopic,
-                          topic: currentQ.topic,
-                        })}
+                        onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))}
                         title="Explain this concept with Titan AI"
                         style={{
                           flexShrink: 0,
