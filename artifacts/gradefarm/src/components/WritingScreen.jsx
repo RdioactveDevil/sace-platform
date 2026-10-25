@@ -287,7 +287,11 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subject: subject.id, essayType, mode, prompt, imageUrl, content }),
       })
-      if (!res.ok) throw new Error('Failed to get feedback')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        // e.g. a student under 15 whose parent hasn't confirmed yet
+        throw new Error(data.code === 'parent_consent_required' ? data.error : 'Failed to get feedback')
+      }
       const fb = await res.json()
       setFeedback(fb)
       if (savedId) {

@@ -541,7 +541,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid ${color}30`, background: `${color}08` }}>
         <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {isExam ? <><Calendar size={13} aria-hidden="true" />SACE Exam</> : <><ClipboardList size={13} aria-hidden="true" />{next.type}</>}
+          {isExam ? <><Calendar size={13} aria-hidden="true" />Exam</> : <><ClipboardList size={13} aria-hidden="true" />{next.type}</>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
           <div style={{ textAlign: 'center', flexShrink: 0 }}>

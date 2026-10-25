@@ -4,7 +4,8 @@ import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal,
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import { currentStreak } from '../lib/streak'
-import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
+import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails } from '../lib/db'
+import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
 import { studentTiers, planTotal, extraLadder, monthlySaving, money } from '../lib/pricing'
 import { supabase } from '../lib/supabase'
@@ -76,6 +77,95 @@ function Field({ t, label, hint, children }) {
       {children}
       {hint && <span style={{ fontSize: 11.5, color: t.textFaint }}>{hint}</span>}
     </label>
+  )
+}
+
+/**
+ * The student's parent or guardian (lib/parentConsent.js): who confirms a
+ * student under 15, and who gets the weekly progress email. A parent who set
+ * the account up sees their own weekly email setting instead.
+ */
+function ParentCard({ profile, theme, card, btn, inputStyle, onProfileUpdated }) {
+  const t = THEMES[theme]
+  const [email, setEmail] = useState(profile.parent_email || '')
+  const [name, setName] = useState(profile.parent_name || '')
+  const [busy, setBusy] = useState(null) // 'save' | 'resend' | 'reports'
+  const [msg, setMsg] = useState(null) // { ok, text }
+  useEffect(() => { setEmail(profile.parent_email || ''); setName(profile.parent_name || '') }, [profile.parent_email, profile.parent_name])
+
+  const young = needsParentConsent(profile.dob, profile.year_level)
+  const first = (profile.display_name || '').split(' ')[0] || 'your child'
+  const run = async (kind, body, okText) => {
+    setBusy(kind); setMsg(null)
+    try {
+      const { parent } = await saveParentDetails(body)
+      onProfileUpdated?.(parent)
+      setMsg({ ok: true, text: okText })
+    } catch (e) {
+      setMsg({ ok: false, text: e.message || "Couldn't save. Please try again." })
+    }
+    setBusy(null)
+  }
+  const msgLine = msg && <div role="status" style={{ fontSize: 12, color: msg.ok ? t.success : t.danger, marginTop: 8 }}>{msg.text}</div>
+
+  if (profile.account_holder === 'parent') {
+    const reportsOn = !profile.parent_reports_stopped_at
+    return (
+      <div style={card}>
+        <CardTitle t={t} title="Parent or guardian" sub={`You set this account up for ${first}${profile.parent_name ? `, as ${profile.parent_name}` : ''}. The weekly progress email goes to the email you sign in with.`} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>Weekly progress email</div>
+            <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2, lineHeight: 1.5 }}>Sunday evenings: how much {first} practised, how well, and what to work on next.</div>
+          </div>
+          <Toggle on={reportsOn} disabled={busy === 'reports'} label="Weekly progress email"
+            onClick={() => run('reports', { reports: !reportsOn }, reportsOn ? 'Weekly emails stopped.' : 'Weekly emails are back on.')} />
+        </div>
+        {msgLine}
+      </div>
+    )
+  }
+
+  const clean = email.trim().toLowerCase()
+  const changed = clean !== (profile.parent_email || '').toLowerCase() || name.trim() !== (profile.parent_name || '')
+  const confirmed = !!profile.parent_consent_at
+  const status = !profile.parent_email ? null
+    : confirmed ? `Confirmed on ${longDate(profile.parent_consent_at)}.`
+    : `Waiting for them to confirm${profile.parent_consent_requested_at ? ` (sent ${longDate(profile.parent_consent_requested_at)})` : ''}. Ask them to check their inbox and spam folder.`
+  return (
+    <div style={card}>
+      <CardTitle t={t} title="Parent or guardian" sub={young
+        ? "You're under 15, so Titan AI and the other AI features switch on once your parent or guardian confirms by email. They'll also get a short progress email on Sundays."
+        : "Optional. Once they confirm by email, they'll get a short progress email about your week every Sunday."} />
+      {status && (
+        <div style={{ fontSize: 13, color: confirmed ? t.success : t.text, marginBottom: 12, lineHeight: 1.5 }}>
+          <strong>{profile.parent_email}</strong> · {status}
+          {confirmed && profile.parent_reports_stopped_at && <span style={{ color: t.textMuted }}> They've stopped the weekly emails.</span>}
+        </div>
+      )}
+      <div className="acct-form">
+        <Field t={t} label="Their email" hint={confirmed && young ? 'A new email has to confirm again, and Titan AI pauses until it does.' : null}>
+          <input type="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} placeholder="parent@example.com" maxLength={254} style={inputStyle} />
+        </Field>
+        <Field t={t} label="Their name (optional)">
+          <input value={name} onChange={e => setName(e.target.value)} maxLength={80} placeholder="e.g. Sam Smith" style={inputStyle} />
+        </Field>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+        <button type="button" disabled={!clean || !changed || !!busy} style={btn('primary', !clean || !changed || !!busy)}
+          onClick={() => run('save', { parentEmail: clean, parentName: name.trim() },
+            clean !== (profile.parent_email || '').toLowerCase() ? `Saved. We've emailed ${clean} to confirm.` : 'Saved.')}>
+          {busy === 'save' ? 'Saving…' : 'Save'}
+        </button>
+        {profile.parent_email && !confirmed && !changed && (
+          <button type="button" disabled={!!busy} style={btn('secondary', !!busy)}
+            onClick={() => run('resend', { resend: true }, `Sent again to ${profile.parent_email}.`)}>
+            {busy === 'resend' ? 'Sending…' : 'Send again'}
+          </button>
+        )}
+      </div>
+      {msgLine}
+    </div>
   )
 }
 
@@ -230,6 +320,11 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   // ?tab=billing etc. opens a tab directly; switching tabs keeps the URL in step.
   const [params, setParams] = useSearchParams()
   const [tab, setTab] = useState(() => (TABS.some(x => x.id === params.get('tab')) ? params.get('tab') : 'overview'))
+  // The screen stays mounted, so a later link to ?tab=… switches tabs too.
+  const tabParam = params.get('tab')
+  useEffect(() => {
+    if (tabParam && tabParam !== tab && TABS.some(x => x.id === tabParam)) setTab(tabParam)
+  }, [tabParam]) // eslint-disable-line react-hooks/exhaustive-deps
   const tabRefs = useRef({})
   const selectTab = (id, focus = false) => {
     setTab(id)
@@ -271,6 +366,9 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const [profileMsg, setProfileMsg]     = useState(null) // { ok, text }
   const setField = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
   const profileDirty = Object.keys(saved).some(k => String(form[k]) !== String(saved[k]))
+  // Waiting on a parent: the database keeps these as they are (migration
+  // 20261025000012_parent_consent.sql), so don't offer to change them.
+  const dobLocked = awaitingParent(profile)
   const nameMissing  = !form.display_name.trim()
 
   // ── Password ──
@@ -579,21 +677,23 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
             <Field t={t} label="School">
               <input value={form.school} onChange={setField('school')} maxLength={120} placeholder="Your school name" style={inputStyle} />
             </Field>
-            <Field t={t} label="Year level">
-              <select value={form.year_level} onChange={setField('year_level')} style={{ ...inputStyle, cursor: 'pointer' }}>
+            <Field t={t} label="Year level" hint={dobLocked ? 'Can be changed once your parent or guardian confirms.' : null}>
+              <select value={form.year_level} onChange={setField('year_level')} disabled={dobLocked} style={{ ...inputStyle, cursor: dobLocked ? 'not-allowed' : 'pointer' }}>
                 <option value="">Not set</option>
                 {YEAR_LEVELS.map(y => <option key={y} value={y}>Year {y}</option>)}
               </select>
             </Field>
-            <Field t={t} label="Date of birth">
-              <input type="date" value={form.dob} onChange={setField('dob')} max={new Date().toISOString().split('T')[0]} style={inputStyle} />
+            <Field t={t} label="Date of birth" hint={dobLocked ? 'Can be changed once your parent or guardian confirms.' : null}>
+              <input type="date" value={form.dob} onChange={setField('dob')} max={new Date().toISOString().split('T')[0]} disabled={dobLocked} style={inputStyle} />
             </Field>
-            <Field t={t} label="ATAR target">
-              <select value={form.atar_target} onChange={setField('atar_target')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                <option value="">Not set</option>
-                {ATAR_TARGETS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-              </select>
-            </Field>
+            {(!form.year_level || Number(form.year_level) >= 11 || form.atar_target !== '') && (
+              <Field t={t} label="ATAR target">
+                <select value={form.atar_target} onChange={setField('atar_target')} style={{ ...inputStyle, cursor: 'pointer' }}>
+                  <option value="">Not set</option>
+                  {ATAR_TARGETS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+              </Field>
+            )}
             <Field t={t} label="Study hours per week">
               <select value={form.study_hours_per_week} onChange={setField('study_hours_per_week')} style={{ ...inputStyle, cursor: 'pointer' }}>
                 <option value="">Not set</option>
@@ -801,7 +901,14 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
 
   const panels = {
     overview,
-    profile: profilePanel,
+    profile: (
+      <>
+        {profilePanel}
+        {isStudent && 'parent_consent_at' in profile && (
+          <ParentCard profile={profile} theme={theme} card={card} btn={btn} inputStyle={inputStyle} onProfileUpdated={onProfileUpdated} />
+        )}
+      </>
+    ),
     billing: isStudent && <BillingCard profile={profile} theme={theme} card={card} btn={btn} onChangeSubject={onChangeSubject} />,
     security: securityPanel,
     preferences: preferencesPanel,

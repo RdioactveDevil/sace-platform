@@ -115,7 +115,7 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
     const timeout = setTimeout(() => controller.abort(), 8000)
 
     const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
-    const subjectLabel = parentQuestion?.subject || 'SACE'
+    const subjectLabel = parentQuestion?.subject || 'school'
     const system = [
       `You are a ${subjectLabel} teacher generating a concept-builder question for a struggling student.`,
       'Return only a valid JSON object (not an array).',
@@ -998,7 +998,7 @@ export default function QuizScreen({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         max_tokens: 120,
-        system: "You are a supportive SACE tutor. Write exactly ONE sentence of coaching advice based on this student's quiz session. Be specific, actionable, and encouraging. No preamble, no markdown.",
+        system: "You are a supportive tutor. Write exactly ONE sentence of coaching advice based on this student's quiz session. Be specific, actionable, and encouraging. No preamble, no markdown.",
         messages: [{ role: 'user', content: `Subject: ${subjectName}. Questions answered: ${sessTotal}. Correct: ${sessCorrect}. Wrong by topic: ${JSON.stringify(wrongByTopic)}.` }],
       }),
     })
@@ -1309,7 +1309,7 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
+            system: `You are a ${currentQ.subject || 'school'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
           }),
         })
@@ -1389,7 +1389,7 @@ export default function QuizScreen({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 200,
-            system: `You are a ${currentQ.subject || 'SACE'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
+            system: `You are a ${currentQ.subject || 'school'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
             messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect answer: ${describeCorrectAnswer(currentQ)}\nStudent answered: ${JSON.stringify(response)}\nSolution: ${currentQ.solution}` }],
           }),
         })

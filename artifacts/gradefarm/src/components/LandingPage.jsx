@@ -245,7 +245,7 @@ function DemoCard() {
 /* ─── MobileMenu ───────────────────────────────────────────────────────── */
 
 function MobileMenu({ open, onClose, onNavigate }) {
-  const NAV_LINKS = [['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']]
+  const NAV_LINKS = [['features','Features'],['how','How It Works'],['year6','Year 6 selective'],['subjects','Subjects'],['pricing','Pricing']]
 
   useEffect(() => {
     if (!open) return
@@ -317,6 +317,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
   }, [])
   const scroll = id => {
     if (id === 'pricing') { navigate('/pricing'); return }
+    if (id === 'year6') { navigate('/year-6'); return }
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
   const handleMobileNav = id => { scroll(id); setMenuOpen(false) }
@@ -417,7 +418,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <span className="lp-tag" style={{ fontSize:10, color:'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
         </div>
         <div className="dnav" style={{ display:'flex', alignItems:'center', gap:28 }}>
-          {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
+          {[['features','Features'],['how','How It Works'],['year6','Year 6'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
             <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.55)', fontSize:13.5, fontWeight:500, cursor:'pointer', fontFamily:FONT_B, transition:'color 0.15s' }}>{label}</button>
           ))}
         </div>
@@ -893,37 +894,20 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ── */}
+      {/* ── YEAR 6 SELECTIVE-ENTRY ── */}
       <section className="lp-pad" style={{ padding:'0 32px 80px' }}>
-        <div style={{ maxWidth:1100, margin:'0 auto' }}>
-          <FadeUp>
-            <div style={{ textAlign:'center', marginBottom:48 }}>
-              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>What students say</div>
-              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(24px,3.5vw,40px)', margin:0, color:'#fff', letterSpacing:1 }}>REAL STUDENTS. REAL RESULTS.</h2>
+        <FadeUp>
+          <div style={{ maxWidth:1100, margin:'0 auto', borderRadius:22, border:'1px solid rgba(241,190,67,0.28)', background:'linear-gradient(135deg,rgba(241,190,67,0.10),rgba(167,139,250,0.06))', padding:'36px 36px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:28, flexWrap:'wrap' }}>
+            <div style={{ flex:'1 1 420px', minWidth:0 }}>
+              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:12 }}>For parents · Year 6</div>
+              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(22px,3.2vw,36px)', margin:'0 0 12px', color:'#fff', letterSpacing:1, lineHeight:1.15 }}>SELECTIVE-ENTRY PREP FOR ADVANCED YEAR 6 STUDENTS.</h2>
+              <p style={{ margin:0, color:MUTED, fontSize:15, lineHeight:1.7 }}>Maths and English pitched above the Year 6 curriculum, a progress email to you every Sunday, and parent sign-off before any AI features switch on.</p>
             </div>
-          </FadeUp>
-          <div className="tgrid" style={{ display:'flex', gap:16 }}>
-            {[
-              { quote:'I bombed my first Chem SAT but after two weeks on gradefarm. my topic scores are genuinely going up. The algorithm kept hammering Equilibrium until I actually got it.', name:'Aiden M.', sub:'Stage 2 Chemistry', init:'AM', hue:210 },
-              { quote:'Titan explains things in a way that actually makes sense. I uploaded my teacher\'s notes and it explained limiting reagents with a burger analogy. It clicked immediately.', name:'Sophie R.', sub:'Stage 2 Chemistry', init:'SR', hue:270 },
-              { quote:'The Priority Queue is insane — it always knows exactly what I need to drill. My exam readiness score went from 41% to 74% in three weeks. I actually feel prepared now.', name:'Jake T.', sub:'Stage 1 Chemistry', init:'JT', hue:160 },
-            ].map((t,i) => (
-              <FadeUp key={i} delay={i * 100} style={{ flex:1 }}>
-                <div style={{ background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:18, padding:28, display:'flex', flexDirection:'column', gap:16, height:'100%' }}>
-                  <div style={{ display:'flex', gap:3 }}>{[0,1,2,3,4].map(s => <span key={s} style={{ color:GOLD, fontSize:14 }}>★</span>)}</div>
-                  <p style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.8, margin:0, flex:1, fontStyle:'italic' }}>"{t.quote}"</p>
-                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                    <div style={{ width:40, height:40, borderRadius:'50%', background:`hsl(${t.hue},40%,30%)`, border:`2px solid rgba(241,190,67,0.2)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#fff', flexShrink:0 }}>{t.init}</div>
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>{t.name}</div>
-                      <div style={{ fontSize:11, color:GOLD }}>{t.sub}</div>
-                    </div>
-                  </div>
-                </div>
-              </FadeUp>
-            ))}
+            <button onClick={() => navigate('/year-6')} className="ctab shimmer-btn" style={{ padding:'14px 26px', borderRadius:11, border:'none', color:NAVYD, fontSize:15, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:'0 6px 22px rgba(241,190,67,0.32)', flexShrink:0 }}>
+              See Year 6 prep →
+            </button>
           </div>
-        </div>
+        </FadeUp>
       </section>
 
       {/* ── SUBJECTS ── */}

@@ -13,7 +13,9 @@
  *   • diagnostic_done       – the tutor, when their student finishes one
  *   • parent_report         – Sunday evening, a student's week to the parent
  *                             their tutor added (recorded on the roster row:
- *                             parents have no account; lib/parent-reports.ts)
+ *                             parents have no account; lib/parent-reports.ts),
+ *                             or to the confirmed parent on the student's own
+ *                             account (recorded on the profile)
  *
  * The job is safe to run at any cadence: each email is claimed in email_log
  * (claim_email RPC) before it is sent, so it goes out at most once. Reminders
@@ -22,7 +24,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Resend } from "resend";
 import { logger } from "./logger";
-import { appUrl, parentUnsubscribeUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
+import { accountParentUnsubscribeUrl, appUrl, parentUnsubscribeUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
 import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
@@ -812,6 +814,91 @@ async function runParentReports(job: Job) {
   }
 }
 
+interface AccountParentRow {
+  id: string;
+  account_holder: "student" | "parent" | null;
+  parent_email: string;
+  parent_name: string | null;
+  parent_report_week: string | null;
+}
+
+/**
+ * The same report for a parent on the student's own account (no tutor
+ * needed). Runs after the tutors' reports and skips a parent who already got
+ * one about this student this week from a tutor.
+ */
+async function runAccountParentReports(job: Job) {
+  const hour = localHour(job.now);
+  if (localWeekday(job.now) !== "Sun" || hour < PARENT_REPORT_HOURS.from || hour >= PARENT_REPORT_HOURS.to) return;
+  const week = localDate(job.now);
+  const { data, error } = await job.admin
+    .from("profiles")
+    .select("id, account_holder, parent_email, parent_name, parent_report_week")
+    .not("parent_email", "is", null)
+    .not("parent_consent_at", "is", null)
+    .is("parent_reports_stopped_at", null)
+    .is("deactivated_at", null)
+    .or(`parent_report_week.is.null,parent_report_week.lt.${week}`)
+    .limit(500);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  const rows = (data ?? []) as AccountParentRow[];
+  if (rows.length === 0) return;
+
+  const { data: tutorSent, error: tsErr } = await job.admin
+    .from("tutor_students").select("student_id, parent_email")
+    .in("student_id", rows.map((r) => r.id)).eq("parent_report_week", week);
+  if (tsErr) throw new Error(`tutor_students: ${tsErr.message}`);
+  const fromTutor = new Set(((tutorSent ?? []) as { student_id: string; parent_email: string | null }[])
+    .map((r) => `${r.student_id}:${(r.parent_email ?? "").toLowerCase()}`));
+
+  const people = await loadRecipients(job, rows.map((r) => r.id));
+  for (const row of rows) {
+    const student = people.get(row.id);
+    if (!student) continue; // deactivated or no sign-in email
+    // A parent who set the account up signs in with it, so follow a change of sign-in email.
+    const to = row.account_holder === "parent" ? student.email : row.parent_email;
+    if (fromTutor.has(`${row.id}:${to.toLowerCase()}`)) continue;
+    if (job.budget <= 0) {
+      job.summary.budgetExhausted = true;
+      return;
+    }
+    const report = await loadParentReport(job.admin, null, row.id, job.now, localDate);
+    const { subject, content } = parentReportEmail({
+      parentName: row.parent_name,
+      studentName: student.name,
+      tutorName: null,
+      data: report,
+      unsubscribe: accountParentUnsubscribeUrl(row.id),
+      formatWhen,
+    });
+    if (job.dryRun) {
+      job.summary.planned!.push({ kind: "parent_report", to, subject });
+      job.budget--;
+      continue;
+    }
+    // Claim this week's report: another run may be here too.
+    const { data: claimed, error: claimErr } = await job.admin
+      .from("profiles").update({ parent_report_week: week })
+      .eq("id", row.id)
+      .or(`parent_report_week.is.null,parent_report_week.lt.${week}`)
+      .select("id");
+    if (claimErr) throw new Error(`profiles: ${claimErr.message}`);
+    if (!claimed?.length) continue;
+    job.budget--;
+    const result = await sendEmail(job.resend!, {
+      to, subject, content, idempotencyKey: `parent_report:account:${row.id}:${week}`,
+    });
+    if (result.error) {
+      await job.admin.from("profiles").update({ parent_report_week: row.parent_report_week })
+        .eq("id", row.id).eq("parent_report_week", week);
+      bump(job.summary.failed, "parent_report");
+      logger.warn({ studentId: row.id, error: result.error }, "emails: account parent report failed");
+    } else {
+      bump(job.summary.sent, "parent_report");
+    }
+  }
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend | null, opts: RunOptions = {}): Promise<RunSummary> {
@@ -836,6 +923,7 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
     ["diagnostic reminders", runDiagnosticReminders],
     ["invite reminders", runInviteReminders],
     ["parent reports", runParentReports],
+    ["account parent reports", runAccountParentReports],
     ["welcome", runWelcome],
   ];
   const errors: string[] = [];

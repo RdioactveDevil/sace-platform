@@ -27,6 +27,10 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const [pass, setPass]       = useState('')
   const [name, setName]       = useState('')
   const [school, setSchool]   = useState('')
+  // A parent setting up an account for their child (the Year 6 page links here
+  // with { as: 'parent' }): they sign in with their own email.
+  const [asParent, setAsParent] = useState(!invite && location.state?.as === 'parent')
+  const [childName, setChildName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   // Shown instead of an error when there's nothing wrong but the user has to
@@ -53,7 +57,10 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
         onAuth(false)
       } else {
         if (!name.trim()) throw new Error('Please enter your name.')
-        const data = await signUp(addr, pass, name.trim(), school.trim(), false, invite?.redirectTo)
+        if (asParent && !childName.trim()) throw new Error("Please enter your child's first name.")
+        const data = asParent
+          ? await signUp(addr, pass, childName.trim(), '', false, undefined, name.trim())
+          : await signUp(addr, pass, name.trim(), school.trim(), false, invite?.redirectTo)
         // With email confirmation on there is no session until the link is clicked.
         if (data?.session) onAuth(true)
         else {
@@ -146,12 +153,14 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
           </div>
 
           <h2 style={{ fontSize:22, fontWeight:800, color:'#f1f5f9', margin:'0 0 4px', letterSpacing:'-0.02em' }}>
-            {mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : 'Create your account'}
+            {mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : asParent ? "Set up your child's account" : 'Create your account'}
           </h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', margin:'0 0 28px' }}>
             {invite?.invitedBy && mode !== 'reset'
               ? `${mode === 'signin' ? 'Sign in' : 'Create your account'} to accept ${invite.invitedBy}'s invite.`
-              : mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one." : 'Your first subject is free. No credit card required.'}
+              : mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one."
+              : asParent ? "You'll sign in with your email, and we'll send you your child's progress every week. First subject free."
+              : 'Your first subject is free. No credit card required.'}
           </p>
 
           {mode !== 'reset' && <div style={{ display:'flex', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:4, marginBottom:24, gap:4 }}>
@@ -165,13 +174,31 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
 
           <form onSubmit={submit} noValidate>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {mode === 'signup' && (
+            {mode === 'signup' && !invite && (
+              <div role="radiogroup" aria-label="Who is this account for?" style={{ display: 'flex', gap: 6 }}>
+                {[[false, "I'm a student"], [true, "I'm a parent"]].map(([v, label]) => (
+                  <button key={label} type="button" role="radio" aria-checked={asParent === v} onClick={() => setAsParent(v)}
+                    style={{ flex: 1, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
+                      border: `1px solid ${asParent === v ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                      background: asParent === v ? 'rgba(241,190,67,0.1)' : 'transparent',
+                      color: asParent === v ? GOLD : 'rgba(255,255,255,0.55)' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {mode === 'signup' && (asParent ? (
+              <>
+                <input className="auth-inp" placeholder="Your name" aria-label="Your name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} />
+                <input className="auth-inp" placeholder="Your child's first name" aria-label="Your child's first name" autoComplete="off" value={childName} onChange={e => setChildName(e.target.value)} />
+              </>
+            ) : (
               <>
                 <input className="auth-inp" placeholder="Your name" aria-label="Your name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} />
                 <input className="auth-inp" placeholder="School (optional)" aria-label="School (optional)" autoComplete="organization" value={school} onChange={e => setSchool(e.target.value)} />
               </>
-            )}
-            <input className="auth-inp" placeholder="Email address" aria-label="Email address" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
+            ))}
+            <input className="auth-inp" placeholder={mode === 'signup' && asParent ? 'Your email address' : 'Email address'} aria-label={mode === 'signup' && asParent ? 'Your email address' : 'Email address'} type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
             {mode !== 'reset' && (
               <input className="auth-inp" placeholder="Password" aria-label="Password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={pass} onChange={e => setPass(e.target.value)} />
             )}
@@ -181,7 +208,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
                 Forgot password?
               </button>
             )}
-            {mode === 'signup' && (
+            {mode === 'signup' && !asParent && (
               <button
                 type="button"
                 onClick={() => navigate('/auth/tutor')}
