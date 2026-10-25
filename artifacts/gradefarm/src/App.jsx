@@ -1280,9 +1280,14 @@ function AppInner() {
     questionContext, setQuestionContext,
     onConsolidate: (target) => {
       if (!target?.subtopics?.length) return
-      // Keep the quiz they're in to come back to after the round.
+      // Keep the quiz they're in to come back to after the round, minus any
+      // remediation waiting on the question they asked Titan about: the round
+      // is that practice, so they come back to a new question instead.
       const inProgress = !!quizQ || quizResults.length > 0
-      setConsolidation({ label: target.label, subtopics: target.subtopics, canReturn: inProgress }, inProgress ? captureQuiz() : null)
+      setConsolidation(
+        { label: target.label, subtopics: target.subtopics, canReturn: inProgress },
+        inProgress ? { ...captureQuiz(), remediation: NO_REMEDIATION } : null,
+      )
       // The round is a session of its own: new questions on just this topic,
       // outside any assignment (its answers mustn't count towards one).
       setActiveAssignment(null)
@@ -1291,6 +1296,12 @@ function AppInner() {
       resetQuizSession()
       navigate('/quiz')
     },
+  }
+
+  // Remediation state for a quiz with none in progress.
+  const NO_REMEDIATION = {
+    mode: false, streak: 0, target: 3, queue: [], status: 'idle', source: 'prebuilt',
+    concept: null, parentId: null, originalQ: null, usedIds: [], wrongCount: 0,
   }
 
   // Everything the quiz needs to carry on exactly where it was.
