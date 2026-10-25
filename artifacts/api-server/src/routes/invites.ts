@@ -25,7 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, getServiceClient, type Caller } from "../lib/auth";
 import { appUrl, getResend, sendEmail } from "../lib/email";
 import { logger } from "../lib/logger";
-import { requireTutorPlan, studentLimitError } from "../lib/tutor-plan";
+import { claimTutorSubjects, requireTutorPlan, studentLimitError } from "../lib/tutor-plan";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { createStudentDiagnostic } from "../lib/student-diagnostic";
 import { liveCurriculum } from "./billing";
@@ -186,12 +186,14 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
       : [];
     if (curriculumIds.length > 20) return res.status(400).json({ error: "That's too many subjects for one invite." });
     const diagnosticSubtopics = pickDiagnosticSubtopics(body.diagnosticSubtopics, curriculumIds);
+    let subjectNames: string[] = [];
     if (curriculumIds.length) {
       if (!(await canIncludeSubject(admin, userId))) {
         return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
       }
       const live = await Promise.all(curriculumIds.map((id) => liveCurriculum(admin, id)));
       if (live.some((c) => !c)) return res.status(400).json({ error: "One of those subjects isn't available." });
+      subjectNames = live.map((c) => c!.name);
     }
 
     const existingUserId = await findUserIdByEmail(admin, email);
@@ -214,6 +216,8 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
 
     const overLimit = await studentLimitError(admin, userId, caller.isAdmin, email);
     if (overLimit) return res.status(403).json({ error: overLimit, code: "tutor_student_limit" });
+    const subjectError = await claimTutorSubjects(admin, userId, caller.isAdmin, subjectNames);
+    if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
 
     const { data: pending, error: pendingErr } = await admin
       .from("tutor_invites")

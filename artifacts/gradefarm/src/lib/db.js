@@ -664,8 +664,9 @@ export async function getBillingConfig() {
 // Tutor plans: the tutor portal's monthly or annual fee (api-server lib/tutor-plan.ts).
 
 /**
- * { enabled, plans: [{ name, monthly, annual, students }], annualDiscount, active, exempt,
- *   plan, interval ('month' | 'year'), status, renewsAt, endsAtPeriodEnd, studentLimit, studentsUsed }
+ * { enabled, plans: [{ name, monthly, annual, students, subjects, recordings, parentReports }], annualDiscount,
+ *   active, exempt, plan, interval ('month' | 'year'), status, renewsAt, endsAtPeriodEnd, studentLimit, studentsUsed,
+ *   subjectLimit, subjects, features: { recordings, parentReports } }
  */
 export async function getTutorBilling() {
   return tutorFetch('/api/tutor-billing/status')
@@ -674,6 +675,16 @@ export async function getTutorBilling() {
 /** Subscribe ({ url } for Stripe Checkout) or move to another plan / billing period ({ ok }). */
 export async function chooseTutorPlan(plan, interval) {
   return tutorFetch('/api/tutor-billing/plan', { method: 'POST', body: JSON.stringify({ plan, interval }) })
+}
+
+/** Drop a subject from the tutor plan's subjects, making room for another. */
+export async function removeTutorPlanSubject(name) {
+  return tutorFetch(`/api/tutor-billing/subjects/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+/** A student's parent for weekly progress reports ({ email, name }; empty email stops them). Resolves to { parent }. */
+export async function setStudentParent(studentId, { email, name }) {
+  return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/parent`, { method: 'PUT', body: JSON.stringify({ email, name }) })
 }
 
 /** Stripe customer portal for the tutor's card, receipts and cancelling; resolves to its URL. */

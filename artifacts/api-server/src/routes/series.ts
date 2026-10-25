@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "../lib/email";
-import { requireTutorPlan } from "../lib/tutor-plan";
+import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -144,6 +144,11 @@ router.post("/series", async (req: Request, res: Response) => {
     ends_at?: string;
     record_session?: boolean;
   };
+
+  if (record_session && !(await tutorHasFeature(ctx.admin, ctx.userId, "recordings"))) {
+    res.status(403).json({ error: FEATURE_MISSING.recordings, code: "tutor_plan_feature" });
+    return;
+  }
 
   if (!recurrence_type || day_of_week === undefined || !time_of_day || !starts_at) {
     res.status(400).json({ error: "recurrence_type, day_of_week, time_of_day, and starts_at are required" });

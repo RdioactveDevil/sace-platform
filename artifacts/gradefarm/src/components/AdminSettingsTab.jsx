@@ -59,7 +59,11 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29, students: 10 }, { name: 'Pro', price: 59, students: 25 }, { name: 'Agency', price: 99, students: 999 }], annual_discount: 0.15 }
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
+  { name: 'Starter', price: 29, students: 10, subjects: 1, recordings: false, parent_reports: false },
+  { name: 'Pro', price: 59, students: 25, subjects: 3, recordings: true, parent_reports: true },
+  { name: 'Agency', price: 99, students: 999, subjects: 999, recordings: true, parent_reports: true },
+], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
   // Pricing state
@@ -94,7 +98,7 @@ export default function AdminSettingsTab() {
   }
 
   const updateTutorPlan = (idx, field, raw) => {
-    const val = field === 'price' || field === 'students' ? (raw === '' ? '' : Number(raw)) : raw
+    const val = ['price', 'students', 'subjects'].includes(field) ? (raw === '' ? '' : Number(raw)) : raw
     setPr(p => {
       const plans = [...(p.tutor_plans || [])]
       plans[idx] = { ...plans[idx], [field]: val }
@@ -175,8 +179,10 @@ export default function AdminSettingsTab() {
         <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>Tutor Plans</div>
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
           Tutors need one of these to use the tutor portal, billed monthly or yearly (annual discount above). A plan
-          caps students on the roster plus pending invites; 999 means unlimited. Tutors already subscribed keep the
-          price and limit they signed up with. Don't rename a plan while tutors are on it.
+          caps students on the roster plus pending invites and the subjects a tutor can tutor in (999 means
+          unlimited), and says whether they can record lessons and send weekly parent reports. Tutors already
+          subscribed keep the price, limits and features they signed up with until they change plan. Don't rename a
+          plan while tutors are on it.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 4 }}>
           {(pr.tutor_plans || []).map((plan, idx) => (
@@ -191,16 +197,24 @@ export default function AdminSettingsTab() {
                   placeholder="0"
                 />
               </Field>
-              <Field label="Students" hint="999 = unlimited">
-                <input
-                  style={inputStyle}
-                  type="number"
-                  min={1}
-                  value={plan.students ?? ''}
-                  onChange={e => updateTutorPlan(idx, 'students', e.target.value)}
-                  placeholder="999"
-                />
-              </Field>
+              {[['students', 'Students'], ['subjects', 'Subjects']].map(([field, label]) => (
+                <Field key={field} label={label} hint="999 = unlimited">
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    min={1}
+                    value={plan[field] ?? ''}
+                    onChange={e => updateTutorPlan(idx, field, e.target.value)}
+                    placeholder="999"
+                  />
+                </Field>
+              ))}
+              {[['recordings', 'Lesson recordings'], ['parent_reports', 'Weekly parent reports']].map(([field, label]) => (
+                <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={plan[field] !== false} onChange={e => updateTutorPlan(idx, field, e.target.checked)} />
+                  {label}
+                </label>
+              ))}
             </div>
           ))}
         </div>

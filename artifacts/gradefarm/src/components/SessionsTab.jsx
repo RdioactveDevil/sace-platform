@@ -13,6 +13,7 @@ import {
   createSessionSeries,
   fetchSessionSeries,
   cancelSessionSeries,
+  getTutorBilling,
 } from '../lib/db'
 
 const GOLD  = '#f1be43'
@@ -79,6 +80,11 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [recordSession, setRecordSession] = useState(false)
+  // Recording lessons is a tutor plan feature (null while loading: allowed).
+  const [canRecord, setCanRecord] = useState(null)
+  useEffect(() => {
+    getTutorBilling().then(b => setCanRecord(b.features?.recordings !== false)).catch(() => setCanRecord(true))
+  }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [createdLink, setCreatedLink] = useState(null)
@@ -394,15 +400,21 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: t.danger, display: 'inline-block' }} />Record {isRecurring ? 'these sessions' : 'this session'}</div>
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
-                {isRecurring
+                {canRecord === false
+                  ? 'Not included on your plan. Upgrade in Plan & billing to record lessons.'
+                  : isRecurring
                   ? 'Every session in the series is saved to Resources automatically'
                   : 'Saved to Resources automatically when the class ends'}
               </div>
             </div>
             <button
               type="button"
+              role="switch"
+              aria-checked={recordSession}
+              aria-label="Record"
+              disabled={canRecord === false}
               onClick={() => setRecordSession(r => !r)}
-              style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, background: recordSession ? GOLD : t.border, position: 'relative', transition: 'background 0.2s' }}
+              style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: canRecord === false ? 'not-allowed' : 'pointer', opacity: canRecord === false ? 0.5 : 1, flexShrink: 0, background: recordSession ? GOLD : t.border, position: 'relative', transition: 'background 0.2s' }}
             >
               <span style={{ position: 'absolute', top: 3, left: recordSession ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
             </button>

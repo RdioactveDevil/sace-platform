@@ -47,9 +47,28 @@ export function unsubscribeUrl(userId: string): string {
 }
 
 export function verifyUnsubscribeToken(userId: string, token: string): boolean {
-  const expected = Buffer.from(signUserId(userId));
-  const given = Buffer.from(token);
-  return expected.length === given.length && timingSafeEqual(expected, given);
+  return sameToken(signUserId(userId), token);
+}
+
+const sameToken = (expected: string, given: string) => {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(given);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+// A parent getting a student's weekly report has no account: their link
+// names the tutor–student pair instead.
+function signParentReport(tutorId: string, studentId: string): string {
+  return createHmac("sha256", unsubscribeSecret()).update(`parent-report:${tutorId}:${studentId}`).digest("base64url");
+}
+
+export function parentUnsubscribeUrl(tutorId: string, studentId: string): string {
+  const params = new URLSearchParams({ tu: tutorId, st: studentId, t: signParentReport(tutorId, studentId) });
+  return `${appUrl()}/api/email/parent-unsubscribe?${params}`;
+}
+
+export function verifyParentUnsubscribeToken(tutorId: string, studentId: string, token: string): boolean {
+  return sameToken(signParentReport(tutorId, studentId), token);
 }
 
 // ── Layout ──────────────────────────────────────────────────────────────────
@@ -68,6 +87,8 @@ export interface EmailContent {
   footer: string;
   /** Adds an unsubscribe link for automated emails. */
   unsubscribe?: string;
+  /** The unsubscribe link's text (default "Unsubscribe from reminder emails"). */
+  unsubscribeLabel?: string;
 }
 
 /** Render the shared gradefarm. email layout as HTML plus a plain-text copy. */
@@ -91,7 +112,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
     ? `<a href="${escapeHtml(c.cta.url)}" style="display:inline-block;background:#f1be43;color:#0c1037;font-weight:800;font-size:15px;padding:13px 26px;border-radius:9px;text-decoration:none">${escapeHtml(c.cta.label)}</a>`
     : "";
   const unsubscribe = c.unsubscribe
-    ? ` <a href="${escapeHtml(c.unsubscribe)}" style="color:#8a90a8;text-decoration:underline">Unsubscribe from reminder emails</a>`
+    ? ` <a href="${escapeHtml(c.unsubscribe)}" style="color:#8a90a8;text-decoration:underline">${escapeHtml(c.unsubscribeLabel ?? "Unsubscribe from reminder emails")}</a>`
     : "";
 
   const html = `<!doctype html>
@@ -119,7 +140,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
     ...(c.details?.length ? [""] : []),
     ...(c.cta ? [`${c.cta.label}: ${c.cta.url}`, ""] : []),
     c.footer,
-    ...(c.unsubscribe ? [`Unsubscribe from reminder emails: ${c.unsubscribe}`] : []),
+    ...(c.unsubscribe ? [`${c.unsubscribeLabel ?? "Unsubscribe from reminder emails"}: ${c.unsubscribe}`] : []),
   ].join("\n");
 
   return { html, text };

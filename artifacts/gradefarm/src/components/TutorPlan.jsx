@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { THEMES } from '../lib/theme'
-import { getTutorBilling, chooseTutorPlan, openTutorBillingPortal, syncCheckout } from '../lib/db'
+import { getTutorBilling, chooseTutorPlan, openTutorBillingPortal, removeTutorPlanSubject, syncCheckout } from '../lib/db'
 
 // Tutor plans (api-server lib/tutor-plan.ts): the tutor portal needs a live
 // plan unless the tutor is an admin or an admin made them exempt.
@@ -11,6 +11,16 @@ const PURPLE = '#a78bfa'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const studentsText = (n) => (n == null ? 'Unlimited students' : `Up to ${n} students`)
+const subjectsText = (n) => (n == null ? 'Every subject' : n === 1 ? '1 subject' : `Up to ${n} subjects`)
+
+/** What a plan includes, for its card: [text, included]. */
+const planFeatures = (plan) => [
+  [studentsText(plan.students), true],
+  [subjectsText(plan.subjects), true],
+  ['Assignments, sessions, messages & progress', true],
+  ['Lesson recordings', plan.recordings],
+  ['Weekly parent progress reports', plan.parentReports],
+]
 const shortDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 
 function useCard(theme) {
@@ -76,7 +86,14 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
                 <span style={{ fontSize: 13, color: t.textMuted }}>/ {period} · AUD</span>
               </div>
               {period === 'year' && <div style={{ fontSize: 12, color: t.textMuted }}>${Math.round(plan.annual / 12)}/month, billed once a year</div>}
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.textSub }}>{studentsText(plan.students)}</div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {planFeatures(plan).map(([text, included]) => (
+                  <li key={text} aria-label={included ? text : `Not included: ${text}`} style={{ fontSize: 13, color: included ? t.textSub : t.textMuted, display: 'flex', gap: 8 }}>
+                    <span aria-hidden="true" style={{ color: included ? PURPLE : t.textMuted, fontWeight: 900 }}>{included ? '✓' : '–'}</span>
+                    <span aria-hidden="true" style={{ textDecoration: included ? 'none' : 'line-through' }}>{text}</span>
+                  </li>
+                ))}
+              </ul>
               {full && <div style={{ fontSize: 12, color: t.danger }}>You have {billing.studentsUsed} students and invites, so you couldn't invite more on this plan.</div>}
               <button type="button" onClick={() => choose(plan)} disabled={!!busy || current || billing.enabled === false}
                 style={{ marginTop: 'auto', padding: '11px 14px', borderRadius: 12, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
@@ -142,6 +159,14 @@ export function TutorPlanTab({ theme }) {
   const load = () => getTutorBilling().then(setBilling).catch(e => setError(e.message || 'Could not load your tutor plan.'))
   useEffect(() => { load() }, [])
 
+  const dropSubject = async (name) => {
+    if (!window.confirm(`Remove ${name} from your plan's subjects? You can add it back later if there's room.`)) return
+    setBusy(true); setError('')
+    try { await removeTutorPlanSubject(name); await load() }
+    catch (e) { setError(e.message || 'Could not update your subjects.') }
+    setBusy(false)
+  }
+
   const openPortal = async () => {
     setBusy(true); setError('')
     try { window.location.assign(await openTutorBillingPortal()) }
@@ -185,6 +210,33 @@ export function TutorPlanTab({ theme }) {
           </button>
         )}
       </div>
+      {(billing.plan || billing.exempt) && (
+        <div style={{ ...card, padding: 22 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 4 }}>Your subjects</div>
+          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
+            {billing.subjectLimit == null
+              ? 'Your plan covers every subject.'
+              : `Your plan covers ${subjectsText(billing.subjectLimit).toLowerCase()}. A subject is added the first time you set an assignment, include it for a student or add it to a student's subjects. Remove one to make room for another; your past work in it stays.`}
+          </div>
+          {billing.subjectLimit != null && (billing.subjects.length === 0
+            ? <div style={{ fontSize: 13, color: t.textMuted }}>None yet.</div>
+            : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {billing.subjects.map(name => (
+                  <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px 6px 12px', borderRadius: 99, border: `1px solid ${t.border}`, fontSize: 13, fontWeight: 700, color: t.text }}>
+                    {name}
+                    <button type="button" onClick={() => dropSubject(name)} disabled={busy} aria-label={`Remove ${name}`}
+                      style={{ border: 'none', background: 'none', padding: 0, color: t.textMuted, cursor: busy ? 'default' : 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, fontSize: 13, color: t.textSub }}>
+            <span>{billing.features?.recordings ? '✓ Lesson recordings' : '– No lesson recordings'}</span>
+            <span>{billing.features?.parentReports ? '✓ Weekly parent reports' : '– No parent reports'}</span>
+          </div>
+        </div>
+      )}
       {error && <div style={{ fontSize: 13, color: t.danger }}>{error}</div>}
       {!(billing.exempt && !billing.plan) && (
         <div>

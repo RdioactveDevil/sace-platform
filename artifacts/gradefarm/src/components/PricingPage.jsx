@@ -46,7 +46,18 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29, students: 10 }, { name: 'Pro', price: 59, students: 25 }, { name: 'Agency', price: 99, students: 999 }], annual_discount: 0.15 }
+// How the three tutor plan cards look; their names, prices and what they include come from settings.
+const TUTOR_PLAN_LOOKS = [
+  { badge: null, hi: false, accentColor: PURPLE },
+  { badge: 'MOST POPULAR', hi: true, accentColor: PURPLE },
+  { badge: null, hi: false, accentColor: GOLD, prioritySupport: true },
+]
+
+const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
+  { name: 'Starter', price: 29, students: 10, subjects: 1, recordings: false, parent_reports: false },
+  { name: 'Pro', price: 59, students: 25, subjects: 3, recordings: true, parent_reports: true },
+  { name: 'Agency', price: 99, students: 999, subjects: 999, recordings: true, parent_reports: true },
+], annual_discount: 0.15 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -120,79 +131,34 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   ]
 
   const tutorDbPlans = dbPricing.tutor_plans || DEFAULT_PRICING.tutor_plans
-  // Each plan's student limit is enforced on invites; 999 or more reads as unlimited.
-  const studentLimit = (i, fallback) => {
-    const n = tutorDbPlans[i]?.students ?? fallback
-    return typeof n === 'number' && n > 0 && n < 999 ? `Up to ${n} students` : 'Unlimited students'
-  }
-  const tutorPlans = [
-    {
-      name: tutorDbPlans[0]?.name || 'Starter',
-      price: tutorDbPlans[0]?.price ?? 29,
+  // What each plan includes comes from settings and is enforced (api-server
+  // lib/tutor-plan.ts): students and subjects (999 or more reads as
+  // unlimited), lesson recordings and weekly parent reports.
+  const limitText = (n, one, many, all) => (typeof n === 'number' && n > 0 && n < 999 ? (n === 1 ? `1 ${one}` : `Up to ${n} ${many}`) : all)
+  const tutorPlans = TUTOR_PLAN_LOOKS.map((look, i) => {
+    const p = { ...DEFAULT_PRICING.tutor_plans[i], ...(tutorDbPlans[i] || {}) }
+    const students = limitText(p.students, 'student', 'students', 'Unlimited students')
+    const subjects = limitText(p.subjects, 'subject', 'subjects', 'All subjects')
+    return {
+      ...look,
+      name: p.name,
+      price: p.price,
       sub: 'per month',
-      badge: null,
-      hi: false,
-      accentColor: PURPLE,
       cta: 'Get started →',
-      limits: studentLimit(0, 10),
+      limits: `${students} · ${subjects}`,
       features: [
         { text: 'Student progress dashboard', included: true },
         { text: 'Session scheduling', included: true },
         { text: 'Assignment creation', included: true },
         { text: 'Student roster management', included: true },
-        { text: 'Up to 3 subjects', included: false },
-        { text: 'Session recordings', included: false },
-        { text: 'Parent progress reports', included: false },
-        { text: 'Unlimited students', included: false },
-        { text: 'All subjects', included: false },
-        { text: 'Priority support', included: false },
+        { text: students, included: true },
+        { text: subjects, included: true },
+        { text: 'Lesson recordings', included: p.recordings !== false },
+        { text: 'Weekly parent progress reports', included: p.parent_reports !== false },
+        { text: 'Priority support', included: !!look.prioritySupport },
       ],
-    },
-    {
-      name: tutorDbPlans[1]?.name || 'Pro',
-      price: tutorDbPlans[1]?.price ?? 59,
-      sub: 'per month',
-      badge: 'MOST POPULAR',
-      hi: true,
-      accentColor: PURPLE,
-      cta: 'Get started →',
-      limits: studentLimit(1, 25),
-      features: [
-        { text: 'Student progress dashboard', included: true },
-        { text: 'Session scheduling', included: true },
-        { text: 'Assignment creation', included: true },
-        { text: 'Student roster management', included: true },
-        { text: 'Up to 3 subjects', included: true },
-        { text: 'Session recordings', included: true },
-        { text: 'Parent progress reports', included: true },
-        { text: 'Unlimited students', included: false },
-        { text: 'All subjects', included: false },
-        { text: 'Priority support', included: false },
-      ],
-    },
-    {
-      name: tutorDbPlans[2]?.name || 'Agency',
-      price: tutorDbPlans[2]?.price ?? 99,
-      sub: 'per month',
-      badge: null,
-      hi: false,
-      accentColor: GOLD,
-      cta: 'Get started →',
-      limits: studentLimit(2, null),
-      features: [
-        { text: 'Student progress dashboard', included: true },
-        { text: 'Session scheduling', included: true },
-        { text: 'Assignment creation', included: true },
-        { text: 'Student roster management', included: true },
-        { text: 'All subjects', included: true },
-        { text: 'Session recordings', included: true },
-        { text: 'Parent progress reports', included: true },
-        { text: 'Unlimited students', included: true },
-        { text: 'All subjects', included: true },
-        { text: 'Priority support', included: true },
-      ],
-    },
-  ]
+    }
+  }).filter((_, i) => i < Math.max(tutorDbPlans.length, 1))
 
   const displayPrice = (p, fixed = false) => {
     if (p === 0) return 'Free'
@@ -465,10 +431,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: plan.hi ? PURPLE : '#475569', marginBottom: 24, padding: '6px 12px', background: plan.hi ? 'rgba(167,139,250,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${plan.hi ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.05)'}`, borderRadius: 8, display: 'inline-block' }}>{plan.limits}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-                      {plan.features.filter((f, i, arr) => {
-                        // Remove duplicate "All subjects" entries
-                        return arr.findIndex(x => x.text === f.text) === i
-                      }).map(f => (
+                      {plan.features.map(f => (
                         <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: f.included ? (plan.hi ? '#cbd5e1' : '#94a3b8') : '#334155' }}>
                           {f.included ? <CHECK gold={false} /> : <DASH />}
                           {f.text}

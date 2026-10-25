@@ -4,7 +4,8 @@ import { Resend } from "resend";
 import { EMAIL_FROM, appUrl } from "../lib/email";
 import { IncludedSubjectError, canIncludeSubject, includeSubject, removeIncludedSubject } from "../lib/included-subject";
 import { createStudentDiagnostic, waiveDiagnostic } from "../lib/student-diagnostic";
-import { requireTutorPlan } from "../lib/tutor-plan";
+import { FEATURE_MISSING, claimTutorSubjects, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
+import { liveCurriculum } from "./billing";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -743,7 +744,7 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    const { admin, callerUserId, tutorName } = ctx;
+    const { admin, callerUserId, tutorName, isAdmin } = ctx;
 
     const body = req.body as BatchAssignmentBody;
     const { type, subject, topics, due_date, studentIds, classIds, allRoster, notify } = body;
@@ -758,6 +759,8 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "type, subject and at least one topic are required." });
     }
     if (!due_date) return res.status(400).json({ error: "due_date is required." });
+    const subjectError = await claimTutorSubjects(admin, callerUserId, isAdmin, [String(subject)]);
+    if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
     if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
       return res.status(400).json({ error: "question_count must be a whole number from 1 to 100." });
     }
@@ -974,7 +977,14 @@ interface StudentDetail {
   included: { subject_name: string; stage: string | null }[]; // subjects THIS tutor includes (free)
   // Diagnostics on tutor-included subjects (lib/student-diagnostic.ts), by any tutor.
   diagnostics: { curriculum_id: string; status: "pending" | "waived" | "completed"; percentage: number | null }[];
+  // The parent THIS tutor sends weekly progress reports to (lib/parent-reports.ts).
+  parent: { email: string; name: string | null; unsubscribed: boolean } | null;
 }
+
+type RosterRow = {
+  tutor_id: string; student_id: string; year_level: string | null;
+  parent_email: string | null; parent_name: string | null; parent_reports_stopped_at: string | null;
+};
 
 // GET /tutor/roster-details — per-student year level + subjects (onboarding + tutor selection)
 router.get("/tutor/roster-details", async (req: Request, res: Response) => {
@@ -984,7 +994,7 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     const { admin, callerUserId } = ctx;
 
     const scopeAll = ctx.isAdmin && req.query.scope === "all";
-    let rosterQuery = admin.from("tutor_students").select("student_id, year_level");
+    let rosterQuery = admin.from("tutor_students").select("tutor_id, student_id, year_level, parent_email, parent_name, parent_reports_stopped_at");
     if (!scopeAll) rosterQuery = rosterQuery.eq("tutor_id", callerUserId);
     const { data: roster, error: rErr } = await rosterQuery;
     if (rErr) return res.status(500).json({ error: rErr.message });
@@ -992,9 +1002,17 @@ router.get("/tutor/roster-details", async (req: Request, res: Response) => {
     const studentIds = (roster ?? []).map((r: { student_id: string }) => r.student_id);
 
     const byStudent: Record<string, StudentDetail> = {};
-    for (const r of (roster ?? []) as { student_id: string; year_level: string | null }[]) {
-      if (byStudent[r.student_id]) continue; // a student with several tutors
-      byStudent[r.student_id] = { override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: [], diagnostics: [] };
+    for (const r of (roster ?? []) as RosterRow[]) {
+      const parent = r.tutor_id === callerUserId && r.parent_email
+        ? { email: r.parent_email, name: r.parent_name, unsubscribed: !!r.parent_reports_stopped_at }
+        : null;
+      if (byStudent[r.student_id]) { // a student with several tutors
+        byStudent[r.student_id].parent ??= parent;
+        continue;
+      }
+      byStudent[r.student_id] = {
+        override_year_level: r.year_level ?? null, profile_year_level: null, tutored: [], subscriptions: [], included: [], diagnostics: [], parent,
+      };
     }
 
     if (studentIds.length > 0) {
@@ -1089,6 +1107,46 @@ router.patch("/tutor/students/:studentId/details", async (req: Request, res: Res
   }
 });
 
+// PUT /tutor/students/:studentId/parent — { email, name? }: who gets this
+// student's weekly progress report (a plan feature). An empty email stops
+// them. A parent who unsubscribed stays unsubscribed unless the address changes.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+router.put("/tutor/students/:studentId/parent", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId } = ctx;
+    const studentId = String(req.params.studentId);
+    const { data: row } = await admin
+      .from("tutor_students").select("parent_email, parent_reports_stopped_at")
+      .eq("tutor_id", callerUserId).eq("student_id", studentId)
+      .maybeSingle<{ parent_email: string | null; parent_reports_stopped_at: string | null }>();
+    if (!row) return res.status(403).json({ error: "Student not on your roster." });
+
+    const body = (req.body ?? {}) as { email?: unknown; name?: unknown };
+    const email = String(body.email ?? "").trim().toLowerCase();
+    const name = String(body.name ?? "").trim().slice(0, 80) || null;
+    if (email && !EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+    if (email && !(await tutorHasFeature(admin, callerUserId, "parentReports", ctx.isAdmin))) {
+      return res.status(403).json({ error: FEATURE_MISSING.parentReports, code: "tutor_plan_feature" });
+    }
+    const changed = email !== (row.parent_email ?? "");
+    const { error } = await admin
+      .from("tutor_students")
+      .update({
+        parent_email: email || null,
+        parent_name: email ? name : null,
+        ...(changed ? { parent_reports_stopped_at: null, parent_report_week: null } : {}),
+      })
+      .eq("tutor_id", callerUserId).eq("student_id", studentId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ parent: email ? { email, name, unsubscribed: !changed && !!row.parent_reports_stopped_at } : null });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 // POST /tutor/students/:studentId/subjects — add a tutored subject + stage
 router.post("/tutor/students/:studentId/subjects", async (req: Request, res: Response) => {
   try {
@@ -1102,6 +1160,8 @@ router.post("/tutor/students/:studentId/subjects", async (req: Request, res: Res
     const { subject_name, stage } = req.body as { subject_name?: string; stage?: string | null };
     const subj = (subject_name ?? "").trim();
     if (!subj) return res.status(400).json({ error: "subject_name is required." });
+    const subjectError = await claimTutorSubjects(admin, callerUserId, ctx.isAdmin, [subj]);
+    if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
 
     const { data, error } = await admin
       .from("tutor_student_subjects")
@@ -1181,6 +1241,11 @@ router.put("/tutor/students/:studentId/included-subjects/:curriculumId", async (
       return res.status(403).json({ error: "Your account can't include subjects yet. Ask an admin to turn it on." });
     }
     const curriculumId = String(req.params.curriculumId);
+    const cur = await liveCurriculum(admin, curriculumId);
+    if (cur) {
+      const subjectError = await claimTutorSubjects(admin, callerUserId, ctx.isAdmin, [cur.name]);
+      if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
+    }
     const result = await includeSubject(admin, callerUserId, studentId, curriculumId);
     // The student does a diagnostic on it before practising (unless they already have one).
     await createStudentDiagnostic(admin, callerUserId, studentId, curriculumId);

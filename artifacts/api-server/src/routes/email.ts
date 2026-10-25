@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { getServiceClient } from "../lib/auth";
-import { appUrl, escapeHtml, getResend, verifyUnsubscribeToken } from "../lib/email";
+import { appUrl, escapeHtml, getResend, verifyParentUnsubscribeToken, verifyUnsubscribeToken } from "../lib/email";
 import { runAutomatedEmails } from "../lib/automated-emails";
 import { logger } from "../lib/logger";
 
@@ -60,9 +60,14 @@ router.post("/cron/emails", handleCron);
 // mail scanners open links. POST does the change; mail clients' one-click
 // "Unsubscribe" button (List-Unsubscribe-Post) POSTs here too.
 
-function page(res: Response, status: number, heading: string, body: string, form?: { action: string; label: string; u: string; t: string }) {
+type PageForm = { action: string; label: string; path?: string } & Record<string, string>;
+
+function page(res: Response, status: number, heading: string, body: string, form?: PageForm) {
+  const query = form
+    ? new URLSearchParams(Object.entries(form).filter(([k]) => !["action", "label", "path"].includes(k))).toString()
+    : "";
   const formHtml = form
-    ? `<form method="post" action="${escapeHtml(`${appUrl()}/api/email/unsubscribe`)}?u=${encodeURIComponent(form.u)}&t=${encodeURIComponent(form.t)}">
+    ? `<form method="post" action="${escapeHtml(`${appUrl()}${form.path ?? "/api/email/unsubscribe"}?${query}`)}">
         <input type="hidden" name="action" value="${escapeHtml(form.action)}">
         <button type="submit">${escapeHtml(form.label)}</button>
       </form>`
@@ -133,6 +138,64 @@ router.post("/email/unsubscribe", async (req: Request, res: Response) => {
   } else {
     page(res, 200, "You're unsubscribed", "You won't get reminder emails any more. Changed your mind?", {
       action: "resubscribe", label: "Turn reminders back on", ...tok,
+    });
+  }
+});
+
+// ── Parent progress reports ─────────────────────────────────────────────────
+// The same confirm-then-POST flow for a parent's weekly report about a
+// student (lib/parent-reports.ts). Stopping it is recorded on the roster row.
+
+const PARENT_PATH = "/api/email/parent-unsubscribe";
+
+function readParentToken(req: Request): { tu: string; st: string; t: string } | null {
+  const tu = String(req.query.tu ?? "");
+  const st = String(req.query.st ?? "");
+  const t = String(req.query.t ?? "");
+  const uuid = /^[0-9a-f-]{36}$/i;
+  if (!uuid.test(tu) || !uuid.test(st) || !t) return null;
+  try {
+    return verifyParentUnsubscribeToken(tu, st, t) ? { tu, st, t } : null;
+  } catch {
+    return null;
+  }
+}
+
+router.get("/email/parent-unsubscribe", (req: Request, res: Response) => {
+  const tok = readParentToken(req);
+  if (!tok) {
+    page(res, 400, "Link not valid", "This unsubscribe link is incomplete. You can also ask your child's tutor to stop the reports.");
+    return;
+  }
+  page(res, 200, "Stop weekly progress reports?", "You'll stop getting the weekly progress email from this tutor about this student.", {
+    action: "unsubscribe", label: "Unsubscribe", path: PARENT_PATH, ...tok,
+  });
+});
+
+router.post("/email/parent-unsubscribe", async (req: Request, res: Response) => {
+  const tok = readParentToken(req);
+  if (!tok) {
+    page(res, 400, "Link not valid", "This unsubscribe link is incomplete. You can also ask your child's tutor to stop the reports.");
+    return;
+  }
+  const resubscribe = (req.body as { action?: string } | undefined)?.action === "resubscribe";
+  try {
+    const { error } = await getServiceClient()
+      .from("tutor_students")
+      .update({ parent_reports_stopped_at: resubscribe ? null : new Date().toISOString() })
+      .eq("tutor_id", tok.tu)
+      .eq("student_id", tok.st);
+    if (error) throw error;
+  } catch (err) {
+    logger.error({ err }, "emails: parent unsubscribe failed");
+    page(res, 500, "Something went wrong", "We couldn't update your email settings. Please try again in a minute.");
+    return;
+  }
+  if (resubscribe) {
+    page(res, 200, "You're subscribed again", "Weekly progress reports are back on.");
+  } else {
+    page(res, 200, "You're unsubscribed", "You won't get weekly progress reports any more. Changed your mind?", {
+      action: "resubscribe", label: "Turn reports back on", path: PARENT_PATH, ...tok,
     });
   }
 });

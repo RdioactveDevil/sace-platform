@@ -7,13 +7,19 @@ import { logger } from "./logger";
 // Tutor plans: what a tutor pays for the tutor portal.
 //
 // The plans are platform_settings.pricing.tutor_plans ({ name, price: $/month,
-// students }) plus annual_discount for paying yearly; Admin → Settings edits
-// them. A tutor subscribes through Stripe (routes/tutor-billing.ts) and the
-// plan is recorded in tutor_billing, keeping the student limit it was bought
-// with. A tutor needs a live plan to use the tutor portal and can't have more
-// students (roster + pending invites) than the plan allows. Admins don't need
-// a plan, and an admin can mark a tutor exempt (no plan, no limit) in
-// Admin → Tutors.
+// students, subjects, recordings, parent_reports }) plus annual_discount for
+// paying yearly; Admin → Settings edits them. A tutor subscribes through
+// Stripe (routes/tutor-billing.ts) and the plan is recorded in tutor_billing,
+// keeping the limits and features it was bought with. A tutor needs a live
+// plan to use the tutor portal, and the plan decides:
+//   • students       – roster + pending invites (studentLimitError)
+//   • subjects       – how many subjects they tutor in; a subject joins their
+//                      list (tutor_billing.subjects) the first time they use it
+//                      (claimTutorSubject) and they can drop one in Plan & billing
+//   • recordings     – recording live lessons
+//   • parent_reports – the weekly progress email to a student's parent
+// Admins don't need a plan, and an admin can mark a tutor exempt (no plan,
+// every feature, no limits) in Admin → Tutors.
 
 /** Marks a Stripe subscription as a tutor plan (metadata.kind), not a student's subjects. */
 export const TUTOR_PLAN_KIND = "tutor_plan";
@@ -29,16 +35,26 @@ export type TutorPlanOption = {
   annual: number;
   /** Most students the plan allows; null = unlimited. */
   students: number | null;
+  /** Most subjects the tutor can tutor in; null = unlimited. */
+  subjects: number | null;
+  recordings: boolean;
+  parentReports: boolean;
 };
 
+export type TutorFeature = "recordings" | "parentReports";
+
 const DEFAULT_PLANS = [
-  { name: "Starter", price: 29, students: 10 },
-  { name: "Pro", price: 59, students: 25 },
-  { name: "Agency", price: 99, students: null },
+  { name: "Starter", price: 29, students: 10, subjects: 1, recordings: false, parent_reports: false },
+  { name: "Pro", price: 59, students: 25, subjects: 3, recordings: true, parent_reports: true },
+  { name: "Agency", price: 99, students: null, subjects: null, recordings: true, parent_reports: true },
 ];
 const DEFAULT_ANNUAL_DISCOUNT = 0.15;
 /** A limit this high (the settings use 999) means unlimited. */
 const UNLIMITED_FROM = 999;
+
+/** A positive whole number below UNLIMITED_FROM, else null (unlimited). */
+const limitOf = (n: unknown): number | null =>
+  typeof n === "number" && n > 0 && n < UNLIMITED_FROM ? Math.floor(n) : null;
 
 /** The plans on offer, from platform_settings.pricing. */
 export function tutorPlanOptions(pricing: Record<string, unknown>): { plans: TutorPlanOption[]; annualDiscount: number } {
@@ -46,10 +62,18 @@ export function tutorPlanOptions(pricing: Record<string, unknown>): { plans: Tut
   const annualDiscount = typeof d === "number" && d >= 0 && d < 1 ? d : DEFAULT_ANNUAL_DISCOUNT;
   const raw = Array.isArray(pricing.tutor_plans) ? pricing.tutor_plans : DEFAULT_PLANS;
   const plans = raw.flatMap((p): TutorPlanOption[] => {
-    const { name, price, students } = (p ?? {}) as { name?: unknown; price?: unknown; students?: unknown };
+    const { name, price, students, subjects, recordings, parent_reports } = (p ?? {}) as Record<string, unknown>;
     if (typeof name !== "string" || !name.trim() || typeof price !== "number" || !(price > 0)) return [];
-    const limit = typeof students === "number" && students > 0 && students < UNLIMITED_FROM ? Math.floor(students) : null;
-    return [{ name: name.trim(), monthly: price, annual: Math.round(price * 12 * (1 - annualDiscount)), students: limit }];
+    return [{
+      name: name.trim(),
+      monthly: price,
+      annual: Math.round(price * 12 * (1 - annualDiscount)),
+      students: limitOf(students),
+      subjects: limitOf(subjects),
+      // A plan from before these switches existed keeps every feature.
+      recordings: recordings !== false,
+      parentReports: parent_reports !== false,
+    }];
   });
   return { plans, annualDiscount };
 }
@@ -59,6 +83,11 @@ export type TutorBillingRow = {
   exempt: boolean;
   plan: string | null;
   student_limit: number | null;
+  subject_limit: number | null;
+  recordings: boolean;
+  parent_reports: boolean;
+  /** Subject names the tutor tutors in, filled as they use them (claimTutorSubject). */
+  subjects: string[];
   interval: TutorPlanInterval | null;
   status: string | null;
   stripe_subscription_id: string | null;
@@ -97,6 +126,68 @@ export async function requireTutorPlan(admin: SupabaseClient, res: Response, tut
   }
   res.status(402).json({ error: "Choose a tutor plan to use the tutor portal.", code: "tutor_plan_required" });
   return false;
+}
+
+/** Whether the tutor's plan includes `feature`; admins and exempt tutors have every feature. */
+export async function tutorHasFeature(admin: SupabaseClient, tutorId: string, feature: TutorFeature, isAdmin?: boolean): Promise<boolean> {
+  if (isAdmin) return true;
+  const row = await tutorBillingRow(admin, tutorId);
+  if (row?.exempt) return true;
+  if (planIsLive(row) && (feature === "recordings" ? row!.recordings : row!.parent_reports)) return true;
+  if (isAdmin === undefined) {
+    const { data } = await admin.from("profiles").select("is_admin").eq("id", tutorId).maybeSingle<{ is_admin: boolean | null }>();
+    return !!data?.is_admin;
+  }
+  return false;
+}
+
+export const FEATURE_MISSING: Record<TutorFeature, string> = {
+  recordings: "Your tutor plan doesn't include recording lessons. Upgrade in Plan & billing to record.",
+  parentReports: "Your tutor plan doesn't include parent progress reports. Upgrade in Plan & billing to send them.",
+};
+
+const sameSubject = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Make sure the tutor's plan covers these subjects (curricula names),
+ * adding any new ones to their list while there's room. Returns the message
+ * to show if one doesn't fit.
+ */
+export async function claimTutorSubjects(admin: SupabaseClient, tutorId: string, isAdmin: boolean, names: string[]): Promise<string | null> {
+  if (isAdmin) return null;
+  const row = await tutorBillingRow(admin, tutorId);
+  if (!row || row.exempt || row.subject_limit == null) return null;
+  const current = row.subjects ?? [];
+  const added: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name || [...current, ...added].some((s) => sameSubject(s, name))) continue;
+    added.push(name);
+  }
+  if (!added.length) return null;
+  if (current.length + added.length > row.subject_limit) {
+    const covered = current.length ? ` (${current.join(", ")})` : "";
+    const plural = row.subject_limit === 1 ? "subject" : "subjects";
+    return `Your ${row.plan ?? "tutor"} plan covers ${row.subject_limit} ${plural}${covered}. To tutor ${added.join(", ")}, swap a subject or upgrade in Plan & billing.`;
+  }
+  const { error } = await admin
+    .from("tutor_billing").update({ subjects: [...current, ...added], updated_at: new Date().toISOString() })
+    .eq("tutor_id", tutorId);
+  if (error) throw new Error(error.message);
+  return null;
+}
+
+/** Stripe metadata for a plan: what syncTutorSubscription records on purchase. */
+export function planMetadata(tutorId: string, plan: TutorPlanOption): Record<string, string> {
+  return {
+    kind: TUTOR_PLAN_KIND,
+    user_id: tutorId,
+    plan: plan.name,
+    students: plan.students == null ? "" : String(plan.students),
+    subjects: plan.subjects == null ? "" : String(plan.subjects),
+    recordings: plan.recordings ? "1" : "0",
+    parent_reports: plan.parentReports ? "1" : "0",
+  };
 }
 
 /** An invite counts towards the student limit until it's accepted (it joins the roster) or expires. */
@@ -142,11 +233,14 @@ export async function syncTutorSubscription(admin: SupabaseClient, sub: Stripe.S
   // A late event for an older, finished subscription mustn't replace the current plan.
   if (row?.stripe_subscription_id && row.stripe_subscription_id !== sub.id && !live) return;
 
-  const limit = Number(sub.metadata?.students);
+  const meta = sub.metadata ?? {};
   const interval = sub.items.data[0]?.price.recurring?.interval;
   const fields = {
-    plan: sub.metadata?.plan || null,
-    student_limit: Number.isInteger(limit) && limit > 0 ? limit : null,
+    plan: meta.plan || null,
+    student_limit: limitOf(Number(meta.students)),
+    subject_limit: limitOf(Number(meta.subjects)),
+    recordings: meta.recordings !== "0",
+    parent_reports: meta.parent_reports !== "0",
     interval: isTutorPlanInterval(interval) ? interval : null,
     status: sub.status,
     stripe_subscription_id: sub.id,

@@ -4,7 +4,7 @@ import { requireUser } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { ACCESS_STATUSES, priceByLookupKey } from "../lib/stripe-plans";
 import {
-  TUTOR_PLAN_KIND, isTutorPlanInterval, planIsLive, studentsUsed, syncTutorSubscription, tutorBillingRow, tutorPlanOptions,
+  isTutorPlanInterval, planIsLive, planMetadata, studentsUsed, syncTutorSubscription, tutorBillingRow, tutorPlanOptions,
   type TutorPlanInterval, type TutorPlanOption,
 } from "../lib/tutor-plan";
 import { appUrl, currentCustomerRow, customerFor, getStripe, isMissing, notConfigured, readPricing } from "./billing";
@@ -31,6 +31,16 @@ function tutorPriceId(stripe: Stripe, plan: TutorPlanOption, interval: TutorPlan
     nickname: `Tutor ${plan.name}: $${dollars} per ${interval}`,
     product_data: { name: `GradeFarm tutor plan: ${plan.name}` },
   });
+}
+
+/** "up to 25 students, 3 subjects, lesson recordings, parent reports" */
+function planSummary(plan: TutorPlanOption): string {
+  return [
+    plan.students == null ? "unlimited students" : `up to ${plan.students} students`,
+    plan.subjects == null ? "every subject" : `${plan.subjects} ${plan.subjects === 1 ? "subject" : "subjects"}`,
+    ...(plan.recordings ? ["lesson recordings"] : []),
+    ...(plan.parentReports ? ["weekly parent reports"] : []),
+  ].join(", ");
 }
 
 async function requireTutorCaller(req: Request, res: Response) {
@@ -70,6 +80,13 @@ router.get("/tutor-billing/status", async (req: Request, res: Response) => {
       endsAtPeriodEnd: paying && !!row?.cancel_at_period_end,
       studentLimit: exempt || !paying ? null : row?.student_limit ?? null,
       studentsUsed: used,
+      // What the tutor's plan includes (everything when exempt).
+      subjectLimit: exempt || !paying ? null : row?.subject_limit ?? null,
+      subjects: row?.subjects ?? [],
+      features: {
+        recordings: exempt || (paying && !!row?.recordings),
+        parentReports: exempt || (paying && !!row?.parent_reports),
+      },
     });
   } catch (err) {
     logger.error({ err }, "tutor billing: status failed");
@@ -94,7 +111,7 @@ router.post("/tutor-billing/plan", async (req: Request, res: Response) => {
     const { plans } = tutorPlanOptions(await readPricing(admin));
     const plan = plans.find((p) => p.name === req.body?.plan);
     if (!plan) return fail(res, 404, "That plan isn't available.");
-    const metadata = { kind: TUTOR_PLAN_KIND, user_id: userId, plan: plan.name, students: plan.students == null ? "" : String(plan.students) };
+    const metadata = planMetadata(userId, plan);
     const priceId = await tutorPriceId(stripe, plan, interval);
 
     const row = await tutorBillingRow(admin, userId);
@@ -126,9 +143,7 @@ router.post("/tutor-billing/plan", async (req: Request, res: Response) => {
       allow_promotion_codes: true,
       subscription_data: { description: `GradeFarm tutor plan: ${plan.name}`, metadata },
       metadata,
-      custom_text: {
-        submit: { message: plan.students == null ? `${plan.name}: unlimited students.` : `${plan.name}: up to ${plan.students} students.` },
-      },
+      custom_text: { submit: { message: `${plan.name}: ${planSummary(plan)}.` } },
       success_url: `${appUrl()}/tutor?plan_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl()}/tutor?plan_checkout=cancelled`,
     });
@@ -136,6 +151,26 @@ router.post("/tutor-billing/plan", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err }, "tutor billing: choose plan failed");
     fail(res, 502, "Couldn't update your tutor plan. Please try again.");
+  }
+});
+
+// DELETE /tutor-billing/subjects/:name — drop a subject from the tutor's list,
+// freeing a place on their plan for another. Their past work in it stays.
+router.delete("/tutor-billing/subjects/:name", async (req: Request, res: Response) => {
+  const caller = await requireTutorCaller(req, res);
+  if (!caller) return;
+  try {
+    const row = await tutorBillingRow(caller.admin, caller.userId);
+    const name = String(req.params.name).trim().toLowerCase();
+    const subjects = (row?.subjects ?? []).filter((s) => s.trim().toLowerCase() !== name);
+    if (!row || subjects.length === row.subjects.length) return fail(res, 404, "That subject isn't on your plan.");
+    const { error } = await caller.admin
+      .from("tutor_billing").update({ subjects, updated_at: new Date().toISOString() }).eq("tutor_id", caller.userId);
+    if (error) throw new Error(error.message);
+    res.json({ ok: true, subjects });
+  } catch (err) {
+    logger.error({ err }, "tutor billing: remove subject failed");
+    fail(res, 500, "Couldn't update your subjects.");
   }
 });
 
