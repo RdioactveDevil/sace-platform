@@ -4,6 +4,7 @@ import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { getSupabaseService, loadWritingAttemptForViewer } from "../lib/writing-auth";
 import { requireUser } from "../lib/auth";
+import { blockAwaitingParent, loadStudentContext } from "../lib/parent-consent";
 
 const router = Router();
 
@@ -204,6 +205,7 @@ function escapePdfText(s: string): string {
 router.post("/writing/prompt", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
+  if (blockAwaitingParent(await loadStudentContext(caller), res)) return;
   const { subject, essayType } = req.body || {};
   if (!subject || !essayType) {
     res.status(400).json({ error: "subject and essayType required" });
@@ -285,6 +287,7 @@ router.post("/writing/prompt", async (req, res) => {
 router.post("/writing/feedback", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
+  if (blockAwaitingParent(await loadStudentContext(caller), res)) return;
   const { subject, essayType, mode, prompt, imageUrl, content } = req.body || {};
   if (!subject || !essayType || !prompt || content == null) {
     res.status(400).json({ error: "subject, essayType, prompt, content required" });

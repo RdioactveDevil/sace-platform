@@ -5,6 +5,7 @@ import { logger } from "../lib/logger";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { requireUser } from "../lib/auth";
 import { checkAiQuota } from "../lib/ai-quota";
+import { blockAwaitingParent, loadStudentContext, studentSafetyRules } from "../lib/parent-consent";
 
 const router = Router();
 
@@ -186,6 +187,10 @@ router.post("/chat", async (req, res) => {
   try {
     const { messages, system, max_tokens, subject, topic, exemplarsFor } = req.body;
 
+    // A student under 15 waits for their parent to confirm before any AI.
+    const student = await loadStudentContext(caller);
+    if (blockAwaitingParent(student, res)) return;
+
     const isChat = req.body?.purpose === "titan_chat";
     const check = await checkAiQuota(caller, isChat);
     if ("blocked" in check) {
@@ -225,6 +230,9 @@ router.post("/chat", async (req, res) => {
         /* degrade silently — generation still works without exemplars */
       }
     }
+
+    // Students get the safety rules ahead of whatever prompt the app sent.
+    if (student) effectiveSystem = [studentSafetyRules(student), effectiveSystem].filter(Boolean).join("\n\n");
 
     const typedMessages: ChatMessage[] = Array.isArray(messages)
       ? messages.filter(

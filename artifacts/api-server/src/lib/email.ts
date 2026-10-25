@@ -71,6 +71,38 @@ export function verifyParentUnsubscribeToken(tutorId: string, studentId: string,
   return sameToken(signParentReport(tutorId, studentId), token);
 }
 
+// The report a parent gets from the student's own account (no tutor) is
+// stopped on the profile, so its link names just the student.
+function signAccountParentReport(studentId: string): string {
+  return createHmac("sha256", unsubscribeSecret()).update(`account-parent-report:${studentId}`).digest("base64url");
+}
+
+export function accountParentUnsubscribeUrl(studentId: string): string {
+  const params = new URLSearchParams({ st: studentId, t: signAccountParentReport(studentId) });
+  return `${appUrl()}/api/email/parent-unsubscribe?${params}`;
+}
+
+export function verifyAccountParentUnsubscribeToken(studentId: string, token: string): boolean {
+  return sameToken(signAccountParentReport(studentId), token);
+}
+
+// A parent confirming a young student's account. The link is tied to the
+// parent email it was sent to, so it stops working if the student changes it.
+function signParentConsent(studentId: string, parentEmail: string): string {
+  return createHmac("sha256", unsubscribeSecret())
+    .update(`parent-consent:${studentId}:${parentEmail.trim().toLowerCase()}`)
+    .digest("base64url");
+}
+
+export function parentConsentUrl(studentId: string, parentEmail: string): string {
+  const params = new URLSearchParams({ s: studentId, t: signParentConsent(studentId, parentEmail) });
+  return `${appUrl()}/api/parent/consent?${params}`;
+}
+
+export function verifyParentConsentToken(studentId: string, parentEmail: string, token: string): boolean {
+  return sameToken(signParentConsent(studentId, parentEmail), token);
+}
+
 // ── Layout ──────────────────────────────────────────────────────────────────
 
 export interface EmailContent {

@@ -2,13 +2,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EmailContent } from "./email";
 import { currentStreak } from "./streak";
 
-// Weekly parent progress reports: a tutor on a plan with parent reports adds
-// a parent's email to a student on their roster (tutor_students.parent_email)
-// and every Sunday evening the automated email job (runParentReports in
-// automated-emails.ts) sends the parent what the student did that week: how
-// much they practised and how well, what they're strong at and should work
-// on, the tutor's assignments and the next lesson. Parents have no account;
-// their unsubscribe link stops the reports for that tutor–student pair.
+// Weekly parent progress reports: every Sunday evening the automated email
+// job (automated-emails.ts) sends a parent what the student did that week: how
+// much they practised and how well, and what they're strong at and should work
+// on. Two ways in:
+//   • a tutor on a plan with parent reports adds a parent's email to a student
+//     on their roster (tutor_students.parent_email, runParentReports). Their
+//     report adds the tutor's assignments and the next lesson, and its
+//     unsubscribe link stops it for that tutor–student pair.
+//   • the student's own account has a confirmed parent (profiles.parent_email,
+//     runAccountParentReports; lib/parent-consent.ts), with no tutor needed.
+//     Its unsubscribe link stops it on the profile.
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /** A topic needs this many answers in the week before it counts as strong or to work on. */
@@ -74,18 +78,28 @@ export type ParentReportData = {
   nextLesson: string | null;
 };
 
-/** Load a student's last 7 days for their parent's report. `dayOf` gives a time's YYYY-MM-DD in Adelaide. */
+const NONE = Promise.resolve({ data: [] as unknown[], error: null });
+
+/**
+ * Load a student's last 7 days for their parent's report. `dayOf` gives a
+ * time's YYYY-MM-DD in Adelaide. Without a tutor there are no assignments or
+ * lessons to report.
+ */
 export async function loadParentReport(
-  admin: SupabaseClient, tutorId: string, studentId: string, now: Date, dayOf: (d: Date) => string,
+  admin: SupabaseClient, tutorId: string | null, studentId: string, now: Date, dayOf: (d: Date) => string,
 ): Promise<ParentReportData> {
   const since = new Date(now.getTime() - WEEK_MS).toISOString();
   const [answersRes, assignmentsRes, lessonRes, profileRes] = await Promise.all([
     admin.from("answer_log").select("question_id, correct, answered_at").eq("user_id", studentId).gte("answered_at", since).limit(5000),
-    admin.from("assignments").select("completed_at, due_date, passed")
-      .eq("tutor_id", tutorId).eq("student_id", studentId).or(`completed_at.is.null,completed_at.gte.${since}`),
-    admin.from("tutoring_sessions").select("scheduled_at")
-      .eq("tutor_id", tutorId).eq("student_id", studentId).neq("status", "cancelled")
-      .gt("scheduled_at", now.toISOString()).order("scheduled_at", { ascending: true }).limit(1),
+    tutorId
+      ? admin.from("assignments").select("completed_at, due_date, passed")
+        .eq("tutor_id", tutorId).eq("student_id", studentId).or(`completed_at.is.null,completed_at.gte.${since}`)
+      : NONE,
+    tutorId
+      ? admin.from("tutoring_sessions").select("scheduled_at")
+        .eq("tutor_id", tutorId).eq("student_id", studentId).neq("status", "cancelled")
+        .gt("scheduled_at", now.toISOString()).order("scheduled_at", { ascending: true }).limit(1)
+      : NONE,
     admin.from("profiles").select("streak, last_active").eq("id", studentId).maybeSingle<{ streak: number | null; last_active: string | null }>(),
   ]);
   for (const r of [answersRes, assignmentsRes, lessonRes]) if (r.error) throw new Error(r.error.message);
@@ -112,11 +126,14 @@ export async function loadParentReport(
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The parent's email. `formatWhen` renders the next lesson's time in Adelaide. */
+/**
+ * The parent's email. `tutorName` is null for the report from the student's
+ * own account. `formatWhen` renders the next lesson's time in Adelaide.
+ */
 export function parentReportEmail(opts: {
   parentName: string | null;
   studentName: string;
-  tutorName: string;
+  tutorName: string | null;
   data: ParentReportData;
   unsubscribe: string;
   formatWhen: (iso: string) => string;
@@ -126,7 +143,9 @@ export function parentReportEmail(opts: {
   const first = studentName.split(" ")[0] || studentName;
 
   const summary = r.answered === 0
-    ? `${first} didn't practise on gradefarm this week. A few short sessions before their next lesson would help them keep up.`
+    ? tutorName
+      ? `${first} didn't practise on gradefarm this week. A few short sessions before their next lesson would help them keep up.`
+      : `${first} didn't practise on gradefarm this week. Fifteen minutes on a few days a week is enough to keep improving.`
     : `${first} answered ${plural(r.answered, "question")} on ${plural(r.activeDays, "day")} this week and got ${r.accuracy}% right.`;
   const assignments = [
     r.assignmentsDone ? `${r.assignmentsDone} done this week` : null,
@@ -150,11 +169,16 @@ export function parentReportEmail(opts: {
     content: {
       heading: `${first}'s week on gradefarm`,
       paragraphs: [
-        `Hi ${parentName || "there"}, here's ${first}'s weekly progress report from ${tutorName}, their tutor.`,
+        tutorName
+          ? `Hi ${parentName || "there"}, here's ${first}'s weekly progress report from ${tutorName}, their tutor.`
+          : `Hi ${parentName || "there"}, here's ${first}'s weekly progress report.`,
         summary,
+        ...(!tutorName && r.workOn ? [`Next week, a few rounds on ${r.workOn} would help most. gradefarm puts it first in ${first}'s practice automatically.`] : []),
       ],
       details,
-      footer: `You're receiving this because ${tutorName} added your email to ${studentName}'s tutoring on gradefarm. With any questions, contact ${tutorName} directly.`,
+      footer: tutorName
+        ? `You're receiving this because ${tutorName} added your email to ${studentName}'s tutoring on gradefarm. With any questions, contact ${tutorName} directly.`
+        : `You're receiving this because you're the parent or guardian on ${studentName}'s gradefarm account. Questions? support@titaniumtutoring.com.au`,
       unsubscribe,
       unsubscribeLabel: "Stop these weekly reports",
     },

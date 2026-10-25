@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { completeOnboarding } from '../lib/db'
+import { completeOnboarding, saveParentDetails } from '../lib/db'
+import { needsParentConsent } from '../lib/parentConsent'
 import { Trophy, Star, Target, TrendingUp, ThumbsUp, User, CircleCheck } from 'lucide-react'
 
 const GOLD   = '#f1be43'
@@ -22,6 +23,11 @@ const ATAR_TARGETS = [
 
 const STUDY_HOURS = [1, 2, 3, 5, 7, 10]
 
+/** ATAR targets only mean something from Year 11. */
+const SHOWS_ATAR = (year) => !year || year >= 11
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const inp = {
   padding: '12px 14px', borderRadius: 10,
   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
@@ -29,8 +35,12 @@ const inp = {
   fontFamily: FONT_B, boxSizing: 'border-box', width: '100%',
 }
 
-/** `suggestedYearLevel`: from the subjects their tutor included, pre-selected until they pick one. */
-export default function OnboardingScreen({ profile, userEmail, onDone, suggestedYearLevel = null }) {
+/**
+ * `suggestedYearLevel`: from the subjects their tutor included, pre-selected until they pick one.
+ * `asParent`: they signed up as a parent setting the account up for their child
+ * (`parentName` is theirs); they can still switch on the first step.
+ */
+export default function OnboardingScreen({ profile, userEmail, onDone, suggestedYearLevel = null, asParent = false, parentName: initialParentName = '' }) {
   const [step, setStep]       = useState(0)
   const [saving, setSaving]   = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -51,6 +61,22 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const [goals, setGoals]             = useState('')
   const [studyHours, setStudyHours]   = useState(null)
   const [termsAccepted, setTermsAccepted] = useState(false)
+  // Who's setting the account up. A parent signs in with their own email; a
+  // student under 15 gives a parent's email, and that parent confirms by email
+  // before the AI features switch on (lib/parentConsent.js).
+  const [holder, setHolder]           = useState(asParent ? 'parent' : 'student')
+  const isParent = holder === 'parent'
+  const [parentName, setParentName]   = useState(initialParentName || '')
+  const [parentEmail, setParentEmail] = useState('')
+  const young = needsParentConsent(dob, yearLevel)
+  const askParentEmail = !isParent && young
+  const parentEmailClean = parentEmail.trim().toLowerCase()
+  const parentEmailError = !askParentEmail || !parentEmailClean ? ''
+    : !EMAIL_RE.test(parentEmailClean) ? 'Enter a valid email address.'
+    : parentEmailClean === (userEmail || '').trim().toLowerCase()
+      ? "That's the email you sign in with. Use your parent or guardian's email (or go back and choose \u201cI'm a parent\u201d)."
+      : ''
+  const child = displayName.trim().split(' ')[0] || 'your child' 
   // Subjects are chosen (and paid for) on the subject picker after onboarding.
   const TOTAL_CONTENT_STEPS = 3
 
@@ -61,25 +87,37 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
     setSaving(true)
     setSaveError('')
     try {
+      // Parent details first: if they don't save, nothing is half set up.
+      let parent = {}
+      try {
+        if (isParent) {
+          ({ parent } = await saveParentDetails({ accountHolder: 'parent', parentName: parentName.trim() }))
+        } else if (askParentEmail) {
+          ({ parent } = await saveParentDetails({ parentEmail: parentEmailClean, parentName: parentName.trim() }))
+        }
+      } catch (e) {
+        // The API's message says what to fix (e.g. a parent email that's their own).
+        e.shown = true
+        throw e
+      }
       const profileUpdates = {}
       if (displayName.trim()) profileUpdates.display_name = displayName.trim()
       if (dob)                profileUpdates.dob = dob
       if (school.trim())      profileUpdates.school = school.trim()
       if (yearLevel)          profileUpdates.year_level = yearLevel
-      if (atarTarget)         profileUpdates.atar_target = atarTarget
+      if (atarTarget && SHOWS_ATAR(yearLevel)) profileUpdates.atar_target = atarTarget
       if (goals.trim())       profileUpdates.goals = goals.trim()
       if (studyHours)         profileUpdates.study_hours_per_week = studyHours
       await completeOnboarding(profile.id, profileUpdates)
+      setSaving(false)
+      onDone({ ...profileUpdates, ...parent })
     } catch (e) {
       // Carrying on would send them back through onboarding on their next
       // visit with everything they entered lost, so stay here and say so.
       console.error('Onboarding save error:', e)
-      setSaveError("We couldn't save your details. Check your connection and try again.")
+      setSaveError(e?.shown && e.message && !/fetch/i.test(e.message) ? e.message : "We couldn't save your details. Check your connection and try again.")
       setSaving(false)
-      return
     }
-    setSaving(false)
-    onDone()
   }
 
   const progressBar = () => {
@@ -156,8 +194,20 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         WELCOME TO<br /><span style={{ color: GOLD }}>GRADEFARM.</span>
       </h2>
       <p style={{ fontSize: 15, color: '#94a3b8', lineHeight: 1.75, margin: '0 0 6px' }}>
-        Let's set up your account so we can personalise your experience and give you access to the right subjects.
+        {isParent
+          ? "Let's set up your child's account so their practice starts at the right level."
+          : "Let's set up your account so we can personalise your experience and give you access to the right subjects."}
       </p>
+      <div role="radiogroup" aria-label="Who is setting up this account?" style={{ display: 'flex', gap: 8, margin: '18px 0 6px' }}>
+        {[['student', "I'm the student"], ['parent', "I'm a parent setting this up"]].map(([v, label]) => (
+          <button key={v} type="button" role="radio" aria-checked={holder === v} onClick={() => setHolder(v)} style={{
+            flex: 1, padding: '10px 8px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
+            border: `1px solid ${holder === v ? GOLD : 'rgba(255,255,255,0.1)'}`,
+            background: holder === v ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.02)',
+            color: holder === v ? GOLD : '#94a3b8', transition: 'all 0.2s',
+          }}>{label}</button>
+        ))}
+      </div>
       <p style={{ fontSize: 12, color: '#475569', marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <span style={{ display: 'inline-block', width: 20, height: 1, background: 'rgba(255,255,255,0.12)' }} />
         Takes about 2 minutes
@@ -203,15 +253,21 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
         <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><User size={26} color={NAVY} aria-hidden="true" /></div>
       </div>
-      <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR DETAILS</h2>
-      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>Tell us a bit about yourself.</p>
+      <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>{isParent ? "YOUR CHILD'S DETAILS" : 'YOUR DETAILS'}</h2>
+      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>{isParent ? 'So their questions start at the right level.' : 'Tell us a bit about yourself.'}</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {isParent && (
+          <div>
+            <label style={labelStyle}>Your Name <span style={{ color: '#f87171' }}>*</span></label>
+            <input style={{ ...inp, borderColor: !parentName.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={parentName} onChange={e => setParentName(e.target.value)} placeholder="Your name (parent or guardian)" autoComplete="name" />
+          </div>
+        )}
         <div>
-          <label style={labelStyle}>Full Name <span style={{ color: '#f87171' }}>*</span></label>
-          <input style={{ ...inp, borderColor: !displayName.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your full name" />
+          <label style={labelStyle}>{isParent ? "Child's Name" : 'Full Name'} <span style={{ color: '#f87171' }}>*</span></label>
+          <input style={{ ...inp, borderColor: !displayName.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder={isParent ? "Your child's name" : 'Your full name'} />
         </div>
         <div>
-          <label style={labelStyle}>Email</label>
+          <label style={labelStyle}>{isParent ? 'Your Email (you sign in with this)' : 'Email'}</label>
           <input
             style={{ ...inp, opacity: 0.6, cursor: 'not-allowed' }}
             value={userEmail || ''}
@@ -220,12 +276,12 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
           />
         </div>
         <div>
-          <label style={labelStyle}>Date of Birth <span style={{ color: '#f87171' }}>*</span></label>
+          <label style={labelStyle}>{isParent ? "Child's Date of Birth" : 'Date of Birth'} <span style={{ color: '#f87171' }}>*</span></label>
           <input style={{ ...inp, colorScheme: 'dark', borderColor: !dob ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} type="date" value={dob} onChange={e => setDob(e.target.value)} max={new Date().toISOString().split('T')[0]} />
         </div>
         <div>
-          <label style={labelStyle}>School <span style={{ color: '#f87171' }}>*</span></label>
-          <input style={{ ...inp, borderColor: !school.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={school} onChange={e => setSchool(e.target.value)} placeholder="Your school name" />
+          <label style={labelStyle}>{isParent ? "Child's School" : 'School'} <span style={{ color: '#f87171' }}>*</span></label>
+          <input style={{ ...inp, borderColor: !school.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={school} onChange={e => setSchool(e.target.value)} placeholder={isParent ? 'Their school' : 'Your school name'} />
         </div>
         <div>
           <label style={labelStyle}>Year Level <span style={{ color: '#f87171' }}>*</span></label>
@@ -247,13 +303,28 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
             ))}
           </select>
         </div>
+        {askParentEmail && (
+          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.25)', background: 'rgba(241,190,67,0.05)' }}>
+            <div style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.55, marginBottom: 10 }}>
+              Because you're under 15, we'll email your parent or guardian to OK your account. Practice questions work straight away; Titan AI switches on when they say yes.
+            </div>
+            <label style={labelStyle}>Parent or Guardian's Email <span style={{ color: '#f87171' }}>*</span></label>
+            <input style={{ ...inp, borderColor: !parentEmailClean || parentEmailError ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} type="email" inputMode="email" autoCapitalize="none" spellCheck={false}
+              value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="parent@example.com" />
+            {parentEmailError && <div style={{ fontSize: 11.5, color: '#f87171', marginTop: 6, lineHeight: 1.45 }}>{parentEmailError}</div>}
+            <label style={{ ...labelStyle, marginTop: 10 }}>Their Name (optional)</label>
+            <input style={inp} value={parentName} onChange={e => setParentName(e.target.value)} placeholder="e.g. Sam Smith" />
+          </div>
+        )}
       </div>
       {(() => {
         const missing = []
-        if (!displayName.trim()) missing.push('Full Name')
+        if (isParent && !parentName.trim()) missing.push('Your Name')
+        if (!displayName.trim()) missing.push(isParent ? "Child's Name" : 'Full Name')
         if (!dob)                missing.push('Date of Birth')
         if (!school.trim())     missing.push('School')
         if (!yearLevel)         missing.push('Year Level')
+        if (askParentEmail && (!parentEmailClean || parentEmailError)) missing.push("Parent's Email")
         return (
           <>
             {missing.length > 0 && (
@@ -274,9 +345,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><Target size={26} color={NAVY} aria-hidden="true" /></div>
       </div>
       <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR GOALS</h2>
-      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>This helps us calibrate your study plan.</p>
+      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>{isParent ? `This helps us calibrate ${child}'s study plan.` : 'This helps us calibrate your study plan.'}</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div>
+        {SHOWS_ATAR(yearLevel) && <div>
           <label style={labelStyle}>ATAR Target</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {ATAR_TARGETS.map(a => (
@@ -296,7 +367,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
               </button>
             ))}
           </div>
-        </div>
+        </div>}
         <div>
           <label style={labelStyle}>Study hours per week (optional)</label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -314,7 +385,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         <div>
           <label style={labelStyle}>Anything else? (optional)</label>
           <textarea value={goals} onChange={e => setGoals(e.target.value)}
-            placeholder="e.g. I want to improve my understanding of organic chemistry..."
+            placeholder={SHOWS_ATAR(yearLevel)
+              ? 'e.g. I want to improve my understanding of organic chemistry...'
+              : isParent ? 'e.g. Preparing for a selective-entry test next year' : 'e.g. I want to get faster at problem solving'}
             style={{ ...inp, resize: 'vertical', minHeight: 72, lineHeight: 1.5 }} />
         </div>
       </div>
@@ -331,12 +404,14 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
       <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20 }}>Review your setup and accept terms to get started.</p>
       <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
         {[
-          { label: 'Name',           value: displayName || '\u2014' },
+          isParent && { label: 'Parent',     value: parentName || '\u2014' },
+          { label: isParent ? 'Student' : 'Name', value: displayName || '\u2014' },
           { label: 'School',         value: school || '\u2014' },
           { label: 'Year',           value: yearLevel ? `Year ${yearLevel}` : '\u2014' },
-          { label: 'ATAR Target',    value: atarTarget ? `${atarTarget}+` : '\u2014' },
+          SHOWS_ATAR(yearLevel) && { label: 'ATAR Target', value: atarTarget ? `${atarTarget}+` : '\u2014' },
           { label: 'Study hrs/week', value: studyHours ? `${studyHours}h` : '\u2014' },
-        ].map(row => (
+          askParentEmail && { label: 'Parent email', value: parentEmailClean || '\u2014' },
+        ].filter(Boolean).map(row => (
           <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ fontSize: 12, color: '#475569' }}>{row.label}</span>
             <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, maxWidth: '55%', textAlign: 'right' }}>{row.value}</span>
@@ -352,7 +427,11 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
           <button type="button" onClick={() => window.open('/terms', '_blank')} style={{ background: 'none', border: 'none', padding: 0, color: GOLD, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B, fontSize: 'inherit' }}>Terms of Service</button>
           {' '}and{' '}
           <button type="button" onClick={() => window.open('/privacy', '_blank')} style={{ background: 'none', border: 'none', padding: 0, color: GOLD, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B, fontSize: 'inherit' }}>Privacy Policy</button>
-          . I confirm I am 13 years or older, or have parental consent.
+          {isParent
+            ? ` on behalf of ${child}, and confirm I'm their parent or guardian. I'll get a weekly progress email about them.`
+            : askParentEmail
+              ? ". We'll also email my parent or guardian to ask for their OK."
+              : '. I confirm I am 18 or older, or my parent or guardian has agreed to them too.'}
         </span>
       </div>
       {saveError && (

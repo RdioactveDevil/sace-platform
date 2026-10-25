@@ -120,3 +120,12 @@ rebuilds `streak` / `best_streak` from `answer_log`, and shows a lapsed
 streak (last active before yesterday) as 0 on the `leaderboard` view. The
 app works either side of it: before it's applied, the stored streak keeps
 its old meaning.
+
+## Parent consent (20261025000012)
+
+`20261025000012_parent_consent` adds the parent columns on `profiles`,
+`needs_parent_consent()`, the updated profile guard and leaderboard view.
+Apply it **before** deploying the app that uses them: onboarding for parents
+and students under 15 saves through `PUT /api/account/parent`, which needs the
+columns. Until it is applied the API lets every AI request through (nothing to
+wait on) and the app hides the parent card.

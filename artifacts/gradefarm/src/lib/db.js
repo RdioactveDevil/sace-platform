@@ -4,12 +4,19 @@ import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-/** `redirectTo`: where the confirmation link lands (e.g. back on a tutor invite). */
-export async function signUp(email, password, displayName, school, applyForTutor = false, redirectTo = undefined) {
+/**
+ * `redirectTo`: where the confirmation link lands (e.g. back on a tutor invite).
+ * `parentName`: a parent setting the account up for their child; `displayName`
+ * is then the child's name, and onboarding takes the parent's route.
+ */
+export async function signUp(email, password, displayName, school, applyForTutor = false, redirectTo = undefined, parentName = null) {
+  const meta = parentName
+    ? { display_name: displayName, signup_path: 'parent', parent_name: parentName }
+    : { display_name: displayName, signup_path: 'student' }
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName, signup_path: 'student' }, ...(redirectTo ? { emailRedirectTo: redirectTo } : {}) }
+    options: { data: meta, ...(redirectTo ? { emailRedirectTo: redirectTo } : {}) }
   })
   if (error) throw error
 
@@ -690,6 +697,16 @@ export async function removeTutorPlanSubject(name) {
 /** A student's parent for weekly progress reports ({ email, name }; empty email stops them). Resolves to { parent }. */
 export async function setStudentParent(studentId, { email, name }) {
   return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/parent`, { method: 'PUT', body: JSON.stringify({ email, name }) })
+}
+
+/**
+ * The signed-in student's parent or guardian (lib/parentConsent.js): any of
+ * { accountHolder: 'parent', parentName }, { parentEmail, parentName },
+ * { resend: true } or { reports }. Resolves to { parent, sent }, where parent
+ * holds the profile's parent columns.
+ */
+export async function saveParentDetails(body) {
+  return tutorFetch('/api/account/parent', { method: 'PUT', body: JSON.stringify(body) })
 }
 
 /** Stripe customer portal for the tutor's card, receipts and cancelling; resolves to its URL. */

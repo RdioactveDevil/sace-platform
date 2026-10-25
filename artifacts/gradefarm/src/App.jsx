@@ -20,6 +20,7 @@ import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScr
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
 import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
+import ParentConsentBanner from './components/ParentConsentBanner'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
@@ -36,6 +37,7 @@ if (typeof window !== 'undefined') {
 // LiveKit, MathLive, the entire admin bundle, marketing pages, etc.) are split
 // out of the initial app bundle and only fetched when the route is visited.
 const LandingPage           = lazyWithReload(() => import('./components/LandingPage'))
+const Year6Page             = lazyWithReload(() => import('./components/Year6Page'))
 const AuthScreen            = lazyWithReload(() => import('./components/AuthScreen'))
 const OnboardingScreen      = lazyWithReload(() => import('./components/OnboardingScreen'))
 const TutorOnboardingScreen = lazyWithReload(() => import('./components/TutorOnboardingScreen'))
@@ -564,7 +566,7 @@ function LiveLessonBanner({ profile, theme }) {
   )
 }
 
-function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, tutorialOverlay = null }) {
+function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, tutorialOverlay = null, onProfileUpdated }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
@@ -645,6 +647,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
           </div>
         )}
         <LiveLessonBanner profile={profile} theme={theme} />
+        <ParentConsentBanner profile={profile} theme={theme} onProfileUpdated={onProfileUpdated} />
         <SectionTabs theme={theme} subject={subject} />
         <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Suspense fallback={<RouteFallback theme={theme} />}>{children}</Suspense>
@@ -679,7 +682,7 @@ function AppShellScreens({
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate }
-  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut, tutorialOverlay }
+  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut, tutorialOverlay, onProfileUpdated }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -1458,6 +1461,7 @@ function AppInner() {
     onChangeSubject: handleChangeSubject,
     onSignOut: handleSignOut,
     tutorialOverlay,
+    onProfileUpdated: (updates) => setProfile(prev => (prev ? { ...prev, ...updates } : prev)),
   }
 
   const onboardingDest =
@@ -1475,6 +1479,9 @@ function AppInner() {
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen signedIn={!!user} />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
+      {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
+      <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
+      <Route path="/selective" element={<Navigate to="/year-6" replace />} />
 
       {/* Question Lab — public preview of the multi-format question engine */}
       <Route path="/question-lab" element={<AdminRoute profile={profile}><QuestionLabScreen theme={theme} onExit={() => navigate('/admin')} /></AdminRoute>} />
@@ -1549,13 +1556,15 @@ function AppInner() {
             ? <Navigate to="/onboarding/tutor" replace />
             : <OnboardingScreen profile={profile} userEmail={user?.email}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
-                onDone={async () => {
+                asParent={user?.user_metadata?.signup_path === 'parent'}
+                parentName={user?.user_metadata?.parent_name || ''}
+                onDone={async (updates = {}) => {
                 try {
                   const subs = await getSubscriptions(profile.id)
                   setSubscriptions(subs)
                   setSubscriptionsLoaded(true)
                 } catch {}
-                setProfile(prev => ({ ...prev, onboarding_completed: true }))
+                setProfile(prev => ({ ...prev, ...updates, onboarding_completed: true }))
                 navigate('/subject-picker', { replace: true })
               }} />
       } />
@@ -1704,7 +1713,6 @@ function AppInner() {
           assignmentsVersion={assignmentsVersion}
           lastSessionAt={lastSessionAt}
           onReplayFeatureTour={handleReplayFeatureTour}
-          onProfileUpdated={(updates) => setProfile(prev => (prev ? { ...prev, ...updates } : prev))}
           onOpenLearn={(nextTopic) => {
             if (nextTopic) setLearnTopic(nextTopic)
             setLearnPhase('setup')

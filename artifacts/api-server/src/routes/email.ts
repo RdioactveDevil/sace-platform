@@ -1,7 +1,10 @@
 import { Router, type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { getServiceClient } from "../lib/auth";
-import { appUrl, escapeHtml, getResend, verifyParentUnsubscribeToken, verifyUnsubscribeToken } from "../lib/email";
+import {
+  appUrl, escapeHtml, getResend, verifyAccountParentUnsubscribeToken, verifyParentConsentToken,
+  verifyParentUnsubscribeToken, verifyUnsubscribeToken,
+} from "../lib/email";
 import { runAutomatedEmails } from "../lib/automated-emails";
 import { logger } from "../lib/logger";
 
@@ -62,7 +65,8 @@ router.post("/cron/emails", handleCron);
 
 type PageForm = { action: string; label: string; path?: string } & Record<string, string>;
 
-function page(res: Response, status: number, heading: string, body: string, form?: PageForm) {
+/** `body` is plain text, one string per paragraph. */
+function page(res: Response, status: number, heading: string, body: string | string[], form?: PageForm, title = "Email preferences") {
   const query = form
     ? new URLSearchParams(Object.entries(form).filter(([k]) => !["action", "label", "path"].includes(k))).toString()
     : "";
@@ -74,7 +78,7 @@ function page(res: Response, status: number, heading: string, body: string, form
     : "";
   res.status(status).type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Email preferences · gradefarm.</title>
+<title>${escapeHtml(title)} · gradefarm.</title>
 <style>
   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#eef0f6;font-family:'Plus Jakarta Sans',Arial,sans-serif;color:#0c1037;padding:16px;box-sizing:border-box}
   .card{max-width:440px;width:100%;background:#fff;border:1px solid #e5e5ea;border-radius:14px;overflow:hidden}
@@ -87,7 +91,7 @@ function page(res: Response, status: number, heading: string, body: string, form
 </style></head>
 <body><div class="card"><div class="top">gradefarm.</div><div class="body">
   <h1>${escapeHtml(heading)}</h1>
-  <p>${escapeHtml(body)}</p>
+  ${(Array.isArray(body) ? body : [body]).map((p) => `<p>${escapeHtml(p)}</p>`).join("")}
   ${formHtml}
   <p style="margin:20px 0 0;font-size:13px"><a href="${escapeHtml(`${appUrl()}/home`)}">Go to gradefarm.</a></p>
 </div></div></body></html>`);
@@ -148,13 +152,16 @@ router.post("/email/unsubscribe", async (req: Request, res: Response) => {
 
 const PARENT_PATH = "/api/email/parent-unsubscribe";
 
-function readParentToken(req: Request): { tu: string; st: string; t: string } | null {
+// A link without a tutor (tu) is for the report from the student's own
+// account, stopped on their profile instead of a roster row.
+function readParentToken(req: Request): { tu?: string; st: string; t: string } | null {
   const tu = String(req.query.tu ?? "");
   const st = String(req.query.st ?? "");
   const t = String(req.query.t ?? "");
   const uuid = /^[0-9a-f-]{36}$/i;
-  if (!uuid.test(tu) || !uuid.test(st) || !t) return null;
+  if (!uuid.test(st) || !t || (tu && !uuid.test(tu))) return null;
   try {
+    if (!tu) return verifyAccountParentUnsubscribeToken(st, t) ? { st, t } : null;
     return verifyParentUnsubscribeToken(tu, st, t) ? { tu, st, t } : null;
   } catch {
     return null;
@@ -167,7 +174,9 @@ router.get("/email/parent-unsubscribe", (req: Request, res: Response) => {
     page(res, 400, "Link not valid", "This unsubscribe link is incomplete. You can also ask your child's tutor to stop the reports.");
     return;
   }
-  page(res, 200, "Stop weekly progress reports?", "You'll stop getting the weekly progress email from this tutor about this student.", {
+  page(res, 200, "Stop weekly progress reports?", tok.tu
+    ? "You'll stop getting the weekly progress email from this tutor about this student."
+    : "You'll stop getting the weekly progress email about this student.", {
     action: "unsubscribe", label: "Unsubscribe", path: PARENT_PATH, ...tok,
   });
 });
@@ -180,11 +189,11 @@ router.post("/email/parent-unsubscribe", async (req: Request, res: Response) => 
   }
   const resubscribe = (req.body as { action?: string } | undefined)?.action === "resubscribe";
   try {
-    const { error } = await getServiceClient()
-      .from("tutor_students")
-      .update({ parent_reports_stopped_at: resubscribe ? null : new Date().toISOString() })
-      .eq("tutor_id", tok.tu)
-      .eq("student_id", tok.st);
+    const stoppedAt = resubscribe ? null : new Date().toISOString();
+    const { error } = tok.tu
+      ? await getServiceClient().from("tutor_students").update({ parent_reports_stopped_at: stoppedAt })
+        .eq("tutor_id", tok.tu).eq("student_id", tok.st)
+      : await getServiceClient().from("profiles").update({ parent_reports_stopped_at: stoppedAt }).eq("id", tok.st);
     if (error) throw error;
   } catch (err) {
     logger.error({ err }, "emails: parent unsubscribe failed");
@@ -197,6 +206,87 @@ router.post("/email/parent-unsubscribe", async (req: Request, res: Response) => 
     page(res, 200, "You're unsubscribed", "You won't get weekly progress reports any more. Changed your mind?", {
       action: "resubscribe", label: "Turn reports back on", path: PARENT_PATH, ...tok,
     });
+  }
+});
+
+// ── Parent consent ──────────────────────────────────────────────────────────
+// A student under 15 gave us their parent's email; the parent confirms here
+// (lib/parent-consent.ts). GET explains and asks, POST records it. The link is
+// signed for the email it went to, so it stops working if the student changes
+// the address.
+
+const CONSENT_PATH = "/api/parent/consent";
+const BAD_CONSENT_LINK = "This link is incomplete or out of date: the parent email on the account may have changed since it was sent. Ask your child to send it again from My Account in gradefarm.";
+
+type ConsentProfile = { display_name: string | null; year_level: number | null; parent_email: string | null; parent_consent_at: string | null };
+
+/** The student the link is for, or null (and the page sent) when it isn't valid. */
+async function readConsentLink(req: Request, res: Response): Promise<{ s: string; t: string; profile: ConsentProfile } | null> {
+  const s = String(req.query.s ?? "");
+  const t = String(req.query.t ?? "");
+  const bad = () => {
+    page(res, 400, "Link not valid", BAD_CONSENT_LINK, undefined, "Confirm your child's account");
+    return null;
+  };
+  if (!/^[0-9a-f-]{36}$/i.test(s) || !t) return bad();
+  const { data: profile, error } = await getServiceClient()
+    .from("profiles").select("display_name, year_level, parent_email, parent_consent_at").eq("id", s)
+    .maybeSingle<ConsentProfile>();
+  if (error) throw error;
+  if (!profile?.parent_email) return bad();
+  try {
+    if (!verifyParentConsentToken(s, profile.parent_email, t)) return bad();
+  } catch {
+    return bad();
+  }
+  return { s, t, profile };
+}
+
+const childName = (p: ConsentProfile) => p.display_name?.trim() || "your child";
+const firstName = (p: ConsentProfile) => childName(p).split(" ")[0];
+
+function consentDone(res: Response, p: ConsentProfile, already: boolean) {
+  page(res, 200, already ? `${firstName(p)}'s account is already confirmed` : `Thanks, ${firstName(p)}'s account is confirmed`, [
+    "Titan AI and the other AI features are now switched on for them.",
+    `Your first weekly progress email arrives on Sunday evening. To stop those, use the link at the bottom of any of them. To close ${firstName(p)}'s account, email support@titaniumtutoring.com.au.`,
+  ], undefined, "Confirm your child's account");
+}
+
+router.get("/parent/consent", async (req: Request, res: Response) => {
+  try {
+    const link = await readConsentLink(req, res);
+    if (!link) return;
+    const { profile: p, s, t } = link;
+    if (p.parent_consent_at) return consentDone(res, p, true);
+    const who = `${childName(p)}${p.year_level ? ` (Year ${p.year_level})` : ""}`;
+    page(res, 200, `Confirm ${firstName(p)}'s gradefarm account`, [
+      `${who} gave us this email address as their parent or guardian. Because they're under 15, we ask you before switching on the AI features.`,
+      `By confirming, you agree to ${firstName(p)} using gradefarm under our Terms of Service and Privacy Policy (${appUrl()}/terms and ${appUrl()}/privacy). That includes Titan AI, an AI tutor that explains their practice questions. What they type to Titan is sent to our AI provider, Anthropic, to write a reply. Titan is set up to stay on schoolwork, never to ask for personal details, and to point them to a trusted adult if they say they're worried about something.`,
+      "You'll also get a short progress email every Sunday at this address. You can stop it any time.",
+      "If you don't agree, you don't need to do anything. Practice questions keep working without the AI features.",
+    ], { action: "confirm", label: "I'm their parent or guardian, and I agree", path: CONSENT_PATH, s, t }, "Confirm your child's account");
+  } catch (err) {
+    logger.error({ err }, "parent consent: page failed");
+    page(res, 500, "Something went wrong", "Please try the link again in a minute.", undefined, "Confirm your child's account");
+  }
+});
+
+router.post("/parent/consent", async (req: Request, res: Response) => {
+  try {
+    const link = await readConsentLink(req, res);
+    if (!link) return;
+    const { profile: p, s } = link;
+    if (p.parent_consent_at) return consentDone(res, p, true);
+    // Only while the email is still the one this link was signed for.
+    const { error } = await getServiceClient().from("profiles")
+      .update({ parent_consent_at: new Date().toISOString() })
+      .eq("id", s).eq("parent_email", p.parent_email!).is("parent_consent_at", null);
+    if (error) throw error;
+    logger.info({ studentId: s }, "parent consent: confirmed");
+    consentDone(res, p, false);
+  } catch (err) {
+    logger.error({ err }, "parent consent: confirm failed");
+    page(res, 500, "Something went wrong", "We couldn't record that. Please try the link again in a minute.", undefined, "Confirm your child's account");
   }
 });
 

@@ -2,12 +2,13 @@ import { Router, type Request, type Response } from "express";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, verifyPassword } from "../lib/auth";
 import { cancelAllSubscriptions, getStripe, syncCustomerEmail } from "./billing";
-import { getResend, sendEmail } from "../lib/email";
+import { getResend, parentConsentUrl, sendEmail } from "../lib/email";
+import { parentConsentEmail } from "../lib/parent-consent";
 import { r2DeleteObject } from "../lib/r2";
 import { logger } from "../lib/logger";
 
-// The signed-in user's own account: self-serve deletion, and keeping Stripe's
-// copy of their email in step after they change it.
+// The signed-in user's own account: self-serve deletion, keeping Stripe's copy
+// of their email in step after they change it, and their parent or guardian.
 
 const router = Router();
 
@@ -136,6 +137,131 @@ router.post("/account/sync-email", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err }, "account: email sync failed");
     fail(res, 502, "Couldn't update your billing email.");
+  }
+});
+
+// ── Parent or guardian ──────────────────────────────────────────────────────
+// lib/parent-consent.ts. The browser can't write these columns (migration
+// 20261025000012_parent_consent.sql), so onboarding and My Account come here.
+
+const PARENT_COLUMNS = "account_holder, parent_name, parent_email, parent_consent_at, parent_consent_requested_at, parent_reports_stopped_at";
+type ParentFields = {
+  account_holder: "student" | "parent" | null;
+  parent_name: string | null;
+  parent_email: string | null;
+  parent_consent_at: string | null;
+  parent_consent_requested_at: string | null;
+  parent_reports_stopped_at: string | null;
+  parent_report_week?: string | null;
+};
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** The consent email goes at most this often, so the form can't be used to spam an address. */
+const CONSENT_RESEND_MS = 60_000;
+
+// PUT /account/parent — any of:
+//   { accountHolder: 'parent', parentName }  a parent set the account up for
+//       their child (onboarding): their sign-in email is the parent email, and
+//       they agreed on the child's behalf when they finished onboarding.
+//   { parentEmail, parentName }  the student's parent or guardian; a new email
+//       is sent a link to confirm (POST /api/parent/consent).
+//   { resend: true }  send that link again.
+//   { reports: boolean }  a parent account holder turns the weekly report on or off.
+router.put("/account/parent", async (req: Request, res: Response) => {
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  const { admin, userId } = ctx;
+  if (userId === "service" || ctx.isTutor || ctx.isAdmin) return fail(res, 400, "Only student accounts have a parent or guardian.");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  try {
+    const [{ data: authUser }, { data: profile, error }] = await Promise.all([
+      admin.auth.admin.getUserById(userId),
+      admin.from("profiles").select(`display_name, ${PARENT_COLUMNS}`).eq("id", userId)
+        .maybeSingle<ParentFields & { display_name: string | null }>(),
+    ]);
+    if (error) throw new Error(error.message);
+    if (!profile) return fail(res, 404, "Account not found");
+    const accountEmail = authUser?.user?.email?.trim().toLowerCase() ?? "";
+    const name = typeof body.parentName === "string" ? body.parentName.trim().slice(0, 80) || null : undefined;
+    const now = new Date().toISOString();
+    const updates: Partial<ParentFields> = {};
+    let sendConsent = false;
+
+    if (body.accountHolder === "parent") {
+      // Decided once, by whoever set the account up.
+      if (profile.account_holder === "student") return fail(res, 409, "This account was set up by the student. Add a parent's email instead.");
+      if (!accountEmail) return fail(res, 400, "Your account has no email address.");
+      Object.assign(updates, { account_holder: "parent", parent_email: accountEmail, parent_consent_at: profile.parent_consent_at ?? now });
+      if (name !== undefined) updates.parent_name = name;
+    } else {
+      if (!profile.account_holder) updates.account_holder = "student";
+      if (typeof body.parentEmail === "string") {
+        if (profile.account_holder === "parent") return fail(res, 400, "You're the parent on this account, so your sign-in email gets the reports.");
+        const email = body.parentEmail.trim().toLowerCase();
+        if (!EMAIL_RE.test(email) || email.length > 254) return fail(res, 400, "Enter a valid email address.");
+        if (email === accountEmail) return fail(res, 400, "That's the email you sign in with. Enter your parent or guardian's email.");
+        if (email !== (profile.parent_email ?? "").toLowerCase()) {
+          // A new address starts again: that person hasn't confirmed anything.
+          Object.assign(updates, {
+            parent_email: email, parent_consent_at: null, parent_report_week: null, parent_reports_stopped_at: null,
+          });
+          sendConsent = true;
+        }
+        if (name !== undefined) updates.parent_name = name;
+      } else if (name !== undefined && profile.parent_email) {
+        updates.parent_name = name;
+      }
+      if (body.resend === true) {
+        if (!profile.parent_email) return fail(res, 400, "Add your parent or guardian's email first.");
+        if (profile.parent_consent_at) return fail(res, 409, "Your parent or guardian has already confirmed.");
+        sendConsent = true;
+      }
+    }
+
+    if (typeof body.reports === "boolean") {
+      if ((updates.account_holder ?? profile.account_holder) !== "parent") {
+        return fail(res, 403, "Your parent or guardian can stop the weekly report from the link in the email.");
+      }
+      updates.parent_reports_stopped_at = body.reports ? null : now;
+    }
+
+    const resend = sendConsent ? getResend() : null;
+    if (sendConsent) {
+      const last = profile.parent_consent_requested_at ? Date.parse(profile.parent_consent_requested_at) : 0;
+      if (Date.now() - last < CONSENT_RESEND_MS) return fail(res, 429, "We've just sent one. Give it a minute, and check the spam folder too.");
+      if (!resend) return fail(res, 503, "We can't send email right now. Please try again later.");
+      updates.parent_consent_requested_at = now;
+    }
+
+    if (Object.keys(updates).length) {
+      const { error: upErr } = await admin.from("profiles").update(updates).eq("id", userId);
+      if (upErr) throw new Error(upErr.message);
+    }
+    const next = { ...profile, ...updates };
+    const parent = {
+      account_holder: next.account_holder, parent_name: next.parent_name, parent_email: next.parent_email,
+      parent_consent_at: next.parent_consent_at, parent_consent_requested_at: next.parent_consent_requested_at,
+      parent_reports_stopped_at: next.parent_reports_stopped_at,
+    };
+
+    if (sendConsent && resend && next.parent_email) {
+      const { subject, content } = parentConsentEmail({
+        parentName: next.parent_name,
+        studentName: next.display_name?.trim() || "Your child",
+        url: parentConsentUrl(userId, next.parent_email),
+      });
+      const { error: sendErr } = await sendEmail(resend, {
+        to: next.parent_email, subject, content, idempotencyKey: `parent-consent:${userId}:${next.parent_email}:${now}`,
+      });
+      if (sendErr) {
+        logger.warn({ userId, error: sendErr }, "account: parent consent email failed");
+        return void res.status(502).json({ error: "We saved the email but couldn't send it. Try Send again in a minute.", parent });
+      }
+    }
+    res.json({ parent, sent: sendConsent });
+  } catch (err) {
+    logger.error({ err, userId }, "account: parent update failed");
+    fail(res, 502, "Couldn't save your parent or guardian's details. Please try again.");
   }
 });
 
