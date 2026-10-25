@@ -502,7 +502,10 @@ export default function QuizScreen({
   const goalReached = !endedForGoal && (!!completedGoal || !!assignmentStand?.complete)
   const goalDisplay = completedGoal || assignmentStand
   // A tutor can run an assignment as a straight quiz, without remediation.
-  const remediationAllowed = activeAssignment?.remediation !== false
+  // Nor inside a consolidation round: the round already is targeted practice on
+  // that concept, and remediation on each miss could keep a struggling student
+  // in it indefinitely.
+  const remediationAllowed = activeAssignment?.remediation !== false && !consolidation
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   // Background top-ups for a student working at 4+ ask for exam-grade questions
@@ -1592,7 +1595,7 @@ export default function QuizScreen({
                 ? round.byStreak
                   ? `${CONSOLIDATION_STREAK} in a row on ${consolidation.label}.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
                   : round.done
-                    ? `You've practised ${round.answered} questions on ${consolidation.label}.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
+                    ? `You've practised ${round.answered} questions on ${consolidation.label}. The ones you missed will come back in your Study Plan.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
                     : `That's every question on ${consolidation.label} for now.`
                 : endedForGoal && goalDisplay
                 ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
