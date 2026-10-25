@@ -147,8 +147,9 @@ export type VerifiableQuestion = {
  *
  * `strict` (exam-grade questions) gives the verifier room to work a hard
  * question through, and fails CLOSED: an unverifiable hard question is dropped,
- * because a wrong answer key on a difficulty-5 question is worse than one
- * fewer question.
+ * and so is one whose key the verifier disputes (it isn't rewritten), because
+ * a wrong answer key on a difficulty-5 question is worse than one fewer
+ * question.
  */
 export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
   questions: T[],
@@ -181,7 +182,10 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
           options: q.options,
           answer_index: q.answer_index,
         }, opts.strict ? { maxTokens: 6000, timeoutMs: 120_000 } : {});
-        if (verdict.verdict === "wrong_question") {
+        if (verdict.verdict === "wrong_question" || (opts.strict && verdict.verdict === "wrong_answer")) {
+          // Strict: the checker may be a weaker model than the writer, so on a
+          // hard question its disagreement drops the question rather than
+          // rewriting a key that may have been right.
           results[idx] = null;
         } else if (
           verdict.verdict === "wrong_answer" &&
