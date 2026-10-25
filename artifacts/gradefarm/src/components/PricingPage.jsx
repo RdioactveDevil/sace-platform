@@ -4,6 +4,7 @@ import { getPlatformSettings } from '../lib/db'
 import { Lightbulb, GraduationCap, Menu, X, Infinity as InfinityIcon } from 'lucide-react'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { formatSubjectLabel } from '../lib/subjects'
+import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, extraLadder, planTotal, monthlySaving } from '../lib/pricing'
 import { SubjectIconByName } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
@@ -45,7 +46,18 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_tiers: [5, 4, 3], free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+// How the three tutor plan cards look; their names, prices and what they include come from settings.
+const TUTOR_PLAN_LOOKS = [
+  { badge: null, hi: false, accentColor: PURPLE },
+  { badge: 'MOST POPULAR', hi: true, accentColor: PURPLE },
+  { badge: null, hi: false, accentColor: GOLD, prioritySupport: true },
+]
+
+const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
+  { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+  { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
+], annual_discount: 0.15 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -66,15 +78,17 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   const handleGetStarted = onGetStarted || (() => navigate('/auth'))
   const handleSignIn     = onSignIn     || (() => navigate('/auth'))
 
-  const annualDiscount = dbPricing.annual_discount ?? 0.2
+  const annualDiscount = dbPricing.annual_discount ?? 0.15
 
-  const tiers = Array.isArray(dbPricing.student_tiers) && dbPricing.student_tiers.length ? dbPricing.student_tiers : [5, 4, 3]
+  const tiers = studentTiers(dbPricing.student_tiers)
   const studentWeekly = tiers[0]
+  const monthlyTiers = studentTiers(dbPricing.student_monthly_tiers, 'month')
+  const saving = monthlySaving(tiers[0], monthlyTiers[0])
   const freeDaily = dbPricing.free_daily_questions ?? 20
   const freeAi = dbPricing.free_daily_ai_messages ?? 10
-  const extraLadder = tiers.length > 1 ? `$${tiers.slice(1).join(', then $')}` : `$${studentWeekly}`
-  const threeSubjects = [0, 1, 2].map(i => tiers[Math.min(i, tiers.length - 1)]).reduce((a, b) => a + b, 0)
-  // Students pay weekly per subject; the monthly/annual toggle is for tutor plans.
+  const extraSubjects = `$${extraLadder(tiers)}`
+  const threeSubjects = planTotal(tiers, 3)
+  // Students pay per subject, weekly or monthly; the monthly/annual toggle is for tutor plans.
   const studentPlans = [
     {
       name: 'Free',
@@ -100,7 +114,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       price: studentWeekly,
       fixed: true,
       unit: '/wk',
-      sub: `first subject · extra subjects ${extraLadder}/week each · AUD`,
+      sub: `first subject · extra subjects ${extraSubjects}/week each · or monthly from $${monthlyTiers[0]}${saving ? ` (save ${saving}%)` : ''} · AUD`,
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: GOLD,
@@ -117,74 +131,34 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   ]
 
   const tutorDbPlans = dbPricing.tutor_plans || DEFAULT_PRICING.tutor_plans
-  const tutorPlans = [
-    {
-      name: 'Starter',
-      price: tutorDbPlans[0]?.price ?? 29,
+  // What each plan includes comes from settings and is enforced (api-server
+  // lib/tutor-plan.ts): students and subjects (999 or more reads as
+  // unlimited), lesson recordings and weekly parent reports.
+  const limitText = (n, one, many, all) => (typeof n === 'number' && n > 0 && n < 999 ? (n === 1 ? `1 ${one}` : `Up to ${n} ${many}`) : all)
+  const tutorPlans = TUTOR_PLAN_LOOKS.map((look, i) => {
+    const p = { ...DEFAULT_PRICING.tutor_plans[i], ...(tutorDbPlans[i] || {}) }
+    const students = limitText(p.students, 'student', 'students', 'Unlimited students')
+    const subjects = limitText(p.subjects, 'subject', 'subjects', 'All subjects')
+    return {
+      ...look,
+      name: p.name,
+      price: p.price,
       sub: 'per month',
-      badge: null,
-      hi: false,
-      accentColor: PURPLE,
       cta: 'Get started →',
-      limits: 'Up to 5 students · 1 subject',
+      limits: `${students} · ${subjects}`,
       features: [
         { text: 'Student progress dashboard', included: true },
         { text: 'Session scheduling', included: true },
         { text: 'Assignment creation', included: true },
         { text: 'Student roster management', included: true },
-        { text: 'Up to 3 subjects', included: false },
-        { text: 'Session recordings', included: false },
-        { text: 'Parent progress reports', included: false },
-        { text: 'Unlimited students', included: false },
-        { text: 'All subjects', included: false },
-        { text: 'Priority support', included: false },
+        { text: students, included: true },
+        { text: subjects !== 'All subjects' && p.subject_swaps === false ? `${subjects} (can’t be swapped)` : subjects, included: true },
+        { text: 'Lesson recordings', included: p.recordings !== false },
+        { text: 'Weekly parent progress reports', included: p.parent_reports !== false },
+        { text: 'Priority support', included: !!look.prioritySupport },
       ],
-    },
-    {
-      name: 'Growth',
-      price: tutorDbPlans[1]?.price ?? 59,
-      sub: 'per month',
-      badge: 'MOST POPULAR',
-      hi: true,
-      accentColor: PURPLE,
-      cta: 'Get started →',
-      limits: 'Up to 20 students · 3 subjects',
-      features: [
-        { text: 'Student progress dashboard', included: true },
-        { text: 'Session scheduling', included: true },
-        { text: 'Assignment creation', included: true },
-        { text: 'Student roster management', included: true },
-        { text: 'Up to 3 subjects', included: true },
-        { text: 'Session recordings', included: true },
-        { text: 'Parent progress reports', included: true },
-        { text: 'Unlimited students', included: false },
-        { text: 'All subjects', included: false },
-        { text: 'Priority support', included: false },
-      ],
-    },
-    {
-      name: 'Pro',
-      price: tutorDbPlans[2]?.price ?? 99,
-      sub: 'per month',
-      badge: null,
-      hi: false,
-      accentColor: GOLD,
-      cta: 'Get started →',
-      limits: 'Unlimited students · All subjects',
-      features: [
-        { text: 'Student progress dashboard', included: true },
-        { text: 'Session scheduling', included: true },
-        { text: 'Assignment creation', included: true },
-        { text: 'Student roster management', included: true },
-        { text: 'All subjects', included: true },
-        { text: 'Session recordings', included: true },
-        { text: 'Parent progress reports', included: true },
-        { text: 'Unlimited students', included: true },
-        { text: 'All subjects', included: true },
-        { text: 'Priority support', included: true },
-      ],
-    },
-  ]
+    }
+  }).filter((_, i) => i < Math.max(tutorDbPlans.length, 1))
 
   const displayPrice = (p, fixed = false) => {
     if (p === 0) return 'Free'
@@ -317,7 +291,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                 <div style={{ position: 'absolute', top: 3, left: billing === 'annual' ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
               </div>
               <button onClick={() => setBilling('annual')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: billing === 'annual' ? 700 : 400, color: billing === 'annual' ? '#f1f5f9' : MUTED }}>
-                Annual <span style={{ fontSize: 11, color: GREEN, fontWeight: 800, marginLeft: 4 }}>–20%</span>
+                Annual {annualDiscount > 0 && <span style={{ fontSize: 11, color: GREEN, fontWeight: 800, marginLeft: 4 }}>–{Math.round(annualDiscount * 100)}%</span>}
               </button>
             </div>}
           </div>
@@ -388,7 +362,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Mix &amp; match subjects</div>
                     <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
-                      Each extra subject costs less. Three subjects together are just <strong style={{ color: '#f1f5f9' }}>${threeSubjects}/week</strong> ({tiers.slice(0, 3).map(n => `$${n}`).join(' + ')}). One weekly bill — add or remove subjects any time.
+                      Each extra subject costs less. Three subjects together are just <strong style={{ color: '#f1f5f9' }}>${threeSubjects}/week</strong> ({tiers.slice(0, 3).map(n => `$${n}`).join(' + ')}). One bill, weekly or monthly{saving ? ` (monthly is about ${saving}% less)` : ''} — add or remove subjects any time.
                     </div>
                   </div>
                 </div>
@@ -457,10 +431,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: plan.hi ? PURPLE : '#475569', marginBottom: 24, padding: '6px 12px', background: plan.hi ? 'rgba(167,139,250,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${plan.hi ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.05)'}`, borderRadius: 8, display: 'inline-block' }}>{plan.limits}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-                      {plan.features.filter((f, i, arr) => {
-                        // Remove duplicate "All subjects" entries
-                        return arr.findIndex(x => x.text === f.text) === i
-                      }).map(f => (
+                      {plan.features.map(f => (
                         <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: f.included ? (plan.hi ? '#cbd5e1' : '#94a3b8') : '#334155' }}>
                           {f.included ? <CHECK gold={false} /> : <DASH />}
                           {f.text}
@@ -510,9 +481,10 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                 { q: 'Are the questions really unlimited?', a: `Yes. When you've worked through a topic's question bank, Titan writes brand-new questions for it, pitched at your level and checked before you see them — so you never run out. The free plan is capped at ${freeDaily} questions a day; paid subjects have no cap.` },
                 { q: 'Can I try before I pay?', a: `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
                 { q: 'Can I cancel anytime?', a: "Absolutely. Remove a subject from My Account whenever you like — unused time is credited to your next bill. Removing your last paid subject ends your plan at the end of the week you've paid for." },
-                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one weekly bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraLadder}/week. Two subjects are $${tiers[0] + tiers[Math.min(1, tiers.length - 1)]}/week.` },
-                { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student subscriptions are always weekly." },
-                { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
+                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraSubjects}/week. Two subjects are $${planTotal(tiers, 2)}/week.` },
+                { q: 'Can I pay monthly instead of weekly?', a: `Yes. Pick monthly at checkout, or switch any time in My Account: $${monthlyTiers[0]} a month for the first subject, then $${extraLadder(monthlyTiers)}/month for each extra one${saving ? ` — about ${saving}% less than paying weekly` : ''}.` },
+                { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student plans are billed weekly or monthly." },
+                { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit. Pending invites count towards the limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },
               ].map(({ q, a }, i) => (
                 <FaqItem key={i} q={q} a={a} />

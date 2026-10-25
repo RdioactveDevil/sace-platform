@@ -4,6 +4,8 @@ import { GraduationCap, Medal, Zap, Flame, Target, ChartColumn, FileText, Folder
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { SubjectIconByName } from './SubjectIcons'
 import { formatSubjectLabel } from '../lib/subjects'
+import { getPlatformSettings } from '../lib/db'
+import { studentTiers, extraLadder } from '../lib/pricing'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -302,6 +304,12 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
   const subjects = usePublicSubjects()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pricing, setPricing] = useState(null)
+  useEffect(() => { getPlatformSettings('pricing').then(setPricing).catch(() => {}) }, [])
+  const tiers = studentTiers(pricing?.student_tiers)
+  const freeDaily = pricing?.free_daily_questions ?? 20
+  const tutorPrices = (pricing?.tutor_plans ?? []).map(p => Number(p.price)).filter(n => n > 0)
+  const tutorFrom = tutorPrices.length ? Math.min(...tutorPrices) : 29
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 40)
     window.addEventListener('scroll', h)
@@ -952,12 +960,12 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <div style={{ maxWidth:820, margin:'0 auto', textAlign:'center' }}>
             <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Pricing</div>
             <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>SIMPLE, TRANSPARENT PRICING.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students get <strong style={{ color:'#f1f5f9' }}>one subject free</strong> (20 questions a day) or go unlimited — every question, no daily cap — from <strong style={{ color:'#f1f5f9' }}>$5/week</strong> — extra subjects cost less. Tutors choose a plan that fits their roster.</p>
+            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students get <strong style={{ color:'#f1f5f9' }}>one subject free</strong> ({freeDaily} questions a day) or go unlimited — every question, no daily cap — from <strong style={{ color:'#f1f5f9' }}>${tiers[0]}/week</strong> — extra subjects cost less. Tutors choose a plan that fits their roster.</p>
             <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:820, margin:'0 auto 36px' }}>
               {[
-                { label:'Free', price:'$0', desc:'1 subject · 20 questions/day', color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
-                { label:'Student', price:'$5', desc:'/week · unlimited questions · extra subjects $4, then $3', color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
-                { label:'Tutor', price:'From $29', desc:'/month · roster & session tools', color:PURPLE, bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.28)' },
+                { label:'Free', price:'$0', desc:`1 subject · ${freeDaily} questions/day`, color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
+                { label:'Student', price:`$${tiers[0]}`, desc:`/week · unlimited questions · extra subjects $${extraLadder(tiers)}`, color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
+                { label:'Tutor', price:`From $${tutorFrom}`, desc:'/month · roster & session tools', color:PURPLE, bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.28)' },
               ].map(p => (
                 <div key={p.label} style={{ background:p.bg, border:`1px solid ${p.border}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid ${p.border}`, borderRadius:18, padding:'28px 20px', textAlign:'left' }}>
                   <div style={{ fontSize:10, fontWeight:800, color:p.color, marginBottom:8, letterSpacing:'0.12em', textTransform:'uppercase' }}>{p.label}</div>

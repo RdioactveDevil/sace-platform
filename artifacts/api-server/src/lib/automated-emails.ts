@@ -11,6 +11,9 @@
  *   • diagnostic_reminder   – once, if a student hasn't done the diagnostic on a
  *                             tutor-included subject after a couple of days
  *   • diagnostic_done       – the tutor, when their student finishes one
+ *   • parent_report         – Sunday evening, a student's week to the parent
+ *                             their tutor added (recorded on the roster row:
+ *                             parents have no account; lib/parent-reports.ts)
  *
  * The job is safe to run at any cadence: each email is claimed in email_log
  * (claim_email RPC) before it is sent, so it goes out at most once. Reminders
@@ -19,9 +22,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Resend } from "resend";
 import { logger } from "./logger";
-import { appUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
+import { appUrl, parentUnsubscribeUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
 import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
+import { loadParentReport, parentReportEmail } from "./parent-reports";
+import { planIsLive, type TutorBillingRow } from "./tutor-plan";
 
 export const TIME_ZONE = "Australia/Adelaide";
 
@@ -33,7 +38,8 @@ export type EmailKind =
   | "assignment_overdue"
   | "invite_reminder"
   | "diagnostic_reminder"
-  | "diagnostic_done";
+  | "diagnostic_done"
+  | "parent_report";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -62,6 +68,8 @@ const DIAGNOSTIC_REMINDER_AFTER = 2 * DAY;
 /** Don't remind about diagnostics set longer ago than this (or tell tutors about old results). */
 const DIAGNOSTIC_LOOKBACK = 30 * DAY;
 const DIAGNOSTIC_DONE_LOOKBACK = 2 * DAY;
+/** Parent reports go out on Sunday between these hours, Adelaide time. */
+const PARENT_REPORT_HOURS = { from: 17, to: 20 };
 
 const daytime = (job: Job) => {
   const hour = localHour(job.now);
@@ -714,6 +722,96 @@ async function runDiagnosticDone(job: Job) {
   }
 }
 
+// ── Parent progress reports ─────────────────────────────────────────────────
+
+export function localWeekday(date: Date): string {
+  return new Intl.DateTimeFormat("en-AU", { timeZone: TIME_ZONE, weekday: "short" }).format(date);
+}
+
+interface ParentRow {
+  tutor_id: string;
+  student_id: string;
+  parent_email: string;
+  parent_name: string | null;
+  parent_report_week: string | null;
+}
+
+async function runParentReports(job: Job) {
+  const hour = localHour(job.now);
+  if (localWeekday(job.now) !== "Sun" || hour < PARENT_REPORT_HOURS.from || hour >= PARENT_REPORT_HOURS.to) return;
+  const week = localDate(job.now);
+  const { data, error } = await job.admin
+    .from("tutor_students")
+    .select("tutor_id, student_id, parent_email, parent_name, parent_report_week")
+    .not("parent_email", "is", null)
+    .is("parent_reports_stopped_at", null)
+    .or(`parent_report_week.is.null,parent_report_week.lt.${week}`)
+    .limit(500);
+  if (error) throw new Error(`tutor_students: ${error.message}`);
+  const rows = (data ?? []) as ParentRow[];
+  if (rows.length === 0) return;
+
+  // Only tutors whose plan includes parent reports (or who need no plan).
+  const tutorIds = [...new Set(rows.map((r) => r.tutor_id))];
+  const [billingRes, adminsRes] = await Promise.all([
+    job.admin.from("tutor_billing").select("*").in("tutor_id", tutorIds),
+    job.admin.from("profiles").select("id").in("id", tutorIds).eq("is_admin", true),
+  ]);
+  if (billingRes.error) throw new Error(`tutor_billing: ${billingRes.error.message}`);
+  const admins = new Set(((adminsRes.data ?? []) as { id: string }[]).map((p) => p.id));
+  const billing = new Map(((billingRes.data ?? []) as TutorBillingRow[]).map((b) => [b.tutor_id, b]));
+  const included = (tutorId: string) => {
+    const b = billing.get(tutorId) ?? null;
+    return admins.has(tutorId) || !!b?.exempt || (planIsLive(b) && b!.parent_reports);
+  };
+
+  const due = rows.filter((r) => included(r.tutor_id));
+  const people = await loadRecipients(job, [...due.map((r) => r.tutor_id), ...due.map((r) => r.student_id)]);
+  for (const row of due) {
+    const tutor = people.get(row.tutor_id);
+    const student = people.get(row.student_id);
+    if (!tutor || !student) continue; // deactivated
+    if (job.budget <= 0) {
+      job.summary.budgetExhausted = true;
+      return;
+    }
+    const report = await loadParentReport(job.admin, row.tutor_id, row.student_id, job.now, localDate);
+    const { subject, content } = parentReportEmail({
+      parentName: row.parent_name,
+      studentName: student.name,
+      tutorName: tutor.name,
+      data: report,
+      unsubscribe: parentUnsubscribeUrl(row.tutor_id, row.student_id),
+      formatWhen,
+    });
+    if (job.dryRun) {
+      job.summary.planned!.push({ kind: "parent_report", to: row.parent_email, subject });
+      job.budget--;
+      continue;
+    }
+    // Claim this week's report: another run may be here too.
+    const { data: claimed, error: claimErr } = await job.admin
+      .from("tutor_students").update({ parent_report_week: week })
+      .eq("tutor_id", row.tutor_id).eq("student_id", row.student_id)
+      .or(`parent_report_week.is.null,parent_report_week.lt.${week}`)
+      .select("student_id");
+    if (claimErr) throw new Error(`tutor_students: ${claimErr.message}`);
+    if (!claimed?.length) continue;
+    job.budget--;
+    const result = await sendEmail(job.resend!, {
+      to: row.parent_email, subject, content, idempotencyKey: `parent_report:${row.tutor_id}:${row.student_id}:${week}`,
+    });
+    if (result.error) {
+      await job.admin.from("tutor_students").update({ parent_report_week: row.parent_report_week })
+        .eq("tutor_id", row.tutor_id).eq("student_id", row.student_id).eq("parent_report_week", week);
+      bump(job.summary.failed, "parent_report");
+      logger.warn({ tutorId: row.tutor_id, studentId: row.student_id, error: result.error }, "emails: parent report failed");
+    } else {
+      bump(job.summary.sent, "parent_report");
+    }
+  }
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend | null, opts: RunOptions = {}): Promise<RunSummary> {
@@ -737,6 +835,7 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
     ["diagnostic results", runDiagnosticDone],
     ["diagnostic reminders", runDiagnosticReminders],
     ["invite reminders", runInviteReminders],
+    ["parent reports", runParentReports],
     ["welcome", runWelcome],
   ];
   const errors: string[] = [];

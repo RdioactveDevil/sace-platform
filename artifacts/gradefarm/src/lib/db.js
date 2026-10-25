@@ -176,6 +176,19 @@ export async function adminGetTutor(tutorId) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}`)
 }
 
+/** Take a subject off a tutor's plan subjects; resolves to { plan_subjects }. */
+export async function adminRemoveTutorPlanSubject(tutorId, name) {
+  return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/plan-subjects/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+/** Let a tutor use the tutor portal without a plan (or make them need one). */
+export async function adminSetTutorBillingExempt(tutorId, exempt) {
+  return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/billing-exempt`, {
+    method: 'PATCH',
+    body: JSON.stringify({ exempt }),
+  })
+}
+
 /** Let a tutor include subjects, free, for their students (or stop them). */
 export async function adminSetTutorIncludeSubject(tutorId, enabled) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/include-subject`, {
@@ -643,11 +656,46 @@ export async function getSubscriptions(userId) {
 // ─── ACCESS & BILLING ────────────────────────────────────────────────────────
 // Students can't write user_subscriptions; access comes from an admin grant,
 // their one free subject, or their Stripe plan (one subscription, quantity =
-// paid subjects, $5 / $4 / $3+ per week), all through these endpoints.
+// paid subjects, $7 / $6 / $5+ per week by default), all through these endpoints.
 
-/** { enabled, tiers, paidCount, weeklyTotal, nextPrice, hasPlan, renewsAt, endsAtPeriodEnd, freeDailyQuestions } */
+/**
+ * { enabled, tiers (weekly), monthlyTiers, interval ('week' | 'month' | null: the plan's billing period),
+ *   planTiers, paidCount, total (per period), nextPrice, hasPlan, renewsAt, endsAtPeriodEnd, freeDailyQuestions }
+ */
 export async function getBillingConfig() {
   return tutorFetch('/api/billing/config')
+}
+
+// Tutor plans: the tutor portal's monthly or annual fee (api-server lib/tutor-plan.ts).
+
+/**
+ * { enabled, plans: [{ name, monthly, annual, students, subjects, recordings, parentReports }], annualDiscount,
+ *   active, exempt, plan, interval ('month' | 'year'), status, renewsAt, endsAtPeriodEnd, studentLimit, studentsUsed,
+ *   subjectLimit, subjects, features: { recordings, parentReports } }
+ */
+export async function getTutorBilling() {
+  return tutorFetch('/api/tutor-billing/status')
+}
+
+/** Subscribe ({ url } for Stripe Checkout) or move to another plan / billing period ({ ok }). */
+export async function chooseTutorPlan(plan, interval) {
+  return tutorFetch('/api/tutor-billing/plan', { method: 'POST', body: JSON.stringify({ plan, interval }) })
+}
+
+/** Drop a subject from the tutor plan's subjects, making room for another. */
+export async function removeTutorPlanSubject(name) {
+  return tutorFetch(`/api/tutor-billing/subjects/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+/** A student's parent for weekly progress reports ({ email, name }; empty email stops them). Resolves to { parent }. */
+export async function setStudentParent(studentId, { email, name }) {
+  return tutorFetch(`/api/tutor/students/${encodeURIComponent(studentId)}/parent`, { method: 'PUT', body: JSON.stringify({ email, name }) })
+}
+
+/** Stripe customer portal for the tutor's card, receipts and cancelling; resolves to its URL. */
+export async function openTutorBillingPortal() {
+  const json = await tutorFetch('/api/tutor-billing/portal', { method: 'POST' })
+  return json.url
 }
 
 /** Make a subject the student's one free subject (replaces any other). */
@@ -655,9 +703,17 @@ export async function chooseFreeSubject(curriculumId) {
   return tutorFetch('/api/billing/free-subject', { method: 'POST', body: JSON.stringify({ curriculumId }) })
 }
 
-/** Pay for a subject: resolves to { url } (first subject → Stripe Checkout) or { added, weeklyTotal }. */
-export async function addPaidSubject(curriculumId) {
-  return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumId }) })
+/**
+ * Pay for a subject: resolves to { url } (first subject → Stripe Checkout, billed
+ * every `interval`: 'week' | 'month') or { added, total, interval } (onto the existing plan).
+ */
+export async function addPaidSubject(curriculumId, interval = 'week') {
+  return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumId, interval }) })
+}
+
+/** Switch the plan to weekly or monthly billing: resolves to { interval, total }. */
+export async function switchBillingInterval(interval) {
+  return tutorFetch('/api/billing/interval', { method: 'POST', body: JSON.stringify({ interval }) })
 }
 
 /** Stop paying for a subject (by its user_subscriptions row id). */

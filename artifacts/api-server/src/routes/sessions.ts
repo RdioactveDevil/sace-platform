@@ -13,6 +13,7 @@ import {
 import { Resend } from "resend";
 import { getR2Config } from "../lib/r2";
 import { EMAIL_FROM } from "../lib/email";
+import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -321,6 +322,7 @@ router.post("/sessions", async (req: Request, res: Response) => {
     res.status(403).json({ error: "Only tutors can create sessions" });
     return;
   }
+  if (!(await requireTutorPlan(ctx.admin, res, ctx.userId))) return;
 
   const {
     session_type = "individual",
@@ -343,6 +345,11 @@ router.post("/sessions", async (req: Request, res: Response) => {
     notes?: string;
     record_session?: boolean;
   };
+
+  if (record_session && !(await tutorHasFeature(ctx.admin, ctx.userId, "recordings"))) {
+    res.status(403).json({ error: FEATURE_MISSING.recordings, code: "tutor_plan_feature" });
+    return;
+  }
 
   if (!scheduled_at) {
     res.status(400).json({ error: "scheduled_at is required" });
@@ -792,6 +799,10 @@ router.post("/rooms/:roomName/recording", async (req: Request, res: Response) =>
       });
       return;
     }
+  }
+  if (!(await tutorHasFeature(ctx.admin, ctx.userId, "recordings"))) {
+    res.status(403).json({ error: FEATURE_MISSING.recordings, code: "tutor_plan_feature" });
+    return;
   }
   if (!recordingEnabled()) {
     res.status(503).json({ error: "Recording isn't set up on this server yet." });

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getBillingConfig, addPaidSubject, chooseFreeSubject } from '../lib/db'
 import { notify } from '../lib/notify'
 import { formatSubjectLabel, subjectAccess } from '../lib/subjects'
+import { DEFAULT_STUDENT_TIERS, studentTiers, extraLadder, monthlySaving, money } from '../lib/pricing'
 import { SubjectIcon } from './SubjectIcons'
 
 const GOLD   = '#f1be43'
@@ -20,8 +21,8 @@ function hex(color, alpha) {
 
 /**
  * A locked subject: make it the student's free subject (limited questions a
- * day) or pay for it — Stripe Checkout for the first paid subject, otherwise
- * added straight onto their weekly plan.
+ * day) or pay for it — Stripe Checkout for the first paid subject (billed
+ * weekly or monthly, their choice), otherwise added straight onto their plan.
  */
 export default function GetAccessScreen({ subscriptions = [], onAccessChanged }) {
   const { state } = useLocation()
@@ -31,8 +32,9 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
 
   const [billing, setBilling] = useState(null)
   const [busy, setBusy] = useState(null) // 'free' | 'paid'
+  const [chosenInterval, setChosenInterval] = useState('week')
   useEffect(() => {
-    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, tiers: [5, 4, 3], nextPrice: 5, weeklyTotal: 0, hasPlan: false, freeDailyQuestions: 20 }))
+    getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, tiers: DEFAULT_STUDENT_TIERS, nextPrice: DEFAULT_STUDENT_TIERS[0], total: 0, hasPlan: false, freeDailyQuestions: 20 }))
   }, [])
 
   if (!subj) {
@@ -43,11 +45,16 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
   const color = subj.color ?? GOLD
 
   const curriculumId = String(subj.id || '').replace(/^curriculum_/, '')
-  const nextPrice = billing?.nextPrice ?? 5
+  // An existing plan keeps its own billing period; a new one bills as chosen here.
+  const interval = billing?.hasPlan ? billing.interval ?? 'week' : chosenInterval
+  const weekly = studentTiers(billing?.tiers)
+  const monthly = studentTiers(billing?.monthlyTiers, 'month')
+  const tiers = interval === 'month' ? monthly : weekly
+  const nextPrice = billing?.hasPlan ? billing.nextPrice ?? tiers[0] : tiers[0]
+  const saving = monthlySaving(weekly[0], monthly[0])
   const freeDaily = billing?.freeDailyQuestions ?? 20
   const currentFree = subscriptions.find(sub => sub.source === 'free')
   const currentFreeLabel = currentFree ? formatSubjectLabel({ name: currentFree.subject_name, stage: currentFree.stage }) : null
-  const tiers = billing?.tiers ?? [5, 4, 3]
   // Opened from the free subject's daily limit: only the paid option applies.
   const isFreeSubject = subjectAccess(subscriptions, subj) === 'free'
 
@@ -67,10 +74,10 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
   const handlePaid = async () => {
     setBusy('paid'); setError(null)
     try {
-      const result = await addPaidSubject(curriculumId)
+      const result = await addPaidSubject(curriculumId, interval)
       if (result.url) { window.location.assign(result.url); return }
       await onAccessChanged?.()
-      notify.success(`${formatSubjectLabel(subj)} added — your plan is now $${result.weeklyTotal}/week.`)
+      notify.success(`${formatSubjectLabel(subj)} added — your plan is now $${money(result.total)}/${result.interval ?? interval}.`)
       navigate('/subject-picker', { replace: true })
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.')
@@ -185,14 +192,34 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
           border: `1px solid ${hex(GOLD, 0.35)}`,
           borderRadius: 20, padding: '22px 24px', marginBottom: 12,
         }}>
+          {!billing?.hasPlan && (
+            <div role="radiogroup" aria-label="Billing period" style={{ display: 'flex', gap: 6, marginBottom: 16, padding: 4, borderRadius: 12, background: 'rgba(255,255,255,0.05)' }}>
+              {[['week', 'Weekly'], ['month', saving ? `Monthly · save ${saving}%` : 'Monthly']].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={chosenInterval === value}
+                  onClick={() => setChosenInterval(value)}
+                  disabled={!!busy}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 9, border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
+                    cursor: busy ? 'default' : 'pointer',
+                    background: chosenInterval === value ? '#ffffff' : 'transparent',
+                    color: chosenInterval === value ? '#06071a' : 'rgba(255,255,255,0.6)',
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 40, color: '#fff', lineHeight: 1 }}>${nextPrice}</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>/ week · AUD</span>
+            <span style={{ fontFamily: FONT_D, fontSize: 40, color: '#fff', lineHeight: 1 }}>${money(nextPrice)}</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>/ {interval} · AUD</span>
           </div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginBottom: 16, lineHeight: 1.5 }}>
             {billing?.hasPlan
-              ? `Added to your plan: $${billing.weeklyTotal} → $${billing.weeklyTotal + nextPrice}/week, prorated from today.`
-              : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${tiers.slice(1).join(', then $')}/week each.`}
+              ? `Added to your plan: $${money(billing.total)} → $${money(billing.total + nextPrice)}/${interval}, prorated from today.`
+              : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
             {[
@@ -227,11 +254,11 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
           >
             {busy === 'paid' ? (billing?.hasPlan ? 'Adding…' : 'Opening secure checkout…')
               : billing?.enabled === false ? 'Payments are coming soon'
-              : billing?.hasPlan ? `Add to my plan — +$${nextPrice}/week`
-              : `Subscribe — $${nextPrice}/week →`}
+              : billing?.hasPlan ? `Add to my plan — +$${money(nextPrice)}/${interval}`
+              : `Subscribe — $${money(nextPrice)}/${interval} →`}
           </button>
           <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '10px 0 0' }}>
-            Billed weekly · cancel any time from My Account · secure payment by Stripe
+            Billed {interval}ly · cancel any time from My Account · secure payment by Stripe
           </p>
         </div>
 

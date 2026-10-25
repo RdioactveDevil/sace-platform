@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getPlatformSettings, setPlatformSetting } from '../lib/db'
+import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS } from '../lib/pricing'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -58,7 +59,11 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: [5, 4, 3], free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
+  { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+  { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
+], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
   // Pricing state
@@ -93,7 +98,7 @@ export default function AdminSettingsTab() {
   }
 
   const updateTutorPlan = (idx, field, raw) => {
-    const val = field === 'price' ? (raw === '' ? '' : Number(raw)) : raw
+    const val = ['price', 'students', 'subjects'].includes(field) ? (raw === '' ? '' : Number(raw)) : raw
     setPr(p => {
       const plans = [...(p.tutor_plans || [])]
       plans[idx] = { ...plans[idx], [field]: val }
@@ -110,8 +115,8 @@ export default function AdminSettingsTab() {
       {/* ── Student access ── */}
       <Section title="Student access">
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-          Every student can pick one free subject (limited questions per day). Paid subjects are one weekly Stripe plan
-          per student, cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
+          Every student can pick one free subject (limited questions per day). Paid subjects are one Stripe plan per
+          student, billed weekly or monthly (their choice), cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
           give a student a subject for free, grant it from <strong>Students</strong>; removing a paid subject there takes
           it off their plan. Tutors and admins can use every subject.
         </div>
@@ -120,23 +125,24 @@ export default function AdminSettingsTab() {
       {/* ── Pricing ── */}
       <Section title="Pricing (shown on pricing page)">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 4 }}>
-          {['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
-            <Field key={label} label={`${label} ($/week, AUD)`} hint={i === 0 ? 'New plans use these prices' : undefined}>
-              <input
-                style={inputStyle}
-                type="number"
-                min={1}
-                step={0.5}
-                value={(pr.student_tiers || DEFAULT_PRICING.student_tiers)[i] ?? ''}
-                onChange={e => setPr(p => {
-                  const next = [...(p.student_tiers || DEFAULT_PRICING.student_tiers)]
-                  next[i] = e.target.value === '' ? '' : Number(e.target.value)
-                  return { ...p, student_tiers: next }
-                })}
-                placeholder={String(DEFAULT_PRICING.student_tiers[i])}
-              />
-            </Field>
-          ))}
+          {[['student_tiers', 'week'], ['student_monthly_tiers', 'month']].flatMap(([key, unit]) =>
+            ['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
+              <Field key={`${key}-${i}`} label={`${label} ($/${unit}, AUD)`} hint={i === 0 ? `New ${unit}ly plans use these prices` : undefined}>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={1}
+                  step={0.5}
+                  value={(pr[key] || DEFAULT_PRICING[key])[i] ?? ''}
+                  onChange={e => setPr(p => {
+                    const next = [...(p[key] || DEFAULT_PRICING[key])]
+                    next[i] = e.target.value === '' ? '' : Number(e.target.value)
+                    return { ...p, [key]: next }
+                  })}
+                  placeholder={String(DEFAULT_PRICING[key][i])}
+                />
+              </Field>
+            )))}
           <Field label="Free tier: Titan AI messages per day" hint="Students with no paid subject">
             <input
               style={inputStyle}
@@ -170,19 +176,46 @@ export default function AdminSettingsTab() {
           </Field>
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12, marginTop: 4 }}>Tutor Plan Prices</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>Tutor Plans</div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
+          Tutors need one of these to use the tutor portal, billed monthly or yearly (annual discount above). A plan
+          caps students on the roster plus pending invites and the subjects a tutor can tutor in (999 means
+          unlimited), and says whether they can record lessons and send weekly parent reports. Tutors already
+          subscribed keep the price, limits and features they signed up with until they change plan. Don't rename a
+          plan while tutors are on it.
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 4 }}>
           {(pr.tutor_plans || []).map((plan, idx) => (
-            <Field key={idx} label={plan.name || `Plan ${idx + 1}`} hint="$/month">
-              <input
-                style={inputStyle}
-                type="number"
-                min={0}
-                value={plan.price ?? ''}
-                onChange={e => updateTutorPlan(idx, 'price', e.target.value)}
-                placeholder="0"
-              />
-            </Field>
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Field label={`${plan.name || `Plan ${idx + 1}`}: price`} hint="$/month">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={0}
+                  value={plan.price ?? ''}
+                  onChange={e => updateTutorPlan(idx, 'price', e.target.value)}
+                  placeholder="0"
+                />
+              </Field>
+              {[['students', 'Students'], ['subjects', 'Subjects']].map(([field, label]) => (
+                <Field key={field} label={label} hint="999 = unlimited">
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    min={1}
+                    value={plan[field] ?? ''}
+                    onChange={e => updateTutorPlan(idx, field, e.target.value)}
+                    placeholder="999"
+                  />
+                </Field>
+              ))}
+              {[['subject_swaps', 'Tutors can swap subjects'], ['recordings', 'Lesson recordings'], ['parent_reports', 'Weekly parent reports']].map(([field, label]) => (
+                <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={plan[field] !== false} onChange={e => updateTutorPlan(idx, field, e.target.checked)} />
+                  {label}
+                </label>
+              ))}
+            </div>
           ))}
         </div>
 

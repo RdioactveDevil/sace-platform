@@ -3,14 +3,20 @@ import Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, getServiceClient } from "../lib/auth";
 import { logger } from "../lib/logger";
+import { ACCESS_STATUSES, periodEnd, priceByLookupKey } from "../lib/stripe-plans";
+import { TUTOR_PLAN_KIND, syncTutorSubscription } from "../lib/tutor-plan";
 
 // Student access and billing.
 //
 // Every student may pick one free subject (limited questions per day, counted
 // by the use_free_question() database function). Paid subjects live on ONE
 // Stripe subscription per student whose quantity is the number of paid
-// subjects, on a graduated weekly AUD price: $5 for the first subject, $4 for
-// the second, $3 for each one after (platform_settings.pricing.student_tiers).
+// subjects, on a graduated AUD price billed weekly or monthly (the student
+// picks at checkout and can switch later). Weekly: $7 for the first subject,
+// $6 for the second, $5 for each one after (platform_settings.pricing
+// .student_tiers); monthly: student_monthly_tiers, a little cheaper. A plan
+// keeps the price it started on when the prices change; what the app shows a
+// student with a plan comes from their own Stripe price.
 // The first paid subject goes through Stripe Checkout; later ones are added to
 // (or removed from) the existing subscription in-app, prorated.
 //
@@ -22,11 +28,14 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
-const DEFAULT_TIERS_AUD = [5, 4, 3];
-/** Statuses that keep paid subjects unlocked (past_due: Stripe is still retrying the card). */
-const ACCESS_STATUSES = new Set<Stripe.Subscription.Status>(["trialing", "active", "past_due"]);
+const DEFAULT_TIERS_AUD = { week: [7, 6, 5], month: [27, 23, 19] };
 
-const appUrl = () => (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/$/, "");
+export type Interval = "week" | "month";
+const INTERVALS: readonly Interval[] = ["week", "month"];
+const isInterval = (v: unknown): v is Interval => INTERVALS.includes(v as Interval);
+const per = (interval: Interval) => `/${interval}`;
+
+export const appUrl = () => (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/$/, "");
 
 let stripeClient: Stripe | null = null;
 export function getStripe(): Stripe | null {
@@ -36,50 +45,59 @@ export function getStripe(): Stripe | null {
   return stripeClient;
 }
 
-function notConfigured(res: Response) {
+export function notConfigured(res: Response) {
   res.status(503).json({ error: "Payments aren't set up yet. Please contact Titanium Tutoring." });
 }
 
 const fail = (res: Response, status: number, error: string) => void res.status(status).json({ error });
 
-/** $/week for the 1st, 2nd, … subject; the last tier applies to every further subject. */
-async function readTiers(admin: SupabaseClient): Promise<number[]> {
+export async function readPricing(admin: SupabaseClient): Promise<Record<string, unknown>> {
   const { data } = await admin.from("platform_settings").select("value").eq("key", "pricing").maybeSingle();
-  const raw = (data?.value as { student_tiers?: unknown } | null)?.student_tiers;
-  const tiers = Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number" && n > 0) : [];
-  return tiers.length ? tiers : DEFAULT_TIERS_AUD;
+  return (data?.value as Record<string, unknown> | null) ?? {};
+}
+
+const positiveNumbers = (raw: unknown) =>
+  Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number" && n > 0) : [];
+
+/** $ per week and per month for the 1st, 2nd, … subject; the last tier applies to every further subject. */
+async function readTiers(admin: SupabaseClient): Promise<Record<Interval, number[]>> {
+  const pricing = await readPricing(admin);
+  const week = positiveNumbers(pricing.student_tiers);
+  const month = positiveNumbers(pricing.student_monthly_tiers);
+  return { week: week.length ? week : DEFAULT_TIERS_AUD.week, month: month.length ? month : DEFAULT_TIERS_AUD.month };
 }
 
 /** Price of the nth paid subject (1-based). */
 export const tierPrice = (tiers: number[], n: number) => tiers[Math.min(n, tiers.length) - 1];
-/** Weekly total for `count` paid subjects. */
+/** Total per billing period for `count` paid subjects. */
 export const planTotal = (tiers: number[], count: number) =>
   Array.from({ length: count }, (_, i) => tierPrice(tiers, i + 1)).reduce((a, b) => a + b, 0);
 
-/** The graduated weekly price for these tiers. Found by lookup key, created on first use. */
-async function planPriceId(stripe: Stripe, tiers: number[]): Promise<string> {
+/** The graduated weekly or monthly price for these tiers. */
+async function planPriceId(stripe: Stripe, tiers: number[], interval: Interval): Promise<string> {
   const cents = tiers.map((d) => Math.round(d * 100));
-  const lookupKey = `gradefarm_subjects_weekly_aud_${cents.join("_")}`;
-  const find = async () => (await stripe.prices.list({ lookup_keys: [lookupKey], active: true, limit: 1 })).data[0]?.id;
-  const existing = await find();
-  if (existing) return existing;
-  try {
-    const price = await stripe.prices.create({
-      currency: "aud",
-      recurring: { interval: "week" },
-      billing_scheme: "tiered",
-      tiers_mode: "graduated",
-      tiers: cents.map((unit_amount, i) => ({ up_to: i === cents.length - 1 ? "inf" : i + 1, unit_amount })),
-      lookup_key: lookupKey,
-      nickname: `Subjects: ${tiers.map((d) => `$${d}`).join(" / ")} per week`,
-      product_data: { name: "GradeFarm subjects" },
-    });
-    return price.id;
-  } catch (err) {
-    const raced = await find(); // another request created it first
-    if (raced) return raced;
-    throw err;
-  }
+  return priceByLookupKey(stripe, `gradefarm_subjects_${interval}ly_aud_${cents.join("_")}`, {
+    currency: "aud",
+    recurring: { interval },
+    billing_scheme: "tiered",
+    tiers_mode: "graduated",
+    tiers: cents.map((unit_amount, i) => ({ up_to: i === cents.length - 1 ? "inf" : i + 1, unit_amount })),
+    nickname: `Subjects: ${tiers.map((d) => `$${d}`).join(" / ")} per ${interval}`,
+    product_data: { name: "GradeFarm subjects" },
+  });
+}
+
+/** Whether the plan bills weekly or monthly. */
+const subscriptionInterval = (sub: Stripe.Subscription): Interval => {
+  const interval = sub.items.data[0]?.price.recurring?.interval;
+  return isInterval(interval) ? interval : "week";
+};
+
+/** $ per subject on the plan's own Stripe price (needs `items.data.price.tiers` expanded). */
+function subscriptionTiers(sub: Stripe.Subscription): number[] | null {
+  const tiers = sub.items.data[0]?.price.tiers;
+  if (!tiers?.length) return null;
+  return tiers.map((t) => (t.unit_amount ?? 0) / 100);
 }
 
 type CustomerRow = { stripe_customer_id: string; stripe_subscription_id: string | null };
@@ -91,10 +109,10 @@ async function customerRow(admin: SupabaseClient, userId: string): Promise<Custo
 }
 
 /** Stripe has no such object in this account and mode, e.g. a sandbox ID after switching to live keys. */
-const isMissing = (err: unknown) => err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing";
+export const isMissing = (err: unknown) => err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing";
 
 /** The student's billing row, dropped (→ null) if Stripe doesn't have its customer, so a new one gets made. */
-async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<CustomerRow | null> {
+export async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<CustomerRow | null> {
   const row = await customerRow(admin, userId);
   if (!row) return null;
   const customer = await stripe.customers.retrieve(row.stripe_customer_id).catch((err) => {
@@ -108,7 +126,7 @@ async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId:
   return null;
 }
 
-async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<string> {
+export async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<string> {
   const row = await currentCustomerRow(admin, stripe, userId);
   if (row) return row.stripe_customer_id;
   const [{ data: authUser }, { data: profile }] = await Promise.all([
@@ -128,11 +146,11 @@ async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string
   return customer.id;
 }
 
-/** The student's subscription if it can still carry subjects (not cancelled / expired). */
+/** The student's subscription if it can still carry subjects (not cancelled / expired), with its price's tiers. */
 async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<Stripe.Subscription | null> {
   const row = await customerRow(admin, userId);
   if (!row?.stripe_subscription_id) return null;
-  const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id).catch((err) => {
+  const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id, { expand: ["items.data.price.tiers"] }).catch((err) => {
     if (isMissing(err)) return null;
     throw err;
   });
@@ -161,13 +179,12 @@ async function accessRow(admin: SupabaseClient, userId: string, cur: Curriculum)
 }
 
 const subFields = (sub: Stripe.Subscription) => {
-  const periodEnd = sub.items.data[0]?.current_period_end;
   return {
     status: sub.status,
     active: ACCESS_STATUSES.has(sub.status),
     stripe_subscription_id: sub.id,
     stripe_customer_id: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
-    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    current_period_end: periodEnd(sub),
     cancel_at_period_end: sub.cancel_at_period_end || !!sub.cancel_at,
     updated_at: new Date().toISOString(),
   };
@@ -207,9 +224,11 @@ async function setQuantity(stripe: Stripe, sub: Stripe.Subscription, quantity: n
  * Write a Stripe subscription's current state onto the student's rows. Re-reads
  * it from Stripe so out-of-order webhooks can't roll access back. A
  * subscription fresh from Checkout carries the first subject in its metadata.
+ * A tutor's plan is recorded in tutor_billing instead (lib/tutor-plan.ts).
  */
 export async function syncSubscription(admin: SupabaseClient, stripe: Stripe, subscriptionId: string): Promise<void> {
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  if (sub.metadata?.kind === TUTOR_PLAN_KIND) return syncTutorSubscription(admin, sub);
   const userId = sub.metadata?.user_id;
   if (!userId) {
     logger.warn({ subscriptionId }, "billing: subscription without GradeFarm metadata");
@@ -232,19 +251,38 @@ export async function syncSubscription(admin: SupabaseClient, stripe: Stripe, su
 router.get("/billing/config", async (req: Request, res: Response) => {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
-  const tiers = await readTiers(ctx.admin);
+  const prices = await readTiers(ctx.admin);
   const { data: rows } = await ctx.admin
     .from("user_subscriptions").select("source, active, cancel_at_period_end, current_period_end")
     .eq("user_id", ctx.userId).eq("source", "stripe").eq("active", true);
   const paid = rows ?? [];
+  const stripe = getStripe();
+  // A plan started before a price change is still charged its old prices.
+  let interval: Interval | null = null;
+  let planTiers: number[] | null = null;
+  if (stripe && paid.length > 0) {
+    const sub = await liveSubscription(ctx.admin, stripe, ctx.userId).catch((err) => {
+      logger.warn({ err }, "billing: couldn't read the student's plan");
+      return null;
+    });
+    if (sub) {
+      interval = subscriptionInterval(sub);
+      planTiers = subscriptionTiers(sub);
+    }
+  }
+  const planPrices = planTiers ?? prices[interval ?? "week"];
   const { data: freeLimit } = await ctx.admin.rpc("free_question_limit");
   res.json({
-    enabled: !!getStripe(),
+    enabled: !!stripe,
     currency: "AUD",
-    tiers,
+    tiers: prices.week,
+    monthlyTiers: prices.month,
+    // The student's plan: how often it bills and what it charges per subject.
+    interval,
+    planTiers: planPrices,
     paidCount: paid.length,
-    weeklyTotal: planTotal(tiers, paid.length),
-    nextPrice: tierPrice(tiers, paid.length + 1),
+    total: planTotal(planPrices, paid.length),
+    nextPrice: tierPrice(planPrices, paid.length + 1),
     hasPlan: paid.length > 0,
     renewsAt: paid[0]?.current_period_end ?? null,
     endsAtPeriodEnd: paid.length > 0 && paid.every((r) => r.cancel_at_period_end),
@@ -276,9 +314,10 @@ router.post("/billing/free-subject", async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// POST /billing/subjects — { curriculumId }: pay for a subject. The first one
-// returns { url } for Stripe Checkout; later ones are added to the plan and
-// return { added: true, weeklyTotal }.
+// POST /billing/subjects — { curriculumId, interval? }: pay for a subject. The
+// first one returns { url } for Stripe Checkout, billed weekly or monthly
+// (`interval`, default weekly); later ones are added to the plan and return
+// { added: true, total, interval }.
 router.post("/billing/subjects", async (req: Request, res: Response) => {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
@@ -289,9 +328,11 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
   if (!cur) return fail(res, 404, "Subject not found");
   const existing = await accessRow(admin, userId, cur);
   if (existing?.active && existing.source !== "free") return fail(res, 409, "You already have full access to this subject.");
+  const requested = req.body?.interval ?? "week";
+  if (!isInterval(requested)) return fail(res, 400, "interval must be week or month");
 
   try {
-    const tiers = await readTiers(admin);
+    const prices = await readTiers(admin);
     const sub = await liveSubscription(admin, stripe, userId);
     if (sub) {
       const before = (await paidRows(admin, sub.id)).length;
@@ -303,10 +344,13 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
         throw err;
       }
       await admin.from("user_subscriptions").update(subFields(updated)).eq("stripe_subscription_id", updated.id).eq("source", "stripe");
-      return void res.json({ added: true, weeklyTotal: planTotal(tiers, before + 1) });
+      const interval = subscriptionInterval(sub);
+      const total = planTotal(subscriptionTiers(sub) ?? prices[interval], before + 1);
+      return void res.json({ added: true, total, interval });
     }
 
-    const [priceId, customer] = await Promise.all([planPriceId(stripe, tiers), customerFor(admin, stripe, userId)]);
+    const tiers = prices[requested];
+    const [priceId, customer] = await Promise.all([planPriceId(stripe, tiers, requested), customerFor(admin, stripe, userId)]);
     const metadata = { user_id: userId, curriculum_id: cur.id };
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -316,7 +360,7 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
       allow_promotion_codes: true,
       subscription_data: { description: "GradeFarm subjects", metadata },
       metadata,
-      custom_text: { submit: { message: `Starts with ${cur.label}. Add more subjects later for $${tierPrice(tiers, 2)}/week, then $${tierPrice(tiers, 3)}/week each.` } },
+      custom_text: { submit: { message: `Starts with ${cur.label}. Add more subjects later for $${tierPrice(tiers, 2)}${per(requested)}, then $${tierPrice(tiers, 3)}${per(requested)} each.` } },
       success_url: `${appUrl()}/subject-picker?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl()}/subject-picker?checkout=cancelled`,
     });
@@ -324,6 +368,41 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err }, "billing: add subject failed");
     fail(res, 502, "Couldn't update your plan. Please try again.");
+  }
+});
+
+// POST /billing/interval — { interval }: switch the student's plan between
+// weekly and monthly billing at today's prices for that period, keeping its
+// subjects. Stripe starts the new period now and credits the unused part of
+// the old one against the first bill.
+router.post("/billing/interval", async (req: Request, res: Response) => {
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  const stripe = getStripe();
+  if (!stripe) return notConfigured(res);
+  const { admin, userId } = ctx;
+  const interval = req.body?.interval;
+  if (!isInterval(interval)) return fail(res, 400, "interval must be week or month");
+
+  try {
+    const sub = await liveSubscription(admin, stripe, userId);
+    if (!sub) return fail(res, 404, "You don't have a paid plan.");
+    if (subscriptionInterval(sub) === interval) return fail(res, 409, `Your plan is already billed ${interval}ly.`);
+    if (sub.cancel_at_period_end || sub.cancel_at) {
+      return fail(res, 409, "Your plan is set to end. Add a subject to keep it going, then switch.");
+    }
+    const tiers = (await readTiers(admin))[interval];
+    const item = sub.items.data[0];
+    const updated = await stripe.subscriptions.update(sub.id, {
+      items: [{ id: item.id, price: await planPriceId(stripe, tiers, interval), quantity: item.quantity }],
+      proration_behavior: "create_prorations",
+    });
+    const { error } = await admin.from("user_subscriptions").update(subFields(updated)).eq("stripe_subscription_id", sub.id).eq("source", "stripe");
+    if (error) throw new Error(error.message);
+    res.json({ ok: true, interval, total: planTotal(tiers, item.quantity ?? 1) });
+  } catch (err) {
+    logger.error({ err }, "billing: switch interval failed");
+    fail(res, 502, "Couldn't change how your plan is billed. Please try again.");
   }
 });
 

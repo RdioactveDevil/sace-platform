@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { WebhookReceiver, EgressStatus } from "livekit-server-sdk";
 import { startSessionRecording, RECORDING_BUCKET } from "./sessions";
 import { r2ObjectExists } from "../lib/r2";
+import { tutorHasFeature } from "../lib/tutor-plan";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -112,6 +113,12 @@ async function handleRoomStarted(admin: SupabaseClient, roomName: string): Promi
           Math.abs(new Date(b.scheduled_at ?? 0).getTime() - now),
       )[0];
   if (!target) return;
+  // Recording is a plan feature: a lesson booked to record on a plan that's
+  // since changed isn't recorded.
+  if (!(await tutorHasFeature(admin, target.tutor_id, "recordings"))) {
+    await markFailed(admin, target.id, "Not recorded: the tutor's plan doesn't include recording lessons.");
+    return;
+  }
 
   const started = await startSessionRecording(roomName, target.tutor_id, target.id);
   if (!started) {

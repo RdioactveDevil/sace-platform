@@ -45,6 +45,7 @@ const TermsScreen           = lazyWithReload(() => import('./components/TermsScr
 const PrivacyScreen         = lazyWithReload(() => import('./components/PrivacyScreen'))
 const AdminScreen           = lazyWithReload(() => import('./components/AdminScreen'))
 const TutorScreen           = lazyWithReload(() => import('./components/TutorScreen'))
+const TutorPlanGate         = lazyWithReload(() => import('./components/TutorPlan'))
 const WritingScreen         = lazyWithReload(() => import('./components/WritingScreen'))
 const DiagnosticScreen      = lazyWithReload(() => import('./components/DiagnosticScreen'))
 const InviteScreen          = lazyWithReload(() => import('./components/InviteScreen'))
@@ -1667,7 +1668,9 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           :               <TutorRoute profile={profile}>
               <AppShell {...shellProps}>
-                <TutorScreen profile={profile} theme={theme} subject={selectedSubject} />
+                <TutorPlanGate theme={theme}>
+                  <TutorScreen profile={profile} theme={theme} subject={selectedSubject} />
+                </TutorPlanGate>
               </AppShell>
             </TutorRoute>
       } />

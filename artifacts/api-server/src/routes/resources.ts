@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { r2DeleteObject, r2SignedUrl } from "../lib/r2";
 import { EMAIL_FROM, appUrl } from "../lib/email";
+import { requireTutorPlan } from "../lib/tutor-plan";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -51,6 +52,7 @@ interface UserContext {
   userId: string;
   email?: string;
   isTutor: boolean;
+  isAdmin: boolean;
   displayName: string;
 }
 
@@ -69,15 +71,16 @@ async function requireUser(req: Request, res: Response): Promise<UserContext | n
   }
   const { data: profile } = await admin
     .from("profiles")
-    .select("id, is_tutor, display_name")
+    .select("id, is_tutor, is_admin, display_name")
     .eq("id", caller.user.id)
-    .single<{ id: string; is_tutor: boolean; display_name: string | null }>();
+    .single<{ id: string; is_tutor: boolean; is_admin: boolean | null; display_name: string | null }>();
 
   return {
     admin,
     userId: caller.user.id,
     email: caller.user.email,
     isTutor: !!profile?.is_tutor,
+    isAdmin: !!profile?.is_admin,
     displayName: profile?.display_name ?? "Your tutor",
   };
 }
@@ -89,6 +92,7 @@ async function requireTutor(req: Request, res: Response): Promise<UserContext | 
     res.status(403).json({ error: "Forbidden: caller is not a tutor" });
     return null;
   }
+  if (!(await requireTutorPlan(ctx.admin, res, ctx.userId, ctx.isAdmin))) return null;
   return ctx;
 }
 

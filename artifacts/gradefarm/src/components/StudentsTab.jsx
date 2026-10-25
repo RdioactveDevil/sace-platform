@@ -21,6 +21,8 @@ import {
   fetchSubjectTopics,
   requireStudentDiagnostic,
   waiveStudentDiagnostic,
+  getTutorBilling,
+  setStudentParent,
 } from '../lib/db'
 import { parseEmailList, gettingStartedStatus } from '../lib/rosterOnboarding'
 
@@ -84,6 +86,8 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   const [invites, setInvites] = useState([])
   // Whether this tutor can include subjects (free for the student), and the subjects.
   const [includable, setIncludable] = useState({ canInclude: false, subjects: [] })
+  // Whether the tutor plan includes weekly parent reports (null until known).
+  const [parentReports, setParentReports] = useState(null)
   const [inviteSubjects, setInviteSubjects] = useState([]) // curriculum ids
   const [inviteScope, setInviteScope] = useState({})       // { curriculumId: [subtopicId] } each diagnostic covers; none = all
   const [inviteBusy, setInviteBusy] = useState(null)
@@ -110,6 +114,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       fetchRosterDetails({ allTutors }).then(setDetails).catch(() => {})
       fetchPendingInvites().then(setInvites).catch(() => {})
       if (!allTutors) fetchIncludableSubjects().then(setIncludable).catch(() => {})
+      if (!allTutors) getTutorBilling().then(b => setParentReports(b.features?.parentReports !== false)).catch(() => {})
     } catch {}
     setLoading(false)
   }
@@ -159,6 +164,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       subscriptions: d.subscriptions || [],
       included: d.included || [],
       diagnostics: d.diagnostics || [],
+      parent: d.parent || null,
       start: gettingStartedStatus({ diagnostics: d.diagnostics || [], xp: r.profiles?.xp ?? 0 }),
       subjects,
       stages,
@@ -350,7 +356,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
 
       {editId === s.id && (
         <tr><td colSpan={colCount} style={{ padding: '0 16px 16px', background: t.bgSubtle }}>
-          <StudentEditor student={s} theme={theme} onChange={load} includable={includable} />
+          <StudentEditor student={s} theme={theme} onChange={load} includable={includable} parentReports={parentReports} />
         </td></tr>
       )}
       {confirmRemove === s.id && (
@@ -529,12 +535,13 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
 }
 
 // ── Inline editor: year-level override + pick which subjects you tutor ──────────
-function StudentEditor({ student, theme, onChange, includable }) {
+function StudentEditor({ student, theme, onChange, includable, parentReports }) {
   const t = THEMES[theme]
   const [year, setYear] = useState(student.overrideYear || '')
   const [savingYear, setSavingYear] = useState(false)
   const [tutored, setTutored] = useState(student.subjects || [])  // [{id, subject_name, stage}]
   const [busyKey, setBusyKey] = useState(null)
+  const [subjectError, setSubjectError] = useState('')
 
   const ctrl = { padding: '8px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
   const subKey = (subject_name, stage) => `${subject_name}::${stage || ''}`
@@ -554,7 +561,7 @@ function StudentEditor({ student, theme, onChange, includable }) {
 
   const toggleSubject = async (sub) => {
     const key = subKey(sub.subject_name, sub.stage)
-    setBusyKey(key)
+    setBusyKey(key); setSubjectError('')
     try {
       const existing = tutoredByKey[key]
       if (existing) {
@@ -564,7 +571,10 @@ function StudentEditor({ student, theme, onChange, includable }) {
         const s = await addStudentSubject(student.id, sub.subject_name, sub.stage || null)
         if (s) setTutored(prev => [...prev.filter(p => p.id !== s.id), s])
       }
-    } catch {}
+    } catch (e) {
+      // e.g. a subject beyond what the tutor plan covers.
+      if (!tutoredByKey[key]) setSubjectError(e.message || 'Could not add that subject.')
+    }
     setBusyKey(null); onChange()
   }
 
@@ -605,9 +615,61 @@ function StudentEditor({ student, theme, onChange, includable }) {
                 )
               })}
             </div>
+            {subjectError && <div style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{subjectError}</div>}
           </>
         )}
       </div>
+
+      <ParentReportEditor student={student} theme={theme} ctrl={ctrl} available={parentReports} onChange={onChange} />
+    </div>
+  )
+}
+
+/** The parent who gets this student's weekly progress email (a tutor plan feature). */
+function ParentReportEditor({ student, theme, ctrl, available, onChange }) {
+  const t = THEMES[theme]
+  const [email, setEmail] = useState(student.parent?.email || '')
+  const [name, setName] = useState(student.parent?.name || '')
+  const [state, setState] = useState(null) // 'saving' | 'saved' | error message
+  const firstName = student.name.split(' ')[0]
+  const saved = student.parent
+
+  const save = async (nextEmail = email) => {
+    setState('saving')
+    try {
+      await setStudentParent(student.id, { email: nextEmail.trim(), name: name.trim() })
+      if (!nextEmail.trim()) { setEmail(''); setName('') }
+      setState('saved'); onChange()
+    } catch (e) { setState(e.message || 'Could not save.') }
+  }
+
+  const label = <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Weekly parent report</div>
+  if (available === false && !saved) {
+    return (
+      <div>
+        {label}
+        <span style={{ fontSize: 13, color: t.textFaint }}>Not included on your plan. Upgrade in Plan &amp; billing to email {firstName}'s parent a progress report every week.</span>
+      </div>
+    )
+  }
+  const dirty = email.trim().toLowerCase() !== (saved?.email || '') || name.trim() !== (saved?.name || '')
+  return (
+    <div>
+      {label}
+      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 8 }}>
+        Every Sunday evening the parent gets {firstName}'s week: questions answered, accuracy, strong and weak topics, your assignments and the next lesson.
+      </div>
+      <form onSubmit={e => { e.preventDefault(); save() }} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="email" value={email} onChange={e => { setEmail(e.target.value); setState(null) }} placeholder="Parent's email" aria-label="Parent's email" style={{ ...ctrl, flex: '1 1 200px' }} />
+        <input value={name} onChange={e => { setName(e.target.value); setState(null) }} placeholder="Parent's name (optional)" aria-label="Parent's name" maxLength={80} style={{ ...ctrl, flex: '1 1 160px' }} />
+        <button type="submit" disabled={!dirty || !email.trim() || state === 'saving'} style={{ ...ctrl, cursor: 'pointer', fontWeight: 700, color: GOLD, borderColor: GOLD, opacity: !dirty || !email.trim() ? 0.5 : 1 }}>
+          {state === 'saving' ? 'Saving…' : 'Save'}
+        </button>
+        {saved && <button type="button" onClick={() => save('')} disabled={state === 'saving'} style={{ ...ctrl, cursor: 'pointer', fontSize: 12, color: t.textMuted }}>Stop reports</button>}
+      </form>
+      {saved?.unsubscribed && <div style={{ fontSize: 12, color: t.danger, marginTop: 6 }}>{saved.email} unsubscribed from these reports. Changing the address starts them again for the new one.</div>}
+      {state === 'saved' && <div style={{ fontSize: 12, color: t.success, marginTop: 6 }}>Saved.</div>}
+      {state && state !== 'saving' && state !== 'saved' && <div style={{ fontSize: 12, color: t.danger, marginTop: 6 }}>{state}</div>}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { curriculumToSubjectTile, subjectAccess } from '../lib/subjects'
 import { fetchSubjectBankCounts, getBillingConfig } from '../lib/db'
+import { studentTiers, extraLadder } from '../lib/pricing'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIcon } from './SubjectIcons'
 import './SubjectPicker.css'
@@ -83,7 +84,8 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const notSubscribed    = allSubjects.filter(s => s.available && accessOf(s) === 'none')
   const hasFreeSubject   = subscriptions.some(sub => sub.source === 'free')
   const freeDaily        = billing?.freeDailyQuestions ?? 20
-  const priceLabel       = hasFreeSubject ? `$${billing?.nextPrice ?? 5}/week` : 'Try free'
+  const tiers            = studentTiers(billing?.tiers)
+  const priceLabel       = hasFreeSubject ? `$${billing?.nextPrice ?? tiers[0]}/${billing?.interval ?? 'week'}` : 'Try free'
   const comingSoon       = allSubjects.filter(s => !s.available)
 
   const firstName = profile.display_name?.split(' ')[0] ?? 'there'
@@ -239,8 +241,8 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
               <div className="sp-fadein sp-intro">
                 <div className="sp-intro-title">Pick a subject to start</div>
                 <div className="sp-intro-body">
-                  Choose one subject to use free ({freeDaily} questions a day), or go unlimited from ${billing?.tiers?.[0] ?? 5}/week
-                  {billing?.tiers?.length > 1 ? ` — extra subjects are cheaper ($${billing.tiers.slice(1).join(', then $')}/week each)` : ''}.
+                  Choose one subject to use free ({freeDaily} questions a day), or go unlimited from ${tiers[0]}/week
+                  {tiers.length > 1 ? ` — extra subjects are cheaper ($${extraLadder(tiers)}/week each)` : ''}.
                 </div>
               </div>
             )}
