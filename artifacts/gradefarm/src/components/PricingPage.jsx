@@ -46,7 +46,7 @@ const DASH = () => (
   </div>
 )
 
-const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.2 }
+const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29, students: 10 }, { name: 'Pro', price: 59, students: 25 }, { name: 'Agency', price: 99, students: 999 }], annual_discount: 0.15 }
 
 export default function PricingPage({ onGetStarted, onSignIn }) {
   const navigate = useNavigate()
@@ -67,7 +67,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   const handleGetStarted = onGetStarted || (() => navigate('/auth'))
   const handleSignIn     = onSignIn     || (() => navigate('/auth'))
 
-  const annualDiscount = dbPricing.annual_discount ?? 0.2
+  const annualDiscount = dbPricing.annual_discount ?? 0.15
 
   const tiers = studentTiers(dbPricing.student_tiers)
   const studentWeekly = tiers[0]
@@ -120,16 +120,21 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
   ]
 
   const tutorDbPlans = dbPricing.tutor_plans || DEFAULT_PRICING.tutor_plans
+  // Each plan's student limit is enforced on invites; 999 or more reads as unlimited.
+  const studentLimit = (i, fallback) => {
+    const n = tutorDbPlans[i]?.students ?? fallback
+    return typeof n === 'number' && n > 0 && n < 999 ? `Up to ${n} students` : 'Unlimited students'
+  }
   const tutorPlans = [
     {
-      name: 'Starter',
+      name: tutorDbPlans[0]?.name || 'Starter',
       price: tutorDbPlans[0]?.price ?? 29,
       sub: 'per month',
       badge: null,
       hi: false,
       accentColor: PURPLE,
       cta: 'Get started →',
-      limits: 'Up to 5 students · 1 subject',
+      limits: studentLimit(0, 10),
       features: [
         { text: 'Student progress dashboard', included: true },
         { text: 'Session scheduling', included: true },
@@ -144,14 +149,14 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       ],
     },
     {
-      name: 'Growth',
+      name: tutorDbPlans[1]?.name || 'Pro',
       price: tutorDbPlans[1]?.price ?? 59,
       sub: 'per month',
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: PURPLE,
       cta: 'Get started →',
-      limits: 'Up to 20 students · 3 subjects',
+      limits: studentLimit(1, 25),
       features: [
         { text: 'Student progress dashboard', included: true },
         { text: 'Session scheduling', included: true },
@@ -166,14 +171,14 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       ],
     },
     {
-      name: 'Pro',
+      name: tutorDbPlans[2]?.name || 'Agency',
       price: tutorDbPlans[2]?.price ?? 99,
       sub: 'per month',
       badge: null,
       hi: false,
       accentColor: GOLD,
       cta: 'Get started →',
-      limits: 'Unlimited students · All subjects',
+      limits: studentLimit(2, null),
       features: [
         { text: 'Student progress dashboard', included: true },
         { text: 'Session scheduling', included: true },
@@ -320,7 +325,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                 <div style={{ position: 'absolute', top: 3, left: billing === 'annual' ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
               </div>
               <button onClick={() => setBilling('annual')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: billing === 'annual' ? 700 : 400, color: billing === 'annual' ? '#f1f5f9' : MUTED }}>
-                Annual <span style={{ fontSize: 11, color: GREEN, fontWeight: 800, marginLeft: 4 }}>–20%</span>
+                Annual {annualDiscount > 0 && <span style={{ fontSize: 11, color: GREEN, fontWeight: 800, marginLeft: 4 }}>–{Math.round(annualDiscount * 100)}%</span>}
               </button>
             </div>}
           </div>
@@ -516,7 +521,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                 { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraSubjects}/week. Two subjects are $${planTotal(tiers, 2)}/week.` },
                 { q: 'Can I pay monthly instead of weekly?', a: `Yes. Pick monthly at checkout, or switch any time in My Account: $${monthlyTiers[0]} a month for the first subject, then $${extraLadder(monthlyTiers)}/month for each extra one${saving ? ` — about ${saving}% less than paying weekly` : ''}.` },
                 { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student plans are billed weekly or monthly." },
-                { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit." },
+                { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit. Pending invites count towards the limit." },
                 { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },
               ].map(({ q, a }, i) => (
                 <FaqItem key={i} q={q} a={a} />

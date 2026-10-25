@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { getStripe, removePaidSubject } from "./billing";
 import { currentStreak } from "../lib/streak";
+import { planIsLive, type TutorBillingRow } from "../lib/tutor-plan";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -659,12 +660,15 @@ router.get("/admin/tutors", async (req, res) => {
     const tutorIds = tutorList.map(t => t.id);
 
     // Fetch all roster rows + assignments for these tutors in parallel
-    const [rosterRes, asgnRes, authUsers] = await Promise.all([
+    const [rosterRes, asgnRes, authUsers, billingRes] = await Promise.all([
       admin.from("tutor_students").select("tutor_id, student_id").in("tutor_id", tutorIds),
       admin.from("assignments").select("id, tutor_id, student_id, due_date, completed_at, created_at").in("tutor_id", tutorIds),
       listAllAuthUsers(admin).catch(() => [] as { id: string; email: string; created_at: string }[]),
+      admin.from("tutor_billing").select("*").in("tutor_id", tutorIds),
     ]);
 
+    if (billingRes.error) return res.status(500).json({ error: billingRes.error.message });
+    const billingById = new Map((billingRes.data as TutorBillingRow[] | null || []).map((b) => [b.tutor_id, b]));
     if (rosterRes.error) return res.status(500).json({ error: rosterRes.error.message });
     if (asgnRes.error)   return res.status(500).json({ error: asgnRes.error.message });
 
@@ -697,6 +701,12 @@ router.get("/admin/tutors", async (req, res) => {
         created_at: t.created_at,
         roster_size: rosterCount[t.id] || 0,
         can_include_subject: !!t.can_include_subject,
+        // Tutor plan (lib/tutor-plan.ts): exempt tutors need none.
+        billing_exempt: !!billingById.get(t.id)?.exempt,
+        plan_active: planIsLive(billingById.get(t.id) ?? null),
+        plan: billingById.get(t.id)?.plan ?? null,
+        plan_interval: billingById.get(t.id)?.interval ?? null,
+        plan_status: billingById.get(t.id)?.status ?? null,
         assignments_total:     stats[t.id].total,
         assignments_completed: stats[t.id].completed,
         assignments_pending:   stats[t.id].pending,
@@ -726,6 +736,25 @@ router.patch("/admin/tutors/:id/include-subject", async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     if (!data?.length) return res.status(404).json({ error: "Tutor not found" });
     return res.json({ ok: true, can_include_subject: enabled });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
+// PATCH /admin/tutors/:id/billing-exempt — { exempt }: whether this tutor can
+// use the tutor portal without a plan (and without a student limit).
+router.patch("/admin/tutors/:id/billing-exempt", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const exempt = req.body?.exempt === true;
+    const { data: tutor } = await ctx.admin
+      .from("profiles").select("id").eq("id", req.params.id).eq("is_tutor", true).maybeSingle();
+    if (!tutor) return res.status(404).json({ error: "Tutor not found" });
+    const { error } = await ctx.admin
+      .from("tutor_billing").upsert({ tutor_id: req.params.id, exempt, updated_at: new Date().toISOString() }, { onConflict: "tutor_id" });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true, billing_exempt: exempt });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
   }

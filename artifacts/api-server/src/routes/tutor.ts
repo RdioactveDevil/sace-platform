@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { EMAIL_FROM, appUrl } from "../lib/email";
 import { IncludedSubjectError, canIncludeSubject, includeSubject, removeIncludedSubject } from "../lib/included-subject";
 import { createStudentDiagnostic, waiveDiagnostic } from "../lib/student-diagnostic";
+import { requireTutorPlan } from "../lib/tutor-plan";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -77,6 +78,7 @@ async function requireTutor(req: Request, res: Response): Promise<TutorContext |
     res.status(403).json({ error: "Forbidden: caller is not a tutor" });
     return null;
   }
+  if (!(await requireTutorPlan(admin, res, callerUser.user.id, !!callerProfile.is_admin))) return null;
   return {
     admin,
     callerUserId: callerUser.user.id,

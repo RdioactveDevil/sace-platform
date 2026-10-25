@@ -59,7 +59,7 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29, students: 10 }, { name: 'Pro', price: 59, students: 25 }, { name: 'Agency', price: 99, students: 999 }], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
   // Pricing state
@@ -94,7 +94,7 @@ export default function AdminSettingsTab() {
   }
 
   const updateTutorPlan = (idx, field, raw) => {
-    const val = field === 'price' ? (raw === '' ? '' : Number(raw)) : raw
+    const val = field === 'price' || field === 'students' ? (raw === '' ? '' : Number(raw)) : raw
     setPr(p => {
       const plans = [...(p.tutor_plans || [])]
       plans[idx] = { ...plans[idx], [field]: val }
@@ -172,19 +172,36 @@ export default function AdminSettingsTab() {
           </Field>
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12, marginTop: 4 }}>Tutor Plan Prices</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>Tutor Plans</div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
+          Tutors need one of these to use the tutor portal, billed monthly or yearly (annual discount above). A plan
+          caps students on the roster plus pending invites; 999 means unlimited. Tutors already subscribed keep the
+          price and limit they signed up with. Don't rename a plan while tutors are on it.
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 4 }}>
           {(pr.tutor_plans || []).map((plan, idx) => (
-            <Field key={idx} label={plan.name || `Plan ${idx + 1}`} hint="$/month">
-              <input
-                style={inputStyle}
-                type="number"
-                min={0}
-                value={plan.price ?? ''}
-                onChange={e => updateTutorPlan(idx, 'price', e.target.value)}
-                placeholder="0"
-              />
-            </Field>
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Field label={`${plan.name || `Plan ${idx + 1}`}: price`} hint="$/month">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={0}
+                  value={plan.price ?? ''}
+                  onChange={e => updateTutorPlan(idx, 'price', e.target.value)}
+                  placeholder="0"
+                />
+              </Field>
+              <Field label="Students" hint="999 = unlimited">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={1}
+                  value={plan.students ?? ''}
+                  onChange={e => updateTutorPlan(idx, 'students', e.target.value)}
+                  placeholder="999"
+                />
+              </Field>
+            </div>
           ))}
         </div>
 

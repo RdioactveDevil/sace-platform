@@ -5,6 +5,7 @@ import { latexPromptRule } from "../lib/math-prompt";
 import { repairLatexJson } from "../lib/json-latex";
 import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
+import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 
 const router = Router();
@@ -205,14 +206,15 @@ async function requireTutor(req: Request, res: Response): Promise<{ admin: Admin
 
   const { data: profile, error: profError } = await admin
     .from("profiles")
-    .select("id, is_tutor, display_name")
+    .select("id, is_tutor, is_admin, display_name")
     .eq("id", userData.user.id)
-    .single<{ id: string; is_tutor: boolean; display_name: string | null }>();
+    .single<{ id: string; is_tutor: boolean; is_admin: boolean | null; display_name: string | null }>();
 
   if (profError || !profile?.is_tutor) {
     res.status(403).json({ error: "Forbidden: caller is not a tutor" });
     return null;
   }
+  if (!(await requireTutorPlan(admin, res, userData.user.id, !!profile.is_admin))) return null;
 
   return { admin, tutorId: userData.user.id, tutorName: profile.display_name ?? "Your tutor" };
 }

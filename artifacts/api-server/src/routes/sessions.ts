@@ -13,6 +13,7 @@ import {
 import { Resend } from "resend";
 import { getR2Config } from "../lib/r2";
 import { EMAIL_FROM } from "../lib/email";
+import { requireTutorPlan } from "../lib/tutor-plan";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -321,6 +322,7 @@ router.post("/sessions", async (req: Request, res: Response) => {
     res.status(403).json({ error: "Only tutors can create sessions" });
     return;
   }
+  if (!(await requireTutorPlan(ctx.admin, res, ctx.userId))) return;
 
   const {
     session_type = "individual",

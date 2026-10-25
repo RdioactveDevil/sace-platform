@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, getServiceClient, type Caller } from "../lib/auth";
 import { appUrl, getResend, sendEmail } from "../lib/email";
 import { logger } from "../lib/logger";
+import { requireTutorPlan, studentLimitError } from "../lib/tutor-plan";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { createStudentDiagnostic } from "../lib/student-diagnostic";
 import { liveCurriculum } from "./billing";
@@ -171,6 +172,7 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     const caller = await requireTutorCaller(req, res);
     if (!caller) return;
     const { admin, userId } = caller;
+    if (!(await requireTutorPlan(admin, res, userId, caller.isAdmin))) return;
 
     const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown; diagnosticSubtopics?: unknown };
     const email = String(body.email ?? "").trim().toLowerCase();
@@ -209,6 +211,9 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
         });
       }
     }
+
+    const overLimit = await studentLimitError(admin, userId, caller.isAdmin, email);
+    if (overLimit) return res.status(403).json({ error: overLimit, code: "tutor_student_limit" });
 
     const { data: pending, error: pendingErr } = await admin
       .from("tutor_invites")

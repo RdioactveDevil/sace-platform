@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard } from 'lucide-react'
+import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard, CreditCard } from 'lucide-react'
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
 import OverviewTab from './OverviewTab'
 import MessagesView from './MessagesView'
 import TutorProfileTab from './TutorProfileTab'
+import { TutorPlanTab } from './TutorPlan'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
 import AssignmentReport from './AssignmentReport'
@@ -2271,6 +2272,7 @@ const NAV_GROUPS = [
   ]},
   { label: 'You', items: [
     { id: 'profile',     label: 'My Profile',  icon: IdCard },
+    { id: 'plan',        label: 'Plan & billing', icon: CreditCard },
   ]},
 ]
 const SECTION_META = {
@@ -2284,6 +2286,7 @@ const SECTION_META = {
   diagnostic:  { title: 'Diagnostic',  sub: 'AI-built diagnostic assessments.' },
   messages:    { title: 'Messages',    sub: 'Conversations with your students.' },
   profile:     { title: 'My Profile',  sub: 'What your students see about you.' },
+  plan:        { title: 'Plan & billing', sub: 'Your tutor plan, student limit and payments.' },
 }
 
 export default function TutorScreen({ profile, theme, subject }) {
@@ -2557,6 +2560,7 @@ export default function TutorScreen({ profile, theme, subject }) {
             {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
             {activeTab === 'messages'    && <MessagesView   theme={theme} emptyHint="Invite a student from the Students tab to start a conversation." />}
             {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
+            {activeTab === 'plan'        && <TutorPlanTab theme={theme} />}
           </div>
         </div>
       </div>

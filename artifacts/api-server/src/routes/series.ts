@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "../lib/email";
+import { requireTutorPlan } from "../lib/tutor-plan";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -110,6 +111,7 @@ router.post("/series", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
   if (!ctx.isTutor) { res.status(403).json({ error: "Only tutors can create series" }); return; }
+  if (!(await requireTutorPlan(ctx.admin, res, ctx.userId))) return;
 
   const {
     session_type = "individual",

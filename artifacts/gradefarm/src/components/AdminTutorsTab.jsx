@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { adminListTutors, adminGetTutor, adminSetTutorIncludeSubject, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
+import { adminListTutors, adminGetTutor, adminSetTutorIncludeSubject, adminSetTutorBillingExempt, adminListStudents, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -18,6 +18,13 @@ function fmtRelative(iso) {
   if (days < 7)  return `${days}d ago`
   if (days < 30) return `${Math.floor(days / 7)}w ago`
   return fmtDate(iso)
+}
+
+/** "Free portal (exempt)", "Pro · monthly", "No tutor plan", … for a row from adminListTutors. */
+function tutorPlanLabel(t) {
+  if (t.billing_exempt) return 'Free portal (exempt)'
+  if (t.plan_active) return `${t.plan || 'Plan'} · ${t.plan_interval === 'year' ? 'annual' : 'monthly'}${t.plan_status === 'past_due' ? ' · payment overdue' : ''}`
+  return 'No tutor plan'
 }
 
 function statusColor(s) {
@@ -70,6 +77,20 @@ export default function AdminTutorsTab() {
       setTutors(ts => ts.map(x => (x.id === selected.id ? { ...x, can_include_subject: enabled } : x)))
     } catch (e) { setError(e.message) }
     setIncludeBusy(false)
+  }
+
+  // Whether the open tutor can use the tutor portal without paying for a plan.
+  const [exemptBusy, setExemptBusy] = useState(false)
+  const toggleBillingExempt = async () => {
+    const exempt = !selected.billing_exempt
+    setExemptBusy(true); setError('')
+    try {
+      await adminSetTutorBillingExempt(selected.id, exempt)
+      const update = x => ({ ...x, billing_exempt: exempt, plan_active: exempt || ['active', 'trialing', 'past_due'].includes(x.plan_status) })
+      setSelected(update)
+      setTutors(ts => ts.map(x => (x.id === selected.id ? update(x) : x)))
+    } catch (e) { setError(e.message) }
+    setExemptBusy(false)
   }
 
   useEffect(() => {
@@ -157,6 +178,7 @@ export default function AdminTutorsTab() {
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{t.email || '—'}</div>
                     {t.school && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{t.school}</div>}
                     {t.can_include_subject && <div style={{ fontSize: 10, color: '#4ade80', marginTop: 2, fontWeight: 700 }}>Includes free subjects</div>}
+                    <div style={{ fontSize: 10, marginTop: 2, fontWeight: 700, color: t.plan_active ? '#a78bfa' : '#f87171' }}>{tutorPlanLabel(t)}</div>
                   </td>
                   <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.roster_size}</span></td>
                   <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.assignments_total}</span></td>
@@ -200,6 +222,20 @@ export default function AdminTutorsTab() {
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: includeBusy ? 'default' : 'pointer',
                   background: selected.can_include_subject ? '#4ade80' : 'rgba(255,255,255,0.08)', color: selected.can_include_subject ? '#0c1037' : '#94a3b8' }}>
                 {includeBusy ? '…' : selected.can_include_subject ? 'On' : 'Off'}
+              </button>
+            </div>
+
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Free tutor portal</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                  {tutorPlanLabel(selected)}. On: this tutor uses the tutor portal without a plan and with no student limit. Off: they need a paid plan.
+                </div>
+              </div>
+              <button onClick={toggleBillingExempt} disabled={exemptBusy} role="switch" aria-checked={!!selected.billing_exempt}
+                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: exemptBusy ? 'default' : 'pointer',
+                  background: selected.billing_exempt ? '#4ade80' : 'rgba(255,255,255,0.08)', color: selected.billing_exempt ? '#0c1037' : '#94a3b8' }}>
+                {exemptBusy ? '…' : selected.billing_exempt ? 'On' : 'Off'}
               </button>
             </div>
 

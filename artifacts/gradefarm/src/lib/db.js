@@ -176,6 +176,14 @@ export async function adminGetTutor(tutorId) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}`)
 }
 
+/** Let a tutor use the tutor portal without a plan (or make them need one). */
+export async function adminSetTutorBillingExempt(tutorId, exempt) {
+  return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/billing-exempt`, {
+    method: 'PATCH',
+    body: JSON.stringify({ exempt }),
+  })
+}
+
 /** Let a tutor include subjects, free, for their students (or stop them). */
 export async function adminSetTutorIncludeSubject(tutorId, enabled) {
   return adminFetch(`/api/admin/tutors/${encodeURIComponent(tutorId)}/include-subject`, {
@@ -651,6 +659,27 @@ export async function getSubscriptions(userId) {
  */
 export async function getBillingConfig() {
   return tutorFetch('/api/billing/config')
+}
+
+// Tutor plans: the tutor portal's monthly or annual fee (api-server lib/tutor-plan.ts).
+
+/**
+ * { enabled, plans: [{ name, monthly, annual, students }], annualDiscount, active, exempt,
+ *   plan, interval ('month' | 'year'), status, renewsAt, endsAtPeriodEnd, studentLimit, studentsUsed }
+ */
+export async function getTutorBilling() {
+  return tutorFetch('/api/tutor-billing/status')
+}
+
+/** Subscribe ({ url } for Stripe Checkout) or move to another plan / billing period ({ ok }). */
+export async function chooseTutorPlan(plan, interval) {
+  return tutorFetch('/api/tutor-billing/plan', { method: 'POST', body: JSON.stringify({ plan, interval }) })
+}
+
+/** Stripe customer portal for the tutor's card, receipts and cancelling; resolves to its URL. */
+export async function openTutorBillingPortal() {
+  const json = await tutorFetch('/api/tutor-billing/portal', { method: 'POST' })
+  return json.url
 }
 
 /** Make a subject the student's one free subject (replaces any other). */

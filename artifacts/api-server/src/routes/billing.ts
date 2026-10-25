@@ -3,6 +3,8 @@ import Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, getServiceClient } from "../lib/auth";
 import { logger } from "../lib/logger";
+import { ACCESS_STATUSES, periodEnd, priceByLookupKey } from "../lib/stripe-plans";
+import { TUTOR_PLAN_KIND, syncTutorSubscription } from "../lib/tutor-plan";
 
 // Student access and billing.
 //
@@ -32,10 +34,8 @@ export type Interval = "week" | "month";
 const INTERVALS: readonly Interval[] = ["week", "month"];
 const isInterval = (v: unknown): v is Interval => INTERVALS.includes(v as Interval);
 const per = (interval: Interval) => `/${interval}`;
-/** Statuses that keep paid subjects unlocked (past_due: Stripe is still retrying the card). */
-const ACCESS_STATUSES = new Set<Stripe.Subscription.Status>(["trialing", "active", "past_due"]);
 
-const appUrl = () => (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/$/, "");
+export const appUrl = () => (process.env.APP_URL ?? "https://gradefarm.com.au").replace(/\/$/, "");
 
 let stripeClient: Stripe | null = null;
 export function getStripe(): Stripe | null {
@@ -45,7 +45,7 @@ export function getStripe(): Stripe | null {
   return stripeClient;
 }
 
-function notConfigured(res: Response) {
+export function notConfigured(res: Response) {
   res.status(503).json({ error: "Payments aren't set up yet. Please contact Titanium Tutoring." });
 }
 
@@ -72,22 +72,6 @@ export const tierPrice = (tiers: number[], n: number) => tiers[Math.min(n, tiers
 /** Total per billing period for `count` paid subjects. */
 export const planTotal = (tiers: number[], count: number) =>
   Array.from({ length: count }, (_, i) => tierPrice(tiers, i + 1)).reduce((a, b) => a + b, 0);
-
-/** The active price with this lookup key, created from `params` on first use. */
-export async function priceByLookupKey(
-  stripe: Stripe, lookupKey: string, params: Omit<Stripe.PriceCreateParams, "lookup_key">,
-): Promise<string> {
-  const find = async () => (await stripe.prices.list({ lookup_keys: [lookupKey], active: true, limit: 1 })).data[0]?.id;
-  const existing = await find();
-  if (existing) return existing;
-  try {
-    return (await stripe.prices.create({ ...params, lookup_key: lookupKey })).id;
-  } catch (err) {
-    const raced = await find(); // another request created it first
-    if (raced) return raced;
-    throw err;
-  }
-}
 
 /** The graduated weekly or monthly price for these tiers. */
 async function planPriceId(stripe: Stripe, tiers: number[], interval: Interval): Promise<string> {
@@ -125,10 +109,10 @@ async function customerRow(admin: SupabaseClient, userId: string): Promise<Custo
 }
 
 /** Stripe has no such object in this account and mode, e.g. a sandbox ID after switching to live keys. */
-const isMissing = (err: unknown) => err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing";
+export const isMissing = (err: unknown) => err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing";
 
 /** The student's billing row, dropped (→ null) if Stripe doesn't have its customer, so a new one gets made. */
-async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<CustomerRow | null> {
+export async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<CustomerRow | null> {
   const row = await customerRow(admin, userId);
   if (!row) return null;
   const customer = await stripe.customers.retrieve(row.stripe_customer_id).catch((err) => {
@@ -142,7 +126,7 @@ async function currentCustomerRow(admin: SupabaseClient, stripe: Stripe, userId:
   return null;
 }
 
-async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<string> {
+export async function customerFor(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<string> {
   const row = await currentCustomerRow(admin, stripe, userId);
   if (row) return row.stripe_customer_id;
   const [{ data: authUser }, { data: profile }] = await Promise.all([
@@ -195,13 +179,12 @@ async function accessRow(admin: SupabaseClient, userId: string, cur: Curriculum)
 }
 
 const subFields = (sub: Stripe.Subscription) => {
-  const periodEnd = sub.items.data[0]?.current_period_end;
   return {
     status: sub.status,
     active: ACCESS_STATUSES.has(sub.status),
     stripe_subscription_id: sub.id,
     stripe_customer_id: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
-    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    current_period_end: periodEnd(sub),
     cancel_at_period_end: sub.cancel_at_period_end || !!sub.cancel_at,
     updated_at: new Date().toISOString(),
   };
@@ -241,9 +224,11 @@ async function setQuantity(stripe: Stripe, sub: Stripe.Subscription, quantity: n
  * Write a Stripe subscription's current state onto the student's rows. Re-reads
  * it from Stripe so out-of-order webhooks can't roll access back. A
  * subscription fresh from Checkout carries the first subject in its metadata.
+ * A tutor's plan is recorded in tutor_billing instead (lib/tutor-plan.ts).
  */
 export async function syncSubscription(admin: SupabaseClient, stripe: Stripe, subscriptionId: string): Promise<void> {
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  if (sub.metadata?.kind === TUTOR_PLAN_KIND) return syncTutorSubscription(admin, sub);
   const userId = sub.metadata?.user_id;
   if (!userId) {
     logger.warn({ subscriptionId }, "billing: subscription without GradeFarm metadata");
