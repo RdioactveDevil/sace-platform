@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getPlatformSettings, setPlatformSetting } from '../lib/db'
-import { DEFAULT_STUDENT_TIERS } from '../lib/pricing'
+import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS } from '../lib/pricing'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -59,7 +59,7 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [{ name: 'Starter', price: 29 }, { name: 'Growth', price: 59 }, { name: 'Pro', price: 99 }], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
   // Pricing state
@@ -111,8 +111,8 @@ export default function AdminSettingsTab() {
       {/* ── Student access ── */}
       <Section title="Student access">
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-          Every student can pick one free subject (limited questions per day). Paid subjects are one weekly Stripe plan
-          per student, cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
+          Every student can pick one free subject (limited questions per day). Paid subjects are one Stripe plan per
+          student, billed weekly or monthly (their choice), cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
           give a student a subject for free, grant it from <strong>Students</strong>; removing a paid subject there takes
           it off their plan. Tutors and admins can use every subject.
         </div>
@@ -121,23 +121,24 @@ export default function AdminSettingsTab() {
       {/* ── Pricing ── */}
       <Section title="Pricing (shown on pricing page)">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 4 }}>
-          {['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
-            <Field key={label} label={`${label} ($/week, AUD)`} hint={i === 0 ? 'New plans use these prices' : undefined}>
-              <input
-                style={inputStyle}
-                type="number"
-                min={1}
-                step={0.5}
-                value={(pr.student_tiers || DEFAULT_PRICING.student_tiers)[i] ?? ''}
-                onChange={e => setPr(p => {
-                  const next = [...(p.student_tiers || DEFAULT_PRICING.student_tiers)]
-                  next[i] = e.target.value === '' ? '' : Number(e.target.value)
-                  return { ...p, student_tiers: next }
-                })}
-                placeholder={String(DEFAULT_PRICING.student_tiers[i])}
-              />
-            </Field>
-          ))}
+          {[['student_tiers', 'week'], ['student_monthly_tiers', 'month']].flatMap(([key, unit]) =>
+            ['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
+              <Field key={`${key}-${i}`} label={`${label} ($/${unit}, AUD)`} hint={i === 0 ? `New ${unit}ly plans use these prices` : undefined}>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={1}
+                  step={0.5}
+                  value={(pr[key] || DEFAULT_PRICING[key])[i] ?? ''}
+                  onChange={e => setPr(p => {
+                    const next = [...(p[key] || DEFAULT_PRICING[key])]
+                    next[i] = e.target.value === '' ? '' : Number(e.target.value)
+                    return { ...p, [key]: next }
+                  })}
+                  placeholder={String(DEFAULT_PRICING[key][i])}
+                />
+              </Field>
+            )))}
           <Field label="Free tier: Titan AI messages per day" hint="Students with no paid subject">
             <input
               style={inputStyle}

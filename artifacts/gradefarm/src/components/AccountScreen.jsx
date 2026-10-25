@@ -4,9 +4,9 @@ import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal,
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import { currentStreak } from '../lib/streak'
-import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
+import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail } from '../lib/db'
 import { formatSubjectLabel } from '../lib/subjects'
-import { studentTiers, planTotal, extraLadder } from '../lib/pricing'
+import { studentTiers, planTotal, extraLadder, monthlySaving, money } from '../lib/pricing'
 import { supabase } from '../lib/supabase'
 import RankIcon from './RankIcon'
 
@@ -79,12 +79,12 @@ function Field({ t, label, hint, children }) {
   )
 }
 
-/** The student's subjects, their weekly plan, and the Stripe portal. */
+/** The student's subjects, their weekly or monthly plan, and the Stripe portal. */
 function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
   const t = THEMES[theme]
   const [subs, setSubs] = useState(null)
   const [plan, setPlan] = useState(null)
-  const [busy, setBusy] = useState(null) // 'portal' | row id
+  const [busy, setBusy] = useState(null) // 'portal' | 'interval' | row id
   const [error, setError] = useState('')
 
   const load = async () => {
@@ -99,9 +99,24 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
 
   const paid = (subs || []).filter(s => s.source === 'stripe')
   const freeDaily = plan?.freeDailyQuestions ?? 20
-  // A plan started before a price change keeps its own prices.
-  const tiers = studentTiers(plan?.hasPlan ? plan.planTiers ?? plan.tiers : plan?.tiers)
+  // A plan bills weekly or monthly, at the prices it started on.
+  const interval = plan?.interval ?? 'week'
+  const weekly = studentTiers(plan?.tiers)
+  const monthly = studentTiers(plan?.monthlyTiers, 'month')
+  const tiers = plan?.hasPlan ? studentTiers(plan.planTiers, interval) : weekly
+  const saving = monthlySaving(weekly[0], monthly[0])
   const totalAfterRemoving = () => planTotal(tiers, paid.length - 1)
+  const otherInterval = interval === 'month' ? 'week' : 'month'
+  const switchedTotal = planTotal(otherInterval === 'month' ? monthly : weekly, paid.length)
+
+  const switchInterval = async () => {
+    const msg = `Switch to ${otherInterval}ly billing at $${money(switchedTotal)}/${otherInterval}? Your new ${otherInterval} starts today, and the unused part of this ${interval} comes off the first bill.`
+    if (!window.confirm(msg)) return
+    setBusy('interval'); setError('')
+    try { await switchBillingInterval(otherInterval); await load() }
+    catch (e) { setError(e.message || 'Could not change your billing.') }
+    setBusy(null)
+  }
 
   const openPortal = async () => {
     setBusy('portal'); setError('')
@@ -113,7 +128,7 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
     const label = formatSubjectLabel({ name: sub.subject_name, stage: sub.stage })
     const msg = paid.length === 1
       ? `Remove ${label}? It's your only paid subject, so your plan ends on ${shortDate(sub.current_period_end)} and you keep access until then.`
-      : `Remove ${label} now? Your plan drops to $${totalAfterRemoving()}/week and unused time is credited to your next bill.`
+      : `Remove ${label} now? Your plan drops to $${money(totalAfterRemoving())}/${interval} and unused time is credited to your next bill.`
     if (!window.confirm(msg)) return
     setBusy(sub.id); setError('')
     try { await removePaidSubject(sub.id); await load() }
@@ -130,7 +145,7 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Your subjects</div>
           {plan?.hasPlan && (
             <span style={{ fontSize: 12.5, color: t.textMuted }}>
-              <strong style={{ color: t.text }}>${plan.weeklyTotal}/week</strong>
+              <strong style={{ color: t.text }}>${money(plan.total)}/{interval}</strong>
               {plan.endsAtPeriodEnd ? ` · ends ${shortDate(plan.renewsAt)}` : plan.renewsAt ? ` · next bill ${shortDate(plan.renewsAt)}` : ''}
             </span>
           )}
@@ -167,15 +182,24 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
       </div>
 
       <div style={card}>
-        <CardTitle t={t} title="Pricing" sub={`$${tiers[0]}/week for your first paid subject${tiers.length > 1 ? `, then $${extraLadder(tiers)}/week for each extra one` : ''}. Your one free subject has ${freeDaily} questions a day.`} />
+        <CardTitle t={t} title="Pricing" sub={`${plan?.hasPlan ? `Your plan is billed ${interval}ly: ` : ''}$${tiers[0]}/${plan?.hasPlan ? interval : 'week'} for your first paid subject${tiers.length > 1 ? `, then $${extraLadder(tiers)}/${plan?.hasPlan ? interval : 'week'} for each extra one` : ''}.${plan?.hasPlan ? '' : ` Or pay monthly from $${monthly[0]}/month${saving ? ` (save ${saving}%)` : ''}.`} Your one free subject has ${freeDaily} questions a day.`} />
         {paid.length > 0 ? (
           <>
             <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
               Update your card, download receipts or cancel your plan in the secure Stripe billing portal.
             </p>
-            <button type="button" onClick={openPortal} disabled={!!busy} style={btn('secondary', !!busy)}>
-              {busy === 'portal' ? 'Opening…' : 'Card & receipts'}
-            </button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button type="button" onClick={openPortal} disabled={!!busy} style={btn('secondary', !!busy)}>
+                {busy === 'portal' ? 'Opening…' : 'Card & receipts'}
+              </button>
+              {plan?.hasPlan && !plan.endsAtPeriodEnd && (
+                <button type="button" onClick={switchInterval} disabled={!!busy} style={btn('secondary', !!busy)}>
+                  {busy === 'interval' ? 'Switching…'
+                    : otherInterval === 'month' ? `Pay monthly${saving ? ` · save ${saving}%` : ''}`
+                    : 'Pay weekly instead'}
+                </button>
+              )}
+            </div>
           </>
         ) : (
           <p style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>

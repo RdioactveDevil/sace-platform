@@ -4,11 +4,19 @@
 
 /** $/week (AUD) for the 1st, 2nd and every further paid subject. */
 export const DEFAULT_STUDENT_TIERS = [7, 6, 5]
+/** The same per month: a little under 52/12 weeks' worth. */
+export const DEFAULT_MONTHLY_TIERS = [27, 23, 19]
 
-/** The tiers from settings or the billing config, or the defaults. */
-export function studentTiers(tiers) {
+/** The tiers from settings or the billing config for that billing period, or the defaults. */
+export function studentTiers(tiers, interval = 'week') {
   const clean = Array.isArray(tiers) ? tiers.filter(n => typeof n === 'number' && n > 0) : []
-  return clean.length ? clean : DEFAULT_STUDENT_TIERS
+  return clean.length ? clean : interval === 'month' ? DEFAULT_MONTHLY_TIERS : DEFAULT_STUDENT_TIERS
+}
+
+/** Whole % a monthly price saves over paying weekly for a month (52/12 weeks); null if it doesn't. */
+export function monthlySaving(weekly, monthly) {
+  const pct = Math.round((1 - monthly / (weekly * 52 / 12)) * 100)
+  return pct > 0 ? pct : null
 }
 
 /** Price of the nth paid subject (1-based); the last tier applies to every further subject. */
