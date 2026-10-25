@@ -167,6 +167,9 @@ export default function LearnScreen({
   const [fromContext, setFromContext]   = useState(false)
   const [contextSubtopic, setContextSubtopic] = useState(null)
   const [questionFocus, setQuestionFocus] = useState(null)
+  // `subject` is the subject tile; the chat API wants its name (the off-topic
+  // check runs on what the student types, judged against this subject and topic).
+  const subjectName = (typeof subject === 'string' ? subject : subject?.name) || ''
   // What "Consolidate" would practise: the bank's subtopic (or whole topic) for
   // this lesson, or null when the bank has nothing for what was typed.
   const consolidateTarget = useMemo(
@@ -310,7 +313,7 @@ export default function LearnScreen({
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1500,
-        subject: subject || '',
+        subject: subjectName,
         topic: contextTopic || '',
         system: systemPrompt,
         messages: [{ role: 'user', content: openingPrompt }],
@@ -440,7 +443,7 @@ export default function LearnScreen({
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, subject: subject || '', topic: topic || '', system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, subject: subjectName, topic: topic || '', system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
       })
       const data = await res.json()
       const firstMsg = { role: 'assistant', content: data.content?.[0]?.text || "Hey! Let's dive in. What do you already know about this topic?" }
@@ -486,7 +489,7 @@ export default function LearnScreen({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
           purpose: 'titan_chat',
-          subject: subject || '',
+          subject: subjectName,
           topic: topic || '',
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests, questionFocus),
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
@@ -531,7 +534,7 @@ export default function LearnScreen({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
           purpose: 'titan_chat',
-          subject: subject || '',
+          subject: subjectName,
           topic: topic || '',
           system: buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests, questionFocus),
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
