@@ -453,14 +453,28 @@ export async function getStruggleMap(userId) {
   return Object.fromEntries(data.map(r => [r.question_id, r]))
 }
 
-export async function recordAnswer(userId, questionId, correct, selected = 0, sessionId = null, timeTakenMs = null) {
+// `selected` is the chosen option index for an MCQ, null for other types.
+export async function recordAnswer(userId, questionId, correct, selected = null, sessionId = null, timeTakenMs = null) {
+  // One call logs the answer and updates the struggle row (migration
+  // 20261025000004_record_answer.sql).
+  const { error } = await supabase.rpc('record_answer', {
+    p_question_id: questionId,
+    p_correct: !!correct,
+    p_selected: Number.isInteger(selected) ? selected : null,
+    p_session_id: sessionId,
+    p_time_ms: Number.isFinite(timeTakenMs) ? Math.round(timeTakenMs) : null,
+  })
+  if (!error) return
+  if (error.code !== 'PGRST202') throw error
+
+  // Before that migration: three requests, and answer_log.selected is NOT NULL.
   // The answer log doesn't depend on the struggle row, so write it alongside
   // the read-then-write below instead of after it.
   const logInsert = supabase.from('answer_log').insert({
     user_id: userId,
     session_id: sessionId,
     question_id: questionId,
-    selected,
+    selected: Number.isInteger(selected) ? selected : 0,
     correct,
     time_taken_ms: timeTakenMs,
   })

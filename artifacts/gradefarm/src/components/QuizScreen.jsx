@@ -616,9 +616,9 @@ export default function QuizScreen({
     }
     clearRemediation()
     setQNumber(n => n + 1)
-    const _targetDiff = getTargetDifficulty(sessionAnswered, questions)
+    const _targetDiff = getTargetDifficulty(sessionResults, questions)
     setStruggleMap(prev => { loadNext(sessionAnswered, prev, quizMode, effectiveSubtopics, _targetDiff); return prev })
-  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, questions, remediationConcept, remediationOriginalQ, sessionAnswered, setQNumber, setStruggleMap])
+  }, [clearRemediation, effectiveSubtopics, loadNext, profile.id, quizMode, questions, remediationConcept, remediationOriginalQ, sessionAnswered, sessionResults, setQNumber, setStruggleMap])
 
   // "Has this student already answered this question?" (by id or by content),
   // so remediation never re-serves a question from an earlier session. Kept in
@@ -1486,7 +1486,14 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
   }
 
-  const counts = getQuestionCounts(questions, struggleMap, effectiveSubtopics)
+  // Walks the whole bank, so only redo it when the inputs change (not on every
+  // keystroke in an answer box or tick of the exam timer).
+  const subtopicsKey = effectiveSubtopics.join('\u0000')
+  const counts = useMemo(
+    () => getQuestionCounts(questions, struggleMap, effectiveSubtopics),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questions, struggleMap, subtopicsKey],
+  )
 
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode) => {
