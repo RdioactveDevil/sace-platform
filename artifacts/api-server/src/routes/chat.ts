@@ -120,18 +120,6 @@ function getServiceClient() {
   return createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false } });
 }
 
-async function verifyJwt(jwt: string): Promise<string | null> {
-  try {
-    const admin = getServiceClient();
-    if (!admin) return null;
-    const { data, error } = await admin.auth.getUser(jwt);
-    if (error || !data?.user?.id) return null;
-    return data.user.id;
-  } catch {
-    return null;
-  }
-}
-
 async function classifyMessage(subject: string, topic: string, userMessage: string): Promise<"on_topic" | "off_topic"> {
   try {
     const classifierSystem = [
@@ -280,22 +268,18 @@ router.post("/chat", async (req, res) => {
     });
     mainFetchPromise.catch(() => {}); // suppress unhandled rejection if aborted early
 
-    if (typeof subject === "string" && subject.trim().length > 0 && typeof topic === "string" && topic.trim().length > 0 && typedMessages.length > 0) {
+    // Off-topic check: only on messages the student types to Titan (purpose
+    // "titan_chat"), never on the app's own hidden prompts, such as the opener
+    // that starts Titan from a quiz question.
+    if (isChat && typeof subject === "string" && subject.trim().length > 0 && typeof topic === "string" && topic.trim().length > 0 && typedMessages.length > 0) {
       const lastUserMsg = [...typedMessages].reverse().find((m) => m.role === "user");
       const lastUserText = lastUserMsg ? extractTextFromContent(lastUserMsg.content) : "";
       if (lastUserMsg && lastUserText.length > 0) {
         const classification = await classifyMessage(subject, topic, lastUserText);
         if (classification === "off_topic") {
           mainController.abort();
-          // Derive student identity server-side from the Bearer JWT — never trust a client-provided user_id.
-          const authHeader = req.headers.authorization;
-          if (authHeader?.startsWith("Bearer ")) {
-            const jwt = authHeader.slice(7);
-            const verifiedUserId = await verifyJwt(jwt);
-            if (verifiedUserId) {
-              logOffTopicAttempt(verifiedUserId, subject.trim(), topic.trim());
-            }
-          }
+          // The caller was verified from their JWT above; server scripts aren't students.
+          if (caller.userId !== "service") logOffTopicAttempt(caller.userId, subject.trim(), topic.trim());
           const redirectFn = OFF_TOPIC_REDIRECTS[Math.floor(Math.random() * OFF_TOPIC_REDIRECTS.length)];
           res.status(200).json({
             content: [{ type: "text", text: redirectFn(topic) }],
