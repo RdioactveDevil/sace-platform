@@ -51,6 +51,7 @@ import QuizToolsDock from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 import { buildQuestionHelpContext } from '../lib/questionHelp'
+import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -348,7 +349,9 @@ function StatusToast({ status, onReturnToQuiz, theme = 'dark' }) {
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
   examMode = false, timerSeconds = 0, subjectTile,
-  onOpenLearn, consolidateSubtopic, onClearConsolidate,
+  onOpenLearn,
+  // A consolidation round from Titan AI ({ label, subtopics, canReturn }) and how to end it.
+  consolidation, onEndConsolidation,
   currentQ: _currentQ, setCurrentQ,
   selected: _selected, setSelected,
   showAns: _showAns, setShowAns,
@@ -486,7 +489,8 @@ export default function QuizScreen({
   const loadingTip = _loadingTip ?? false
   const quizMode = _quizMode ?? 'new'
   const quizSubtopics = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
-  const effectiveSubtopics = consolidateSubtopic ? [consolidateSubtopic] : quizSubtopics
+  const effectiveSubtopics = consolidation ? consolidation.subtopics : quizSubtopics
+  const round = consolidation ? consolidationRound(sessionResults) : null
   const remediationMode = _remediationMode ?? false
   const remediationStreak = _remediationStreak ?? 0
   const remediationTarget = _remediationTarget ?? 3
@@ -561,6 +565,13 @@ export default function QuizScreen({
   }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns])
 
   const loadNext = useCallback((answered, map, mode = 'new', subtopics = [], targetDiff = null) => {
+    // A consolidation round ends once it has its run of right answers or its
+    // question count. Remediation for the last answer finishes first: it calls
+    // this when it's done.
+    if (consolidation && consolidationRound(sessionResults).done) {
+      setFinished(true)
+      return
+    }
     const q = selectNextQuestion(
       questions, map, answered, mode, subtopics,
       assignmentBand ? assignmentBand.target : targetDiff, assignmentBand,
@@ -570,7 +581,7 @@ export default function QuizScreen({
       return
     }
     setDisplayQuestion(q)
-  }, [questions, setDisplayQuestion, assignmentBand])
+  }, [questions, setDisplayQuestion, assignmentBand, consolidation, sessionResults])
 
   const clearRemediation = useCallback(() => {
     setRemediationMode(false)
@@ -716,7 +727,7 @@ export default function QuizScreen({
       loadNext([], struggleMap, quizMode, effectiveSubtopics)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidateSubtopic])
+  }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidation])
 
   // Count a main-question answer toward the assignment goal. App holds the
   // running state (updated here the same way the RPC updates the row) so it
@@ -816,8 +827,10 @@ export default function QuizScreen({
   // questions table so they're reusable.
   useEffect(() => {
     if (!finished || (quizMode !== 'new' && quizMode !== 'all')) return
-    // Ending on an assignment's question count is not the bank running out.
-    if (endedForGoal) return
+    // Ending on an assignment's question count or a consolidation round's end
+    // is not the bank running out. (The round's end is read from the results,
+    // which are settled by now, not from state set alongside `finished`.)
+    if (endedForGoal || round?.done) return
     if (generatingMoreRef.current) return
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
@@ -1081,13 +1094,26 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished])
 
-  // Clear consolidation filter when leaving the quiz screen
-  useEffect(() => {
-    return () => {
-      if (consolidateSubtopic) onClearConsolidate?.()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Leaving the quiz screen ends a consolidation round, back to the quiz they
+  // were in. Read through a ref: the cleanup runs with the props of the last
+  // render. (App ignores the call when no round is running.)
+  const endConsolidationRef = useRef(onEndConsolidation)
+  endConsolidationRef.current = onEndConsolidation
+  useEffect(() => () => endConsolidationRef.current?.(), [])
+
+  /** End the consolidation round now: back to the quiz they were in. */
+  const leaveConsolidation = () => {
+    generatingMoreRef.current = false
+    bankExhaustionAttempted.current = false
+    backgroundPrefetchAttempted.current = false
+    setGeneratingMore(false)
+    setGenerationError(null)
+    setCompletedGoal(null)
+    setEndedForGoal(false)
+    setRemediationWrongCount(0)
+    setRemediationDifficultyTarget(null)
+    onEndConsolidation?.()
+  }
 
   // Enter remediation after a wrong MAIN question. SYNCHRONOUS state only — must
   // run with no awaits before it (batched with setShowAns) so a fast "Next"
@@ -1503,6 +1529,8 @@ export default function QuizScreen({
       setSessionResults([])
       setQNumber(1)
       setSessionXP(0)
+      setSessionTip('')
+      setSessionTipLoading(false)
       clearRemediation()
       setFinished(false)
       loadNext([], struggleMap, mode, effectiveSubtopics)
@@ -1533,7 +1561,9 @@ export default function QuizScreen({
       sessionResults.filter(r => !r.correct && !r.remediation && r.subtopic).map(r => r.subtopic)
     )].slice(0, 4)
 
-    const headlineText = examMode
+    const headlineText = consolidation
+      ? (round.byStreak ? 'Nice work!' : 'Round complete')
+      : examMode
       ? (timeLeft <= 0 ? "Time's Up!" : 'Exam Complete!')
       : quizMode === 'new'
         ? 'Session Complete!'
@@ -1558,7 +1588,13 @@ export default function QuizScreen({
               {headlineText}
             </div>
             <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
-              {endedForGoal && goalDisplay
+              {consolidation
+                ? round.byStreak
+                  ? `${CONSOLIDATION_STREAK} in a row on ${consolidation.label}.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
+                  : round.done
+                    ? `You've practised ${round.answered} questions on ${consolidation.label}.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
+                    : `That's every question on ${consolidation.label} for now.`
+                : endedForGoal && goalDisplay
                 ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
                 : quizMode === 'new' && sessTotal > 0
                   ? "You've worked through every question in this set."
@@ -1693,19 +1729,25 @@ export default function QuizScreen({
 
           {/* Action buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {weakTopics.length > 0 && counts.wrong > 0 && (
+            {consolidation && (
+              <button onClick={leaveConsolidation}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                {consolidation.canReturn ? 'Back to my quiz →' : 'Practise the whole subject →'}
+              </button>
+            )}
+            {!consolidation && weakTopics.length > 0 && counts.wrong > 0 && (
               <button onClick={() => startMode('wrong')}
                 style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                 Fix {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''} →
               </button>
             )}
-            {counts.wrong === 0 && quizMode !== 'all' && (
+            {!consolidation && counts.wrong === 0 && quizMode !== 'all' && (
               <button onClick={() => startMode('all')}
                 style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                 Repeat all questions
               </button>
             )}
-            {onGoToStudyPlan && (
+            {!consolidation && onGoToStudyPlan && (
               <button onClick={onGoToStudyPlan}
                 style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                 Go to Study Plan →
@@ -1902,7 +1944,7 @@ export default function QuizScreen({
             </div>
           )}
           <div style={{ flex: sidePassage ? '2 1 0' : '0 1 600px', minWidth: sidePassage ? 340 : 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
-            {consolidateSubtopic && (
+            {consolidation && (
               <div style={{
                 marginBottom: 14,
                 padding: '10px 14px',
@@ -1915,15 +1957,19 @@ export default function QuizScreen({
                 gap: 10,
                 flexWrap: 'wrap',
               }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: t.purple }}>
-                  <Pin size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} aria-hidden="true" />Consolidating: <span style={{ color: t.text }}>{consolidateSubtopic}</span>
-                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.purple }}>
+                    <Pin size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} aria-hidden="true" />Consolidating: <span style={{ color: t.text }}>{consolidation.label}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: t.textMuted, marginTop: 3 }}>
+                    {Math.min(round.inARow, CONSOLIDATION_STREAK)}/{CONSOLIDATION_STREAK} right in a row · question {Math.min(round.answered + (!currentQ?.is_variant && !showAns ? 1 : 0), CONSOLIDATION_MAX_QUESTIONS)} of {CONSOLIDATION_MAX_QUESTIONS}
+                  </div>
+                </div>
                 <button
-                  onClick={onClearConsolidate}
-                  style={{ background: 'transparent', border: 'none', color: t.purple, fontSize: 16, cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
-                  title="Return to full quiz"
+                  onClick={leaveConsolidation}
+                  style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${t.purple}`, background: 'transparent', color: t.purple, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
                 >
-                  ✕
+                  {consolidation.canReturn ? 'Back to my quiz' : 'Practise everything'}
                 </button>
               </div>
             )}

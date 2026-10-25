@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import MathText from './MathText'
 import { questionHelpSystemSection, questionHelpOpeningPrompt } from '../lib/questionHelp'
+import { resolveConsolidation } from '../lib/consolidation'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -166,6 +167,12 @@ export default function LearnScreen({
   const [fromContext, setFromContext]   = useState(false)
   const [contextSubtopic, setContextSubtopic] = useState(null)
   const [questionFocus, setQuestionFocus] = useState(null)
+  // What "Consolidate" would practise: the bank's subtopic (or whole topic) for
+  // this lesson, or null when the bank has nothing for what was typed.
+  const consolidateTarget = useMemo(
+    () => resolveConsolidation(questions, contextSubtopic || topic),
+    [questions, contextSubtopic, topic],
+  )
 
   const [attachedImages, setAttachedImages] = useState([])
   const [processingImages, setProcessingImages] = useState(false)
@@ -978,7 +985,7 @@ export default function LearnScreen({
             </div>
           )}
 
-          {(contextSubtopic || topic) && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
+          {consolidateTarget && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
             <div style={{
               padding: '10px 28px',
               background: t.purpleBg,
@@ -986,7 +993,7 @@ export default function LearnScreen({
               flexShrink: 0,
             }}>
               <button
-                onClick={() => onConsolidate(contextSubtopic || topic)}
+                onClick={() => onConsolidate(consolidateTarget)}
                 style={{
                   width: '100%',
                   padding: '11px 16px',
@@ -1005,7 +1012,7 @@ export default function LearnScreen({
                 }}
               >
                 <span>Consolidate — practice this topic</span>
-                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({contextSubtopic || topic})</span>
+                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({consolidateTarget.label})</span>
               </button>
             </div>
           )}

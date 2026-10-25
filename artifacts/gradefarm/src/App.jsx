@@ -956,7 +956,17 @@ function AppInner() {
 
   // Titan AI bridge state
   const [questionContext,     setQuestionContext]     = useState(null)  // set from QuizScreen, consumed by LearnScreen
-  const [consolidateSubtopic, setConsolidateSubtopic] = useState(null)  // set from LearnScreen, consumed by QuizScreen
+  // A short "Consolidate — practice this topic" round started from Titan AI:
+  // { label, subtopics, canReturn }, consumed by QuizScreen.
+  const [consolidation, setConsolidationState] = useState(null)
+  // The round and the quiz to go back to after it, mirrored in a ref: the quiz
+  // screen ends a round from its unmount cleanup, which can run with props
+  // from before a reset (sign-out, a new session) and must then do nothing.
+  const consolidationRef = useRef({ active: null, saved: null })
+  const setConsolidation = (next, saved = null) => {
+    consolidationRef.current = { active: next, saved: next ? saved : null }
+    setConsolidationState(next)
+  }
 
   // Lifted Quiz state — persists across tab switches
   const [quizQ,           setQuizQ]           = useState(null)
@@ -1146,7 +1156,7 @@ function AppInner() {
     setLearnDocContext('')
     setLearnDocName('')
     setQuestionContext(null)
-    setConsolidateSubtopic(null)
+    setConsolidation(null)
     setQuizQ(null)
     setQuizSelected(null)
     setQuizShowAns(false)
@@ -1181,6 +1191,7 @@ function AppInner() {
   }
 
   const handleChangeSubject = () => {
+    setConsolidation(null)
     setSelectedSubject(null)
     localStorage.removeItem('gf-subject')
     clearQuestions()
@@ -1267,38 +1278,114 @@ function AppInner() {
     docContext: learnDocContext, setDocContext: setLearnDocContext,
     docName: learnDocName,   setDocName: setLearnDocName,
     questionContext, setQuestionContext,
-    onConsolidate: (subtopic) => {
-      setConsolidateSubtopic(subtopic)
-      // Reset quiz session so the filtered practice starts fresh. 'new' mode
-      // serves questions the student hasn't seen, generating more when the
-      // subtopic runs out.
-      setQuizQ(null)
-      setQuizSelected(null)
-      setQuizShowAns(false)
-      setQuizCorrect(null)
-      setQuizEarnedXP(0)
-      setQuizStreak(0)
-      setQuizSessionXP(0)
-      setQuizResults([])
-      setQuizAnswered([])
-      setQuizQNumber(1)
-      setQuizAiTip('')
-      setQuizLoadingTip(false)
-      setQuizMode('new')
-      setQuizSubtopics([])  // consolidation uses its own state, not quizSubtopics
-      setQuizRemediationMode(false)
-      setQuizRemediationStreak(0)
-      setQuizRemediationTarget(3)
-      setQuizRemediationQueue([])
-      setQuizRemediationStatus('idle')
-      setQuizRemediationSource('prebuilt')
-      setQuizRemediationConcept(null)
-      setQuizRemediationParentId(null)
-      setQuizRemediationOriginalQ(null)
-      setQuizRemediationUsedIds([])
-      setQuizRemediationWrongCount(0)
+    onConsolidate: (target) => {
+      if (!target?.subtopics?.length) return
+      // Keep the quiz they're in to come back to after the round.
+      const inProgress = !!quizQ || quizResults.length > 0
+      setConsolidation({ label: target.label, subtopics: target.subtopics, canReturn: inProgress }, inProgress ? captureQuiz() : null)
+      // The round is a session of its own: new questions on just this topic,
+      // outside any assignment (its answers mustn't count towards one).
+      setActiveAssignment(null)
+      setQuizExamMode(false)
+      setQuizTimerSeconds(0)
+      resetQuizSession()
       navigate('/quiz')
     },
+  }
+
+  // Everything the quiz needs to carry on exactly where it was.
+  const captureQuiz = () => ({
+    q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
+    earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
+    results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
+    mode: quizMode, subtopics: quizSubtopics, examMode: quizExamMode, timerSeconds: quizTimerSeconds,
+    assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
+    remediation: {
+      mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
+      queue: quizRemediationQueue, status: quizRemediationStatus, source: quizRemediationSource,
+      concept: quizRemediationConcept, parentId: quizRemediationParentId,
+      originalQ: quizRemediationOriginalQ, usedIds: quizRemediationUsedIds, wrongCount: quizRemediationWrongCount,
+    },
+  })
+
+  const restoreQuiz = (saved) => {
+    setQuizQ(saved.q)
+    setQuizSelected(saved.selected)
+    setQuizShowAns(saved.showAns)
+    setQuizCorrect(saved.correct)
+    setQuizEarnedXP(saved.earnedXP)
+    setQuizStreak(saved.streak)
+    setQuizSessionXP(saved.sessionXP)
+    setQuizResults(saved.results)
+    setQuizAnswered(saved.answered)
+    setQuizQNumber(saved.qNumber)
+    setQuizAiTip(saved.aiTip)
+    setQuizLoadingTip(false)
+    setQuizMode(saved.mode)
+    setQuizSubtopics(saved.subtopics)
+    setQuizExamMode(saved.examMode)
+    setQuizTimerSeconds(saved.timerSeconds)
+    setActiveAssignment(saved.assignment)
+    setQuizFinished(saved.finished)
+    setQuizSessionTip(saved.sessionTip)
+    setQuizSessionTipLoading(false)
+    const r = saved.remediation
+    setQuizRemediationMode(r.mode)
+    setQuizRemediationStreak(r.streak)
+    setQuizRemediationTarget(r.target)
+    setQuizRemediationQueue(r.queue)
+    // A queue still loading when they left was lost with the quiz screen; an
+    // empty, active queue makes Next look it up again.
+    setQuizRemediationStatus(r.status === 'generating' ? 'activated' : r.status)
+    setQuizRemediationSource(r.source)
+    setQuizRemediationConcept(r.concept)
+    setQuizRemediationParentId(r.parentId)
+    setQuizRemediationOriginalQ(r.originalQ)
+    setQuizRemediationUsedIds(r.usedIds)
+    setQuizRemediationWrongCount(r.wrongCount)
+  }
+
+  // A fresh 'new'-questions session (the quiz screen loads the first question).
+  const resetQuizSession = () => {
+    setQuizQ(null)
+    setQuizSelected(null)
+    setQuizShowAns(false)
+    setQuizCorrect(null)
+    setQuizEarnedXP(0)
+    setQuizStreak(0)
+    setQuizSessionXP(0)
+    setQuizResults([])
+    setQuizAnswered([])
+    setQuizQNumber(1)
+    setQuizAiTip('')
+    setQuizLoadingTip(false)
+    setQuizMode('new')
+    setQuizSubtopics([])
+    setQuizFinished(false)
+    setQuizSessionTip('')
+    setQuizSessionTipLoading(false)
+    setQuizRemediationMode(false)
+    setQuizRemediationStreak(0)
+    setQuizRemediationTarget(3)
+    setQuizRemediationQueue([])
+    setQuizRemediationStatus('idle')
+    setQuizRemediationSource('prebuilt')
+    setQuizRemediationConcept(null)
+    setQuizRemediationParentId(null)
+    setQuizRemediationOriginalQ(null)
+    setQuizRemediationUsedIds([])
+    setQuizRemediationWrongCount(0)
+  }
+
+  // End a consolidation round: back to the quiz they were in, or, if there
+  // wasn't one, a normal session on the whole subject. Does nothing once the
+  // round is already over.
+  const endConsolidation = () => {
+    const { active, saved } = consolidationRef.current
+    if (!active) return
+    setConsolidation(null)
+    if (saved) restoreQuiz(saved)
+    else resetQuizSession()
   }
 
   // A student's tour waits for their diagnostics to load and for any due on
@@ -1526,8 +1613,8 @@ function AppInner() {
                 setLearnMessages([])
                 navigate('/learn')
               }}
-              consolidateSubtopic={consolidateSubtopic}
-              onClearConsolidate={() => setConsolidateSubtopic(null)}
+              consolidation={consolidation}
+              onEndConsolidation={endConsolidation}
               activeAssignment={activeAssignment}
               onAssignmentComplete={() => {
                 setActiveAssignment(null)
@@ -1688,7 +1775,7 @@ function AppInner() {
             setQuizRemediationOriginalQ(null)
             setQuizRemediationUsedIds([])
             setQuizRemediationWrongCount(0)
-            setConsolidateSubtopic(null)
+            setConsolidation(null)
             setQuizFinished(false)
             setQuizSessionTip('')
             setQuizSessionTipLoading(false)
