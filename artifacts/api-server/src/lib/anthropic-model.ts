@@ -15,7 +15,7 @@ export const CLAUDE_THINKING = { type: "disabled" } as const;
  * a stronger reasoning model than the base CLAUDE_MODEL. Override via
  * AI_VERIFY_MODEL (e.g. set it to claude-haiku-5-5 to cut cost).
  */
-export const CLAUDE_VERIFY_MODEL = process.env.AI_VERIFY_MODEL || "claude-sonnet-4-6";
+export const CLAUDE_VERIFY_MODEL = process.env.AI_VERIFY_MODEL || "claude-sonnet-5-5";
 
 /**
  * Model for "exam-grade" generation: the hardest bank questions, requested by

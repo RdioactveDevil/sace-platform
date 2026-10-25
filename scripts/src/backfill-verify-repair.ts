@@ -63,7 +63,7 @@ const ANTHROPIC_KEY =
   process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_BASE =
   process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
-const VERIFY_MODEL = process.env.AI_VERIFY_MODEL || "claude-sonnet-4-6";
+const VERIFY_MODEL = process.env.AI_VERIFY_MODEL || "claude-sonnet-5-5";
 const VERIFY = !!ANTHROPIC_KEY;
 
 // Retry transient Anthropic failures (rate limits / overload / timeouts) so a

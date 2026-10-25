@@ -249,6 +249,12 @@ export function mcqColumns(q: GeneratedQuestion): { options: string[] | null; an
   };
 }
 
+// Exam-grade questions are the bank's hardest: never saved below 4★, whatever
+// rating the model gave.
+function examGradeDifficulty(d: unknown): number {
+  return Math.min(5, Math.max(4, Math.round(Number(d)) || 5));
+}
+
 // Extra rules for exam-grade batches. "Hard" is about the reasoning a question
 // demands, not its length, and the options must not leak the answer.
 function examGradeRules(curriculumLabel: string, graphsWanted: boolean): string[] {
@@ -619,7 +625,7 @@ export async function generateForTopic(opts: {
         topic: parentTopicName,
         subtopic: topicName,
         concept_tag: `${normalizedSubject}|${parentTopicName}|${topicName}`.toLowerCase(),
-        difficulty: q.difficulty || 3,
+        difficulty: examGrade ? examGradeDifficulty(q.difficulty) : (q.difficulty || 3),
         question: normalizeMathText(q.question) as string,
         ...mcqColumns(q),
         ...typeColumns(q),
@@ -635,16 +641,22 @@ export async function generateForTopic(opts: {
       (r) => !existingTexts.has(r.question.trim().toLowerCase())
     );
 
-    let insertedCount = 0;
+    let saved: Record<string, unknown>[] = [];
     if (newRows.length > 0) {
-      const { data: insertedData } = await adminDb
+      const { data: insertedData, error: insertErr } = await adminDb
         .from("questions")
         .insert(newRows)
-        .select("id");
-      insertedCount = (insertedData || []).length;
+        .select("*");
+      if (insertErr) {
+        logger.error({ err: insertErr, topicCode }, "[generate-questions] saving the generated questions failed");
+        return { status: 500, body: { error: "Saving the new questions failed", detail: insertErr.message } };
+      }
+      saved = insertedData || [];
     }
 
-    return { status: 200, body: { inserted: insertedCount, questions: newRows } };
+    // Only questions that are really in the bank: the app serves these and
+    // records answers against their ids.
+    return { status: 200, body: { inserted: saved.length, questions: saved } };
   }
 
   // ── Default: insert into draft queue for admin review ─────────────────────────
@@ -661,7 +673,7 @@ export async function generateForTopic(opts: {
     graph: sanitizeGraph(q.graph),
     table_data: q.table_data || null,
     diagram: diagramColumn(q),
-    difficulty: q.difficulty || null,
+    difficulty: examGrade ? examGradeDifficulty(q.difficulty) : (q.difficulty || null),
     status: "pending",
   }));
 
@@ -675,42 +687,55 @@ export async function generateForTopic(opts: {
 
 // Default daily allowance of exam-grade questions per student per subject.
 const DEFAULT_EXAM_GRADE_DAILY_LIMIT = 9;
+// Exam-grade questions per student top-up: the seed script's batch size, which
+// keeps generation plus the strict answer check inside the 300 s limit.
+const STUDENT_EXAM_GRADE_COUNT = 2;
 
 /**
- * Whether a student's top-up may use the exam-grade generator, claiming the
- * questions from today's allowance if so. Requires: the subject switched
+ * How many exam-grade questions a student's top-up may have, claimed from
+ * today's allowance (0: generate normally). Requires: the subject switched
  * features.exam_grade_topups on, one subtopic at difficulty 4+, and room in the
  * student's allowance (use_exam_grade_quota, which also requires a paid,
- * granted or beta subscription to the subject). Any error means no: the
- * request then runs as normal generation.
+ * granted or beta subscription to the subject). Any error means 0.
  */
 async function claimStudentExamGrade(
   adminDb: SupabaseClient, caller: Caller, subject: string, topicCodes: string[],
   difficulty: unknown, count: number,
-): Promise<boolean> {
-  if (topicCodes.length !== 1 || !(Number(difficulty) >= 4)) return false;
+): Promise<number> {
+  if (topicCodes.length !== 1 || !(Number(difficulty) >= 4)) return 0;
   try {
     const { data: curr } = await adminDb
       .from("curricula").select("id, features").eq("name", subject).maybeSingle();
     const features = ((curr as { features?: Record<string, unknown> } | null)?.features ?? {});
-    if (!curr || features.exam_grade_topups !== true) return false;
+    if (!curr || features.exam_grade_topups !== true) return 0;
     const limit = Number(features.exam_grade_daily_limit) > 0
       ? Number(features.exam_grade_daily_limit)
       : DEFAULT_EXAM_GRADE_DAILY_LIMIT;
+    const wanted = Math.min(Math.max(1, count || 1), STUDENT_EXAM_GRADE_COUNT);
     const { data, error } = await adminDb.rpc("use_exam_grade_quota", {
       p_user: caller.userId,
       p_curriculum: (curr as { id: string }).id,
-      p_count: Math.min(Math.max(1, count || 1), EXAM_GRADE_MAX_COUNT),
+      p_count: wanted,
       p_limit: limit,
     });
     if (error) {
       logger.warn({ err: error }, "[generate-questions] exam-grade allowance check failed; using normal generation");
-      return false;
+      return 0;
     }
-    return data === true;
+    return data === true ? wanted : 0;
   } catch (err) {
     logger.warn({ err }, "[generate-questions] exam-grade allowance check failed; using normal generation");
-    return false;
+    return 0;
+  }
+}
+
+/** Give back allowance claimed for exam-grade questions that weren't saved. */
+async function releaseStudentExamGrade(adminDb: SupabaseClient, caller: Caller, unused: number): Promise<void> {
+  if (unused < 1) return;
+  const { error } = await adminDb.rpc("release_exam_grade_quota", { p_user: caller.userId, p_count: unused });
+  // Before migration 20261025000007 there is nothing to call; the claim stands.
+  if (error && error.code !== "PGRST202") {
+    logger.warn({ err: error }, "[generate-questions] giving back unused exam-grade allowance failed");
   }
 }
 
@@ -752,8 +777,11 @@ router.post("/generate-questions", async (req, res) => {
   // The stronger exam-grade model costs far more per question. Admins may ask
   // for it freely; a student's request is honoured only within their subject's
   // exam-grade top-up allowance, and otherwise falls back to normal generation.
-  const examGrade = !!req.body.examGrade && (caller.isAdmin ||
-    await claimStudentExamGrade(adminDb, caller, resolvedSubject, topicCodes, difficulty, Number(count)));
+  // A student's exam-grade claim also sets how many questions to write.
+  const studentExamClaim = req.body.examGrade && !caller.isAdmin
+    ? await claimStudentExamGrade(adminDb, caller, resolvedSubject, topicCodes, difficulty, Number(count))
+    : 0;
+  const examGrade = !!req.body.examGrade && (caller.isAdmin || studentExamClaim > 0);
 
   if (examGrade && topicCodes.length > EXAM_GRADE_MAX_TOPICS) {
     res.status(400).json({ error: `Exam-grade generation takes up to ${EXAM_GRADE_MAX_TOPICS} subtopics per request` });
@@ -799,15 +827,22 @@ router.post("/generate-questions", async (req, res) => {
   }
 
   // Single topic
+  let result: GenResult;
   try {
-    const { status, body } = await generateForTopic({
-      adminDb, resolvedSubject, topicCode: topicCodes[0], count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs, examGrade,
+    result = await generateForTopic({
+      adminDb, resolvedSubject, topicCode: topicCodes[0], count: studentExamClaim || count, difficulty, autoApprove, questionTypes, includeDiagrams, includeGraphs, examGrade,
     });
-    res.status(status).json(body);
   } catch (err) {
     logger.error({ err, topicCode: topicCodes[0] }, "Subtopic generation failed");
-    res.status(500).json({ error: (err as Error).message });
+    result = { status: 500, body: { error: (err as Error).message } };
   }
+  // The allowance counts only exam-grade questions that reached the bank. Given
+  // back before replying: Vercel may freeze the function once it has responded.
+  if (studentExamClaim > 0) {
+    const saved = result.status === 200 ? Number(result.body.inserted) || 0 : 0;
+    await releaseStudentExamGrade(adminDb, caller, studentExamClaim - saved);
+  }
+  res.status(result.status).json(result.body);
 });
 
 export default router;
