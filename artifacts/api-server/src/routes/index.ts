@@ -25,6 +25,7 @@ import portalRouter from "./portal";
 import assignmentReportsRouter from "./assignment-reports";
 import accountRouter from "./account";
 import remediationRouter from "./remediation";
+import readinessRouter from "./readiness";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(portalRouter);
 router.use(assignmentReportsRouter);
 router.use(accountRouter);
 router.use(remediationRouter);
+router.use(readinessRouter);
 
 export default router;
