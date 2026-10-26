@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Resend } from "resend";
+import { getServiceClient } from "./auth";
+import { contactEmailForLogin, isFamilyLogin } from "./family";
 
 /** Sender for every email the API sends. Must be on a domain verified in Resend. */
 export const EMAIL_FROM = process.env.EMAIL_FROM ?? "gradefarm. <notifications@gradefarm.com.au>";
@@ -198,6 +200,14 @@ export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastSendAt = Date.now();
 
+  // A child added to a family signs in with a hidden address: their mail goes to the parent.
+  let to = email.to;
+  if (isFamilyLogin(to)) {
+    const parent = await contactEmailForLogin(getServiceClient(), to).catch(() => null);
+    if (!parent) return { id: null, error: "No parent email for this family account" };
+    to = parent;
+  }
+
   const { html, text } = renderEmail(email.content);
   const headers: Record<string, string> = {};
   if (email.content.unsubscribe) {
@@ -208,7 +218,7 @@ export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{
   }
   try {
     const { data, error } = await resend.emails.send(
-      { from: EMAIL_FROM, to: [email.to], subject: email.subject, html, text, headers },
+      { from: EMAIL_FROM, to: [to], subject: email.subject, html, text, headers },
       { idempotencyKey: email.idempotencyKey.slice(0, 256) },
     );
     if (error) return { id: null, error: error.message || String(error) };

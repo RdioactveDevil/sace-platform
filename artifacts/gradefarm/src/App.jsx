@@ -21,6 +21,7 @@ import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScr
 import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import ParentConsentBanner from './components/ParentConsentBanner'
+import FamilySwitcher from './components/FamilySwitcher'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
@@ -405,6 +406,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
             )}
           </div>
         )}
+        <FamilySwitcher profile={profile} />
         <button
           data-tutorial-target="change-subject"
           className="gf-footer-btn"
@@ -1558,7 +1560,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path === 'tutor'
             ? <Navigate to="/onboarding/tutor" replace />
-            : <OnboardingScreen profile={profile} userEmail={user?.email}
+            : <OnboardingScreen profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
                 asParent={user?.user_metadata?.signup_path === 'parent'}
                 parentName={user?.user_metadata?.parent_name || ''}

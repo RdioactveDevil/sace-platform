@@ -20,16 +20,17 @@ const TRUST_ITEMS = [
 export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const navigate = useNavigate()
   const location = useLocation()
-  // The tutor-invite page links here with { mode, email, redirectTo, invitedBy }.
+  // The tutor-invite page links here with { mode, email, redirectTo, invitedBy },
+  // plus { as: 'parent', childName } when the invite went to a parent.
   const invite = location.state?.invitedBy !== undefined ? location.state : null
   const [mode, setMode]       = useState(location.state?.mode === 'signup' ? 'signup' : 'signin')
   const [email, setEmail]     = useState(location.state?.email || '')
   const [pass, setPass]       = useState('')
   const [name, setName]       = useState('')
   const [school, setSchool]   = useState('')
-  // A parent setting up an account for their child (the Year 6 page links here
-  // with { as: 'parent' }): they sign in with their own email.
-  const [asParent, setAsParent] = useState(!invite && location.state?.as === 'parent')
+  // A parent setting up an account for their child (the Year 6 page and a
+  // parent's invite link here with { as: 'parent' }): they sign in with their own email.
+  const [asParent, setAsParent] = useState(location.state?.as === 'parent')
   const [childName, setChildName] = useState(location.state?.childName || '')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
@@ -59,7 +60,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
         if (!name.trim()) throw new Error('Please enter your name.')
         if (asParent && !childName.trim()) throw new Error("Please enter your child's first name.")
         const data = asParent
-          ? await signUp(addr, pass, childName.trim(), '', false, undefined, name.trim())
+          ? await signUp(addr, pass, childName.trim(), '', false, invite?.redirectTo, name.trim())
           : await signUp(addr, pass, name.trim(), school.trim(), false, invite?.redirectTo)
         // With email confirmation on there is no session until the link is clicked.
         if (data?.session) onAuth(true)

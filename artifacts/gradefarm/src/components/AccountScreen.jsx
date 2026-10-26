@@ -4,7 +4,8 @@ import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal,
 import { THEMES } from '../lib/theme'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import { currentStreak } from '../lib/streak'
-import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails } from '../lib/db'
+import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails, addFamilyChild, switchToChild, removeFamilyChild } from '../lib/db'
+import { useFamily } from './FamilySwitcher'
 import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
 import { studentTiers, planTotal, extraLadder, monthlySaving, money } from '../lib/pricing'
@@ -170,6 +171,72 @@ function ParentCard({ profile, theme, card, btn, inputStyle, onProfileUpdated })
 }
 
 /** The student's subjects, their weekly or monthly plan, and the Stripe portal. */
+/**
+ * A parent's children (api-server routes/family.ts): one sign-in email for
+ * all of them. Switch to a child, add one, or remove an added one.
+ */
+function FamilyCard({ family, theme, card, btn, inputStyle }) {
+  const t = THEMES[theme]
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(null)
+  const [msg, setMsg] = useState('')
+  const [removing, setRemoving] = useState(null) // child id
+  const [password, setPassword] = useState('')
+  const children = family.children || []
+
+  const act = async (key, fn) => {
+    setBusy(key); setMsg('')
+    try { await fn() } catch (e) { setMsg(e.message || 'Something went wrong.'); setBusy(null) }
+  }
+  const add = (e) => {
+    e.preventDefault()
+    if (name.trim()) act('add', async () => { const child = await addFamilyChild(name.trim()); await switchToChild(child.id) })
+  }
+  const remove = (child) => act(`remove-${child.id}`, async () => {
+    await removeFamilyChild(child.id, password)
+    window.location.reload()
+  })
+
+  return (
+    <div style={card}>
+      <CardTitle t={t} title="Your children" sub={<>Each child has their own progress, subjects and tutor. You sign in to all of them with <strong style={{ color: t.text }}>{family.parentEmail}</strong> and switch between them from the menu.</>} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {children.map(c => (
+          <div key={c.id} style={{ border: `1px solid ${t.border}`, borderRadius: 12, padding: '10px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: t.text, fontSize: 14 }}>{c.name}{c.id === family.currentId && <span style={{ color: t.goldText || GOLD, fontSize: 12, fontWeight: 700 }}> · open now</span>}</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>{[c.year_level ? (String(c.year_level).startsWith('Year') ? c.year_level : `Year ${c.year_level}`) : null, c.set_up ? null : 'Not set up yet', c.primary ? 'The account you sign in to' : null].filter(Boolean).join(' · ')}</div>
+              </div>
+              {c.id !== family.currentId && (
+                <button type="button" onClick={() => act(c.id, () => switchToChild(c.id))} disabled={!!busy} style={btn('secondary', !!busy)}>{busy === c.id ? 'Opening…' : `Switch to ${c.name}`}</button>
+              )}
+              {!c.primary && c.id !== family.currentId && removing !== c.id && (
+                <button type="button" onClick={() => { setRemoving(c.id); setPassword(''); setMsg('') }} style={btn('danger')}>Remove</button>
+              )}
+            </div>
+            {removing === c.id && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 8, lineHeight: 1.5 }}>This deletes {c.name}'s account, progress and any paid plan for them. It can't be undone.</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input type="password" autoComplete="current-password" aria-label="Your password" placeholder="Your password" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputStyle, flex: '1 1 180px', width: 'auto' }} />
+                  <button type="button" onClick={() => remove(c)} disabled={!password || !!busy} style={btn('danger', !password || !!busy)}>{busy === `remove-${c.id}` ? 'Removing…' : `Remove ${c.name}`}</button>
+                  <button type="button" onClick={() => setRemoving(null)} style={btn('secondary')}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+        <input value={name} onChange={e => setName(e.target.value)} maxLength={40} placeholder="Another child's first name" aria-label="Another child's first name" style={{ ...inputStyle, flex: '1 1 200px', width: 'auto' }} />
+        <button type="submit" disabled={!name.trim() || !!busy} style={btn('primary', !name.trim() || !!busy)}>{busy === 'add' ? 'Adding…' : 'Add a child'}</button>
+      </form>
+      {msg && <div role="alert" style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{msg}</div>}
+    </div>
+  )
+}
+
 function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
   const t = THEMES[theme]
   const [subs, setSubs] = useState(null)
@@ -347,7 +414,11 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     if (isStudent) syncBillingEmail().catch(() => {})
     return () => { cancelled = true }
   }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
-  const email = authUser?.email || ''
+  // A child added to a family signs in through the parent (api-server lib/family.ts).
+  const familyChild = !!authUser?.user_metadata?.family_child
+  const email = (familyChild ? authUser?.user_metadata?.family_email : authUser?.email) || ''
+  const family = useFamily(profile)
+  const otherChildren = (family?.children || []).filter(c => !c.primary && c.id !== profile.id)
   const pendingEmail = authUser?.new_email || ''
   const memberSince = profile.created_at || authUser?.created_at
 
@@ -725,6 +796,11 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
 
   const securityPanel = (
     <>
+      {familyChild ? (
+      <div style={card}>
+        <CardTitle t={t} title="Sign-in" sub={<>{profile.display_name || 'This child'} is part of your family account. You sign in with <strong style={{ color: t.text }}>{email}</strong> and switch to them from the menu, so they have no email or password of their own. To change the email or password, switch to the account you sign in to.</>} />
+      </div>
+      ) : (
       <div style={card}>
         <CardTitle t={t} title="Sign-in" sub={email ? <>You sign in as <strong style={{ color: t.text }}>{email}</strong>{authUser?.last_sign_in_at ? ` · last signed in ${longDate(authUser.last_sign_in_at)}` : ''}.</> : null} />
 
@@ -780,6 +856,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
         </div>
         {msgLine(pwMsg)}
       </div>
+      )}
 
       <div style={card}>
         <CardTitle t={t} title="Sessions" sub="Signed in on a shared or lost device? Signing out everywhere ends every session, including this one." />
@@ -808,7 +885,11 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
           ? 'Admin accounts can\'t be deleted here. Ask another admin to remove your admin access first.'
           : profile.is_tutor
             ? 'Your students rely on your classes, lessons and recordings, so tutor accounts are closed by our team. We\'ll move your classes over first.'
-            : 'Permanently delete your account and everything tied to it. This can\'t be undone.'} />
+            : familyChild
+              ? `Permanently delete ${profile.display_name || 'this child'}'s account and everything tied to it. This can't be undone.`
+              : otherChildren.length
+                ? `Permanently delete this account and everything tied to it. ${otherChildren.map(c => c.name).join(' and ')}'s account${otherChildren.length > 1 ? 's are' : ' is'} deleted too, since you sign in to ${otherChildren.length > 1 ? 'them' : 'it'} through this one. This can't be undone.`
+                : 'Permanently delete your account and everything tied to it. This can\'t be undone.'} />
         {profile.is_tutor && !profile.is_admin && (
           <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Close my GradeFarm tutor account')}&body=${encodeURIComponent(`Hi,\n\nPlease close my GradeFarm tutor account.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`)}`}
             style={{ ...btn('danger'), textDecoration: 'none', display: 'inline-block' }}>Contact support</a>
@@ -825,7 +906,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
               <li>We may keep payment records for as long as the law requires.</li>
             </ul>
             <div className="acct-form">
-              <Field t={t} label="Your password">
+              <Field t={t} label={familyChild ? 'Your password (the one you sign in with)' : 'Your password'}>
                 <input type="password" autoComplete="current-password" value={deletePw} onChange={e => setDeletePw(e.target.value)} style={inputStyle} />
               </Field>
               <Field t={t} label="Type DELETE to confirm">
@@ -904,6 +985,9 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     profile: (
       <>
         {profilePanel}
+        {isStudent && family && (
+          <FamilyCard family={family} theme={theme} card={card} btn={btn} inputStyle={inputStyle} />
+        )}
         {isStudent && 'parent_consent_at' in profile && (
           <ParentCard profile={profile} theme={theme} card={card} btn={btn} inputStyle={inputStyle} onProfileUpdated={onProfileUpdated} />
         )}

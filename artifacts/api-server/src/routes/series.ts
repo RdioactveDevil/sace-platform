@@ -4,6 +4,8 @@ import { AccessToken } from "livekit-server-sdk";
 import { Resend } from "resend";
 import { EMAIL_FROM } from "../lib/email";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
+import { contactEmailForLogin } from "../lib/family";
+import { getServiceClient } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -280,9 +282,11 @@ router.post("/series", async (req: Request, res: Response) => {
       const email = authUser?.user?.email;
       if (!email) return;
       const safeStudent = escapeHtml(nameMap[sid] ?? "Student");
+      // A child added to a family signs in with a hidden address: their mail goes to the parent.
+      const recipient = (await contactEmailForLogin(getServiceClient(), email)) ?? email;
       await resend.emails.send({
         from: EMAIL_FROM,
-        to: [email],
+        to: [recipient],
         subject: `Recurring ${isGroup ? "group " : ""}sessions booked: ${safeTitle}`,
         html: `
           <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:560px;margin:auto;color:#1a1a2e">

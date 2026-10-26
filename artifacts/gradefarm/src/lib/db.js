@@ -1023,11 +1023,18 @@ export async function fetchRoster(tutorId, { allTutors = false } = {}) {
  *  with, free ([] for none; left out, a re-send keeps the current ones).
  *  `diagnosticSubtopics`: { curriculumId: [subtopicId] } each subject's
  *  diagnostic covers (left out: the whole subject).
+ *  `recipient`: { parent: false } for the student, or { parent: true, childName }
+ *  to send it to a parent who sets the account up for their child (left out,
+ *  a re-send keeps who it's for).
  *  Resolves to { invite, emailSent, emailError }. */
-export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics) {
+export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics, recipient) {
   const body = { email: studentEmail }
   if (curriculumIds !== undefined) body.curriculumIds = curriculumIds
   if (diagnosticSubtopics !== undefined) body.diagnosticSubtopics = diagnosticSubtopics
+  if (recipient !== undefined) {
+    body.recipient = recipient.parent ? 'parent' : 'student'
+    if (recipient.parent) body.childName = recipient.childName
+  }
   return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify(body) })
 }
 
@@ -1109,10 +1116,46 @@ export async function fetchInvite(token) {
 
 /** Accept or decline an invite as the signed-in user. Accepting resolves to
  *  { ok, tutor_name, subjects, subjectError }: `subjects` are the ones it unlocked. */
-export async function respondToInvite(token, accept) {
-  const json = await tutorFetch(`/api/invites/${encodeURIComponent(token)}/${accept ? 'accept' : 'decline'}`, { method: 'POST' })
+/**
+ * Accept or decline a tutor's invite. A parent's invite that could be for more
+ * than one of their children fails with err.body.code 'choose_child' (and
+ * err.body.children); answer with `child`: { childId } or { newChild: true }.
+ * Accepting resolves to { tutor_name, subjects, subjectError, student } where
+ * `student` is set when the invite went to another child in the family.
+ */
+export async function respondToInvite(token, accept, child = null) {
+  const json = await tutorFetch(`/api/invites/${encodeURIComponent(token)}/${accept ? 'accept' : 'decline'}`, {
+    method: 'POST', ...(accept && child ? { body: JSON.stringify(child) } : {}),
+  })
   tutoringAccessCache.clear()
   return json
+}
+
+// ── FAMILY ───────────────────────────────────────────────────────────────────
+// One parent email for several children (api-server routes/family.ts).
+
+/** { canAddChildren, currentId, parentEmail, children: [{ id, name, year_level, set_up, primary }] }. */
+export async function fetchFamily() {
+  return tutorFetch('/api/family')
+}
+
+/** Add a child to the family; resolves to the new child { id, name }. */
+export async function addFamilyChild(name) {
+  const json = await tutorFetch('/api/family/children', { method: 'POST', body: JSON.stringify({ name }) })
+  return json.child
+}
+
+/** Sign in to another child in the family (no password), then reload the app on Home. */
+export async function switchToChild(userId, path = '/home') {
+  const { token_hash } = await tutorFetch('/api/family/switch', { method: 'POST', body: JSON.stringify({ userId }) })
+  const { error } = await supabase.auth.verifyOtp({ token_hash, type: 'magiclink' })
+  if (error) throw error
+  window.location.assign(path)
+}
+
+/** Remove an added child and their data (needs the parent's password). */
+export async function removeFamilyChild(childId, password) {
+  return tutorFetch(`/api/family/children/${encodeURIComponent(childId)}`, { method: 'DELETE', body: JSON.stringify({ password }) })
 }
 
 // ── OWN ACCOUNT ──────────────────────────────────────────────────────────────
@@ -1282,7 +1325,7 @@ async function tutorFetch(path, opts = {}) {
     },
   })
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`)
+  if (!res.ok) throw Object.assign(new Error(json.error || `Request failed (${res.status})`), { status: res.status, body: json })
   return json
 }
 

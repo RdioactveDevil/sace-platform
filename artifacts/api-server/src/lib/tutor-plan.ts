@@ -220,17 +220,23 @@ export function planMetadata(tutorId: string, plan: TutorPlanOption): Record<str
 /** An invite counts towards the student limit until it's accepted (it joins the roster) or expires. */
 const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** Students on the roster plus invites still waiting, optionally leaving out one invited address. */
-export async function studentsUsed(admin: SupabaseClient, tutorId: string, exceptEmail?: string): Promise<number> {
+/**
+ * Students on the roster plus invites still waiting, optionally leaving out
+ * one invite (by address, and child for an invite to a parent, who can have
+ * invites for several children).
+ */
+export async function studentsUsed(admin: SupabaseClient, tutorId: string, exceptEmail?: string, exceptChild: string | null = null): Promise<number> {
   const [roster, invites] = await Promise.all([
     admin.from("tutor_students").select("student_id", { count: "exact", head: true }).eq("tutor_id", tutorId),
-    admin.from("tutor_invites").select("email, sent_at, created_at").eq("tutor_id", tutorId).eq("status", "pending"),
+    admin.from("tutor_invites").select("email, child_name, sent_at, created_at").eq("tutor_id", tutorId).eq("status", "pending"),
   ]);
   if (roster.error) throw new Error(roster.error.message);
   if (invites.error) throw new Error(invites.error.message);
   const now = Date.now();
-  const waiting = ((invites.data ?? []) as { email: string; sent_at: string | null; created_at: string }[])
-    .filter((i) => i.email !== exceptEmail && now - new Date(i.sent_at ?? i.created_at).getTime() <= INVITE_TTL_MS);
+  const same = (i: { email: string; child_name: string | null }) =>
+    i.email === exceptEmail && (i.child_name ?? "").toLowerCase() === (exceptChild ?? "").toLowerCase();
+  const waiting = ((invites.data ?? []) as { email: string; child_name: string | null; sent_at: string | null; created_at: string }[])
+    .filter((i) => !same(i) && now - new Date(i.sent_at ?? i.created_at).getTime() <= INVITE_TTL_MS);
   return (roster.count ?? 0) + waiting.length;
 }
 
@@ -239,11 +245,11 @@ export async function studentsUsed(admin: SupabaseClient, tutorId: string, excep
  * student limit. Returns the message to show if not. Re-sending an invite
  * that's already waiting doesn't count again.
  */
-export async function studentLimitError(admin: SupabaseClient, tutorId: string, isAdmin: boolean, email: string): Promise<string | null> {
+export async function studentLimitError(admin: SupabaseClient, tutorId: string, isAdmin: boolean, email: string, childName: string | null = null): Promise<string | null> {
   if (isAdmin) return null;
   const row = await tutorBillingRow(admin, tutorId);
   if (!row || row.exempt || row.student_limit == null) return null;
-  const used = await studentsUsed(admin, tutorId, email);
+  const used = await studentsUsed(admin, tutorId, email, childName);
   if (used < row.student_limit) return null;
   return `Your ${row.plan ?? "tutor"} plan covers ${row.student_limit} students, counting invites still waiting. Upgrade your plan to add more.`;
 }

@@ -559,6 +559,8 @@ interface InviteRow {
   token: string;
   curriculum_ids: string[] | null;
   sent_at: string;
+  recipient: "student" | "parent" | null;
+  child_name: string | null;
 }
 
 async function runInviteReminders(job: Job) {
@@ -566,7 +568,7 @@ async function runInviteReminders(job: Job) {
   const nowMs = job.now.getTime();
   const { data, error } = await job.admin
     .from("tutor_invites")
-    .select("id, tutor_id, email, token, curriculum_ids, sent_at")
+    .select("id, tutor_id, email, token, curriculum_ids, sent_at, recipient, child_name")
     .eq("status", "pending")
     .is("reminded_at", null)
     .lte("sent_at", new Date(nowMs - INVITE_REMINDER_AFTER).toISOString())
@@ -615,6 +617,7 @@ function listSubjects(labels: string[]): string {
 }
 
 function inviteReminderEmail(inv: InviteRow, tutorName: string, subjects: string[]): { subject: string; content: EmailContent } {
+  if (inv.recipient === "parent") return parentInviteReminderEmail(inv, tutorName, subjects);
   const included = subjects.length
     ? ` ${listSubjects(subjects)} ${subjects.length > 1 ? "are" : "is"} included with your tutoring, so there's nothing to pay for ${subjects.length > 1 ? "them" : "it"}.`
     : "";
@@ -628,6 +631,26 @@ function inviteReminderEmail(inv: InviteRow, tutorName: string, subjects: string
       ],
       cta: { label: "Accept invite", url: `${appUrl()}/invite/${encodeURIComponent(inv.token)}` },
       footer: `You're receiving this because ${tutorName} invited you on gradefarm. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,
+    },
+  };
+}
+
+/** The reminder for an invite sent to a parent or guardian (routes/invites.ts). */
+function parentInviteReminderEmail(inv: InviteRow, tutorName: string, subjects: string[]): { subject: string; content: EmailContent } {
+  const child = inv.child_name || "your child";
+  const included = subjects.length
+    ? ` ${listSubjects(subjects)} ${subjects.length > 1 ? "are" : "is"} included with the tutoring, so there's nothing to pay for ${subjects.length > 1 ? "them" : "it"}.`
+    : "";
+  return {
+    subject: `Reminder: ${tutorName} invited ${child} to gradefarm.`,
+    content: {
+      heading: `${tutorName} is waiting to tutor ${child}`,
+      paragraphs: [
+        `${tutorName} invited ${child} to gradefarm. a few days ago and the invite hasn't been accepted yet.${included}`,
+        `The account sits under your email (${inv.email}): the button takes you to set it up for ${child}, and the invite is accepted as soon as you're in.`,
+      ],
+      cta: { label: `Set up ${inv.child_name ? `${inv.child_name}'s` : "the"} account`, url: `${appUrl()}/invite/${encodeURIComponent(inv.token)}` },
+      footer: `You're receiving this because ${tutorName} entered your email address on gradefarm as ${child}'s parent or guardian. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,
     },
   };
 }

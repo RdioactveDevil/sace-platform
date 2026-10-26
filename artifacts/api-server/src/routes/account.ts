@@ -5,6 +5,7 @@ import { cancelAllSubscriptions, getStripe, syncCustomerEmail } from "./billing"
 import { getResend, parentConsentUrl, sendEmail } from "../lib/email";
 import { parentConsentEmail } from "../lib/parent-consent";
 import { r2DeleteObject } from "../lib/r2";
+import { contactEmailForLogin, familyIdOf, familyMembers, isFamilyLogin } from "../lib/family";
 import { logger } from "../lib/logger";
 
 // The signed-in user's own account: self-serve deletion, keeping Stripe's copy
@@ -25,7 +26,7 @@ type StoredFile = { path: string; backend: "r2" | "supabase" };
  * student's own face and voice. Class and group recordings have no student_id
  * and are untouched: the rest of the class keeps them.
  */
-async function oneOnOneRecordingFiles(admin: SupabaseClient, userId: string): Promise<StoredFile[]> {
+export async function oneOnOneRecordingFiles(admin: SupabaseClient, userId: string): Promise<StoredFile[]> {
   const [{ data: resources, error: rErr }, { data: sessions, error: sErr }] = await Promise.all([
     admin.from("tutor_resources").select("storage_path, storage_backend")
       .eq("student_id", userId).eq("type", "recording").eq("kind", "file").not("storage_path", "is", null),
@@ -46,7 +47,7 @@ async function oneOnOneRecordingFiles(admin: SupabaseClient, userId: string): Pr
   return [...files.values()];
 }
 
-async function deleteStoredFiles(admin: SupabaseClient, files: StoredFile[], userId: string): Promise<void> {
+export async function deleteStoredFiles(admin: SupabaseClient, files: StoredFile[], userId: string): Promise<void> {
   for (const f of files.filter((x) => x.backend === "r2")) await r2DeleteObject(f.path);
   const onSupabase = files.filter((x) => x.backend === "supabase").map((x) => x.path);
   if (onSupabase.length) {
@@ -75,17 +76,35 @@ router.delete("/account", async (req: Request, res: Response) => {
 
   try {
     const { data: authUser, error: userErr } = await admin.auth.admin.getUserById(userId);
-    const email = authUser?.user?.email;
-    if (userErr || !email) return fail(res, 404, "Account not found");
-    if (!(await verifyPassword(email, password))) return fail(res, 403, "That password isn't right.");
+    const loginEmail = authUser?.user?.email;
+    if (userErr || !loginEmail) return fail(res, 404, "Account not found");
+    // An added child (lib/family.ts) has no password of their own: the parent's confirms it.
+    const email = isFamilyLogin(loginEmail) ? await contactEmailForLogin(admin, loginEmail) : loginEmail;
+    if (!email || !(await verifyPassword(email, password))) return fail(res, 403, "That password isn't right.");
 
-    const { data: billing } = await admin.from("billing_customers").select("user_id").eq("user_id", userId).maybeSingle();
-    if (billing) {
-      const stripe = getStripe();
+    // Deleting the account the parent signs in to deletes the children added
+    // to it too: nobody could reach them afterwards.
+    const familyId = await familyIdOf(admin, userId);
+    const addedChildren = familyId === userId
+      ? (await familyMembers(admin, userId)).filter((m) => !m.primary).map((m) => m.id)
+      : [];
+
+    const stripe = getStripe();
+    for (const id of [...addedChildren, userId]) {
+      const { data: billing } = await admin.from("billing_customers").select("user_id").eq("user_id", id).maybeSingle();
+      if (!billing) continue;
       // Deleting without cancelling would leave Stripe billing a deleted account.
       if (!stripe) return fail(res, 503, "We can't cancel your plan right now. Please try again later or contact support.");
-      await cancelAllSubscriptions(admin, stripe, userId);
+      await cancelAllSubscriptions(admin, stripe, id);
     }
+    for (const id of addedChildren) {
+      await admin.from("draft_questions").update({ reviewed_by: null }).eq("reviewed_by", id);
+      const childRecordings = await oneOnOneRecordingFiles(admin, id);
+      const { error: childErr } = await admin.auth.admin.deleteUser(id);
+      if (childErr) throw new Error(childErr.message);
+      await deleteStoredFiles(admin, childRecordings, id);
+    }
+    const billing = (await admin.from("billing_customers").select("user_id").eq("user_id", userId).maybeSingle()).data;
 
     // The one reference to profiles that doesn't cascade or null itself out.
     await admin.from("draft_questions").update({ reviewed_by: null }).eq("reviewed_by", userId);
@@ -181,7 +200,9 @@ router.put("/account/parent", async (req: Request, res: Response) => {
     ]);
     if (error) throw new Error(error.message);
     if (!profile) return fail(res, 404, "Account not found");
-    const accountEmail = authUser?.user?.email?.trim().toLowerCase() ?? "";
+    const loginEmail = authUser?.user?.email?.trim().toLowerCase() ?? "";
+    // An added child signs in with a hidden address; the parent's is the one that counts.
+    const accountEmail = loginEmail ? ((await contactEmailForLogin(admin, loginEmail)) ?? "").toLowerCase() : "";
     const name = typeof body.parentName === "string" ? body.parentName.trim().slice(0, 80) || null : undefined;
     const now = new Date().toISOString();
     const updates: Partial<ParentFields> = {};
