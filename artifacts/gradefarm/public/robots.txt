@@ -3,6 +3,8 @@ Allow: /$
 Allow: /pricing
 Allow: /terms
 Allow: /privacy
+Allow: /year-6
+Allow: /readiness-check$
 # App routes are behind auth and hold no public content — keep them out of the index.
 Disallow: /home
 Disallow: /auth
@@ -22,5 +24,7 @@ Disallow: /writing
 Disallow: /session
 Disallow: /room
 Disallow: /diagnostic
+# A parent's readiness-check report: private, reached only from their email.
+Disallow: /readiness-check/report
 
 Sitemap: https://www.gradefarm.com.au/sitemap.xml

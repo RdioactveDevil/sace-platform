@@ -38,6 +38,7 @@ if (typeof window !== 'undefined') {
 // out of the initial app bundle and only fetched when the route is visited.
 const LandingPage           = lazyWithReload(() => import('./components/LandingPage'))
 const Year6Page             = lazyWithReload(() => import('./components/Year6Page'))
+const ReadinessCheckScreen  = lazyWithReload(() => import('./components/ReadinessCheckScreen'))
 const AuthScreen            = lazyWithReload(() => import('./components/AuthScreen'))
 const OnboardingScreen      = lazyWithReload(() => import('./components/OnboardingScreen'))
 const TutorOnboardingScreen = lazyWithReload(() => import('./components/TutorOnboardingScreen'))
@@ -1482,6 +1483,9 @@ function AppInner() {
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
       <Route path="/selective" element={<Navigate to="/year-6" replace />} />
+      {/* Free readiness check for parents, no account needed — public */}
+      <Route path="/readiness-check" element={<ReadinessCheckScreen signedIn={!!(user && profile)} />} />
+      <Route path="/readiness-check/report/:token" element={<ReadinessCheckScreen signedIn={!!(user && profile)} />} />
 
       {/* Question Lab — public preview of the multi-format question engine */}
       <Route path="/question-lab" element={<AdminRoute profile={profile}><QuestionLabScreen theme={theme} onExit={() => navigate('/admin')} /></AdminRoute>} />

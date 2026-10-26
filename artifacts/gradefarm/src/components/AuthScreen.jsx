@@ -30,7 +30,7 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   // A parent setting up an account for their child (the Year 6 page links here
   // with { as: 'parent' }): they sign in with their own email.
   const [asParent, setAsParent] = useState(!invite && location.state?.as === 'parent')
-  const [childName, setChildName] = useState('')
+  const [childName, setChildName] = useState(location.state?.childName || '')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   // Shown instead of an error when there's nothing wrong but the user has to
