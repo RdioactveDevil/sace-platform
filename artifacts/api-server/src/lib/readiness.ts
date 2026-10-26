@@ -25,8 +25,8 @@ export type PoolQuestion = {
 const VERBAL = "Verbal Reasoning for Selective School Entry";
 /**
  * English: topic → how many questions, before one passage with its questions.
- * Reading is only tested through the passage: some reading questions in the
- * bank quote "paragraph 2" of a passage that isn't linked to them.
+ * Reading is tested through a full passage, the way the reading section of a
+ * selective test works, rather than through short stand-alone extracts.
  */
 const ENGLISH_PLAN: Array<[string, number]> = [
   ["Grammar and Language", 6],
