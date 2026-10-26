@@ -245,7 +245,7 @@ function DemoCard() {
 /* ─── MobileMenu ───────────────────────────────────────────────────────── */
 
 function MobileMenu({ open, onClose, onNavigate }) {
-  const NAV_LINKS = [['features','Features'],['how','How It Works'],['year6','Year 6 selective'],['subjects','Subjects'],['pricing','Pricing']]
+  const NAV_LINKS = [['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']]
 
   useEffect(() => {
     if (!open) return
@@ -317,7 +317,6 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
   }, [])
   const scroll = id => {
     if (id === 'pricing') { navigate('/pricing'); return }
-    if (id === 'year6') { navigate('/year-6'); return }
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
   const handleMobileNav = id => { scroll(id); setMenuOpen(false) }
@@ -418,7 +417,7 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
           <span className="lp-tag" style={{ fontSize:10, color:'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
         </div>
         <div className="dnav" style={{ display:'flex', alignItems:'center', gap:28 }}>
-          {[['features','Features'],['how','How It Works'],['year6','Year 6'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
+          {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
             <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.55)', fontSize:13.5, fontWeight:500, cursor:'pointer', fontFamily:FONT_B, transition:'color 0.15s' }}>{label}</button>
           ))}
         </div>
