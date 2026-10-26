@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
-import { verifyQuestionPayload, withStimulus, type Verdict } from "../lib/verify-question";
+import { studentSolution, verifyQuestionPayload, withStimulus, type Verdict } from "../lib/verify-question";
 import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
 import { generateForTopic } from "./generate-questions";
@@ -90,8 +90,11 @@ async function resolveReport(reportId: string, questionId: string) {
       return;
     }
 
-    if (verdict.verdict === "wrong_answer" && verdict.correct_index != null) {
-      await adminDb.from("questions").update({ answer_index: verdict.correct_index }).eq("id", questionId);
+    // A corrected key needs working that agrees with it; without a usable
+    // student solution the question is handled like a flawed one below.
+    const solution = verdict.verdict === "wrong_answer" ? studentSolution(verdict) : null;
+    if (verdict.verdict === "wrong_answer" && verdict.correct_index != null && solution) {
+      await adminDb.from("questions").update({ answer_index: verdict.correct_index, solution }).eq("id", questionId);
       await adminDb.from("question_reports").update({
         ai_status: "fixed_index",
         ai_verdict: verdict,
@@ -101,7 +104,7 @@ async function resolveReport(reportId: string, questionId: string) {
       return;
     }
 
-    if (verdict.verdict === "wrong_question") {
+    if (verdict.verdict === "wrong_question" || verdict.verdict === "wrong_answer") {
       const { data: q } = await adminDb
         .from("questions").select("subject, topic, subtopic, difficulty").eq("id", questionId).single();
 

@@ -14,8 +14,30 @@ import { describeGraph } from "./graph-spec";
 export type Verdict = {
   verdict: "correct" | "wrong_answer" | "wrong_question";
   correct_index: number | null;
+  /** For whoever runs the check (admins, logs). Never shown to students. */
   explanation: string;
+  /** wrong_answer only: a worked solution written for the student. */
+  solution?: string;
 };
+
+// The explanation is written about the options ("matching option B, not the
+// marked option A"), and once went into students' worked solutions. Text like
+// that must never reach a student.
+const CHECKER_NOTE = /\b(marked (option|answer)|not the marked|matching options?|options? \(?[A-F]\)?(?![a-z])|index [0-9]|re-?check|let me|wait[,.!])/i;
+
+export function looksLikeCheckerNote(text: string): boolean {
+  return CHECKER_NOTE.test(text);
+}
+
+/**
+ * The student-facing solution to store with a corrected answer key, or null
+ * when the verifier didn't give a usable one (then the question can't be
+ * fixed in place and should be dropped or regenerated).
+ */
+export function studentSolution(verdict: Verdict): string | null {
+  const text = typeof verdict.solution === "string" ? verdict.solution.trim() : "";
+  return text && !looksLikeCheckerNote(text) ? text : null;
+}
 
 const LABELS = ["A", "B", "C", "D", "E", "F"];
 
@@ -40,8 +62,8 @@ Then respond with ONLY a single JSON object (no other text, no markdown, no LaTe
 If the marked option genuinely matches your computed answer:
 {"verdict":"correct","correct_index":null,"explanation":"one sentence with the key working"}
 
-If a DIFFERENT option matches your computed answer (use the 0-based index of that option):
-{"verdict":"wrong_answer","correct_index":2,"explanation":"one sentence showing the working that proves it"}
+If a DIFFERENT option matches your computed answer (use the 0-based index of that option), also write "solution": a worked solution for the student, one to three sentences that show the working and state the answer itself. The solution must not mention options, letters, indexes, or that any answer was marked or checked:
+{"verdict":"wrong_answer","correct_index":2,"explanation":"one sentence showing the working that proves it","solution":"Brackets first: 8 - 3 = 5. Then 5 x 5 = 25, and 25 + 8 = 33."}
 
 If your computed answer matches NO option, or the question is fundamentally flawed/ambiguous:
 {"verdict":"wrong_question","correct_index":null,"explanation":"one sentence"}`;
@@ -137,8 +159,9 @@ export type VerifiableQuestion = {
  * Verify a freshly generated batch before insertion:
  *   - "correct"        → keep as-is
  *   - "wrong_answer"   → fix answer_index, and replace the solution with the
- *                        verifier's working so the explanation can't contradict
- *                        the corrected answer
+ *                        verifier's student-facing solution so the working can't
+ *                        contradict the corrected answer; without a usable one
+ *                        (studentSolution), drop the question
  *   - "wrong_question" → drop it entirely (never enters the bank)
  *
  * Fails OPEN: if the verifier errors (network/parse/model unavailable) the
@@ -194,12 +217,13 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
           verdict.correct_index < q.options.length &&
           verdict.correct_index !== q.answer_index
         ) {
-          fixed++;
-          results[idx] = {
-            ...q,
-            answer_index: verdict.correct_index,
-            solution: verdict.explanation || q.solution || "",
-          } as T;
+          const solution = studentSolution(verdict);
+          if (solution) {
+            fixed++;
+            results[idx] = { ...q, answer_index: verdict.correct_index, solution } as T;
+          } else {
+            results[idx] = null;
+          }
         } else {
           results[idx] = q;
         }
