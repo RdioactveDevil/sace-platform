@@ -358,7 +358,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{inv.tutor_name}{inv.recipient === 'parent' && inv.child_name ? <span style={{ fontWeight: 500, color: t.textMuted }}> · for {inv.child_name}</span> : null}</div>
                 {inv.subjects?.length > 0 && <div style={{ fontSize: 11, color: GOLD, marginTop: 2 }}>{inv.subjects.join(', ')} included, free</div>}
               </div>
-              <button onClick={() => respondInvite(inv.token, true)} disabled={!!inviteBusy} style={btn(true)}>{inviteBusy === inv.token ? '…' : 'Accept'}</button>
+              {inv.recipient === 'parent' ? (
+                // The invite page asks which child it's for when that isn't clear.
+                <button onClick={() => navigate(`/invite/${encodeURIComponent(inv.token)}`)} style={btn(true)}>Review</button>
+              ) : (
+                <button onClick={() => respondInvite(inv.token, true)} disabled={!!inviteBusy} style={btn(true)}>{inviteBusy === inv.token ? '…' : 'Accept'}</button>
+              )}
               <button onClick={() => respondInvite(inv.token, false)} disabled={!!inviteBusy} style={btn(false)}>Decline</button>
             </div>
           ))}

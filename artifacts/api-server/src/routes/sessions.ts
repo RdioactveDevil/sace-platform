@@ -14,6 +14,8 @@ import { Resend } from "resend";
 import { getR2Config } from "../lib/r2";
 import { EMAIL_FROM } from "../lib/email";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
+import { contactEmailForLogin } from "../lib/family";
+import { getServiceClient } from "../lib/auth";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -283,9 +285,11 @@ async function sendSessionInvite(
     ? `<p style="margin:0 0 6px"><strong>👥 Participants:</strong> ${opts.participantCount} students</p>`
     : "";
 
+  // A child added to a family signs in with a hidden address: their mail goes to the parent.
+  const recipient = (await contactEmailForLogin(getServiceClient(), opts.studentEmail)) ?? opts.studentEmail;
   await resend.emails.send({
     from: EMAIL_FROM,
-    to: [opts.studentEmail],
+    to: [recipient],
     subject: `${opts.isGroup ? "Group session" : "Session"} booked: ${safeTitle} on ${safeDate}`,
     html: `
       <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:560px;margin:auto;color:#1a1a2e">

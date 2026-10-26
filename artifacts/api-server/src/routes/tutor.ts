@@ -6,6 +6,8 @@ import { IncludedSubjectError, canIncludeSubject, includeSubject, removeIncluded
 import { createStudentDiagnostic, waiveDiagnostic } from "../lib/student-diagnostic";
 import { FEATURE_MISSING, claimTutorSubjects, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
 import { liveCurriculum } from "./billing";
+import { contactEmailForLogin, isFamilyLogin } from "../lib/family";
+import { getServiceClient } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -151,7 +153,10 @@ router.post("/tutor/student-emails", async (req: Request, res: Response) => {
 
     const emails: Record<string, string> = {};
     for (const u of listData.users) {
-      if (u.id && u.email && allowed.has(u.id)) emails[u.id] = u.email;
+      if (u.id && u.email && allowed.has(u.id)) {
+        // A child added to a family signs in with a hidden address: show the parent's.
+        emails[u.id] = isFamilyLogin(u.email) ? (await contactEmailForLogin(admin, u.email)) ?? "" : u.email;
+      }
     }
     return res.json({ emails });
   } catch (err) {
@@ -197,9 +202,11 @@ router.post("/tutor/notify-assignment", async (req: Request, res: Response) => {
     const safeTopics = escapeHtml(topicsList);
     const safeDueDate = escapeHtml(dueDate);
 
+    // A child added to a family signs in with a hidden address: their mail goes to the parent.
+    const recipient = (await contactEmailForLogin(getServiceClient(), studentEmail)) ?? studentEmail;
     const { error: sendErr } = await resend.emails.send({
       from: EMAIL_FROM,
-      to: studentEmail,
+      to: recipient,
       subject: `New ${safeType} assigned — ${safeSubject}`,
       html: `
         <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
@@ -278,9 +285,11 @@ router.post("/tutor/notify-student", async (req: Request, res: Response) => {
     const safeTutorName = escapeHtml(tutorName);
     const safeMessage = escapeHtml(customMessage);
 
+    // A child added to a family signs in with a hidden address: their mail goes to the parent.
+    const recipient = (await contactEmailForLogin(getServiceClient(), studentEmail)) ?? studentEmail;
     const { error: sendErr } = await resend.emails.send({
       from: EMAIL_FROM,
-      to: studentEmail,
+      to: recipient,
       subject: `Message from your tutor — ${safeTutorName}`,
       html: `
         <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
@@ -875,9 +884,11 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
           if (!studentEmail) return;
           const studentName = await getStudentName(admin, sid);
           const safeStudentName = escapeHtml(studentName);
+          // A child added to a family signs in with a hidden address: their mail goes to the parent.
+          const recipient = (await contactEmailForLogin(getServiceClient(), studentEmail)) ?? studentEmail;
           const { error: sendErr } = await resend.emails.send({
             from: EMAIL_FROM,
-            to: studentEmail,
+            to: recipient,
             subject: `New ${safeType} assigned — ${safeSubject}`,
             html: `
               <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">

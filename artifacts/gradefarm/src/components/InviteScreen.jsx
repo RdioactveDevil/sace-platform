@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { GraduationCap, Check, TriangleAlert, BookOpen } from 'lucide-react'
-import { fetchInvite, respondToInvite } from '../lib/db'
+import { fetchInvite, respondToInvite, switchToChild } from '../lib/db'
 import { clearPendingInvite, inviteAcceptPath, pendingInvite, rememberPendingInvite } from '../lib/pendingInvite'
 
 const GOLD  = '#f1be43'
@@ -34,7 +34,9 @@ export default function InviteScreen({ signedIn }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(null) // 'accept' | 'decline'
   const [done, setDone] = useState(null) // 'accepted' | 'declined'
-  const [accepted, setAccepted] = useState(null) // { subjects, subjectError } from accepting
+  const [accepted, setAccepted] = useState(null) // { subjects, subjectError, student } from accepting
+  // A parent's invite that could be for more than one of their children: { childName, children }.
+  const [choice, setChoice] = useState(null)
   const autoAccept = useRef(searchParams.get('accept') === '1')
 
   useEffect(() => {
@@ -45,13 +47,21 @@ export default function InviteScreen({ signedIn }) {
     return () => { cancelled = true }
   }, [token])
 
-  const respond = async (accept) => {
+  const respond = async (accept, child = null) => {
     setBusy(accept ? 'accept' : 'decline'); setError('')
     try {
-      const res = await respondToInvite(token, accept)
-      if (accept) setAccepted({ subjects: res?.subjects || [], subjectError: res?.subjectError || null })
+      const res = await respondToInvite(token, accept, child)
+      if (accept) setAccepted({ subjects: res?.subjects || [], subjectError: res?.subjectError || null, student: res?.student || null })
+      setChoice(null)
       setDone(accept ? 'accepted' : 'declined')
-    } catch (e) { setError(e.message) }
+    } catch (e) {
+      if (e.body?.code === 'choose_child') {
+        setChoice({ childName: e.body.child_name, children: e.body.children || [] })
+        setBusy(null)
+        return // still remembered: answered once they pick
+      }
+      setError(e.message)
+    }
     if (pendingInvite() === token) clearPendingInvite() // answered, one way or the other
     setBusy(null)
   }
@@ -105,14 +115,18 @@ export default function InviteScreen({ signedIn }) {
   } else if (done === 'accepted') {
     body = (
       <>
-        <Notice icon={Check} color="#4ade80" text={forParent ? `You're in. ${tutor} is now ${child}'s tutor.` : `You're in. ${tutor} is now your tutor.`} />
+        <Notice icon={Check} color="#4ade80" text={forParent ? `You're in. ${tutor} is now ${accepted?.student?.name || child}'s tutor.` : `You're in. ${tutor} is now your tutor.`} />
         {accepted?.subjects?.length > 0 && (
           <div style={{ marginTop: 10 }}><Notice icon={BookOpen} color={GOLD} text={`${listSubjects(accepted.subjects)} ${accepted.subjects.length > 1 ? 'are' : 'is'} unlocked, included with ${forParent ? 'the' : 'your'} tutoring.`} /></div>
         )}
         {accepted?.subjectError && (
           <div style={{ marginTop: 10 }}><Notice icon={TriangleAlert} color={GOLD} text={accepted.subjectError} /></div>
         )}
-        <button onClick={openPortal} style={{ ...btn(true), marginTop: 20 }}>Continue →</button>
+        {accepted?.student ? (
+          <button onClick={() => switchToChild(accepted.student.id, '/portal').catch(e => setError(e.message))} style={{ ...btn(true), marginTop: 20 }}>Switch to {accepted.student.name} →</button>
+        ) : (
+          <button onClick={openPortal} style={{ ...btn(true), marginTop: 20 }}>Continue →</button>
+        )}
       </>
     )
   } else if (done === 'declined') {
@@ -124,6 +138,24 @@ export default function InviteScreen({ signedIn }) {
     )
   } else if (invite.status !== 'pending') {
     body = <Notice icon={TriangleAlert} color={GOLD} text={STATUS_TEXT[invite.status] || 'This invite can no longer be used.'} />
+  } else if (choice) {
+    body = (
+      <>
+        <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 15, lineHeight: 1.6 }}>
+          Which of your children is this invite for? {tutor} named <strong>{choice.childName || 'your child'}</strong>.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {choice.children.map(c => (
+            <button key={c.id} onClick={() => respond(true, { childId: c.id })} disabled={!!busy} style={{ ...btn(false, !!busy), textAlign: 'left' }}>{c.name}</button>
+          ))}
+          <button onClick={() => respond(true, { newChild: true })} disabled={!!busy} style={{ ...btn(true, !!busy), textAlign: 'left' }}>
+            Add {choice.childName || 'them'} as a new child
+          </button>
+        </div>
+        <p style={{ margin: '12px 0 0', color: '#94a3b8', fontSize: 12.5, lineHeight: 1.5 }}>A new child gets their own account under your email, with their own progress and subjects. You switch between your children from the menu.</p>
+        {error && <div style={{ marginTop: 16 }}><Notice icon={TriangleAlert} color="#f87171" text={error} /></div>}
+      </>
+    )
   } else if (busy === 'accept' && !error) {
     body = <p style={{ color: '#94a3b8', fontSize: 14 }}>Accepting your invite…</p>
   } else {

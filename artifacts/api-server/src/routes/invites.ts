@@ -16,11 +16,14 @@
  * lib/student-diagnostic.ts).
  *
  *   POST   /tutor/invites           invite (or re-send to) an email address
+ *   POST   /tutor/invites/:id/resend  send a pending invite again
  *   GET    /tutor/invites           the caller's pending invites
  *   DELETE /tutor/invites/:id       cancel a pending invite
  *   GET    /invites/mine            pending invites for the signed-in user
  *   GET    /invites/:token          public summary for the invite page
- *   POST   /invites/:token/accept   join the tutor's roster
+ *   POST   /invites/:token/accept   join the tutor's roster; a parent's invite takes
+ *                                    { childId } or { newChild: true } when it isn't
+ *                                    clear which of their children it's for
  *   POST   /invites/:token/decline
  */
 import { Router, type Request, type Response } from "express";
@@ -32,6 +35,7 @@ import { logger } from "../lib/logger";
 import { claimTutorSubjects, requireTutorPlan, studentLimitError, tutorHasFeature } from "../lib/tutor-plan";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { createStudentDiagnostic } from "../lib/student-diagnostic";
+import { FamilyError, addFamilyChild, contactEmailForLogin, familyIdOf, familyMembers, firstName } from "../lib/family";
 import { liveCurriculum } from "./billing";
 
 const router = Router();
@@ -82,12 +86,22 @@ async function findUserIdByEmail(admin: SupabaseClient, email: string): Promise<
   return data.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
 }
 
-/** The caller's email address, or null until they have confirmed it. */
+/**
+ * The caller's email address, or null until they have confirmed it. A child
+ * added to a family answers to their parent's (lib/family.ts).
+ */
 async function confirmedEmail(caller: Caller): Promise<string | null> {
   const { data } = await caller.admin.auth.admin.getUserById(caller.userId);
   const user = data?.user;
   if (!user?.email || !(user.email_confirmed_at ?? user.confirmed_at)) return null;
-  return user.email.toLowerCase();
+  return (await contactEmailForLogin(caller.admin, user.email.toLowerCase()))?.toLowerCase() ?? null;
+}
+
+/** The accounts a parent's address reaches: their family's children, or just the one account. */
+async function accountsFor(admin: SupabaseClient, userId: string): Promise<{ id: string; name: string }[]> {
+  const familyId = await familyIdOf(admin, userId);
+  if (familyId) return (await familyMembers(admin, familyId)).map((m) => ({ id: m.id, name: m.name }));
+  return [{ id: userId, name: (await displayName(admin, userId)) ?? "Student" }];
 }
 
 /** j••••@example.com — enough for the recipient to recognise, not to harvest. */
@@ -242,12 +256,15 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     const existingUserId = await findUserIdByEmail(admin, email);
     if (existingUserId === userId) return res.status(400).json({ error: "You cannot add yourself as a student." });
     if (existingUserId) {
-      const { data: rostered } = await admin
-        .from("tutor_students")
-        .select("student_id")
-        .eq("tutor_id", userId)
-        .eq("student_id", existingUserId)
-        .maybeSingle();
+      // A parent's address can hold several children (lib/family.ts): only the
+      // one named on the invite counts.
+      const candidates = recipient === "parent"
+        ? (await accountsFor(admin, existingUserId)).filter((a) => firstName(a.name) === firstName(childName)).map((a) => a.id)
+        : [existingUserId];
+      const { data: rosteredRows } = candidates.length
+        ? await admin.from("tutor_students").select("student_id").eq("tutor_id", userId).in("student_id", candidates)
+        : { data: [] };
+      const rostered = (rosteredRows ?? []).length > 0;
       if (rostered) {
         return res.status(409).json({
           error: curriculumIds.length
@@ -257,19 +274,23 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
       }
     }
 
-    const overLimit = await studentLimitError(admin, userId, caller.isAdmin, email);
+    const overLimit = await studentLimitError(admin, userId, caller.isAdmin, email, childName);
     if (overLimit) return res.status(403).json({ error: overLimit, code: "tutor_student_limit" });
     const subjectError = await claimTutorSubjects(admin, userId, caller.isAdmin, subjectNames);
     if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
 
-    const { data: pending, error: pendingErr } = await admin
+    const { data: pendingRows, error: pendingErr } = await admin
       .from("tutor_invites")
       .select("*")
       .eq("tutor_id", userId)
       .eq("email", email)
-      .eq("status", "pending")
-      .maybeSingle<InviteRow>();
+      .eq("status", "pending");
     if (pendingErr) return res.status(500).json({ error: pendingErr.message });
+    // One open invite per address and child; a plain re-send picks the address's only one.
+    const open = (pendingRows ?? []) as InviteRow[];
+    const pending = setsRecipient
+      ? open.find((i) => (i.child_name ?? "").toLowerCase() === (childName ?? "").toLowerCase()) ?? null
+      : open[0] ?? null;
 
     let invite = pending;
     if (invite?.sent_at && Date.now() - new Date(invite.sent_at).getTime() < RESEND_INTERVAL_MS) {
@@ -306,6 +327,37 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     const emailError = await sendInviteEmail(invite, tutorName, subjects, sentAt);
     if (!emailError) {
       // A fresh send gets its own reminder later (lib/automated-emails.ts).
+      await admin.from("tutor_invites").update({ sent_at: sentAt, reminded_at: null }).eq("id", invite.id);
+      invite = { ...invite, sent_at: sentAt, reminded_at: null };
+    }
+    return res.json({ invite: tutorView(invite, subjects), emailSent: !emailError, emailError });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+router.post("/tutor/invites/:id/resend", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireTutorCaller(req, res);
+    if (!caller) return;
+    const { admin, userId } = caller;
+    if (!(await requireTutorPlan(admin, res, userId, caller.isAdmin))) return;
+    const { data: found, error } = await admin.from("tutor_invites").select("*")
+      .eq("id", String(req.params.id)).eq("tutor_id", userId).eq("status", "pending").maybeSingle<InviteRow>();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!found) return res.status(404).json({ error: "Invite not found." });
+    if (found.sent_at && Date.now() - new Date(found.sent_at).getTime() < RESEND_INTERVAL_MS) {
+      return res.status(429).json({ error: "Invite already sent. Wait a couple of minutes before re-sending it." });
+    }
+    const sentAt = new Date().toISOString();
+    const [tutorName, labels] = await Promise.all([
+      displayName(admin, userId).then((n) => n ?? "Your tutor"),
+      subjectLabels(admin, [found]),
+    ]);
+    const subjects = labelsOf(found, labels);
+    let invite = found;
+    const emailError = await sendInviteEmail(invite, tutorName, subjects, sentAt);
+    if (!emailError) {
       await admin.from("tutor_invites").update({ sent_at: sentAt, reminded_at: null }).eq("id", invite.id);
       invite = { ...invite, sent_at: sentAt, reminded_at: null };
     }
@@ -462,9 +514,41 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
     if (!found) return;
     const { caller, invite } = found;
 
+    // Whose account joins the roster: the caller's, or for a parent's invite,
+    // the child it names among the parent's children.
+    let studentId = caller.userId;
+    let studentName: string | null = null;
+    if (invite.recipient === "parent") {
+      const body = (req.body ?? {}) as { childId?: unknown; newChild?: unknown };
+      const accounts = await accountsFor(caller.admin, caller.userId);
+      if (typeof body.childId === "string") {
+        const chosen = accounts.find((a) => a.id === body.childId);
+        if (!chosen) return res.status(403).json({ error: "That child isn't in your family." });
+        studentId = chosen.id; studentName = chosen.name;
+      } else if (body.newChild === true) {
+        try {
+          const child = await addFamilyChild(caller.admin, caller.userId, invite.child_name ?? "");
+          studentId = child.id; studentName = child.name;
+        } catch (err) {
+          if (err instanceof FamilyError) return res.status(400).json({ error: err.message });
+          throw err;
+        }
+      } else {
+        const matches = accounts.filter((a) => firstName(a.name) === firstName(invite.child_name));
+        if (matches.length !== 1) {
+          return res.status(409).json({
+            code: "choose_child", child_name: invite.child_name,
+            children: accounts.map((a) => ({ id: a.id, name: a.name })),
+            error: `Which of your children is this invite for?`,
+          });
+        }
+        studentId = matches[0].id; studentName = matches[0].name;
+      }
+    }
+
     const { error: rosterErr } = await caller.admin
       .from("tutor_students")
-      .upsert({ tutor_id: invite.tutor_id, student_id: caller.userId }, { onConflict: "tutor_id,student_id", ignoreDuplicates: true });
+      .upsert({ tutor_id: invite.tutor_id, student_id: studentId }, { onConflict: "tutor_id,student_id", ignoreDuplicates: true });
     if (rosterErr) return res.status(500).json({ error: rosterErr.message });
 
     // A parent who accepted gets the tutor's weekly parent report, when the
@@ -473,13 +557,13 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
       const { error: parentErr } = await caller.admin
         .from("tutor_students")
         .update({ parent_email: invite.email, parent_reports_stopped_at: null, parent_report_week: null })
-        .eq("tutor_id", invite.tutor_id).eq("student_id", caller.userId).is("parent_email", null);
+        .eq("tutor_id", invite.tutor_id).eq("student_id", studentId).is("parent_email", null);
       if (parentErr) logger.warn({ inviteId: invite.id, error: parentErr.message }, "invites: could not set the parent report address");
     }
 
     const { error } = await caller.admin
       .from("tutor_invites")
-      .update({ status: "accepted", student_id: caller.userId, responded_at: new Date().toISOString() })
+      .update({ status: "accepted", student_id: studentId, responded_at: new Date().toISOString() })
       .eq("id", invite.id);
     if (error) return res.status(500).json({ error: error.message });
 
@@ -490,12 +574,12 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
     if (invite.curriculum_ids?.length) {
       try {
         if (await canIncludeSubject(caller.admin, invite.tutor_id)) {
-          const result = await includeSubjects(caller.admin, invite.tutor_id, caller.userId, invite.curriculum_ids);
+          const result = await includeSubjects(caller.admin, invite.tutor_id, studentId, invite.curriculum_ids);
           subjects = result.labels;
           if (result.failed) subjectError = "Some of your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
           // Each comes with a diagnostic to do before practising it.
           for (const id of result.ids) {
-            await createStudentDiagnostic(caller.admin, invite.tutor_id, caller.userId, id, invite.diagnostic_subtopics?.[id] ?? [])
+            await createStudentDiagnostic(caller.admin, invite.tutor_id, studentId, id, invite.diagnostic_subtopics?.[id] ?? [])
               .catch((err) => logger.error({ err, inviteId: invite.id, curriculumId: id }, "invites: could not set a diagnostic"));
           }
         }
@@ -504,7 +588,11 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
         subjectError = "Your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
       }
     }
-    return res.json({ ok: true, tutor_name: (await displayName(caller.admin, invite.tutor_id)) ?? "your tutor", subjects, subjectError });
+    return res.json({
+      ok: true, tutor_name: (await displayName(caller.admin, invite.tutor_id)) ?? "your tutor", subjects, subjectError,
+      // Set when the invite went to a different child in the family than the open account.
+      student: studentId !== caller.userId ? { id: studentId, name: studentName } : null,
+    });
   } catch (err) {
     return fail(res, err);
   }

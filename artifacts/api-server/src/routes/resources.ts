@@ -4,6 +4,8 @@ import { Resend } from "resend";
 import { r2DeleteObject, r2SignedUrl } from "../lib/r2";
 import { EMAIL_FROM, appUrl } from "../lib/email";
 import { requireTutorPlan } from "../lib/tutor-plan";
+import { contactEmailForLogin } from "../lib/family";
+import { getServiceClient } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -272,9 +274,11 @@ router.post("/tutor/resources", async (req: Request, res: Response) => {
           recipients.map(async (sid) => {
             const to = emailMap.get(sid);
             if (!to) return;
+            // A child added to a family signs in with a hidden address: their mail goes to the parent.
+            const recipient = (await contactEmailForLogin(getServiceClient(), to)) ?? to;
             const { error: sendErr } = await resend.emails.send({
               from: EMAIL_FROM,
-              to,
+              to: recipient,
               subject: `New ${safeType} from your tutor — ${safeTitle}`,
               html: `
                 <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">

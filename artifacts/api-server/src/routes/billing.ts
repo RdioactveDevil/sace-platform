@@ -5,6 +5,7 @@ import { requireUser, getServiceClient } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { ACCESS_STATUSES, periodEnd, priceByLookupKey } from "../lib/stripe-plans";
 import { TUTOR_PLAN_KIND, syncTutorSubscription } from "../lib/tutor-plan";
+import { contactEmailForLogin } from "../lib/family";
 
 // Student access and billing.
 //
@@ -133,8 +134,11 @@ export async function customerFor(admin: SupabaseClient, stripe: Stripe, userId:
     admin.auth.admin.getUserById(userId),
     admin.from("profiles").select("display_name").eq("id", userId).maybeSingle<{ display_name: string | null }>(),
   ]);
+  const loginEmail = authUser?.user?.email;
+  // An added child's receipts go to their parent (lib/family.ts).
+  const billingEmail = loginEmail ? await contactEmailForLogin(admin, loginEmail) : null;
   const customer = await stripe.customers.create(
-    { email: authUser?.user?.email ?? undefined, name: profile?.display_name ?? undefined, metadata: { user_id: userId } },
+    { email: billingEmail ?? undefined, name: profile?.display_name ?? undefined, metadata: { user_id: userId } },
     { idempotencyKey: `gradefarm-customer-${userId}` },
   );
   const { error } = await admin.from("billing_customers").insert({ user_id: userId, stripe_customer_id: customer.id });
@@ -456,7 +460,7 @@ export async function syncCustomerEmail(admin: SupabaseClient, stripe: Stripe, u
   const row = await customerRow(admin, userId);
   if (!row) return false;
   const { data } = await admin.auth.admin.getUserById(userId);
-  const email = data?.user?.email;
+  const email = data?.user?.email ? await contactEmailForLogin(admin, data.user.email) : null;
   if (!email) return false;
   const customer = await stripe.customers.retrieve(row.stripe_customer_id).catch((err) => {
     if (isMissing(err)) return null;
