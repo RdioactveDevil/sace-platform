@@ -13,8 +13,10 @@
  *
  *   2. Answer-key verification. An AI fact-checker independently solves each
  *      question; a mislabelled answer_index is corrected (and the solution
- *      replaced with the verifier's working). Questions the checker finds
- *      fundamentally flawed are reported, and only deleted with --delete-flawed.
+ *      replaced with the verifier's student-facing solution). A question whose
+ *      key is wrong but that comes back without a usable solution, or that the
+ *      checker finds fundamentally flawed, is reported, and only deleted with
+ *      --delete-flawed.
  *
  * Dry-run by default — prints what WOULD change. Pass --apply to write.
  * Verification needs AI_INTEGRATIONS_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY);
@@ -101,7 +103,18 @@ type Verdict = {
   verdict: "correct" | "wrong_answer" | "wrong_question";
   correct_index: number | null;
   explanation: string;
+  solution?: string;
 };
+
+// Same rule as studentSolution() in artifacts/api-server/src/lib/verify-question.ts:
+// the explanation is written about the options and must never become a
+// student's worked solution.
+const CHECKER_NOTE = /\b(marked (option|answer)|not the marked|matching options?|options? \(?[A-F]\)?(?![a-z])|index [0-9]|re-?check|let me|wait[,.!])/i;
+function studentSolution(verdict: Verdict): string | null {
+  const text = typeof verdict.solution === "string" ? verdict.solution.trim() : "";
+  return text && !CHECKER_NOTE.test(text) ? text : null;
+}
+
 const LABELS = ["A", "B", "C", "D", "E", "F"];
 
 function parseVerdict(text: string): Verdict {
@@ -138,8 +151,8 @@ Then respond with ONLY a single JSON object (no other text, no markdown, no LaTe
 If the marked option genuinely matches your computed answer:
 {"verdict":"correct","correct_index":null,"explanation":"one sentence with the key working"}
 
-If a DIFFERENT option matches your computed answer (use the 0-based index of that option):
-{"verdict":"wrong_answer","correct_index":2,"explanation":"one sentence showing the working that proves it"}
+If a DIFFERENT option matches your computed answer (use the 0-based index of that option), also write "solution": a worked solution for the student, one to three sentences that show the working and state the answer itself. The solution must not mention options, letters, indexes, or that any answer was marked or checked:
+{"verdict":"wrong_answer","correct_index":2,"explanation":"one sentence showing the working that proves it","solution":"Brackets first: 8 - 3 = 5. Then 5 x 5 = 25, and 25 + 8 = 33."}
 
 If your computed answer matches NO option, or the question is fundamentally flawed/ambiguous:
 {"verdict":"wrong_question","correct_index":null,"explanation":"one sentence"}`;
@@ -294,16 +307,18 @@ async function processRow(row: Row): Promise<void> {
   if (VERIFY && qText && opts.length >= 2 && ai >= 0 && ai < opts.length) {
     try {
       const verdict = await verify({ question: qText, options: opts, answer_index: ai });
+      const solution = studentSolution(verdict);
       if (verdict.verdict === "wrong_answer" &&
           verdict.correct_index != null &&
           verdict.correct_index >= 0 &&
           verdict.correct_index < opts.length &&
-          verdict.correct_index !== ai) {
+          verdict.correct_index !== ai &&
+          solution) {
         stats.indexFixed++;
         patch.answer_index = verdict.correct_index;
-        if (verdict.explanation) patch.solution = verdict.explanation;
+        patch.solution = solution;
         console.log(`  [${row.id}] answer_index ${ai} → ${verdict.correct_index}: ${verdict.explanation}`);
-      } else if (verdict.verdict === "wrong_question") {
+      } else if (verdict.verdict === "wrong_question" || (verdict.verdict === "wrong_answer" && verdict.correct_index !== ai)) {
         stats.flawed++;
 
         // Preferred: replace the flawed question with a fresh, verified one.
