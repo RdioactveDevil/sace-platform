@@ -5,6 +5,10 @@
  * row is what lets the tutor see the student's progress and opens the Lessons
  * section of the Student Portal.
  *
+ * The invite can go to a parent instead (recipient 'parent', with the child's
+ * first name): the parent sets the account up under their own email, the way
+ * the parent sign-up does, and gets the tutor's weekly parent report.
+ *
  * An invite can come with the subjects the tutor teaches the student
  * (curriculum_ids); they unlock, free, when they accept (see
  * lib/included-subject.ts), each with a diagnostic to do first covering the
@@ -23,9 +27,9 @@ import { Router, type Request, type Response } from "express";
 import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, getServiceClient, type Caller } from "../lib/auth";
-import { appUrl, getResend, sendEmail } from "../lib/email";
+import { appUrl, getResend, sendEmail, type EmailContent } from "../lib/email";
 import { logger } from "../lib/logger";
-import { claimTutorSubjects, requireTutorPlan, studentLimitError } from "../lib/tutor-plan";
+import { claimTutorSubjects, requireTutorPlan, studentLimitError, tutorHasFeature } from "../lib/tutor-plan";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { createStudentDiagnostic } from "../lib/student-diagnostic";
 import { liveCurriculum } from "./billing";
@@ -38,6 +42,7 @@ const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RESEND_INTERVAL_MS = 2 * 60 * 1000;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CHILD_NAME_RE = /^[\p{L}][\p{L}' -]{0,39}$/u;
 
 interface InviteRow {
   id: string;
@@ -46,6 +51,9 @@ interface InviteRow {
   token: string;
   status: "pending" | "accepted" | "declined" | "cancelled";
   student_id: string | null;
+  recipient: "student" | "parent";
+  /** The child's first name, on a parent invite. */
+  child_name: string | null;
   curriculum_ids: string[];
   /** Subtopics each subject's diagnostic covers, by curriculum id (none: the whole subject). */
   diagnostic_subtopics: Record<string, string[]>;
@@ -98,11 +106,18 @@ function listSubjects(labels: string[]): string {
 }
 
 async function sendInviteEmail(invite: InviteRow, tutorName: string, subjects: string[], sentAt: string): Promise<string | null> {
-  const subject = subjects.length ? listSubjects(subjects) : null;
   const resend = getResend();
   if (!resend) return "Email service not configured. Please add RESEND_API_KEY.";
-  const { error } = await sendEmail(resend, {
-    to: invite.email,
+  const { subject, content } = invite.recipient === "parent"
+    ? parentInviteEmail(invite, tutorName, subjects)
+    : studentInviteEmail(invite, tutorName, subjects);
+  const { error } = await sendEmail(resend, { to: invite.email, subject, content, idempotencyKey: `tutor-invite:${invite.id}:${sentAt}` });
+  return error;
+}
+
+function studentInviteEmail(invite: InviteRow, tutorName: string, subjects: string[]): { subject: string; content: EmailContent } {
+  const subject = subjects.length ? listSubjects(subjects) : null;
+  return {
     subject: subject ? `${tutorName} has set you up with ${subject} on gradefarm.` : `${tutorName} invited you to gradefarm.`,
     content: {
       heading: `${tutorName} wants to be your tutor`,
@@ -116,14 +131,35 @@ async function sendInviteEmail(invite: InviteRow, tutorName: string, subjects: s
       cta: { label: "Accept invite", url: inviteUrl(invite.token) },
       footer: `You're receiving this because ${tutorName} entered your email address on gradefarm. If you don't know them, you can ignore this email. The invite expires in 30 days.`,
     },
-    idempotencyKey: `tutor-invite:${invite.id}:${sentAt}`,
-  });
-  return error;
+  };
+}
+
+/** To a parent or guardian: they set the account up for their child under their own email. */
+function parentInviteEmail(invite: InviteRow, tutorName: string, subjects: string[]): { subject: string; content: EmailContent } {
+  const child = invite.child_name || "your child";
+  const subject = subjects.length ? listSubjects(subjects) : null;
+  return {
+    subject: subject
+      ? `${tutorName} has set ${child} up with ${subject} on gradefarm.`
+      : `${tutorName} invited ${child} to gradefarm.`,
+    content: {
+      heading: `${tutorName} wants to tutor ${child} on gradefarm`,
+      paragraphs: [
+        `${tutorName} has invited ${child} to gradefarm., an online practice app by Titanium Tutoring: adaptive questions with worked solutions, and the lessons and work ${tutorName} sets.`
+          + (subject ? ` ${subject} ${subjects.length > 1 ? "are" : "is"} included with the tutoring, so there's nothing to pay for ${subjects.length > 1 ? "them" : "it"}.` : ""),
+        `The account sits under your email: you sign in with it and set it up for ${child}. Once you accept, ${tutorName} can see ${child}'s practice progress, and you'll get a short progress email every Sunday.`,
+        `New to gradefarm.? The button takes you to create the account with this email address (${invite.email}). The invite is accepted as soon as you confirm it.`,
+      ],
+      cta: { label: `Set up ${invite.child_name ? `${invite.child_name}'s` : "the"} account`, url: inviteUrl(invite.token) },
+      footer: `You're receiving this because ${tutorName} entered your email address on gradefarm as ${child}'s parent or guardian. If you don't know them, you can ignore this email. The invite expires in 30 days.`,
+    },
+  };
 }
 
 function tutorView(invite: InviteRow, subjects: string[]) {
   return {
-    id: invite.id, email: invite.email, subjects, created_at: invite.created_at, sent_at: invite.sent_at,
+    id: invite.id, email: invite.email, recipient: invite.recipient, child_name: invite.child_name,
+    subjects, created_at: invite.created_at, sent_at: invite.sent_at,
     reminded_at: invite.reminded_at, expired: isExpired(invite),
   };
 }
@@ -174,9 +210,16 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     const { admin, userId } = caller;
     if (!(await requireTutorPlan(admin, res, userId, caller.isAdmin))) return;
 
-    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown; diagnosticSubtopics?: unknown };
+    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown; diagnosticSubtopics?: unknown; recipient?: unknown; childName?: unknown };
     const email = String(body.email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+    // Who it's for. Left out (a plain re-send) keeps the invite's current one.
+    const setsRecipient = "recipient" in body;
+    const recipient: InviteRow["recipient"] = body.recipient === "parent" ? "parent" : "student";
+    const childName = recipient === "parent" ? String(body.childName ?? "").trim().replace(/\s+/g, " ") : null;
+    if (recipient === "parent" && !CHILD_NAME_RE.test(childName ?? "")) {
+      return res.status(400).json({ error: "Enter the child's first name (letters only)." });
+    }
 
     // The subjects the invite comes with. Left out (a plain re-send) keeps the
     // invite's current ones; [] takes them off.
@@ -238,16 +281,20 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
         .insert({
           tutor_id: userId, email, token: randomBytes(24).toString("base64url"),
           curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics,
+          recipient, child_name: childName,
         })
         .select("*")
         .single<InviteRow>();
       if (insertErr || !created) return res.status(500).json({ error: insertErr?.message ?? "Could not create the invite." });
       invite = created;
-    } else if (setsSubjects) {
-      const { error: subjErr } = await admin
-        .from("tutor_invites").update({ curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics }).eq("id", invite.id);
-      if (subjErr) return res.status(500).json({ error: subjErr.message });
-      invite = { ...invite, curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics };
+    } else if (setsSubjects || setsRecipient) {
+      const changes = {
+        ...(setsSubjects ? { curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics } : {}),
+        ...(setsRecipient ? { recipient, child_name: childName } : {}),
+      };
+      const { error: updErr } = await admin.from("tutor_invites").update(changes).eq("id", invite.id);
+      if (updErr) return res.status(500).json({ error: updErr.message });
+      invite = { ...invite, ...changes };
     }
 
     const sentAt = new Date().toISOString();
@@ -335,6 +382,8 @@ router.get("/invites/mine", async (req: Request, res: Response) => {
       invites: invites.map((i) => ({
         token: i.token,
         tutor_name: names[i.tutor_id] || "A tutor",
+        recipient: i.recipient,
+        child_name: i.child_name,
         subjects: labelsOf(i, labels),
         created_at: i.created_at,
       })),
@@ -360,6 +409,8 @@ router.get("/invites/:token", async (req: Request, res: Response) => {
     return res.json({
       tutor_name: (await displayName(admin, invite.tutor_id)) ?? "A tutor",
       email: maskEmail(invite.email),
+      recipient: invite.recipient,
+      child_name: invite.child_name,
       // Pre-fills sign-up. Only while the invite is usable: whoever has the
       // link was sent it at this address.
       signup_email: status === "pending" ? invite.email : null,
@@ -415,6 +466,16 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
       .from("tutor_students")
       .upsert({ tutor_id: invite.tutor_id, student_id: caller.userId }, { onConflict: "tutor_id,student_id", ignoreDuplicates: true });
     if (rosterErr) return res.status(500).json({ error: rosterErr.message });
+
+    // A parent who accepted gets the tutor's weekly parent report, when the
+    // tutor's plan has it (the same rule as adding a parent from the roster).
+    if (invite.recipient === "parent" && (await tutorHasFeature(caller.admin, invite.tutor_id, "parentReports"))) {
+      const { error: parentErr } = await caller.admin
+        .from("tutor_students")
+        .update({ parent_email: invite.email, parent_reports_stopped_at: null, parent_report_week: null })
+        .eq("tutor_id", invite.tutor_id).eq("student_id", caller.userId).is("parent_email", null);
+      if (parentErr) logger.warn({ inviteId: invite.id, error: parentErr.message }, "invites: could not set the parent report address");
+    }
 
     const { error } = await caller.admin
       .from("tutor_invites")

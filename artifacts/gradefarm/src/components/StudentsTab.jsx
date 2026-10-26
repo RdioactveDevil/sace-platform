@@ -83,6 +83,9 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [addNotice, setAddNotice] = useState('')
+  // Send the invite to a parent, who sets the account up for their child (one at a time).
+  const [toParent, setToParent] = useState(false)
+  const [childName, setChildName] = useState('')
   const [invites, setInvites] = useState([])
   // Whether this tutor can include subjects (free for the student), and the subjects.
   const [includable, setIncludable] = useState({ canInclude: false, subjects: [] })
@@ -237,13 +240,17 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     e.preventDefault()
     if (addLoading || !addresses.length) return
     if (addresses.length > 50) { setAddError('Paste up to 50 addresses at a time.'); return }
+    const child = childName.trim()
+    if (toParent && addresses.length > 1) { setAddError('Invite one parent at a time, so each invite has their child\'s name.'); return }
+    if (toParent && !child) { setAddError("Enter the child's first name."); return }
     setAddError(''); setAddLoading(true)
     setAddNotice('')
     const scope = Object.fromEntries(inviteSubjects.filter(id => inviteScope[id]?.length).map(id => [id, inviteScope[id]]))
     const results = []
     for (const addr of addresses) {
       try {
-        const res = await inviteStudent(addr, includable.canInclude ? inviteSubjects : undefined, includable.canInclude ? scope : undefined)
+        const res = await inviteStudent(addr, includable.canInclude ? inviteSubjects : undefined, includable.canInclude ? scope : undefined,
+          { parent: toParent, childName: child })
         results.push({ addr, ok: !!res.emailSent, saved: true, error: res.emailError, subjects: res.invite?.subjects || [] })
       } catch (err) {
         results.push({ addr, ok: false, saved: false, error: err.message || 'Could not send the invite.' })
@@ -253,7 +260,9 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     const failed = results.filter(r => !r.ok)
     const unlocked = sent[0]?.subjects || []
     const withSubjects = unlocked.length ? `, with ${unlocked.join(', ')} unlocked` : ''
-    if (sent.length) {
+    if (sent.length && toParent) {
+      setAddNotice(`Invite sent to ${sent[0].addr}. ${child} joins your roster once their parent accepts${withSubjects}.`)
+    } else if (sent.length) {
       setAddNotice(sent.length === 1
         ? `Invite sent to ${sent[0].addr}. They'll join your roster once they accept${withSubjects}.`
         : `Invites sent to ${sent.length} students. They'll join your roster as they accept${withSubjects}.`)
@@ -266,7 +275,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     }
     // Keep only the ones that didn't go out, to fix and retry.
     setEmail(failed.filter(f => !f.saved).map(f => f.addr).join('\n'))
-    if (!failed.length) { setInviteSubjects([]); setInviteScope({}) }
+    if (!failed.length) { setInviteSubjects([]); setInviteScope({}); setChildName('') }
     fetchPendingInvites().then(setInvites).catch(() => {})
     setAddLoading(false)
   }
@@ -424,16 +433,35 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       {/* Add form */}
       {showAdd && (
         <div style={{ ...card, padding: '16px 18px' }}>
+          <div role="radiogroup" aria-label="Send the invite to" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginRight: 4 }}>Send the invite to</span>
+            {[[false, 'The student'], [true, 'A parent']].map(([v, label]) => (
+              <button key={label} type="button" role="radio" aria-checked={toParent === v} onClick={() => { setToParent(v); setAddError(''); setAddNotice('') }} style={chipStyle(toParent === v)}>{label}</button>
+            ))}
+          </div>
           <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 10 }}>
-            Enter the student's email and we'll send them an invite. They join your roster (and get the Student Portal) once they accept. They don't need an account yet.
-            {includable.canInclude && ' Pick the subjects you tutor them in and they unlock free for them when they accept.'}
+            {toParent
+              ? "For a student without their own email. The parent sets the account up for their child under their own email, and the student joins your roster (and gets the Student Portal) once they accept. The parent also gets a progress email every Sunday."
+              : "Enter the student's email and we'll send them an invite. They join your roster (and get the Student Portal) once they accept. They don't need an account yet."}
+            {includable.canInclude && ' Pick the subjects you tutor them in and they unlock free when the invite is accepted.'}
           </div>
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <textarea className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleAdd(e) }}
-              placeholder="student@email.com (or paste several, one per line or comma-separated)" aria-label="Student email addresses"
-              rows={Math.min(5, Math.max(1, email.split('\n').length))} autoCapitalize="none" spellCheck={false}
-              style={{ ...ctrl, flex: 1, minWidth: 220, resize: 'vertical', lineHeight: 1.5 }} />
+            {toParent ? (
+              <>
+                <input className="td-input-gold" value={childName} onChange={e => { setChildName(e.target.value); setAddError(''); setAddNotice('') }}
+                  placeholder="Child's first name" aria-label="Child's first name" autoComplete="off" maxLength={40}
+                  style={{ ...ctrl, flex: '1 1 160px', minWidth: 140 }} />
+                <input className="td-input-gold" type="email" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }}
+                  placeholder="parent@email.com" aria-label="Parent's email address" autoCapitalize="none" spellCheck={false}
+                  style={{ ...ctrl, flex: '2 1 220px', minWidth: 200 }} />
+              </>
+            ) : (
+              <textarea className="td-input-gold" value={email} onChange={e => { setEmail(e.target.value); setAddError(''); setAddNotice('') }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleAdd(e) }}
+                placeholder="student@email.com (or paste several, one per line or comma-separated)" aria-label="Student email addresses"
+                rows={Math.min(5, Math.max(1, email.split('\n').length))} autoCapitalize="none" spellCheck={false}
+                style={{ ...ctrl, flex: 1, minWidth: 220, resize: 'vertical', lineHeight: 1.5 }} />
+            )}
             <button type="submit" disabled={addLoading || !addresses.length} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Sending…' : addresses.length > 1 ? `Send ${addresses.length} invites` : 'Send invite'}</button>
           </form>
           {includable.canInclude && (
@@ -466,12 +494,14 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         <div style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '13px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Pending invites</div>
-            <div style={{ fontSize: 12, color: t.textMuted }}>Waiting for the student to accept</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>Waiting to be accepted</div>
           </div>
           {invites.map(inv => (
             <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px', borderBottom: `1px solid ${divider}` }}>
               <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.email}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {inv.recipient === 'parent' ? <>{inv.child_name || 'Student'} <span style={{ fontWeight: 500, color: t.textMuted }}>· Parent: {inv.email}</span></> : inv.email}
+                </div>
                 <div style={{ fontSize: 11, color: inv.expired ? t.danger : t.textMuted }}>
                   {inv.expired ? 'Expired. Resend to renew' : inv.sent_at ? `Sent ${fmtDate(inv.sent_at)}` : 'Not sent yet'}
                   {inv.subjects?.length ? ` · ${inv.subjects.join(', ')} included` : ''}

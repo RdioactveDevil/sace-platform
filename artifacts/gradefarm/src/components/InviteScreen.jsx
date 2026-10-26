@@ -17,7 +17,9 @@ const STATUS_TEXT = {
 }
 
 /**
- * /invite/:token — a student accepts (or declines) a tutor's invite. Signed
+ * /invite/:token — a student accepts (or declines) a tutor's invite. An
+ * invite sent to a parent (recipient 'parent') reads to them, and its sign-up
+ * is the parent sign-up with the child's name filled in. Signed
  * out, it sends them to sign up (email pre-filled) or sign in and remembers
  * the invite (pendingInvite); once they're signed in the app accepts it
  * wherever they are (App.jsx). It accepts itself when they're signed in on
@@ -67,11 +69,15 @@ export default function InviteScreen({ signedIn }) {
     respond(true)
   }, [signedIn, invite]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const forParent = invite?.recipient === 'parent'
+  const child = invite?.child_name || 'your child'
+
   const toAuth = (mode) => {
     rememberPendingInvite(token)
     navigate('/auth', { state: {
       mode,
       email: invite?.signup_email || '',
+      ...(forParent ? { as: 'parent', childName: invite.child_name || '' } : {}),
       // The sign-up confirmation link comes back here, on whichever device it's opened.
       redirectTo: `${window.location.origin}${inviteAcceptPath(token)}`,
       invitedBy: invite?.tutor_name || null,
@@ -99,9 +105,9 @@ export default function InviteScreen({ signedIn }) {
   } else if (done === 'accepted') {
     body = (
       <>
-        <Notice icon={Check} color="#4ade80" text={`You're in. ${tutor} is now your tutor.`} />
+        <Notice icon={Check} color="#4ade80" text={forParent ? `You're in. ${tutor} is now ${child}'s tutor.` : `You're in. ${tutor} is now your tutor.`} />
         {accepted?.subjects?.length > 0 && (
-          <div style={{ marginTop: 10 }}><Notice icon={BookOpen} color={GOLD} text={`${listSubjects(accepted.subjects)} ${accepted.subjects.length > 1 ? 'are' : 'is'} unlocked, included with your tutoring.`} /></div>
+          <div style={{ marginTop: 10 }}><Notice icon={BookOpen} color={GOLD} text={`${listSubjects(accepted.subjects)} ${accepted.subjects.length > 1 ? 'are' : 'is'} unlocked, included with ${forParent ? 'the' : 'your'} tutoring.`} /></div>
         )}
         {accepted?.subjectError && (
           <div style={{ marginTop: 10 }}><Notice icon={TriangleAlert} color={GOLD} text={accepted.subjectError} /></div>
@@ -112,7 +118,7 @@ export default function InviteScreen({ signedIn }) {
   } else if (done === 'declined') {
     body = (
       <>
-        <Notice icon={Check} color="#94a3b8" text={`Invite declined. ${tutor} won't be added as your tutor.`} />
+        <Notice icon={Check} color="#94a3b8" text={forParent ? `Invite declined. ${tutor} won't be added as ${child}'s tutor.` : `Invite declined. ${tutor} won't be added as your tutor.`} />
         <button onClick={() => navigate('/home')} style={{ ...btn(false), marginTop: 20 }}>Go to gradefarm.</button>
       </>
     )
@@ -127,13 +133,17 @@ export default function InviteScreen({ signedIn }) {
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '0 0 16px', padding: '12px 14px', borderRadius: 12, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.3)' }}>
             <BookOpen size={18} color={GOLD} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ fontSize: 14, lineHeight: 1.5, color: '#f1f5f9' }}>
-              <strong>{listSubjects(subjects)}</strong> {subjects.length > 1 ? 'are' : 'is'} included with your tutoring. There's nothing to pay for {subjects.length > 1 ? 'them' : 'it'}.
+              <strong>{listSubjects(subjects)}</strong> {subjects.length > 1 ? 'are' : 'is'} included with {forParent ? 'the' : 'your'} tutoring. There's nothing to pay for {subjects.length > 1 ? 'them' : 'it'}.
             </div>
           </div>
         )}
         <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 15, lineHeight: 1.6 }}>
-          Accept to open the Student Portal: your lessons, class resources and recordings, and the work {tutor} sets you.
-          {' '}{tutor} will also be able to see your practice progress.
+          {forParent ? (
+            <>The account sits under your email: you sign in and set it up for {child}. Accepting opens the Student Portal for {child}'s lessons and the work {tutor} sets, and {tutor} will be able to see {child}'s practice progress. You'll get a short progress email every Sunday.</>
+          ) : (
+            <>Accept to open the Student Portal: your lessons, class resources and recordings, and the work {tutor} sets you.
+            {' '}{tutor} will also be able to see your practice progress.</>
+          )}
         </p>
         <p style={{ margin: '0 0 22px', color: '#94a3b8', fontSize: 13 }}>Sent to {invite.email}</p>
         {signedIn ? (
@@ -143,9 +153,11 @@ export default function InviteScreen({ signedIn }) {
           </div>
         ) : (
           <>
-            <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 14 }}>Create your account with that email address (or sign in if you have one). We'll accept the invite for you as soon as you're in.</p>
+            <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 14 }}>
+              {forParent ? `Set up ${child}'s account with that email address (or sign in if you already have one).` : 'Create your account with that email address (or sign in if you have one).'} We'll accept the invite for you as soon as you're in.
+            </p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={() => toAuth('signup')} style={btn(true)}>Create account</button>
+              <button onClick={() => toAuth('signup')} style={btn(true)}>{forParent ? `Set up ${invite.child_name ? `${invite.child_name}'s` : 'the'} account` : 'Create account'}</button>
               <button onClick={() => toAuth('signin')} style={btn(false)}>I have an account</button>
             </div>
           </>
@@ -162,7 +174,7 @@ export default function InviteScreen({ signedIn }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <GraduationCap size={22} color={GOLD} aria-hidden="true" />
           <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: '#f1f5f9' }}>
-            {invite ? `${tutor} wants to be your tutor` : 'Tutor invite'}
+            {!invite ? 'Tutor invite' : forParent ? `${tutor} wants to tutor ${child}` : `${tutor} wants to be your tutor`}
           </h1>
         </div>
         {body}

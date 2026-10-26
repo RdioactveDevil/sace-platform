@@ -1023,11 +1023,18 @@ export async function fetchRoster(tutorId, { allTutors = false } = {}) {
  *  with, free ([] for none; left out, a re-send keeps the current ones).
  *  `diagnosticSubtopics`: { curriculumId: [subtopicId] } each subject's
  *  diagnostic covers (left out: the whole subject).
+ *  `recipient`: { parent: false } for the student, or { parent: true, childName }
+ *  to send it to a parent who sets the account up for their child (left out,
+ *  a re-send keeps who it's for).
  *  Resolves to { invite, emailSent, emailError }. */
-export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics) {
+export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics, recipient) {
   const body = { email: studentEmail }
   if (curriculumIds !== undefined) body.curriculumIds = curriculumIds
   if (diagnosticSubtopics !== undefined) body.diagnosticSubtopics = diagnosticSubtopics
+  if (recipient !== undefined) {
+    body.recipient = recipient.parent ? 'parent' : 'student'
+    if (recipient.parent) body.childName = recipient.childName
+  }
   return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify(body) })
 }
 
