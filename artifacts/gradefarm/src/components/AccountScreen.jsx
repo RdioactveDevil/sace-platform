@@ -40,6 +40,7 @@ function accessLine(sub, freeDaily) {
   if (sub.source !== 'stripe') return { text: 'Included by Titanium Tutoring', tone: 'success' }
   if (sub.status === 'past_due') return { text: 'Payment failed — update your card', tone: 'danger' }
   if (sub.cancel_at_period_end) return { text: `Ends ${shortDate(sub.current_period_end)}`, tone: 'muted' }
+  if (sub.status === 'trialing') return { text: `Free trial until ${shortDate(sub.current_period_end)}`, tone: 'success' }
   return { text: 'In your plan', tone: 'muted' }
 }
 
@@ -267,7 +268,9 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
   const switchedTotal = planTotal(otherInterval === 'month' ? monthly : weekly, paid.length)
 
   const switchInterval = async () => {
-    const msg = `Switch to ${otherInterval}ly billing at $${money(switchedTotal)}/${otherInterval}? Your new ${otherInterval} starts today, and the unused part of this ${interval} comes off the first bill.`
+    const msg = plan?.trialing
+      ? `Switch to ${otherInterval}ly billing? You'll pay $${money(switchedTotal)}/${otherInterval} when your free trial ends on ${shortDate(plan.renewsAt)}.`
+      : `Switch to ${otherInterval}ly billing at $${money(switchedTotal)}/${otherInterval}? Your new ${otherInterval} starts today, and the unused part of this ${interval} comes off the first bill.`
     if (!window.confirm(msg)) return
     setBusy('interval'); setError('')
     try { await switchBillingInterval(otherInterval); await load() }
@@ -284,7 +287,9 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
   const remove = async (sub) => {
     const label = formatSubjectLabel({ name: sub.subject_name, stage: sub.stage })
     const msg = paid.length === 1
-      ? `Remove ${label}? It's your only paid subject, so your plan ends on ${shortDate(sub.current_period_end)} and you keep access until then.`
+      ? sub.status === 'trialing'
+        ? `Cancel your free trial of ${label}? You keep access until ${shortDate(sub.current_period_end)} and won't be charged.`
+        : `Remove ${label}? It's your only paid subject, so your plan ends on ${shortDate(sub.current_period_end)} and you keep access until then.`
       : `Remove ${label} now? Your plan drops to $${money(totalAfterRemoving())}/${interval} and unused time is credited to your next bill.`
     if (!window.confirm(msg)) return
     setBusy(sub.id); setError('')
@@ -303,7 +308,7 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
           {plan?.hasPlan && (
             <span style={{ fontSize: 12.5, color: t.textMuted }}>
               <strong style={{ color: t.text }}>${money(plan.total)}/{interval}</strong>
-              {plan.endsAtPeriodEnd ? ` · ends ${shortDate(plan.renewsAt)}` : plan.renewsAt ? ` · next bill ${shortDate(plan.renewsAt)}` : ''}
+              {plan.endsAtPeriodEnd ? ` · ends ${shortDate(plan.renewsAt)}` : plan.renewsAt ? ` · ${plan.trialing ? 'first' : 'next'} bill ${shortDate(plan.renewsAt)}` : ''}
             </span>
           )}
         </div>

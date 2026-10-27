@@ -6,6 +6,7 @@ import { logger } from "../lib/logger";
 import { ACCESS_STATUSES, periodEnd, priceByLookupKey } from "../lib/stripe-plans";
 import { TUTOR_PLAN_KIND, syncTutorSubscription } from "../lib/tutor-plan";
 import { contactEmailForLogin } from "../lib/family";
+import { getResend, sendEmail } from "../lib/email";
 
 // Student access and billing.
 //
@@ -20,6 +21,11 @@ import { contactEmailForLogin } from "../lib/family";
 // student with a plan comes from their own Stripe price.
 // The first paid subject goes through Stripe Checkout; later ones are added to
 // (or removed from) the existing subscription in-app, prorated.
+//
+// A student's first plan starts with a free trial on that one subject
+// (platform_settings.pricing.student_trial_days, default 7; 0 turns it off).
+// Checkout still takes a card, and Stripe charges it when the trial ends unless
+// the plan was cancelled. Adding a second subject ends the trial and bills now.
 //
 // Which subjects are paid for is recorded in user_subscriptions (source =
 // 'stripe', linked by stripe_subscription_id); the subscription's state comes
@@ -66,6 +72,16 @@ async function readTiers(admin: SupabaseClient): Promise<Record<Interval, number
   const week = positiveNumbers(pricing.student_tiers);
   const month = positiveNumbers(pricing.student_monthly_tiers);
   return { week: week.length ? week : DEFAULT_TIERS_AUD.week, month: month.length ? month : DEFAULT_TIERS_AUD.month };
+}
+
+const DEFAULT_TRIAL_DAYS = 7;
+
+/** Days of free trial a first plan starts with; 0 = no trial. */
+async function readTrialDays(admin: SupabaseClient): Promise<number> {
+  const raw = (await readPricing(admin)).student_trial_days;
+  if (raw === undefined || raw === null || raw === "") return DEFAULT_TRIAL_DAYS;
+  const days = Math.floor(Number(raw));
+  return Number.isFinite(days) && days > 0 ? Math.min(days, 90) : 0;
 }
 
 /** Price of the nth paid subject (1-based). */
@@ -161,6 +177,20 @@ async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: s
   return sub && ACCESS_STATUSES.has(sub.status) ? sub : null;
 }
 
+/** Whether the student has never had a plan, so their first one may start with a free trial. */
+async function trialEligible(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<boolean> {
+  const row = await customerRow(admin, userId);
+  if (!row) return true;
+  const subs = await stripe.subscriptions.list({ customer: row.stripe_customer_id, status: "all", limit: 100 }).catch((err) => {
+    if (isMissing(err)) return null;
+    throw err;
+  });
+  // incomplete_expired: a first payment that never went through, so no plan was had.
+  return !subs?.data.some((s) => s.metadata?.kind !== TUTOR_PLAN_KIND && s.status !== "incomplete_expired");
+}
+
+const shortDay = (d: Date) => d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "Australia/Adelaide" });
+
 export type Curriculum = { id: string; name: string; stage: string; label: string };
 
 export async function liveCurriculum(admin: SupabaseClient, id: unknown): Promise<Curriculum | null> {
@@ -213,14 +243,19 @@ async function paidRows(admin: SupabaseClient, subscriptionId: string): Promise<
   return data ?? [];
 }
 
-/** Set the plan's quantity to `quantity` paid subjects, prorating the change. */
-async function setQuantity(stripe: Stripe, sub: Stripe.Subscription, quantity: number) {
+/**
+ * Set the plan's quantity to `quantity` paid subjects, prorating the change.
+ * `endTrial` bills the plan now instead of at the end of its free trial, and
+ * fails without changing it if the card is declined.
+ */
+async function setQuantity(stripe: Stripe, sub: Stripe.Subscription, quantity: number, { endTrial = false } = {}) {
   const item = sub.items.data[0];
   return stripe.subscriptions.update(sub.id, {
     items: [{ id: item.id, quantity }],
     proration_behavior: "create_prorations",
     // Adding a subject to a plan that was set to end keeps it going.
     ...(sub.cancel_at_period_end ? { cancel_at_period_end: false } : {}),
+    ...(endTrial ? { trial_end: "now" as const, payment_behavior: "error_if_incomplete" as const } : {}),
   });
 }
 
@@ -257,7 +292,7 @@ router.get("/billing/config", async (req: Request, res: Response) => {
   if (!ctx) return;
   const prices = await readTiers(ctx.admin);
   const { data: rows } = await ctx.admin
-    .from("user_subscriptions").select("source, active, cancel_at_period_end, current_period_end")
+    .from("user_subscriptions").select("source, active, status, cancel_at_period_end, current_period_end")
     .eq("user_id", ctx.userId).eq("source", "stripe").eq("active", true);
   const paid = rows ?? [];
   const stripe = getStripe();
@@ -276,6 +311,18 @@ router.get("/billing/config", async (req: Request, res: Response) => {
   }
   const planPrices = planTiers ?? prices[interval ?? "week"];
   const { data: freeLimit } = await ctx.admin.rpc("free_question_limit");
+  const trialing = paid.length > 0 && paid.every((r) => r.status === "trialing");
+  // Days free a first plan would start with; 0 once they've had a plan.
+  let trialDays = 0;
+  if (stripe && paid.length === 0) {
+    const days = await readTrialDays(ctx.admin);
+    if (days > 0) {
+      trialDays = await trialEligible(ctx.admin, stripe, ctx.userId).then((ok) => (ok ? days : 0), (err) => {
+        logger.warn({ err }, "billing: couldn't check trial eligibility");
+        return 0;
+      });
+    }
+  }
   res.json({
     enabled: !!stripe,
     currency: "AUD",
@@ -291,6 +338,9 @@ router.get("/billing/config", async (req: Request, res: Response) => {
     renewsAt: paid[0]?.current_period_end ?? null,
     endsAtPeriodEnd: paid.length > 0 && paid.every((r) => r.cancel_at_period_end),
     freeDailyQuestions: typeof freeLimit === "number" ? freeLimit : 20,
+    trialDays,
+    // On a free trial: renewsAt is when it ends and the first bill is due.
+    trialing,
   });
 });
 
@@ -320,8 +370,10 @@ router.post("/billing/free-subject", async (req: Request, res: Response) => {
 
 // POST /billing/subjects — { curriculumId, interval? }: pay for a subject. The
 // first one returns { url } for Stripe Checkout, billed weekly or monthly
-// (`interval`, default weekly); later ones are added to the plan and return
-// { added: true, total, interval }.
+// (`interval`, default weekly), with a free trial if it's their first plan;
+// later ones are added to the plan and return { added: true, total, interval }.
+// Adding one during the free trial ends it and bills now, so it needs
+// `endTrial: true` (409 { trialing: true } without it).
 router.post("/billing/subjects", async (req: Request, res: Response) => {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
@@ -339,8 +391,12 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
     const prices = await readTiers(admin);
     const sub = await liveSubscription(admin, stripe, userId);
     if (sub) {
+      const endTrial = sub.status === "trialing";
+      if (endTrial && req.body?.endTrial !== true) {
+        return void res.status(409).json({ error: "Your free trial covers one subject. Adding another ends the trial and starts billing today.", trialing: true });
+      }
       const before = (await paidRows(admin, sub.id)).length;
-      const updated = await setQuantity(stripe, sub, before + 1);
+      const updated = await setQuantity(stripe, sub, before + 1, { endTrial });
       try {
         await attachPaidSubject(admin, userId, cur, updated);
       } catch (err) {
@@ -354,23 +410,37 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
     }
 
     const tiers = prices[requested];
-    const [priceId, customer] = await Promise.all([planPriceId(stripe, tiers, requested), customerFor(admin, stripe, userId)]);
+    const [priceId, customer, days] = await Promise.all([
+      planPriceId(stripe, tiers, requested), customerFor(admin, stripe, userId), readTrialDays(admin),
+    ]);
+    const trialDays = days > 0 && (await trialEligible(admin, stripe, userId)) ? days : 0;
     const metadata = { user_id: userId, curriculum_id: cur.id };
+    const more = `Add more subjects later for $${tierPrice(tiers, 2)}${per(requested)}, then $${tierPrice(tiers, 3)}${per(requested)} each.`;
+    const firstBill = shortDay(new Date(Date.now() + trialDays * 86_400_000));
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
       client_reference_id: userId,
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      subscription_data: { description: "GradeFarm subjects", metadata },
+      // A card is taken even for a free trial; it's charged when the trial ends.
+      payment_method_collection: "always",
+      subscription_data: {
+        description: "GradeFarm subjects",
+        metadata,
+        ...(trialDays > 0 ? { trial_period_days: trialDays, trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } } } : {}),
+      },
       metadata,
-      custom_text: { submit: { message: `Starts with ${cur.label}. Add more subjects later for $${tierPrice(tiers, 2)}${per(requested)}, then $${tierPrice(tiers, 3)}${per(requested)} each.` } },
+      custom_text: { submit: { message: trialDays > 0
+        ? `${cur.label} free for ${trialDays} days, then $${tierPrice(tiers, 1)}${per(requested)} from ${firstBill}. Cancel before then in My Account and you won't be charged. ${more}`
+        : `Starts with ${cur.label}. ${more}` } },
       success_url: `${appUrl()}/subject-picker?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl()}/subject-picker?checkout=cancelled`,
     });
     res.json({ url: session.url });
   } catch (err) {
     logger.error({ err }, "billing: add subject failed");
+    if (err instanceof Stripe.errors.StripeCardError) return fail(res, 402, "Your card was declined. Update it in My Account → Manage billing, then try again.");
     fail(res, 502, "Couldn't update your plan. Please try again.");
   }
 });
@@ -531,6 +601,41 @@ router.post("/billing/portal", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Remind a student their free trial ends soon (Stripe sends trial_will_end 3
+ * days before), with what they'll be charged and how to cancel.
+ */
+async function sendTrialEndingEmail(admin: SupabaseClient, stripe: Stripe, subscriptionId: string): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price.tiers"] });
+  const userId = sub.metadata?.user_id;
+  if (!userId || sub.metadata?.kind === TUTOR_PLAN_KIND || sub.status !== "trialing" || !sub.trial_end) return;
+  if (sub.cancel_at_period_end || sub.cancel_at) return; // already cancelled: nothing will be charged
+  const { data } = await admin.auth.admin.getUserById(userId);
+  const email = data?.user?.email;
+  if (!email) return;
+  const tiers = subscriptionTiers(sub);
+  const interval = subscriptionInterval(sub);
+  const price = tiers ? `$${planTotal(tiers, sub.items.data[0]?.quantity ?? 1)}${per(interval)}` : `your ${interval}ly price`;
+  const ends = shortDay(new Date(sub.trial_end * 1000));
+  const result = await sendEmail(resend, {
+    to: email,
+    subject: `Your gradefarm. free trial ends ${ends}`,
+    content: {
+      heading: "Your free trial ends soon",
+      paragraphs: [
+        `Your free trial ends on ${ends}. From then your plan continues at ${price}, charged to the card you added, and renews automatically until you cancel.`,
+        "Want to keep going? You don't need to do anything. If not, cancel before then in My Account and you won't be charged.",
+      ],
+      cta: { label: "Manage my plan", url: `${appUrl()}/my-account` },
+      footer: "You're receiving this because you started a free trial on gradefarm.",
+    },
+    idempotencyKey: `trial-ending-${sub.id}-${sub.trial_end}`,
+  });
+  if (result.error) logger.warn({ error: result.error, subscriptionId }, "billing: trial reminder not sent");
+}
+
 // POST /billing/webhook — Stripe events. Needs the raw body (captured in app.ts).
 router.post("/billing/webhook", async (req: Request, res: Response) => {
   const stripe = getStripe();
@@ -554,6 +659,10 @@ router.post("/billing/webhook", async (req: Request, res: Response) => {
       if (subId) await syncSubscription(getServiceClient(), stripe, subId);
     } else if (event.type.startsWith("customer.subscription.")) {
       await syncSubscription(getServiceClient(), stripe, (event.data.object as Stripe.Subscription).id);
+      if (event.type === "customer.subscription.trial_will_end") {
+        // A reminder that can't be sent isn't worth Stripe retrying the whole event.
+        await sendTrialEndingEmail(getServiceClient(), stripe, event.data.object.id).catch((err) => logger.warn({ err }, "billing: trial reminder failed"));
+      }
     }
     res.json({ received: true });
   } catch (err) {
