@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
  * Live subjects for signed-out pages (landing, pricing), from
  * GET /api/public-subjects. `subjects` is null while loading and [] if the
  * request fails, so callers can fall back to generic copy.
- * @returns {{ name: string, level: string }[] | null}
+ * @returns {{ id: string, name: string, level: string }[] | null}
  */
 export function usePublicSubjects() {
   const [subjects, setSubjects] = useState(null)

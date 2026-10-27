@@ -6,6 +6,7 @@ import { usePublicSubjects } from '../lib/publicSubjects'
 import { formatSubjectLabel } from '../lib/subjects'
 import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, extraLadder, planTotal, monthlySaving } from '../lib/pricing'
 import { SubjectIconByName } from './SubjectIcons'
+import { rememberPendingCheckout, startCheckout, subjectTileFor } from '../lib/pendingCheckout'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -59,13 +60,17 @@ const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_
   { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
 ], annual_discount: 0.15 }
 
-export default function PricingPage({ onGetStarted, onSignIn }) {
+export default function PricingPage({ onGetStarted, onSignIn, signedIn = false }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState('students') // 'students' | 'tutors'
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
   const [dbPricing, setDbPricing] = useState(DEFAULT_PRICING)
   const [menuOpen, setMenuOpen] = useState(false)
   const subjects = usePublicSubjects()
+  // The subject the Per Subject card's checkout is for (a public subject's id).
+  const [paidSubjectId, setPaidSubjectId] = useState('')
+  const [checkoutBusy, setCheckoutBusy] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
@@ -77,6 +82,32 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
 
   const handleGetStarted = onGetStarted || (() => navigate('/auth'))
   const handleSignIn     = onSignIn     || (() => navigate('/auth'))
+  const handleSignUp     = () => navigate('/auth', { state: { mode: 'signup' } })
+
+  // Per Subject: straight to Stripe Checkout for the chosen subject. Signed
+  // out, they create an account first and the app carries on to Checkout
+  // once they're in (App.jsx, lib/pendingCheckout.js).
+  const handlePaid = async () => {
+    // No subject list to choose from (it didn't load): pick one in the app instead.
+    if (subjects?.length === 0) { navigate(signedIn ? '/subject-picker' : '/auth', { state: { mode: 'signup' } }); return }
+    const picked = (subjects || []).find(s => s.id === paidSubjectId)
+    if (!picked) { setCheckoutError('Choose a subject first.'); return }
+    const subject = { curriculumId: picked.id, name: picked.name, level: picked.level }
+    setCheckoutError('')
+    if (!signedIn) {
+      rememberPendingCheckout(subject)
+      navigate('/auth', { state: { mode: 'signup' } })
+      return
+    }
+    setCheckoutBusy(true)
+    try {
+      const result = await startCheckout(subject)
+      if (result.hasPlan) navigate('/get-access', { state: { subject: subjectTileFor(subject) } })
+    } catch (e) {
+      setCheckoutError(e.message || 'Something went wrong. Please try again.')
+      setCheckoutBusy(false)
+    }
+  }
 
   const annualDiscount = dbPricing.annual_discount ?? 0.15
 
@@ -99,6 +130,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       hi: false,
       accentColor: MUTED,
       cta: 'Get started free',
+      onClick: handleSignUp,
       features: [
         { text: '1 subject of your choice (swap any time)', included: true },
         { text: `${freeDaily} questions per day`, included: true },
@@ -113,12 +145,14 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
       name: 'Per Subject',
       price: studentWeekly,
       fixed: true,
-      unit: '/wk',
+      unit: '/Week',
       sub: `first subject · extra subjects ${extraSubjects}/week each · or monthly from $${monthlyTiers[0]}${saving ? ` (save ${saving}%)` : ''} · AUD`,
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: GOLD,
-      cta: 'Start learning →',
+      cta: checkoutBusy ? 'Opening checkout…' : 'Start learning →',
+      onClick: handlePaid,
+      pickSubject: true,
       features: [
         { text: 'Unlimited questions — fresh AI questions, no daily cap', included: true },
         { text: 'Exam Mode', included: true },
@@ -229,7 +263,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <button onClick={handleSignIn} className="pp-signin" style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.65)', fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>Sign in</button>
-            <button onClick={handleGetStarted} className="pp-shimmer" style={{ padding: '9px 16px', borderRadius: 9, border: 'none', color: NAVYD, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>Get started free</button>
+            <button onClick={handleSignUp} className="pp-shimmer" style={{ padding: '9px 16px', borderRadius: 9, border: 'none', color: NAVYD, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>Get started free</button>
             <button
               className="pp-menu-btn"
               onClick={() => setMenuOpen(o => !o)}
@@ -340,8 +374,25 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
                         </div>
                       ))}
                     </div>
+                    {plan.pickSubject && subjects?.length > 0 && (
+                      <select
+                        value={paidSubjectId}
+                        onChange={e => { setPaidSubjectId(e.target.value); setCheckoutError('') }}
+                        aria-label="Subject"
+                        style={{ width: '100%', padding: '12px 14px', marginBottom: 10, borderRadius: 12, border: '1px solid rgba(241,190,67,0.32)', background: NAVYD, color: paidSubjectId ? '#f1f5f9' : MUTED, fontSize: 14, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}
+                      >
+                        <option value="">Choose your subject…</option>
+                        {subjects.map(s => (
+                          <option key={s.id} value={s.id}>{formatSubjectLabel({ name: s.name, stage: s.level })}</option>
+                        ))}
+                      </select>
+                    )}
+                    {plan.pickSubject && checkoutError && (
+                      <div role="alert" style={{ fontSize: 12, color: '#fca5a5', marginBottom: 10 }}>{checkoutError}</div>
+                    )}
                     <button
-                      onClick={handleGetStarted}
+                      onClick={plan.onClick}
+                      disabled={plan.pickSubject && checkoutBusy}
                       className={plan.hi ? 'pp-shimmer' : ''}
                       style={{
                         width: '100%', padding: '14px', borderRadius: 12, border: plan.hi ? 'none' : '1px solid rgba(255,255,255,0.1)',
@@ -505,7 +556,7 @@ export default function PricingPage({ onGetStarted, onSignIn }) {
             <p style={{ fontSize: 16, color: MUTED, marginBottom: 36, lineHeight: 1.75, maxWidth: 400, margin: '0 auto 36px' }}>
               No credit card. No commitment. The algorithm gets to work on your first question.
             </p>
-            <button onClick={handleGetStarted} className="pp-shimmer" style={{ padding: '16px 48px', borderRadius: 13, border: 'none', color: NAVYD, fontSize: 16, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 10px 36px rgba(241,190,67,0.4)` }}>
+            <button onClick={handleSignUp} className="pp-shimmer" style={{ padding: '16px 48px', borderRadius: 13, border: 'none', color: NAVYD, fontSize: 16, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 10px 36px rgba(241,190,67,0.4)` }}>
               Get started free →
             </button>
             <div style={{ marginTop: 16, fontSize: 13, color: MUTED }}>No credit card · No commitment · Free plan available</div>

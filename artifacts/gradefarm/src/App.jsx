@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
 import { notify, notifyError } from './lib/notify'
 import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
+import { takePendingCheckout, startCheckout, subjectTileFor } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
@@ -927,6 +928,26 @@ function AppInner() {
       .finally(() => { acceptingInvite.current = false })
   }, [user, profile, location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Signed in after picking a paid subject on the pricing page: on to Stripe
+  // Checkout for it, before onboarding (which picks up again on the way back).
+  const [openingCheckout, setOpeningCheckout] = useState(false)
+  useEffect(() => {
+    if (!user || !profile || profile.is_tutor || user.user_metadata?.signup_path === 'tutor') return
+    const subject = takePendingCheckout()
+    if (!subject) return
+    setOpeningCheckout(true)
+    startCheckout(subject)
+      .then((result) => {
+        if (!result.hasPlan) return // the browser is on its way to Stripe
+        setOpeningCheckout(false)
+        navigate('/get-access', { state: { subject: subjectTileFor(subject) } })
+      })
+      .catch((e) => {
+        setOpeningCheckout(false)
+        notifyError(e, "Couldn't open checkout. Choose your subject again to pay for it.", { source: 'pendingCheckout' })
+      })
+  }, [user, profile]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Back from Stripe Checkout (?checkout=success&session_id=… or ?checkout=cancelled).
   useEffect(() => {
     if (!user) return
@@ -1411,7 +1432,7 @@ function AppInner() {
 
   // Also while a just-signed-in user's profile loads, so the landing or sign-in
   // page doesn't flash before the redirect into the app.
-  if ((!bootstrapped || (user && !profile)) && loading) return (
+  if (((!bootstrapped || (user && !profile)) && loading) || openingCheckout) return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <style>{`@keyframes gf-bootspin { to { transform: rotate(360deg); } }`}</style>
       <div
@@ -1481,7 +1502,7 @@ function AppInner() {
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen signedIn={!!user} />} />
-      <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />} />
+      <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
       <Route path="/selective" element={<Navigate to="/year-6" replace />} />
