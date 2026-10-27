@@ -2073,6 +2073,7 @@ function DiagnosticTab({ profile, theme }) {
                       </div>
                       <div style={{ fontSize: 11, color: t.textMuted }}>
                         {d.submitted_by_name || d.student_name || 'No name yet'}
+                        {d.set_by ? ` · Set by ${d.set_by}` : ''}
                         {completed && d.score_total != null ? ` · Score: ${d.score_total}/${d.score_max}` : ''}
                         {` · Created ${fmtDate(d.created_at)}`}
                         {completed && d.completed_at ? ` · Submitted ${fmtDate(d.completed_at)}` : ''}
@@ -2209,30 +2210,77 @@ function DiagnosticTab({ profile, theme }) {
                   </div>
                 )}
 
-                {/* Per-question results */}
+                {/* Every question in full: what was asked, the student's answer, the answer, feedback */}
                 {r.question_results?.length > 0 && (
                   <div style={card}>
                     <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Question-by-Question Feedback</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Questions and Answers</div>
                     </div>
                     <div>
                       {r.question_results.map(qr => {
+                        const q = (a.questions || []).find(x => String(x.id) === String(qr.id))
                         const full = qr.marks_awarded === qr.marks_possible
                         const partial = !full && qr.marks_awarded > 0
                         const col = full ? t.success : partial ? GOLD : t.danger
+                        const studentAnswer = qr.student_answer || a.student_answers?.[String(qr.id)] || ''
+                        const correctAnswer = q?.correct_answer ?? qr.correct_answer
+                        const isMcq = q?.type === 'multiple_choice' && q.options?.length > 0
+                        const label = { fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }
+                        const answerBox = (c) => ({ fontSize: 13, color: t.text, lineHeight: 1.55, padding: '8px 12px', borderRadius: 8, background: `${c}10`, border: `1px solid ${c}30`, whiteSpace: 'pre-wrap', overflowX: 'auto' })
                         return (
-                          <div key={qr.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                          <div key={qr.id} style={{ padding: '16px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                             <div style={{ width: 30, height: 30, borderRadius: 8, background: `${col}15`, border: `1px solid ${col}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: col, flexShrink: 0 }}>
                               Q{qr.id}
                             </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: col }}>{qr.marks_awarded}/{qr.marks_possible} marks</span>
+                                {q && <span style={{ fontSize: 11, color: t.textFaint }}>{[DIFF_LABEL[q.difficulty], q.topic, q.subtopic].filter(Boolean).join(' · ')}</span>}
                               </div>
-                              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}><MathText text={qr.feedback} /></div>
-                              {qr.student_answer && (
-                                <div style={{ marginTop: 6, fontSize: 11, color: t.textFaint }}>
-                                  Student answered: <span style={{ color: t.textMuted }}>{qr.student_answer.length > 80 ? qr.student_answer.slice(0, 80) + '…' : qr.student_answer}</span>
+                              {q?.question && <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}><MathText text={q.question} /></div>}
+                              {isMcq ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {q.options.map((opt, i) => {
+                                    const letter = String.fromCharCode(65 + i)
+                                    const picked = studentAnswer.trim().toUpperCase() === letter
+                                    const right = String(correctAnswer).trim().toUpperCase() === letter
+                                    const c = right ? t.success : picked ? t.danger : t.border
+                                    return (
+                                      <div key={letter} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 12px', borderRadius: 8, border: `1px solid ${right || picked ? `${c}60` : t.border}`, background: right || picked ? `${c}12` : 'transparent', fontSize: 13, color: t.text }}>
+                                        <span style={{ fontWeight: 800, color: right ? t.success : picked ? t.danger : t.textMuted }}>{letter}</span>
+                                        <span style={{ flex: 1, minWidth: 0 }}><MathText text={opt.replace(/^[A-D]\.\s*/, '')} /></span>
+                                        {(right || picked) && <span style={{ fontSize: 11, fontWeight: 700, color: c, whiteSpace: 'nowrap' }}>{right && picked ? 'Correct, their answer' : right ? 'Correct answer' : 'Their answer'}</span>}
+                                      </div>
+                                    )
+                                  })}
+                                  {!studentAnswer && <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
+                                </div>
+                              ) : (
+                                <>
+                                  <div>
+                                    <div style={label}>Student's answer</div>
+                                    {studentAnswer
+                                      ? <div style={answerBox(col)}><MathText text={asMath(studentAnswer)} /></div>
+                                      : <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
+                                  </div>
+                                  {correctAnswer && (
+                                    <div>
+                                      <div style={label}>Model answer</div>
+                                      <div style={answerBox(t.success)}><MathText text={correctAnswer} /></div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              {qr.feedback && (
+                                <div>
+                                  <div style={label}>Feedback</div>
+                                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}><MathText text={qr.feedback} /></div>
+                                </div>
+                              )}
+                              {q?.solution_notes && (
+                                <div>
+                                  <div style={label}>Solution notes</div>
+                                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}><MathText text={q.solution_notes} /></div>
                                 </div>
                               )}
                             </div>
@@ -2252,6 +2300,13 @@ function DiagnosticTab({ profile, theme }) {
 }
 
 const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam Style' }
+
+// A maths answer is the bare LaTeX the MathLive answer box gives (\frac{1}{2},
+// x^{2}, a_{n}); wrap it so MathText renders it as maths. Prose and answers
+// already written with $…$ are left alone.
+function asMath(answer) {
+  return !answer.includes('$') && /\\|\^|_\{/.test(answer) ? `$${answer}$` : answer
+}
 
 // ── Main TutorScreen — sidebar shell ───────────────────────────────────────────
 const NAV_GROUPS = [

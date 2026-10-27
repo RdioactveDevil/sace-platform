@@ -653,24 +653,60 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
   }
 });
 
-/** GET /tutor/diagnostic/list — All assessments for this tutor */
+/**
+ * Ids of the students on this tutor's roster. Every tutor of a student can see
+ * the student's diagnostics, whoever set them.
+ */
+async function rosterStudentIds(admin: AdminClient, tutorId: string): Promise<string[]> {
+  const { data, error } = await admin.from("tutor_students").select("student_id").eq("tutor_id", tutorId);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { student_id: string }[]).map((r) => r.student_id);
+}
+
+/** Ids split into groups small enough for an `in` filter in a request URL. */
+function inBatches(ids: string[], size = 150): string[][] {
+  const out: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
+}
+
+/** GET /tutor/diagnostic/list — the tutor's own assessments, plus any set for students on their roster */
 router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const { data, error } = await admin
-      .from("diagnostic_assessments")
-      .select("id, token, year_level, subjects, status, student_name, submitted_by_name, score_total, score_max, created_at, completed_at, pre_call_form_url")
-      .eq("tutor_id", tutorId)
-      .order("created_at", { ascending: false });
+    const columns = "id, token, tutor_id, student_id, year_level, subjects, status, student_name, submitted_by_name, score_total, score_max, created_at, completed_at, pre_call_form_url";
+    const studentIds = await rosterStudentIds(admin, tutorId);
+    // Rosters can be long: look the students' diagnostics up in batches.
+    const results = await Promise.all([
+      admin.from("diagnostic_assessments").select(columns).eq("tutor_id", tutorId),
+      ...inBatches(studentIds).map((ids) => admin.from("diagnostic_assessments").select(columns).in("student_id", ids)),
+    ]);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) throw new Error(failed.error.message);
 
-    if (error) throw new Error(error.message);
+    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_id" | "student_name" | "submitted_by_name" | "created_at">;
+    const byId = new Map<string, Row>();
+    for (const r of results) for (const row of (r.data ?? []) as Row[]) byId.set(row.id, row);
+    const list = [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    // Names for students' own diagnostics (no name typed in) and for other tutors who set one.
+    const ids = [...new Set(list.flatMap((r) => [r.student_id, r.tutor_id !== tutorId ? r.tutor_id : null]).filter((x): x is string => !!x))];
+    const names = new Map<string, string>();
+    const profileResults = await Promise.all(inBatches(ids).map((batch) => admin.from("profiles").select("id, display_name").in("id", batch)));
+    for (const r of profileResults) {
+      for (const p of (r.data ?? []) as { id: string; display_name: string | null }[]) {
+        if (p.display_name) names.set(p.id, p.display_name);
+      }
+    }
 
     const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "https://app.gradefarm.com.au";
-    const rows = (data || []).map((row) => ({
+    const rows = list.map((row) => ({
       ...row,
+      student_name: row.student_name || (row.student_id ? names.get(row.student_id) ?? null : null),
+      set_by: row.tutor_id === tutorId ? null : names.get(row.tutor_id) ?? "Another tutor",
       link: `${origin}/diagnostic/${row.token}`,
     }));
 
@@ -681,7 +717,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
   }
 });
 
-/** GET /tutor/diagnostic/:id/report — Full report for a completed assessment */
+/** GET /tutor/diagnostic/:id/report — Full report for a completed assessment (its tutor or any rostered tutor) */
 router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
@@ -693,11 +729,19 @@ router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) =
       .from("diagnostic_assessments")
       .select("*")
       .eq("id", id)
-      .eq("tutor_id", tutorId)
-      .single<DiagnosticAssessment>();
+      .maybeSingle<DiagnosticAssessment>();
 
     if (error || !data) return res.status(404).json({ error: "Assessment not found" });
+    // Its tutor, or any tutor with the student on their roster.
+    if (data.tutor_id !== tutorId) {
+      const { data: rostered } = data.student_id
+        ? await admin.from("tutor_students").select("student_id").eq("tutor_id", tutorId).eq("student_id", data.student_id).maybeSingle()
+        : { data: null };
+      if (!rostered) return res.status(404).json({ error: "Assessment not found" });
+    }
 
+    // The questions come back too (with answers and solution notes), so the
+    // report can show each question in full beside the student's answer.
     return res.json({ assessment: data, report: data.report });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

@@ -749,10 +749,7 @@ async function runDiagnosticDone(job: Job) {
           ...(sum.work_on.length ? ([["Work on", sum.work_on.join(", ")]] as Array<[string, string]>) : []),
           ...(sum.strong.length ? ([["Strong at", sum.strong.join(", ")]] as Array<[string, string]>) : []),
         ],
-        // The full report sits with the tutor who set it; other tutors see the score on the student.
-        cta: setter
-          ? { label: "See the full report", url: `${appUrl()}/tutor?tab=diagnostic` }
-          : { label: `See ${studentName} on gradefarm`, url: `${appUrl()}/tutor?tab=students` },
+        cta: { label: "See the full report", url: `${appUrl()}/tutor?tab=diagnostic` },
         footer: setter
           ? "You're receiving this because you set this diagnostic on gradefarm."
           : `You're receiving this because ${studentName} is one of your students on gradefarm.`,
