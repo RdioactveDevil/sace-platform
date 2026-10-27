@@ -2,11 +2,11 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SACE study platform by Titanium Tutoring.
+pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive study platform for Australian students by Titanium Tutoring.
 
 ## Application
 
-**gradefarm.** — An adaptive SACE (South Australian Certificate of Education) Chemistry study platform.
+**gradefarm.** — An adaptive study platform for Australian students. Subjects follow the Australian Curriculum (Years 7–10), SACE and VCE.
 
 - **Frontend**: React + Vite app at `artifacts/gradefarm/` (preview path: `/`)
 - **Backend**: Express API server at `artifacts/api-server/` (preview path: `/api`)

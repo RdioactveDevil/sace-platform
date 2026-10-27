@@ -92,7 +92,7 @@ export default function AuthScreen() {
             <Text style={s.subtitle}>
               {mode === "signin"
                 ? "Sign in to continue your study session"
-                : "Join thousands of SACE students"}
+                : "Join thousands of Australian students"}
             </Text>
 
             {mode === "signup" && (

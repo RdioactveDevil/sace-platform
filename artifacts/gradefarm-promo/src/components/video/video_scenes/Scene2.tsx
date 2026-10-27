@@ -45,7 +45,7 @@ export function Scene2() {
           animate={phase >= 2 ? { opacity: 1 } : { opacity: 0 }}
           transition={{ duration: 0.8 }}
         >
-          Questions that adapt to your exact skill level, keeping you in the zone for SACE mastery.
+          Questions that adapt to your exact skill level, keeping you in the zone for exam mastery.
         </motion.p>
       </div>
       

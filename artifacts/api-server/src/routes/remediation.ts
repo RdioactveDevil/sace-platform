@@ -135,7 +135,7 @@ async function canReadQuestion(caller: Caller, questionId: string): Promise<bool
 async function generateWithClaude(caller: Caller, parent: Parent, targetDifficulty: number): Promise<unknown[]> {
   const options = parseOptions(parent.options);
   const correctAnswer = parent.answer_index != null ? options[parent.answer_index] ?? "" : "";
-  const subjectLabel = parent.subject || "SACE";
+  const subjectLabel = parent.subject || "high school";
   const systemLines = [
     `You are generating adaptive remediation MCQs for a ${subjectLabel} student.`,
     `Return only a valid JSON array containing exactly ${VARIANT_COUNT} objects.`,

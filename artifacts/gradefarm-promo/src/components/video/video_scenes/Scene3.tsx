@@ -44,7 +44,7 @@ export function Scene3() {
           animate={phase >= 2 ? { opacity: 1 } : { opacity: 0 }}
           transition={{ duration: 0.8 }}
         >
-          Stuck on a concept? Get instant, step-by-step guidance tailored to the SACE curriculum.
+          Stuck on a concept? Get instant, step-by-step guidance tailored to your curriculum.
         </motion.p>
       </div>
       

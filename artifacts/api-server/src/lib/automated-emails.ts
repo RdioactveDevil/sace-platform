@@ -325,7 +325,7 @@ function welcomeEmail(r: Recipient, isTutor: boolean): { subject: string; conten
         "Your account is ready. Here's how to get the most out of it:",
       ],
       details: [
-        ["1. Pick a subject", "Choose the SACE subjects you're studying"],
+        ["1. Pick a subject", "Choose the subjects you're studying"],
         ["2. Practise", "Questions adapt to you, and you get similar ones to retry when you miss one"],
         ["3. Ask Titan", "Get step-by-step help on any question you're stuck on"],
         ["4. Keep a streak", "A few questions a day builds XP and keeps your streak going"],

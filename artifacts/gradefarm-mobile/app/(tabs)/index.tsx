@@ -29,7 +29,7 @@ async function fetchAITip(question: Question, wrongAnswer: string): Promise<stri
       headers: await apiHeaders(),
       body: JSON.stringify({
         system:
-          "You are a concise SACE Chemistry tutor. Give a short, helpful 1-2 sentence tip to help a student understand why an answer is correct. Be direct and educational.",
+          "You are a concise tutor. Give a short, helpful 1-2 sentence tip to help a student understand why an answer is correct. Be direct and educational.",
         messages: [
           {
             role: "user",

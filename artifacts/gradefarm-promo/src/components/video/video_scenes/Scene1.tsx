@@ -43,7 +43,7 @@ export function Scene1() {
             animate={phase >= 2 ? { y: 0 } : { y: "100%" }}
             transition={{ type: 'spring', stiffness: 200, damping: 25 }}
           >
-            Adaptive SACE Practice
+            Adaptive Exam Practice
           </motion.p>
         </motion.div>
       </div>
