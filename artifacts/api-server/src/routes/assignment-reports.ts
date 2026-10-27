@@ -3,10 +3,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { EMAIL_FROM, appUrl, escapeHtml, getResend } from "../lib/email";
 import { logger } from "../lib/logger";
+import { rosterTutorIds, tutorsToNotify } from "../lib/student-tutors";
 
 // Assignment reports: what a student did on a tutor's assignment, question by
 // question, with an AI write-up for the tutor; and the email that tells the
-// tutor an assignment has finished.
+// student's tutors an assignment has finished.
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -311,12 +312,13 @@ router.post("/assignments/:id/finished", async (req: Request, res: Response) => 
 
     const resend = getResend();
     if (!resend) return res.json({ ok: true, notified: false });
-    const { data: tutorUser } = await caller.admin.auth.admin.getUserById(claimed.tutor_id);
-    if (!tutorUser?.user?.email) return res.json({ ok: true, notified: false });
 
-    const [studentName, tutorName] = await Promise.all([
+    // The tutor who set it and every other tutor with the student on their roster.
+    const roster = await rosterTutorIds(caller.admin, [claimed.student_id]);
+    const tutorIds = tutorsToNotify(claimed.tutor_id, roster.get(claimed.student_id));
+    const [studentName, setterName] = await Promise.all([
       displayName(caller.admin, claimed.student_id, "Your student"),
-      displayName(caller.admin, claimed.tutor_id, "there"),
+      displayName(caller.admin, claimed.tutor_id, "another tutor"),
     ]);
     const score = scoreOf(claimed);
     const outcome = claimed.passed == null ? "finished" : claimed.passed ? "passed" : "did not pass";
@@ -326,18 +328,30 @@ router.post("/assignments/:id/finished", async (req: Request, res: Response) => 
     const row = (label: string, value: string, color = "#f0f4ff") =>
       `<tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px; width: 110px;">${label}</td><td style="padding: 6px 0; color: ${color}; font-size: 13px; font-weight: 700;">${escapeHtml(value)}</td></tr>`;
 
-    const { error: sendErr } = await resend.emails.send({
-      from: EMAIL_FROM,
-      to: tutorUser.user.email,
-      subject: `${studentName} ${outcome} their ${claimed.type} — ${claimed.subject}`,
-      html: `
+    let notified = false;
+    for (const tutorId of tutorIds) {
+      const setter = tutorId === claimed.tutor_id;
+      const [{ data: tutorUser }, { data: tutorProfile }] = await Promise.all([
+        caller.admin.auth.admin.getUserById(tutorId),
+        caller.admin.from("profiles").select("display_name, deactivated_at").eq("id", tutorId)
+          .maybeSingle<{ display_name: string | null; deactivated_at: string | null }>(),
+      ]);
+      if (!tutorUser?.user?.email || tutorProfile?.deactivated_at) continue;
+      const tutorName = tutorProfile?.display_name || "there";
+      const setBy = setter ? "you set" : `${setterName} set`;
+
+      const { error: sendErr } = await resend.emails.send({
+        from: EMAIL_FROM,
+        to: tutorUser.user.email,
+        subject: `${studentName} ${outcome} their ${claimed.type} — ${claimed.subject}`,
+        html: `
         <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
           <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
             <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
           </div>
           <div style="padding: 32px;">
             <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">Assignment ${escapeHtml(outcome)}</h2>
-            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${escapeHtml(tutorName)}, ${escapeHtml(studentName)} has finished the ${escapeHtml(claimed.type.toLowerCase())} you set.</p>
+            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${escapeHtml(tutorName)}, ${escapeHtml(studentName)} has finished the ${escapeHtml(claimed.type.toLowerCase())} ${escapeHtml(setBy)}.</p>
             <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
               <table style="width: 100%; border-collapse: collapse;">
                 ${row("Subject", claimed.subject)}
@@ -350,13 +364,15 @@ router.post("/assignments/:id/finished", async (req: Request, res: Response) => 
             <a href="${reportUrl}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">View the report</a>
           </div>
           <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
-            You're receiving this because you set this assignment on gradefarm.
+            ${setter ? "You're receiving this because you set this assignment on gradefarm." : `You're receiving this because ${escapeHtml(studentName)} is one of your students on gradefarm.`}
           </div>
         </div>
       `,
-    });
-    if (sendErr) logger.warn({ err: sendErr.message }, "assignment finished: email failed");
-    return res.json({ ok: true, notified: !sendErr });
+      });
+      if (sendErr) logger.warn({ err: sendErr.message, tutorId }, "assignment finished: email failed");
+      else notified = true;
+    }
+    return res.json({ ok: true, notified });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
   }
