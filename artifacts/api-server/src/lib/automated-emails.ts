@@ -10,7 +10,8 @@
  *                             have no account, so no email_log row)
  *   • diagnostic_reminder   – once, if a student hasn't done the diagnostic on a
  *                             tutor-included subject after a couple of days
- *   • diagnostic_done       – the tutor, when their student finishes one
+ *   • diagnostic_done       – the student's tutors (the one who set it and any
+ *                             others on their roster), when they finish one
  *   • parent_report         – Sunday evening, a student's week to the parent
  *                             their tutor added (recorded on the roster row:
  *                             parents have no account; lib/parent-reports.ts),
@@ -27,6 +28,7 @@ import { logger } from "./logger";
 import { accountParentUnsubscribeUrl, appUrl, parentUnsubscribeUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
 import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
+import { rosterTutorIds, tutorsToNotify } from "./student-tutors";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
 import { planIsLive, type TutorBillingRow } from "./tutor-plan";
 
@@ -721,12 +723,20 @@ async function runDiagnosticDone(job: Job) {
   const rows = ((data ?? []) as DiagnosticRow[]).filter((d) => d.report);
   if (rows.length === 0) return;
 
+  // The tutor who set it and every other tutor with the student on their roster.
+  const roster = await rosterTutorIds(job.admin, rows.map((d) => d.student_id));
   const done = await loadDone(job, "diagnostic_done", rows.map((d) => d.id));
-  const pending = rows.filter((d) => !done.has(`${d.id}:${d.tutor_id}`));
-  const people = await loadRecipients(job, [...pending.map((d) => d.tutor_id), ...pending.map((d) => d.student_id)]);
-  for (const d of pending) {
-    const tutor = people.get(d.tutor_id);
+  const pending = rows.flatMap((d) =>
+    tutorsToNotify(d.tutor_id, roster.get(d.student_id))
+      .filter((tutorId) => !done.has(`${d.id}:${tutorId}`))
+      .map((tutorId) => ({ d, tutorId })),
+  );
+  if (pending.length === 0) return;
+  const people = await loadRecipients(job, [...pending.map((p) => p.tutorId), ...pending.map((p) => p.d.student_id)]);
+  for (const { d, tutorId } of pending) {
+    const tutor = people.get(tutorId);
     if (!tutor || tutor.unsubscribed) continue;
+    const setter = tutorId === d.tutor_id;
     const studentName = people.get(d.student_id)?.name ?? "Your student";
     const sum = studentSummary(d.report!);
     await deliver(job, "diagnostic_done", tutor, [d.id], () => ({
@@ -740,7 +750,9 @@ async function runDiagnosticDone(job: Job) {
           ...(sum.strong.length ? ([["Strong at", sum.strong.join(", ")]] as Array<[string, string]>) : []),
         ],
         cta: { label: "See the full report", url: `${appUrl()}/tutor?tab=diagnostic` },
-        footer: "You're receiving this because you set this diagnostic on gradefarm.",
+        footer: setter
+          ? "You're receiving this because you set this diagnostic on gradefarm."
+          : `You're receiving this because ${studentName} is one of your students on gradefarm.`,
         unsubscribe: unsubscribeUrl(tutor.id),
       },
     }));
