@@ -140,6 +140,13 @@ function MathKeyboard({ onInsert }) {
 
 // ── MathLive input (math subjects) ─────────────────────────────────────────────
 
+// Same test MathLive uses to decide whether to auto-show its virtual keyboard
+function isTouchDevice() {
+  if (typeof window === 'undefined') return false
+  if (window.matchMedia) return window.matchMedia('(pointer: coarse)').matches
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0
+}
+
 function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, minHeight }) {
   const containerRef = useRef(null)
   const stableAnswer = useRef(onAnswer)
@@ -171,13 +178,20 @@ function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, min
 
     const configure = () => {
       if (cancelled) return
-      mf.mathVirtualKeyboardPolicy = 'manual'
+      // MathLive's input sink is hard-coded to inputmode=none, so touch devices
+      // (iPad, phones) never get the OS keyboard. 'auto' shows MathLive's own
+      // virtual keyboard on focus there; desktops are unaffected.
+      mf.mathVirtualKeyboardPolicy = 'auto'
       mf.smartMode = true
       mf.readOnly = !!disabled
       if (value) mf.setValue(value, { suppressChangeNotifications: true })
 
       const onInput = () => stableAnswer.current(questionId, mf.value)
-      const onFocus = () => { mf.style.borderColor = GOLD }
+      const onFocus = () => {
+        mf.style.borderColor = GOLD
+        // Keep the field visible above the virtual keyboard once it slides up
+        if (isTouchDevice()) setTimeout(() => mf.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400)
+      }
       const onBlur  = () => { mf.style.borderColor = 'rgba(255,255,255,0.12)' }
       mf.addEventListener('input', onInput)
       mf.addEventListener('focus', onFocus)
@@ -512,6 +526,34 @@ export default function DiagnosticScreen() {
   }, [token])
   useEffect(() => { load() }, [load])
 
+  // Pad the page by the virtual keyboard's height so the last questions can
+  // still be scrolled above it on touch devices.
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  useEffect(() => {
+    const kbd = window.mathVirtualKeyboard
+    if (!kbd) return
+    const onGeometry = () => setKeyboardHeight(kbd.visible ? kbd.boundingRect.height : 0)
+    kbd.addEventListener('geometrychange', onGeometry)
+    return () => kbd.removeEventListener('geometrychange', onGeometry)
+  }, [])
+
+  // iOS doesn't resize the layout viewport for its keyboard, so a fixed bottom
+  // bar comes loose and floats mid-screen while scrolling. Hide it while an
+  // answer box has focus on touch devices.
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    if (!isTouchDevice()) return
+    const isField = el => el?.matches?.('textarea, input, math-field')
+    const onFocusIn  = e => { if (isField(e.target)) setTyping(true) }
+    const onFocusOut = e => { if (isField(e.target)) setTyping(false) }
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
+    return () => {
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('focusout', onFocusOut)
+    }
+  }, [])
+
   // Still being written: write it (or wait for whoever is), then load it.
   useEffect(() => {
     if (phase !== 'preparing') return
@@ -572,7 +614,7 @@ export default function DiagnosticScreen() {
   const subjectNames  = (assessment?.subjects || []).map(s => s.name).join(', ')
 
   return (
-    <div ref={topRef} style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT, color: '#fff' }}>
+    <div ref={topRef} style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT, color: '#fff', paddingBottom: keyboardHeight }}>
       <style>{`
         @font-face { font-family: 'Plus Jakarta Sans'; src: url('/PlusJakartaSans.woff2') format('woff2'); font-display: swap; }
         * { box-sizing: border-box; }
@@ -780,7 +822,7 @@ export default function DiagnosticScreen() {
               </div>
             )}
 
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(12,16,55,0.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, zIndex: 100 }}>
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(12,16,55,0.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px', display: typing ? 'none' : 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, zIndex: 100 }}>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
                 {answeredCount}/{totalCount} questions answered
                 {!allAnswered() && <span style={{ color: GOLD }}> — try to answer all before submitting</span>}
