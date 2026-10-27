@@ -457,8 +457,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             </p>
 
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:40 }}>
-              <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ padding:'15px 36px', borderRadius:12, border:'none', color:NAVYD, fontSize:15, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 10px 36px rgba(241,190,67,0.4)` }}>
-                Start for free →
+              <button onClick={() => navigate('/pricing')} className="ctab shimmer-btn" style={{ padding:'15px 36px', borderRadius:12, border:'none', color:NAVYD, fontSize:15, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 10px 36px rgba(241,190,67,0.4)` }}>
+                Start learning →
               </button>
               <button onClick={() => scroll('features')} className="ctab" style={{ padding:'15px 28px', borderRadius:12, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.03)', color:MUTED, fontSize:15, fontWeight:600, cursor:'pointer', fontFamily:FONT_B }}>
                 See all features
@@ -979,8 +979,8 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
             </p>
             <div style={{ position:'relative', display:'inline-block' }}>
               <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:300, height:120, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.45) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
-              <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ position:'relative', padding:'18px 56px', borderRadius:14, border:'none', color:NAVYD, fontSize:17, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 12px 40px rgba(241,190,67,0.5)` }}>
-                Start for free →
+              <button onClick={() => navigate('/pricing')} className="ctab shimmer-btn" style={{ position:'relative', padding:'18px 56px', borderRadius:14, border:'none', color:NAVYD, fontSize:17, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 12px 40px rgba(241,190,67,0.5)` }}>
+                Start learning →
               </button>
             </div>
             <div style={{ marginTop:20, fontSize:13, color:MUTED }}>No credit card · No commitment · Free plan available</div>
