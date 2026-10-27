@@ -59,7 +59,7 @@ const disabledBtnStyle = {
 }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7, tutor_plans: [
   { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
   { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
   { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
@@ -161,6 +161,17 @@ export default function AdminSettingsTab() {
               value={pr.free_daily_questions ?? ''}
               onChange={e => setPr(p => ({ ...p, free_daily_questions: e.target.value === '' ? '' : Number(e.target.value) }))}
               placeholder="20"
+            />
+          </Field>
+          <Field label="Free trial: days on a student's first paid subject" hint="Card required; 0 turns trials off">
+            <input
+              style={inputStyle}
+              type="number"
+              min={0}
+              max={90}
+              value={pr.student_trial_days ?? ''}
+              onChange={e => setPr(p => ({ ...p, student_trial_days: e.target.value === '' ? '' : Number(e.target.value) }))}
+              placeholder="7"
             />
           </Field>
           <Field label="Annual discount %" hint="e.g. 15 for 15%">

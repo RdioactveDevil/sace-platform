@@ -85,7 +85,9 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const hasFreeSubject   = subscriptions.some(sub => sub.source === 'free')
   const freeDaily        = billing?.freeDailyQuestions ?? 20
   const tiers            = studentTiers(billing?.tiers)
-  const priceLabel       = hasFreeSubject ? `$${billing?.nextPrice ?? tiers[0]}/${billing?.interval ?? 'week'}` : 'Try free'
+  const priceLabel       = !hasFreeSubject ? 'Try free'
+    : billing?.trialDays > 0 ? `${billing.trialDays} days free`
+    : `$${billing?.nextPrice ?? tiers[0]}/${billing?.interval ?? 'week'}`
   const comingSoon       = allSubjects.filter(s => !s.available)
 
   const firstName = profile.display_name?.split(' ')[0] ?? 'there'

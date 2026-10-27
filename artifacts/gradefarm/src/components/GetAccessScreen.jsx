@@ -6,6 +6,8 @@ import { formatSubjectLabel, subjectAccess } from '../lib/subjects'
 import { DEFAULT_STUDENT_TIERS, studentTiers, extraLadder, monthlySaving, money } from '../lib/pricing'
 import { SubjectIcon } from './SubjectIcons'
 
+const shortDate = (d) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -53,6 +55,10 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
   const nextPrice = billing?.hasPlan ? billing.nextPrice ?? tiers[0] : tiers[0]
   const saving = monthlySaving(weekly[0], monthly[0])
   const freeDaily = billing?.freeDailyQuestions ?? 20
+  // A first plan starts free; adding to a plan still on its trial ends the trial.
+  const trialDays = billing?.hasPlan ? 0 : billing?.trialDays ?? 0
+  const endsTrial = !!billing?.hasPlan && !!billing?.trialing
+  const firstBill = shortDate(new Date(Date.now() + trialDays * 86_400_000))
   const currentFree = subscriptions.find(sub => sub.source === 'free')
   const currentFreeLabel = currentFree ? formatSubjectLabel({ name: currentFree.subject_name, stage: currentFree.stage }) : null
   // Opened from the free subject's daily limit: only the paid option applies.
@@ -74,7 +80,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
   const handlePaid = async () => {
     setBusy('paid'); setError(null)
     try {
-      const result = await addPaidSubject(curriculumId, interval)
+      const result = await addPaidSubject(curriculumId, interval, { endTrial: endsTrial })
       if (result.url) { window.location.assign(result.url); return }
       await onAccessChanged?.()
       notify.success(`${formatSubjectLabel(subj)} added — your plan is now $${money(result.total)}/${result.interval ?? interval}.`)
@@ -217,8 +223,12 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>/ {interval} · AUD</span>
           </div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginBottom: 16, lineHeight: 1.5 }}>
-            {billing?.hasPlan
+            {endsTrial
+              ? `Your free trial covers one subject. Adding ${formatSubjectLabel(subj)} ends it today: you'll be charged $${money(billing.total + nextPrice)}/${interval} from now.`
+              : billing?.hasPlan
               ? `Added to your plan: $${money(billing.total)} → $${money(billing.total + nextPrice)}/${interval}, prorated from today.`
+              : trialDays > 0
+              ? `Free for ${trialDays} days, then $${money(nextPrice)}/${interval} from ${firstBill}. Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`
               : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
@@ -254,11 +264,15 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
           >
             {busy === 'paid' ? (billing?.hasPlan ? 'Adding…' : 'Opening secure checkout…')
               : billing?.enabled === false ? 'Payments are coming soon'
+              : endsTrial ? `End trial and add — $${money(billing.total + nextPrice)}/${interval}`
               : billing?.hasPlan ? `Add to my plan — +$${money(nextPrice)}/${interval}`
+              : trialDays > 0 ? `Start ${trialDays}-day free trial →`
               : `Subscribe — $${money(nextPrice)}/${interval} →`}
           </button>
           <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '10px 0 0' }}>
-            Billed {interval}ly · cancel any time from My Account · secure payment by Stripe
+            {trialDays > 0
+              ? `Card required · nothing charged until ${firstBill} · cancel before then in My Account · secure payment by Stripe`
+              : `Billed ${interval}ly · cancel any time from My Account · secure payment by Stripe`}
           </p>
         </div>
 

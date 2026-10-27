@@ -54,7 +54,7 @@ const TUTOR_PLAN_LOOKS = [
   { badge: null, hi: false, accentColor: GOLD, prioritySupport: true },
 ]
 
-const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, tutor_plans: [
+const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7, tutor_plans: [
   { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
   { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
   { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
@@ -117,6 +117,8 @@ export default function PricingPage({ onGetStarted, onSignIn, signedIn = false }
   const saving = monthlySaving(tiers[0], monthlyTiers[0])
   const freeDaily = dbPricing.free_daily_questions ?? 20
   const freeAi = dbPricing.free_daily_ai_messages ?? 10
+  // Free trial on a student's first paid subject (api-server routes/billing.ts); 0 = none.
+  const trialDays = Math.max(0, Math.floor(Number(dbPricing.student_trial_days ?? 7)) || 0)
   const extraSubjects = `$${extraLadder(tiers)}`
   const threeSubjects = planTotal(tiers, 3)
   // Students pay per subject, weekly or monthly; the monthly/annual toggle is for tutor plans.
@@ -150,7 +152,8 @@ export default function PricingPage({ onGetStarted, onSignIn, signedIn = false }
       badge: 'MOST POPULAR',
       hi: true,
       accentColor: GOLD,
-      cta: checkoutBusy ? 'Opening checkout…' : 'Start learning →',
+      cta: checkoutBusy ? 'Opening checkout…' : trialDays > 0 ? `Start ${trialDays}-day free trial →` : 'Start learning →',
+      trialNote: trialDays > 0 ? `${trialDays} days free on your first subject · card required · cancel before it ends and pay nothing` : null,
       onClick: handlePaid,
       pickSubject: true,
       features: [
@@ -402,6 +405,9 @@ export default function PricingPage({ onGetStarted, onSignIn, signedIn = false }
                         boxShadow: plan.hi ? `0 6px 20px rgba(241,190,67,0.35)` : 'none',
                       }}
                     >{plan.cta}</button>
+                    {plan.trialNote && (
+                      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>{plan.trialNote}</div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -530,7 +536,9 @@ export default function PricingPage({ onGetStarted, onSignIn, signedIn = false }
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
               {[
                 { q: 'Are the questions really unlimited?', a: `Yes. When you've worked through a topic's question bank, Titan writes brand-new questions for it, pitched at your level and checked before you see them — so you never run out. The free plan is capped at ${freeDaily} questions a day; paid subjects have no cap.` },
-                { q: 'Can I try before I pay?', a: `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
+                { q: 'Can I try before I pay?', a: trialDays > 0
+                  ? `Yes, two ways. Your first paid subject starts with a ${trialDays}-day free trial with everything unlocked. We take a card at sign-up but charge nothing until the trial ends, and you can cancel in My Account before then and pay nothing. Or pick any one subject to use free for as long as you like, with ${freeDaily} questions a day and no credit card.`
+                  : `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
                 { q: 'Can I cancel anytime?', a: "Absolutely. Remove a subject from My Account whenever you like — unused time is credited to your next bill. Removing your last paid subject ends your plan at the end of the week you've paid for." },
                 { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraSubjects}/week. Two subjects are $${planTotal(tiers, 2)}/week.` },
                 { q: 'Can I pay monthly instead of weekly?', a: `Yes. Pick monthly at checkout, or switch any time in My Account: $${monthlyTiers[0]} a month for the first subject, then $${extraLadder(monthlyTiers)}/month for each extra one${saving ? ` — about ${saving}% less than paying weekly` : ''}.` },
