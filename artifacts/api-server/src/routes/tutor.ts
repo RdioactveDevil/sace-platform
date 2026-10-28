@@ -8,6 +8,10 @@ import { FEATURE_MISSING, claimTutorSubjects, requireTutorPlan, tutorHasFeature 
 import { liveCurriculum } from "./billing";
 import { contactEmailForLogin, isFamilyLogin } from "../lib/family";
 import { getServiceClient } from "../lib/auth";
+import { localDate } from "../lib/automated-emails";
+import {
+  issueSchedule, issuesOn, missingScheduleTable, nextIssueOn, type ScheduleRow,
+} from "../lib/recurring-assignments";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -749,6 +753,103 @@ const DIFFICULTY_LABELS: Record<string, string> = {
   adaptive: "Adaptive", easy: "Easy", medium: "Medium", hard: "Hard",
 };
 
+interface AssignmentGoal {
+  type: string;
+  subject: string;
+  topics: string[];
+  questionCount: number;
+  difficulty: string;
+  minAccuracy: number | null;
+  passMode: string;
+  remediation: boolean;
+}
+
+type AssignmentGoalBody = Pick<BatchAssignmentBody,
+  "type" | "subject" | "topics" | "question_count" | "difficulty" | "min_accuracy" | "pass_mode" | "remediation">;
+
+/** Validate what a new assignment (one-off or recurring) asks of the student. */
+function parseAssignmentGoal(body: AssignmentGoalBody): AssignmentGoal | { error: string } {
+  const { type, subject, topics } = body;
+  const questionCount = Number(body.question_count ?? 10);
+  const difficulty = body.difficulty ?? "adaptive";
+  // Optional pass mark (%): omitted or null means none.
+  const minAccuracy = body.min_accuracy == null ? null : Number(body.min_accuracy);
+  const passMode = body.pass_mode ?? "until_pass";
+
+  if (!type || !subject || !Array.isArray(topics) || topics.length === 0) {
+    return { error: "type, subject and at least one topic are required." };
+  }
+  if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
+    return { error: "question_count must be a whole number from 1 to 100." };
+  }
+  if (!ASSIGNMENT_DIFFICULTIES.includes(difficulty)) {
+    return { error: "difficulty must be adaptive, easy, medium or hard." };
+  }
+  if (minAccuracy !== null && (!Number.isInteger(minAccuracy) || minAccuracy < 1 || minAccuracy > 100)) {
+    return { error: "min_accuracy must be a whole number from 1 to 100." };
+  }
+  if (passMode !== "until_pass" && passMode !== "one_attempt") {
+    return { error: "pass_mode must be until_pass or one_attempt." };
+  }
+  return { type, subject, topics, questionCount, difficulty, minAccuracy, passMode, remediation: body.remediation !== false };
+}
+
+/**
+ * The students a new assignment goes to: the union of the named students (on
+ * the caller's roster, or anyone for an admin), the members of the named
+ * classes (which the caller must own or co-teach) and, with allRoster, the
+ * whole roster.
+ */
+async function resolveAssignmentTargets(
+  ctx: TutorContext,
+  { studentIds, classIds, allRoster }: Pick<BatchAssignmentBody, "studentIds" | "classIds" | "allRoster">,
+): Promise<{ targets: string[]; usedClassIds: string[] } | { status: number; error: string }> {
+  const { admin, callerUserId } = ctx;
+  const resolved = new Set<string>();
+
+  // Always intersect against the tutor's roster — never assign to non-roster students.
+  const { data: rosterRows, error: rErr } = await admin
+    .from("tutor_students")
+    .select("student_id")
+    .eq("tutor_id", callerUserId);
+  if (rErr) return { status: 500, error: rErr.message };
+  const rosterSet = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
+
+  if (allRoster) {
+    for (const id of rosterSet) resolved.add(id);
+  }
+
+  // Admins (managers) can set work for any student; it's recorded as from them.
+  if (Array.isArray(studentIds)) {
+    for (const id of studentIds) {
+      if (ctx.isAdmin || rosterSet.has(id)) resolved.add(id);
+    }
+  }
+
+  let usedClassIds: string[] = [];
+  if (Array.isArray(classIds) && classIds.length > 0) {
+    // Every class must be one the caller owns or co-teaches (any class for admins).
+    for (const classId of classIds) {
+      if (!(await classAccess(ctx, String(classId)))) {
+        return { status: 403, error: "One or more classes do not belong to you." };
+      }
+    }
+    usedClassIds = classIds.map(String);
+
+    const { data: memberRows, error: memErr } = await admin
+      .from("tutor_class_members")
+      .select("student_id")
+      .in("class_id", usedClassIds);
+    if (memErr) return { status: 500, error: memErr.message };
+    for (const m of (memberRows ?? []) as { student_id: string }[]) resolved.add(m.student_id);
+  }
+
+  if (resolved.size === 0) {
+    return { status: 400, error: "No target students resolved. Add students to your roster or selected classes." };
+  }
+  return { targets: Array.from(resolved), usedClassIds };
+}
+
 router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
@@ -756,82 +857,22 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
     const { admin, callerUserId, tutorName, isAdmin } = ctx;
 
     const body = req.body as BatchAssignmentBody;
-    const { type, subject, topics, due_date, studentIds, classIds, allRoster, notify } = body;
-    const questionCount = Number(body.question_count ?? 10);
-    const difficulty = body.difficulty ?? "adaptive";
-    // Optional pass mark (%): omitted or null means none.
-    const minAccuracy = body.min_accuracy == null ? null : Number(body.min_accuracy);
-    const passMode = body.pass_mode ?? "until_pass";
-    const remediation = body.remediation !== false;
-
-    if (!type || !subject || !Array.isArray(topics) || topics.length === 0) {
-      return res.status(400).json({ error: "type, subject and at least one topic are required." });
-    }
+    const { due_date, notify } = body;
+    const goal = parseAssignmentGoal(body);
+    if ("error" in goal) return res.status(400).json({ error: goal.error });
+    const { type, subject, topics, questionCount, difficulty, minAccuracy, passMode, remediation } = goal;
     if (!due_date) return res.status(400).json({ error: "due_date is required." });
     const subjectError = await claimTutorSubjects(admin, callerUserId, isAdmin, [String(subject)]);
     if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
-    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
-      return res.status(400).json({ error: "question_count must be a whole number from 1 to 100." });
-    }
-    if (!ASSIGNMENT_DIFFICULTIES.includes(difficulty)) {
-      return res.status(400).json({ error: "difficulty must be adaptive, easy, medium or hard." });
-    }
-    if (minAccuracy !== null && (!Number.isInteger(minAccuracy) || minAccuracy < 1 || minAccuracy > 100)) {
-      return res.status(400).json({ error: "min_accuracy must be a whole number from 1 to 100." });
-    }
-    if (passMode !== "until_pass" && passMode !== "one_attempt") {
-      return res.status(400).json({ error: "pass_mode must be until_pass or one_attempt." });
-    }
 
-    // Resolve target student IDs.
-    const resolved = new Set<string>();
-
-    // Always intersect against the tutor's roster — never assign to non-roster students.
-    const { data: rosterRows, error: rErr } = await admin
-      .from("tutor_students")
-      .select("student_id")
-      .eq("tutor_id", callerUserId);
-    if (rErr) return res.status(500).json({ error: rErr.message });
-    const rosterSet = new Set((rosterRows ?? []).map((r: { student_id: string }) => r.student_id));
-
-    if (allRoster) {
-      for (const id of rosterSet) resolved.add(id);
-    }
-
-    // Admins (managers) can set work for any student; it's recorded as from them.
-    if (Array.isArray(studentIds)) {
-      for (const id of studentIds) {
-        if (ctx.isAdmin || rosterSet.has(id)) resolved.add(id);
-      }
-    }
-
-    let usedClassIds: string[] = [];
-    if (Array.isArray(classIds) && classIds.length > 0) {
-      // Every class must be one the caller owns or co-teaches (any class for admins).
-      for (const classId of classIds) {
-        if (!(await classAccess(ctx, String(classId)))) {
-          return res.status(403).json({ error: "One or more classes do not belong to you." });
-        }
-      }
-      usedClassIds = classIds.map(String);
-
-      const { data: memberRows, error: memErr } = await admin
-        .from("tutor_class_members")
-        .select("student_id")
-        .in("class_id", usedClassIds);
-      if (memErr) return res.status(500).json({ error: memErr.message });
-      for (const m of (memberRows ?? []) as { student_id: string }[]) resolved.add(m.student_id);
-    }
-
-    if (resolved.size === 0) {
-      return res.status(400).json({ error: "No target students resolved. Add students to your roster or selected classes." });
-    }
+    const resolvedTargets = await resolveAssignmentTargets(ctx, body);
+    if ("error" in resolvedTargets) return res.status(resolvedTargets.status).json({ error: resolvedTargets.error });
+    const { targets, usedClassIds } = resolvedTargets;
 
     // Generate batch_id (UUID v4) — Postgres can also generate one but we need it to return.
     const batchId = (globalThis.crypto as Crypto).randomUUID();
     const singleClassId = usedClassIds.length === 1 ? usedClassIds[0] : null;
 
-    const targets = Array.from(resolved);
     const rows = targets.map((sid) => ({
       tutor_id: callerUserId,
       student_id: sid,
@@ -929,6 +970,170 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
       notified,
       notify_errors: notifyErrors,
     });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// ── Recurring assignments ─────────────────────────────────────────────────────
+// A schedule sets the same work again on chosen weekdays (lib/recurring-assignments.ts).
+
+interface ScheduleBody extends Omit<BatchAssignmentBody, "due_date" | "notify"> {
+  days_of_week?: number[];
+  every_weeks?: number;
+  due_days?: number;
+  start_date?: string;
+  end_date?: string | null;
+  notify?: boolean;
+}
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (v: unknown): v is string => typeof v === "string" && YMD.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+
+const withNext = (s: ScheduleRow, today: string) => ({ ...s, next_on: nextIssueOn(s, today) });
+
+// GET /tutor/assignment-schedules — the caller's schedules (?scope=all: every tutor's, admins only)
+router.get("/tutor/assignment-schedules", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    let query = ctx.admin.from("assignment_schedules").select("*").order("created_at", { ascending: false });
+    if (!(ctx.isAdmin && req.query.scope === "all")) query = query.eq("tutor_id", ctx.callerUserId);
+    const { data, error } = await query;
+    if (error) {
+      if (missingScheduleTable(error)) return res.json({ schedules: [] });
+      return res.status(500).json({ error: error.message });
+    }
+    const today = localDate(new Date());
+    return res.json({ schedules: ((data ?? []) as ScheduleRow[]).map((s) => withNext(s, today)) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /tutor/assignment-schedules — create a recurring assignment. If it runs
+// today, today's work is set straight away.
+router.post("/tutor/assignment-schedules", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin, callerUserId, isAdmin } = ctx;
+    const body = req.body as ScheduleBody;
+
+    const goal = parseAssignmentGoal(body);
+    if ("error" in goal) return res.status(400).json({ error: goal.error });
+
+    const days = Array.isArray(body.days_of_week) ? [...new Set(body.days_of_week.map(Number))].sort() : [];
+    if (days.length === 0 || days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+      return res.status(400).json({ error: "Pick at least one day of the week." });
+    }
+    const everyWeeks = Number(body.every_weeks ?? 1);
+    if (everyWeeks !== 1 && everyWeeks !== 2) return res.status(400).json({ error: "every_weeks must be 1 or 2." });
+    const dueDays = Number(body.due_days ?? 0);
+    if (!Number.isInteger(dueDays) || dueDays < 0 || dueDays > 13) {
+      return res.status(400).json({ error: "due_days must be a whole number from 0 to 13." });
+    }
+    const today = localDate(new Date());
+    const startDate = body.start_date || today;
+    if (!isDay(startDate)) return res.status(400).json({ error: "start_date must be a date (YYYY-MM-DD)." });
+    if (startDate < today) return res.status(400).json({ error: "The start date can't be in the past." });
+    const endDate = body.end_date || null;
+    if (endDate !== null && (!isDay(endDate) || endDate < startDate)) {
+      return res.status(400).json({ error: "The end date must be on or after the start date." });
+    }
+
+    const resolvedTargets = await resolveAssignmentTargets(ctx, body);
+    if ("error" in resolvedTargets) return res.status(resolvedTargets.status).json({ error: resolvedTargets.error });
+    const subjectError = await claimTutorSubjects(admin, callerUserId, isAdmin, [String(goal.subject)]);
+    if (subjectError) return res.status(403).json({ error: subjectError, code: "tutor_subject_limit" });
+
+    const { data, error } = await admin
+      .from("assignment_schedules")
+      .insert({
+        tutor_id: callerUserId,
+        type: goal.type,
+        subject: goal.subject,
+        topics: goal.topics,
+        question_count: goal.questionCount,
+        difficulty: goal.difficulty,
+        min_accuracy: goal.minAccuracy,
+        pass_mode: goal.passMode,
+        remediation: goal.remediation,
+        // Kept as chosen so each run picks up who's in the class (or roster) then.
+        student_ids: body.allRoster ? [] : (Array.isArray(body.studentIds) ? body.studentIds.map(String) : []),
+        class_ids: resolvedTargets.usedClassIds,
+        all_roster: !!body.allRoster,
+        days_of_week: days,
+        every_weeks: everyWeeks,
+        due_days: dueDays,
+        start_date: startDate,
+        end_date: endDate,
+        notify: body.notify !== false,
+      })
+      .select("*")
+      .single<ScheduleRow>();
+    if (error) {
+      if (missingScheduleTable(error)) {
+        return res.status(503).json({ error: "Recurring assignments aren't set up yet (the database migration hasn't been applied)." });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+
+    let schedule = data;
+    let issued = 0;
+    if (issuesOn(schedule, today)) {
+      issued = (await issueSchedule(admin, schedule, today)) ?? 0;
+      schedule = { ...schedule, last_issued_on: today };
+    }
+    return res.json({ ok: true, schedule: withNext(schedule, today), issued });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** The schedule, if the caller set it (or is an admin). */
+async function ownSchedule(ctx: TutorContext, id: string): Promise<ScheduleRow | null> {
+  const { data } = await ctx.admin.from("assignment_schedules").select("*").eq("id", id).maybeSingle<ScheduleRow>();
+  return data && (data.tutor_id === ctx.callerUserId || ctx.isAdmin) ? data : null;
+}
+
+// PATCH /tutor/assignment-schedules/:id — { paused: boolean } pauses or resumes it
+router.patch("/tutor/assignment-schedules/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const schedule = await ownSchedule(ctx, String(req.params.id));
+    if (!schedule) return res.status(404).json({ error: "Recurring assignment not found." });
+    const { paused } = req.body as { paused?: boolean };
+    if (typeof paused !== "boolean") return res.status(400).json({ error: "paused (true or false) is required." });
+
+    const { data, error } = await ctx.admin
+      .from("assignment_schedules")
+      .update({ paused_at: paused ? (schedule.paused_at ?? new Date().toISOString()) : null })
+      .eq("id", schedule.id)
+      .select("*")
+      .single<ScheduleRow>();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true, schedule: withNext(data, localDate(new Date())) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /tutor/assignment-schedules/:id — stops it; work already set stays
+router.delete("/tutor/assignment-schedules/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const schedule = await ownSchedule(ctx, String(req.params.id));
+    if (!schedule) return res.status(404).json({ error: "Recurring assignment not found." });
+    const { error } = await ctx.admin.from("assignment_schedules").delete().eq("id", schedule.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
