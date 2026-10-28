@@ -338,15 +338,11 @@ export default function LandingPage({ onSignIn }) {
 
         <div className="lp-hero" style={{ position: 'relative', maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 80 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#e2e8f0', fontWeight: 600, marginBottom: 22, padding: '6px 14px', borderRadius: 999, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: GOLD }} />
-              For Australian students, primary school to Year 12
-            </div>
             <h1 className="lp-h1" style={{ fontFamily: FONT_D, fontSize: 'clamp(34px,4.4vw,54px)', letterSpacing: 1, lineHeight: 1.06, margin: '0 0 22px', color: '#fff' }}>
               FIND OUT WHAT YOU DON'T KNOW. <span style={{ color: GOLD, whiteSpace: 'nowrap' }}>THEN FIX IT.</span>
             </h1>
             <p style={{ fontSize: 18, color: MUTED, lineHeight: 1.65, margin: '0 0 32px', maxWidth: 520 }}>
-              gradefarm. is an online study tool. You answer practice questions for your subject, it works out which topics you're weak in, and it keeps you practising those until you've got them. An AI tutor explains anything you get wrong.
+              gradefarm. is an online study tool for Australian students, from primary school to Year 12. You answer practice questions for your subject, it works out which topics you're weak in, and it keeps you practising those until you've got them. An AI tutor explains anything you get wrong.
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
               <PrimaryButton large onClick={getStarted}>Get started free →</PrimaryButton>
