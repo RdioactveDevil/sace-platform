@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, X, Zap, GraduationCap, Infinity as InfinityIcon, Gauge, PenLine, ChartColumn, Users, ClipboardList, TrendingUp, Repeat, BookOpen } from 'lucide-react'
+import { Check, X, Zap, GraduationCap, Infinity as InfinityIcon, Users, ClipboardList, BookOpen } from 'lucide-react'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { SubjectIconByName } from './SubjectIcons'
 import { formatSubjectLabel } from '../lib/subjects'
@@ -53,14 +53,6 @@ function IconTile({ icon: Icon, rgb, color, size = 40 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: 12, background: `rgba(${rgb},0.12)`, border: `1px solid rgba(${rgb},0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       <Icon size={size / 2} color={color} aria-hidden="true" />
-    </div>
-  )
-}
-
-function Bar({ pct, color }) {
-  return (
-    <div style={{ height: 5, borderRadius: 3, background: '#eef0f5' }}>
-      <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: color }} />
     </div>
   )
 }
@@ -192,69 +184,183 @@ function QuestionFlow() {
   )
 }
 
-function MiniQuestion() {
+/* ─── how-it-works tour ───────────────────────────────────────────────── */
+
+// The product pictures the tour swaps between. They sit in a white "app window".
+function TourPractise() {
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 10 }}>Balance: Fe + O₂ → Fe₂O₃</div>
-      {[['4Fe + 3O₂ → 2Fe₂O₃', true], ['2Fe + 3O₂ → Fe₂O₃', false]].map(([t, ok]) => (
-        <div key={t} style={{ fontSize: 11, padding: '7px 10px', borderRadius: 8, marginBottom: 6, color: ok ? '#047857' : MUTED, background: ok ? '#ecfdf5' : '#fff', border: `1px solid ${ok ? '#a7f3d0' : LINE}`, display: 'flex', justifyContent: 'space-between' }}>
-          {t}{ok && <Check size={13} aria-hidden="true" />}
-        </div>
-      ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+        <span style={{ fontSize: 12, background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: 20, fontWeight: 700 }}>Year 8 Maths · Fractions</span>
+        <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>Level 3 · Question 4 of 10</span>
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: NAVY, marginBottom: 18 }}>What is ⅔ of 45?</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {['15', '25', '30', '35'].map((o, i) => (
+          <div key={o} style={{ padding: '14px 16px', borderRadius: 10, fontSize: 15, fontWeight: 600, background: i === 2 ? '#fffbeb' : '#f5f6ff', border: `1px solid ${i === 2 ? GOLD : '#e2e5f0'}`, color: i === 2 ? '#78350f' : '#334155' }}>{o}</div>
+        ))}
+      </div>
+      <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: MUTED }}>
+        <span>Last 3 right, so you moved up to Level 3</span>
+        <span style={{ fontWeight: 700, color: GOLDT }}>+36 XP</span>
+      </div>
     </div>
   )
 }
 
-function MiniTopics() {
+function TourTopics() {
+  const topics = [['Place value', 91], ['Measurement', 82], ['Fractions', 67], ['Geometry', 58], ['Algebra', 41], ['Probability', 19]]
+  const tone = s => s > 75 ? ['#ecfdf5', '#a7f3d0', GREEN] : s > 50 ? ['#fffbeb', '#fde68a', '#b45309'] : s > 30 ? ['#fff7ed', '#fed7aa', ORANGE] : ['#fef2f2', '#fca5a5', RED]
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-      {[['Place value', 91, GREEN, GREEN], ['Fractions', 67, GOLD, GOLDT], ['Algebra', 41, '#f97316', ORANGE], ['Probability', 19, '#ef4444', RED]].map(([n, p, c, t]) => (
-        <div key={n}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-            <span style={{ color: TEXT }}>{n}</span><span style={{ color: t, fontWeight: 700 }}>{p}%</span>
-          </div>
-          <Bar pct={p} color={c} />
-        </div>
-      ))}
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: NAVY }}>Your topics · Year 8 Maths</div>
+        <span style={{ fontSize: 12, background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: 20, fontWeight: 700, whiteSpace: 'nowrap' }}>Updated just now</span>
+      </div>
+      <div className="lp-tour-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+        {topics.map(([n, s]) => {
+          const [bg, bd, c] = tone(s)
+          return (
+            <div key={n} style={{ padding: 12, borderRadius: 10, background: bg, border: `${s < 30 ? 2 : 1}px solid ${bd}` }}>
+              <div style={{ fontSize: 12, color: '#475569' }}>{n}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: c }}>{s}%</div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 12, background: NAVY, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div><div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.06em' }}>UP NEXT</div><div style={{ fontSize: 15, fontWeight: 700 }}>8 questions on Probability</div></div>
+        <div style={{ background: GOLD, color: NAVY, fontWeight: 800, fontSize: 13, padding: '8px 14px', borderRadius: 8, whiteSpace: 'nowrap' }}>Start →</div>
+      </div>
     </div>
   )
 }
 
-function MiniTitan() {
+function TourFix() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ alignSelf: 'flex-end', fontSize: 11, color: TEXT, background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '12px 12px 4px 12px', padding: '7px 10px', maxWidth: '85%' }}>Why do I flip the fraction?</div>
-      <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
-        <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><GraduationCap size={13} color="#fff" aria-hidden="true" /></div>
-        <div style={{ fontSize: 11, color: TEXT, lineHeight: 1.5, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '4px 12px 12px 12px', padding: '7px 10px' }}>
-          How many halves fit in 3 pizzas? That's <span style={{ color: GOLDT, fontWeight: 700 }}>6</span>. So ÷ ½ is the same as × 2.
+    <div>
+      <div style={{ padding: '14px 16px', borderRadius: 12, background: '#fef2f2', border: '1px solid #fecaca' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: RED, marginBottom: 6 }}><X size={15} aria-hidden="true" />Not quite</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>A recipe uses ⅗ of a 250 g bag of flour. How many grams?</div>
+        <div style={{ fontSize: 13, color: '#475569' }}>You said 125 g. It's 150 g: one fifth is 50 g, so three fifths is 150 g.</div>
+      </div>
+      <div style={{ textAlign: 'center', color: PURPLE, fontSize: 18, lineHeight: 1, margin: '10px 0' }} aria-hidden="true">↓</div>
+      <div style={{ padding: '14px 16px', borderRadius: 12, background: '#fff', border: '1px solid #ddd6fe', boxShadow: '0 6px 18px rgba(124,58,237,0.08)' }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: PURPLE, marginBottom: 8 }}>Here's a similar one</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 12 }}>Mia read ⅝ of a 240-page book. How many pages is that?</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+          {['96', '120', '150', '180'].map((o, i) => (
+            <div key={o} style={{ padding: '10px 0', textAlign: 'center', borderRadius: 8, fontSize: 14, fontWeight: 700, background: i === 2 ? '#ecfdf5' : '#f5f6ff', border: `1px solid ${i === 2 ? '#86efac' : '#e2e5f0'}`, color: i === 2 ? '#166534' : '#334155' }}>{o}{i === 2 && ' ✓'}</div>
+          ))}
         </div>
       </div>
     </div>
   )
 }
 
-function ReadinessCard() {
-  const r = 30, C = 2 * Math.PI * r
+function TourTitan() {
+  const you = text => <div style={{ alignSelf: 'flex-end', maxWidth: '80%', fontSize: 14, color: NAVY, background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '14px 14px 4px 14px', padding: '9px 13px' }}>{text}</div>
+  const titan = text => (
+    <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', maxWidth: '88%' }}>
+      <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
+      <div style={{ fontSize: 14, color: NAVY, lineHeight: 1.55, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '4px 14px 14px 14px', padding: '9px 13px' }}>{text}</div>
+    </div>
+  )
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ position: 'absolute', inset: '10% 5%', background: 'radial-gradient(circle,rgba(241,190,67,0.25) 0%,transparent 70%)', filter: 'blur(30px)', pointerEvents: 'none' }} />
-      <div style={{ position: 'relative', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: 24, boxShadow: '0 24px 60px rgba(12,16,55,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 20 }}>
-          <div style={{ position: 'relative', width: 72, height: 72, flexShrink: 0 }}>
-            <svg viewBox="0 0 72 72" style={{ width: 72, height: 72, transform: 'rotate(-90deg)' }} aria-hidden="true">
-              <circle cx="36" cy="36" r={r} fill="none" stroke="#eef0f5" strokeWidth="8" />
-              <circle cx="36" cy="36" r={r} fill="none" stroke={GOLD} strokeWidth="8" strokeDasharray={`${C * 0.72} ${C}`} strokeLinecap="round" />
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: GOLDT }}>72%</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: PURPLE, letterSpacing: '0.06em', marginBottom: 2 }}>TITAN · AI TUTOR</div>
+      {you('I got the flour one wrong. How do I do it?')}
+      {titan(<>Let's take it one step at a time. ⅗ means 3 lots of one fifth. What's one fifth of 250 g?</>)}
+      {you('50 g?')}
+      {titan(<>Exactly. So three of those fifths is…?</>)}
+      <div style={{ marginTop: 4, alignSelf: 'flex-start', fontSize: 13, fontWeight: 700, color: PURPLE, border: '1px solid #ddd6fe', borderRadius: 999, padding: '7px 14px', background: '#fff' }}>Practise this topic →</div>
+    </div>
+  )
+}
+
+function TourReady() {
+  const r = 34, C = 2 * Math.PI * r
+  const weeks = [['Wk 1', 34], ['Wk 2', 47], ['Wk 3', 58], ['Wk 4', 81]]
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 22 }}>
+        <div style={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
+          <svg viewBox="0 0 84 84" style={{ width: 84, height: 84, transform: 'rotate(-90deg)' }} aria-hidden="true">
+            <circle cx="42" cy="42" r={r} fill="none" stroke="#eef0f5" strokeWidth="9" />
+            <circle cx="42" cy="42" r={r} fill="none" stroke={GREEN} strokeWidth="9" strokeDasharray={`${C * 0.81} ${C}`} strokeLinecap="round" />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: GREEN }}>81%</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: NAVY }}>Test readiness</div>
+          <div style={{ fontSize: 13, color: GREEN, fontWeight: 700, marginTop: 3 }}>Up from 34% four weeks ago</div>
+          <div style={{ fontSize: 13, color: MUTED, marginTop: 3 }}>Still to work on: Probability</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 120, padding: '0 4px', borderBottom: `1px solid ${LINE}` }}>
+        {weeks.map(([w, v], i) => (
+          <div key={w} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: i === weeks.length - 1 ? GREEN : MUTED }}>{v}%</span>
+            <div style={{ width: '100%', height: `${v}%`, borderRadius: '6px 6px 0 0', background: i === weeks.length - 1 ? GREEN : '#c7f0dd' }} />
           </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Test readiness</div>
-            <div style={{ fontSize: 12, color: GREEN, fontWeight: 700, marginTop: 3 }}>Up 14% this week</div>
-            <div style={{ fontSize: 12, color: MUTED, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}><Zap size={12} color={GOLDT} aria-hidden="true" />Next: Probability</div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 14, padding: '6px 4px 0' }}>
+        {weeks.map(([w]) => <span key={w} style={{ flex: 1, textAlign: 'center', fontSize: 12, color: MUTED }}>{w}</span>)}
+      </div>
+    </div>
+  )
+}
+
+const TOUR_STEPS = [
+  { title: 'Practise at your level', desc: 'Pick your subject and go. Every question is set at your level, and the level moves with you: get a few right and it steps up.', screen: TourPractise },
+  { title: "See exactly where you're weak", desc: 'Every answer is tracked by topic. Your map updates after every question, and your weakest topic comes up next.', screen: TourTopics },
+  { title: 'Fix mistakes on the spot', desc: 'Miss a question and you get a similar one straight away, so the fix sticks. The topic comes back next session too.', screen: TourFix },
+  { title: 'Get help from Titan', desc: 'Titan, the built-in AI tutor, walks you through any question one step at a time, instead of just giving you the answer.', screen: TourTitan },
+  { title: "Know when you're ready", desc: 'Your readiness score climbs as your gaps close, so you know how prepared you are before the test.', screen: TourReady },
+]
+
+function HowItWorksTour() {
+  const [active, setActive] = useState(0)
+  const tabRefs = useRef([])
+  const Screen = TOUR_STEPS[active].screen
+  // Arrow keys move between tabs, as in any tablist.
+  const onKeyDown = e => {
+    const d = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0
+    if (!d) return
+    e.preventDefault()
+    const next = (active + d + TOUR_STEPS.length) % TOUR_STEPS.length
+    setActive(next)
+    tabRefs.current[next]?.focus()
+  }
+  return (
+    <div className="lp-tour" style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 40, alignItems: 'start' }}>
+      <div role="tablist" aria-orientation="vertical" aria-label="How gradefarm. works" onKeyDown={onKeyDown} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {TOUR_STEPS.map((s, i) => {
+          const on = i === active
+          return (
+            <button key={s.title} ref={el => { tabRefs.current[i] = el }} role="tab" id={`lp-tab-${i}`} aria-selected={on} aria-controls="lp-tour-panel" tabIndex={on ? 0 : -1}
+              onClick={() => setActive(i)} className={on ? '' : 'lp-tab'}
+              style={{ display: 'flex', gap: 14, textAlign: 'left', padding: '16px 18px', borderRadius: 14, cursor: 'pointer', fontFamily: FONT_B, background: on ? '#fff' : 'transparent', border: `1px solid ${on ? '#fde68a' : 'transparent'}`, boxShadow: on ? SHADOW : 'none', transition: 'background 0.2s, border-color 0.2s' }}>
+              <span style={{ fontFamily: FONT_D, fontSize: 17, color: on ? GOLDT : '#9aa3b5', width: 26, flexShrink: 0, paddingTop: 1 }}>{String(i + 1).padStart(2, '0')}</span>
+              <span>
+                <span style={{ display: 'block', fontSize: 16, fontWeight: 700, color: on ? TEXT : MUTED }}>{s.title}</span>
+                {on && <span style={{ display: 'block', fontSize: 14, color: MUTED, lineHeight: 1.6, marginTop: 4 }}>{s.desc}</span>}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ position: 'relative' }}>
+        <div style={{ position: 'absolute', inset: '-6% -4%', background: 'radial-gradient(ellipse,rgba(241,190,67,0.2) 0%,transparent 70%)', filter: 'blur(24px)', pointerEvents: 'none' }} />
+        <div id="lp-tour-panel" role="tabpanel" aria-labelledby={`lp-tab-${active}`} style={{ position: 'relative', background: '#fff', borderRadius: 18, border: `1px solid ${LINE}`, boxShadow: '0 24px 60px rgba(12,16,55,0.12)', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', gap: 6, padding: '12px 16px', background: '#f1f3f9', borderBottom: `1px solid ${LINE}` }} aria-hidden="true">
+            {[0, 1, 2].map(i => <span key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: '#d6d9e4' }} />)}
+          </div>
+          <div key={active} className="lp-tour-screen" style={{ padding: 28, minHeight: 360 }}>
+            <Screen />
           </div>
         </div>
-        <MiniTopics />
       </div>
     </div>
   )
@@ -364,17 +470,19 @@ export default function LandingPage({ onSignIn }) {
         .lp-card { transition:transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
         .lp-card:hover { transform:translateY(-3px); border-color:rgba(241,190,67,0.55) !important; box-shadow:0 12px 32px rgba(12,16,55,0.09) !important; }
         .lp-opt:hover { border-color:${GOLD} !important; }
+        .lp-tab:hover { background:rgba(255,255,255,0.7) !important; }
+        .lp-tour-screen { animation:lpTourIn 0.25s ease; }
+        @keyframes lpTourIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
         .lp-grid-bg { background-image:linear-gradient(rgba(12,16,55,0.045) 1px,transparent 1px),linear-gradient(90deg,rgba(12,16,55,0.045) 1px,transparent 1px); background-size:48px 48px; -webkit-mask-image:radial-gradient(ellipse at 50% 30%,#000 20%,transparent 70%); mask-image:radial-gradient(ellipse at 50% 30%,#000 20%,transparent 70%); }
-        @media (prefers-reduced-motion: reduce) { .lp-fade { opacity:1 !important; transform:none !important; transition:none !important; } }
+        @media (prefers-reduced-motion: reduce) { .lp-fade { opacity:1 !important; transform:none !important; transition:none !important; } .lp-tour-screen { animation:none !important; } }
         @media(max-width:900px) {
           .lp-dnav { display:none !important; }
           .lp-hmenu { display:block !important; }
           .lp-hero { flex-direction:column !important; gap:56px !important; }
           .lp-hero-visual { align-self:stretch; width:100% !important; }
           .lp-3col { grid-template-columns:1fr !important; }
-          .lp-4col { grid-template-columns:repeat(2,1fr) !important; }
-          .lp-hero-visual { flex:1 1 auto !important; }
-          .lp-why { grid-template-columns:1fr !important; gap:48px !important; }
+                    .lp-hero-visual { flex:1 1 auto !important; }
+          .lp-tour { grid-template-columns:1fr !important; gap:24px !important; }
         }
         @media(max-width:560px) {
           .lp-nav { padding-left:16px !important; padding-right:16px !important; }
@@ -382,7 +490,8 @@ export default function LandingPage({ onSignIn }) {
           .lp-hero-wrap { padding:104px 16px 64px !important; }
           .lp-tag, .lp-badge { display:none !important; }
           .lp-h1 { font-size:clamp(26px,8vw,34px) !important; }
-          .lp-4col { grid-template-columns:1fr !important; }
+          .lp-tour-grid { grid-template-columns:repeat(2,1fr) !important; }
+          .lp-tour-screen { padding:18px !important; min-height:0 !important; }
           .lp-h2 { font-size:clamp(24px,7vw,30px) !important; }
           .lp-cta { padding:40px 20px !important; }
           .lp-footer { flex-direction:column !important; align-items:flex-start !important; padding-left:16px !important; padding-right:16px !important; }
@@ -446,80 +555,35 @@ export default function LandingPage({ onSignIn }) {
         </div>
       </section>
 
-      {/* ── HOW IT WORKS: how it helps ── */}
+      {/* ── HOW IT WORKS: a click-through tour ── */}
       <Section id="how">
-        <Heading eyebrow="How it works" sub="gradefarm. is an adaptive study engine. It finds what you don't know and builds every session around fixing it.">
+        <Heading eyebrow="How it works" sub="gradefarm. is an adaptive study engine. Click through what it does for you.">
           MORE THAN A <Mark>QUESTION BANK.</Mark>
         </Heading>
-        <div className="lp-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18 }}>
-          {[
-            { icon: PenLine, rgb: '241,190,67', color: GOLDT, title: 'Answer questions', desc: 'Pick your subject and start. Questions follow your syllabus and are set at your level.', visual: <MiniQuestion /> },
-            { icon: ChartColumn, rgb: '5,150,105', color: GREEN, title: 'See your weak spots', desc: 'Every answer is tracked by topic, so you can see what you know and what still needs work.', visual: <MiniTopics /> },
-            { icon: GraduationCap, rgb: '124,58,237', color: PURPLE, title: 'Practise until it sticks', desc: 'Topics you miss keep coming back until you get them right. Stuck? Titan, the built-in AI tutor, walks you through it.', visual: <MiniTitan /> },
-          ].map((s, i) => (
-            <FadeUp key={s.title} delay={i * 80} style={{ height: '100%' }}>
-              <div className="lp-card" style={{ height: '100%', background: CARD, border: `1px solid ${LINE}`, boxShadow: SHADOW, borderRadius: 18, padding: 22, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ background: '#f6f7fb', border: `1px solid ${LINE}`, borderRadius: 12, padding: 16, marginBottom: 22, height: 160, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  {s.visual}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                  <IconTile icon={s.icon} rgb={s.rgb} color={s.color} size={36} />
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: s.color, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Step {i + 1}</div>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: TEXT }}>{s.title}</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.65 }}>{s.desc}</div>
-              </div>
-            </FadeUp>
-          ))}
-        </div>
-        <div className="lp-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 18, marginTop: 18 }}>
-          {[
-            { icon: TrendingUp, rgb: '241,190,67', color: GOLDT, title: 'Adapts to every answer', desc: 'Right answers move you up a level. Questions are never too easy or too hard for long.' },
-            { icon: Repeat, rgb: '124,58,237', color: PURPLE, title: 'Fixes mistakes on the spot', desc: 'Miss a question and you get a similar one straight away, so the fix sticks.' },
-            { icon: InfinityIcon, rgb: '5,150,105', color: GREEN, title: 'Never runs out', desc: 'Finish the question bank and new questions are written for your weak topics, checked before you see them.' },
-            { icon: BookOpen, rgb: '241,190,67', color: GOLDT, title: 'Mapped to your syllabus', desc: 'Every question follows the Australian Curriculum, SACE or VCE, so nothing is wasted.' },
-          ].map((f, i) => (
-            <FadeUp key={f.title} delay={i * 60} style={{ height: '100%' }}>
-              <div style={{ height: '100%', background: CARD, border: `1px solid ${LINE}`, boxShadow: SHADOW, borderRadius: 16, padding: 20 }}>
-                <IconTile icon={f.icon} rgb={f.rgb} color={f.color} size={36} />
-                <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: '14px 0 6px' }}>{f.title}</div>
-                <div style={{ fontSize: 14, color: MUTED, lineHeight: 1.6 }}>{f.desc}</div>
-              </div>
-            </FadeUp>
-          ))}
-        </div>
+        <FadeUp>
+          <HowItWorksTour />
+        </FadeUp>
       </Section>
 
       {/* ── WHY: why you need it ── */}
       <Section id="why">
-        <div className="lp-why" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 72, alignItems: 'center' }}>
-          <div>
-            <Heading eyebrow="Why it works" sub="Most revision time goes on things you already know. Re-reading notes feels productive, but it doesn't show you what you'd get wrong in a test. gradefarm. does, and puts your time where the marks are.">
-              STOP REVISING WHAT YOU <Mark>ALREADY KNOW.</Mark>
-            </Heading>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {[
-                { icon: GraduationCap, rgb: '124,58,237', color: PURPLE, title: "Help the moment you're stuck", desc: 'Titan explains a question one step at a time, any time of day, instead of just showing you the answer.' },
-                { icon: Gauge, rgb: '5,150,105', color: GREEN, title: 'Know how ready you are', desc: 'A readiness score shows how prepared you are for the test, and which topic to work on next.' },
-                { icon: Zap, rgb: '241,190,67', color: GOLDT, title: 'Stay motivated', desc: 'XP, ranks and day streaks make a few questions a day a habit, not a chore.' },
-              ].map((b, i) => (
-                <FadeUp key={b.title} delay={i * 70}>
-                  <div style={{ display: 'flex', gap: 16 }}>
-                    <IconTile icon={b.icon} rgb={b.rgb} color={b.color} />
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 4 }}>{b.title}</div>
-                      <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.6 }}>{b.desc}</div>
-                    </div>
-                  </div>
-                </FadeUp>
-              ))}
-            </div>
-          </div>
-          <FadeUp delay={120}>
-            <ReadinessCard />
-          </FadeUp>
+        <Heading eyebrow="Why it works" center sub="Most revision time goes on things you already know. Re-reading notes feels productive, but it doesn't show you what you'd get wrong in a test. gradefarm. does, and puts your time where the marks are.">
+          STOP REVISING WHAT YOU <Mark>ALREADY KNOW.</Mark>
+        </Heading>
+        <div className="lp-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18 }}>
+          {[
+            { icon: InfinityIcon, rgb: '241,190,67', color: GOLDT, title: 'Questions that never run out', desc: "Finish the question bank and new questions are written for your weak topics, checked before you see them." },
+            { icon: BookOpen, rgb: '5,150,105', color: GREEN, title: 'Mapped to your syllabus', desc: 'Every question follows the Australian Curriculum, SACE or VCE, so no time is wasted on things you won\'t be tested on.' },
+            { icon: Zap, rgb: '124,58,237', color: PURPLE, title: 'Stay motivated', desc: 'XP, ranks and day streaks make a few questions a day a habit, not a chore.' },
+          ].map((b, i) => (
+            <FadeUp key={b.title} delay={i * 70} style={{ height: '100%' }}>
+              <div style={{ height: '100%', background: CARD, border: `1px solid ${LINE}`, boxShadow: SHADOW, borderRadius: 16, padding: 24 }}>
+                <IconTile icon={b.icon} rgb={b.rgb} color={b.color} />
+                <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, margin: '16px 0 6px' }}>{b.title}</div>
+                <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.6 }}>{b.desc}</div>
+              </div>
+            </FadeUp>
+          ))}
         </div>
       </Section>
 
