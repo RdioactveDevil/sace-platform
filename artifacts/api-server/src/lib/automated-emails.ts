@@ -5,6 +5,8 @@
  *   • session_reminder_1h   – students and the tutor, about an hour before
  *   • assignment_due        – the day before an unfinished assignment is due
  *   • assignment_overdue    – the day after, if it is still unfinished
+ *   • assignment_set        – a recurring assignment was set for the student
+ *                             today (lib/recurring-assignments.ts)
  *   • invite_reminder       – once, if a tutor's invite isn't accepted after a
  *                             few days (recorded on the invite: the invitee may
  *                             have no account, so no email_log row)
@@ -40,6 +42,7 @@ export type EmailKind =
   | "session_reminder_1h"
   | "assignment_due"
   | "assignment_overdue"
+  | "assignment_set"
   | "invite_reminder"
   | "diagnostic_reminder"
   | "diagnostic_done"
@@ -552,6 +555,85 @@ function assignmentEmail(
   };
 }
 
+// ── Recurring assignments ───────────────────────────────────────────────────
+
+interface IssuedRow extends AssignmentRow {
+  question_count: number | null;
+}
+
+/**
+ * Tell students about recurring work set today (or late yesterday, after the
+ * day's sending hours), one email per student, if the schedule says to.
+ */
+async function runRecurringAssignmentEmails(job: Job) {
+  if (!daytime(job)) return;
+  const today = localDate(job.now);
+  const { data, error } = await job.admin
+    .from("assignments")
+    .select("id, tutor_id, student_id, type, subject, topics, due_date, created_at, question_count, assignment_schedules!inner(notify)")
+    .in("issued_on", [addDays(today, -1), today])
+    .eq("assignment_schedules.notify", true)
+    .is("completed_at", null)
+    .limit(2000);
+  if (error) {
+    // Before the recurring assignments migration there's nothing to send.
+    if (/assignment_schedules|issued_on|schedule_id/.test(error.message)) return;
+    throw new Error(`assignments: ${error.message}`);
+  }
+  const rows = (data ?? []) as unknown as IssuedRow[];
+  if (rows.length === 0) return;
+
+  const done = await loadDone(job, "assignment_set", rows.map((a) => a.id));
+  const byStudent = new Map<string, IssuedRow[]>();
+  for (const a of rows) {
+    if (done.has(`${a.id}:${a.student_id}`)) continue;
+    const l = byStudent.get(a.student_id) ?? [];
+    l.push(a);
+    byStudent.set(a.student_id, l);
+  }
+  if (byStudent.size === 0) return;
+
+  const people = await loadRecipients(job, [...byStudent.keys(), ...rows.map((a) => a.tutor_id)]);
+  for (const [studentId, items] of byStudent) {
+    const r = people.get(studentId);
+    if (!r || r.unsubscribed) continue;
+    await deliver(job, "assignment_set", r, items.map((a) => a.id), (claimed) =>
+      assignmentSetEmail(r, items.filter((a) => claimed.includes(a.id)), people, today),
+    );
+  }
+}
+
+function assignmentSetEmail(
+  r: Recipient,
+  items: IssuedRow[],
+  people: Map<string, Recipient>,
+  today: string,
+): { subject: string; content: EmailContent } {
+  const first = items[0];
+  const many = items.length > 1;
+  const details = items.map((a): [string, string] => {
+    const topics = (a.topics ?? []).filter(Boolean).join(", ");
+    const goal = a.question_count ? `${a.question_count} question${a.question_count === 1 ? "" : "s"}` : "";
+    const due = a.due_date === today ? "due today" : `due ${formatDueDate(a.due_date)}`;
+    return [a.type, [a.subject, topics, goal, due].filter(Boolean).join(" · ")];
+  });
+  const tutors = [...new Set(items.map((a) => people.get(a.tutor_id)?.name).filter(Boolean))];
+  const from = tutors.length === 1 ? tutors[0] : "your tutor";
+  return {
+    subject: many ? `${items.length} new assignments to do` : `New ${first.type} for ${first.subject}`,
+    content: {
+      heading: many ? "You have new work" : `New ${first.type}`,
+      paragraphs: [
+        `Hi ${r.name}, here's your regular work from ${from}.`,
+      ],
+      details,
+      cta: { label: "Start now", url: `${appUrl()}/home` },
+      footer: "You're receiving this because your tutor set you recurring work on gradefarm.",
+      unsubscribe: unsubscribeUrl(r.id),
+    },
+  };
+}
+
 // ── Invite reminders ────────────────────────────────────────────────────────
 
 interface InviteRow {
@@ -954,6 +1036,7 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
   const steps: Array<[string, (j: Job) => Promise<void>]> = [
     ["session reminders", runSessionReminders],
     ["assignment reminders", runAssignmentReminders],
+    ["recurring assignments", runRecurringAssignmentEmails],
     ["diagnostic results", runDiagnosticDone],
     ["diagnostic reminders", runDiagnosticReminders],
     ["invite reminders", runInviteReminders],

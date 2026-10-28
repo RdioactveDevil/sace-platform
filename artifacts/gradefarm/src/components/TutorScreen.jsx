@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard, CreditCard } from 'lucide-react'
+import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard, CreditCard, Repeat, Pause, Play } from 'lucide-react'
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
@@ -34,6 +34,10 @@ import {
   addStudentsToClass,
   removeStudentFromClass,
   createBatchAssignment,
+  fetchAssignmentSchedules,
+  createAssignmentSchedule,
+  setAssignmentSchedulePaused,
+  deleteAssignmentSchedule,
   fetchTutorStudentWritingAttempts,
   downloadWritingReportPdf,
   generateDiagnosticQuestions,
@@ -46,6 +50,7 @@ import {
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
+import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -54,6 +59,12 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 
 const ASSIGNMENT_TYPES = ['Quiz', 'Test', 'Worksheet', 'Homework']
 const QUESTION_COUNT_PRESETS = [5, 10, 15, 20, 30]
+const REPEAT_OPTIONS = [
+  { id: 'none',        label: 'Doesn’t repeat' },
+  { id: 'daily',       label: 'Daily' },
+  { id: 'weekly',      label: 'Weekly' },
+  { id: 'fortnightly', label: 'Fortnightly' },
+]
 const DIFFICULTY_OPTIONS = [
   { id: 'adaptive', label: 'Adaptive', hint: 'Follows the student’s level' },
   ...Object.entries(ASSIGNMENT_DIFFICULTIES).map(([id, d]) => ({
@@ -65,6 +76,12 @@ const DIFFICULTY_OPTIONS = [
 function fmtDate(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** A YYYY-MM-DD day, e.g. "Thu 29 Oct". */
+function fmtDay(ymd) {
+  if (!ymd) return '—'
+  return new Date(`${ymd}T12:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 function assignmentStatus(a) {
@@ -279,7 +296,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
   const [filterStudent, setFilterStudent] = useState('')
   const [filterStatus, setFilterStatus]   = useState('All')
   const [expandedBatches, setExpandedBatches] = useState(() => new Set())
-  const [form, setForm]               = useState({
+  const blankForm = () => ({
     type: 'Quiz',
     subject: subject?.name || '',
     topics: [],
@@ -293,7 +310,17 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     target_mode: 'single',  // 'single' | 'multi' | 'classes' | 'all'
     student_ids: [],
     class_ids: [],
+    // Recurring: set again on these weekdays (0 = Sunday) instead of once with a due date.
+    repeat: 'none',         // 'none' | 'daily' | 'weekly' | 'fortnightly'
+    days_of_week: [],
+    due_days: 0,
+    start_date: localYmd(),
+    end_date: '',
+    notify_each: true,
   })
+  const [form, setForm]               = useState(blankForm)
+  const [schedules, setSchedules]     = useState([])
+  const [scheduleBusy, setScheduleBusy] = useState(null)
   const [curriculumMacroGroups, setCurriculumMacroGroups] = useState([])
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
@@ -319,14 +346,16 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
   const load = async () => {
     setLoading(true)
     try {
-      const [asgns, ros, cls] = await Promise.all([
+      const [asgns, ros, cls, sch] = await Promise.all([
         fetchAssignmentsForTutor(profile.id, { allTutors }),
         fetchRoster(profile.id, { allTutors }),
         fetchTutorClasses({ allTutors }).catch(() => []),
+        fetchAssignmentSchedules({ allTutors }).catch(() => []),
       ])
       setAssignments(asgns)
       setRoster(ros)
       setClasses(cls)
+      setSchedules(sch)
     } catch {}
     setLoading(false)
   }
@@ -351,6 +380,25 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     setForm(f => {
       if (f.target_mode === 'single') return { ...f, student_ids: [id] }
       return { ...f, student_ids: f.student_ids.includes(id) ? f.student_ids.filter(s => s !== id) : [...f.student_ids, id] }
+    })
+  }
+
+  const setRepeat = (repeat) => {
+    setForm(f => {
+      let days = f.days_of_week
+      if (repeat === 'daily') days = [0, 1, 2, 3, 4, 5, 6]
+      else if (repeat !== 'none' && (days.length === 0 || days.length === 7)) days = [new Date(`${f.start_date}T12:00:00`).getDay()]
+      const everyWeeks = repeat === 'fortnightly' ? 2 : 1
+      return { ...f, repeat, days_of_week: days, due_days: defaultDueDays(days, everyWeeks) }
+    })
+  }
+
+  const toggleDay = (day) => {
+    setForm(f => {
+      const days = f.days_of_week.includes(day) ? f.days_of_week.filter(d => d !== day) : [...f.days_of_week, day]
+      // Daily with a day taken off is a weekly schedule on the rest.
+      const repeat = f.repeat === 'daily' && days.length < 7 ? 'weekly' : f.repeat
+      return { ...f, repeat, days_of_week: days, due_days: defaultDueDays(days, repeat === 'fortnightly' ? 2 : 1) }
     })
   }
 
@@ -381,7 +429,10 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     setFormError('')
     setNotifyStatus(null)
     if (form.topics.length === 0) { setFormError('Select at least one topic.'); return }
-    if (!form.due_date) { setFormError('Please set a due date.'); return }
+    const repeating = form.repeat !== 'none'
+    if (!repeating && !form.due_date) { setFormError('Please set a due date.'); return }
+    if (repeating && form.days_of_week.length === 0) { setFormError('Pick at least one day for it to repeat on.'); return }
+    if (repeating && form.end_date && form.end_date < form.start_date) { setFormError('The end date must be on or after the start date.'); return }
     const questionCount = Number(form.question_count)
     if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
       setFormError('Number of questions must be a whole number from 1 to 100.'); return
@@ -392,6 +443,41 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     }
     if (resolvedCount === 0) { setFormError('Select at least one target (student, class, or roster).'); return }
     setSaving(true)
+    if (repeating) {
+      try {
+        const { schedule, issued } = await createAssignmentSchedule({
+          type: form.type,
+          subject: form.subject,
+          topics: form.topics,
+          question_count: questionCount,
+          difficulty: form.difficulty,
+          min_accuracy: minAccuracy,
+          pass_mode: form.pass_mode,
+          remediation: form.remediation,
+          studentIds: form.target_mode === 'classes' || form.target_mode === 'all' ? [] : form.student_ids,
+          classIds: form.target_mode === 'classes' ? form.class_ids : [],
+          allRoster: form.target_mode === 'all',
+          days_of_week: form.days_of_week,
+          every_weeks: form.repeat === 'fortnightly' ? 2 : 1,
+          due_days: Number(form.due_days) || 0,
+          start_date: form.start_date,
+          end_date: form.end_date || null,
+          notify: form.notify_each,
+        })
+        setShowForm(false)
+        setForm(blankForm())
+        await load()
+        let msg = `Recurring assignment set up: ${describeRepeat(schedule)}.`
+        if (issued > 0) msg += ` Today’s has been set for ${issued} student${issued !== 1 ? 's' : ''}.`
+        else if (schedule.next_on) msg += ` The first one is set on ${fmtDay(schedule.next_on)}.`
+        setNotifyStatus({ ok: true, msg })
+        setTimeout(() => setNotifyStatus(null), 6000)
+      } catch (err) {
+        setFormError(err.message || 'Failed to set up the recurring assignment.')
+      }
+      setSaving(false)
+      return
+    }
     try {
       const result = await createBatchAssignment({
         type: form.type,
@@ -409,7 +495,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
         notify: true,
       })
       setShowForm(false)
-      setForm({ type: 'Quiz', subject: subject?.name || '', topics: [], due_date: '', question_count: 10, difficulty: 'adaptive', pass_mark_on: false, min_accuracy: 80, pass_mode: 'until_pass', remediation: true, target_mode: 'single', student_ids: [], class_ids: [] })
+      setForm(blankForm())
       await load()
       const created = result?.created ?? resolvedCount
       const notified = result?.notified ?? 0
@@ -429,6 +515,25 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     setDeletingId(id)
     try { await deleteAssignment(id); await load() } catch {}
     setDeletingId(null)
+  }
+
+  const togglePaused = async (sch) => {
+    setScheduleBusy(sch.id)
+    try {
+      const updated = await setAssignmentSchedulePaused(sch.id, !sch.paused_at)
+      setSchedules(list => list.map(x => (x.id === sch.id ? updated : x)))
+    } catch {}
+    setScheduleBusy(null)
+  }
+
+  const stopSchedule = async (sch) => {
+    if (!window.confirm('Stop this recurring assignment? Work it has already set stays with the students.')) return
+    setScheduleBusy(sch.id)
+    try {
+      await deleteAssignmentSchedule(sch.id)
+      setSchedules(list => list.filter(x => x.id !== sch.id))
+    } catch {}
+    setScheduleBusy(null)
   }
 
   const overdueCount = assignments.filter(a => assignmentStatus(a) === 'Overdue').length
@@ -611,9 +716,71 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Due Date</label>
-              <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={{ ...inputStyle, maxWidth: 220 }} min={new Date().toISOString().slice(0, 10)} />
+              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Repeat</label>
+              <div role="radiogroup" aria-label="Repeat" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {REPEAT_OPTIONS.map(opt => {
+                  const active = form.repeat === opt.id
+                  return (
+                    <button key={opt.id} type="button" role="radio" aria-checked={active} onClick={() => setRepeat(opt.id)}
+                      style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                      {opt.id !== 'none' && <Repeat size={11} aria-hidden="true" style={{ marginRight: 5, verticalAlign: '-1px' }} />}
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {form.repeat !== 'none' && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>On</div>
+                    <div role="group" aria-label="Days of the week" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {WEEKDAYS.map(d => {
+                        const active = form.days_of_week.includes(d.id)
+                        return (
+                          <button key={d.id} type="button" aria-pressed={active} aria-label={d.short} title={d.short} onClick={() => toggleDay(d.id)}
+                            style={{ width: 38, height: 34, borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 800 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                            {d.short.slice(0, 2)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                    <div>
+                      <label htmlFor="schedule-due-days" style={{ fontSize: 12, color: t.textMuted, display: 'block', marginBottom: 6 }}>Each one is due</label>
+                      <select id="schedule-due-days" value={form.due_days} onChange={e => setForm(f => ({ ...f, due_days: Number(e.target.value) }))} style={inputStyle}>
+                        {Array.from({ length: 14 }, (_, n) => <option key={n} value={n}>{n === 0 ? 'The same day' : n === 1 ? 'The next day' : `${n} days later`}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="schedule-start" style={{ fontSize: 12, color: t.textMuted, display: 'block', marginBottom: 6 }}>Starts</label>
+                      <input id="schedule-start" type="date" value={form.start_date} min={localYmd()} onChange={e => setForm(f => ({ ...f, start_date: e.target.value || localYmd() }))} style={inputStyle} />
+                    </div>
+                    <div>
+                      <label htmlFor="schedule-end" style={{ fontSize: 12, color: t.textMuted, display: 'block', marginBottom: 6 }}>Ends <span style={{ fontSize: 11 }}>(optional)</span></label>
+                      <input id="schedule-end" type="date" value={form.end_date} min={form.start_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} style={inputStyle} />
+                    </div>
+                  </div>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, fontWeight: 600, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form.notify_each} onChange={e => setForm(f => ({ ...f, notify_each: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                    Email students each time it’s set
+                  </label>
+                  {form.days_of_week.length > 0 && (
+                    <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 12px', borderRadius: 8, background: 'rgba(241,190,67,0.06)', border: `1px solid ${t.border}` }}>
+                      {describeRepeat({ days_of_week: form.days_of_week, every_weeks: form.repeat === 'fortnightly' ? 2 : 1 })}, {describeDue(Number(form.due_days))}
+                      {form.end_date ? `, until ${fmtDay(form.end_date)}` : ''}. Students who join a class or roster you pick get it from then on.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
+            {form.repeat === 'none' && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Due Date</label>
+                <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={{ ...inputStyle, maxWidth: 220 }} min={new Date().toISOString().slice(0, 10)} />
+              </div>
+            )}
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
@@ -692,9 +859,59 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
             {formError && <div style={{ marginBottom: 12, fontSize: 12, color: '#f87171' }}>{formError}</div>}
 
             <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
-              {saving ? 'Creating…' : `Create Assignment${resolvedCount > 1 ? ` (${resolvedCount} students)` : ''}`}
+              {saving ? 'Creating…' : `${form.repeat !== 'none' ? 'Create Recurring Assignment' : 'Create Assignment'}${resolvedCount > 1 ? ` (${resolvedCount} students)` : ''}`}
             </button>
           </form>
+        </div>
+      )}
+
+      {schedules.length > 0 && (
+        <div style={card}>
+          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>Recurring</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>{schedules.length} active or paused</div>
+          </div>
+          {schedules.map(sch => {
+            const paused = !!sch.paused_at
+            const finished = !paused && !sch.next_on
+            const busy = scheduleBusy === sch.id
+            const studentNames = (sch.student_ids || []).map(id => roster.find(r => r.student_id === id)?.profiles?.display_name).filter(Boolean)
+            const classNames = (sch.class_ids || []).map(id => classes.find(c => c.id === id)?.name).filter(Boolean)
+            const who = sch.all_roster ? 'Entire roster'
+              : [...classNames.map(n => `Class: ${n}`), ...studentNames].join(', ') || `${(sch.student_ids || []).length + (sch.class_ids || []).length} target${(sch.student_ids || []).length + (sch.class_ids || []).length !== 1 ? 's' : ''}`
+            const state = paused ? 'Paused' : finished ? 'Finished' : `Next: ${fmtDay(sch.next_on)}`
+            const stateColor = paused ? t.textMuted : finished ? t.textMuted : GOLD
+            return (
+              <div key={sch.id} style={{ padding: '13px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14, opacity: paused || finished ? 0.75 : 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <Repeat size={14} color={GOLD} aria-hidden="true" />
+                    <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{sch.type}</span>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${stateColor}40`, background: `${stateColor}15`, color: stateColor, fontWeight: 700 }}>{state}</span>
+                    <span style={{ fontSize: 11, color: t.textMuted }}>{describeRepeat(sch)}, {describeDue(sch.due_days)}{sch.end_date ? ` · until ${fmtDay(sch.end_date)}` : ''}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>
+                    <strong style={{ color: t.text }}>For:</strong> {who}
+                    <span style={{ marginLeft: 8 }}>· {sch.question_count} questions · {ASSIGNMENT_DIFFICULTIES[sch.difficulty]?.label || 'Adaptive'}{sch.min_accuracy ? ` · Pass ${sch.min_accuracy}%` : ''}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: t.textMuted }}>
+                    <strong style={{ color: t.text }}>Topics:</strong> {(sch.topics || []).join(', ') || sch.subject}
+                  </div>
+                </div>
+                {!finished && (
+                  <button type="button" onClick={() => togglePaused(sch)} disabled={busy}
+                    style={{ padding: '5px 11px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: FONT_B, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    {paused ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}
+                    {paused ? 'Resume' : 'Pause'}
+                  </button>
+                )}
+                <button type="button" onClick={() => stopSchedule(sch)} disabled={busy}
+                  style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
+                  {finished ? 'Remove' : 'Stop'}
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -773,6 +990,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                       {!indent && <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{a.type}</span>}
                       <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700 }}>{status}</span>
                       {!indent && <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}</span>}
+                      {!indent && a.schedule_id && <span title="Set by a recurring assignment" style={{ fontSize: 11, color: GOLD, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Repeat size={11} aria-hidden="true" />Recurring</span>}
                     </div>
                     <div style={{ fontSize: 12, color: t.textMuted, marginBottom: indent ? 0 : 3 }}>
                       <strong style={{ color: t.text }}>Student:</strong> {a.profiles?.display_name || a.student_id}
@@ -834,7 +1052,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                           <span style={{ fontSize: 11, color: GOLD, fontWeight: 800 }}>{isExpanded ? '▾' : '▸'}</span>
                           <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{head.type}</span>
-                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.15)', color: GOLD, fontWeight: 700 }}>Batch</span>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.15)', color: GOLD, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{head.schedule_id && <Repeat size={11} aria-hidden="true" />}{head.schedule_id ? 'Recurring' : 'Batch'}</span>
                           <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(head.due_date)}</span>
                           {head.question_count > 0 && <span style={{ fontSize: 11, color: t.textMuted }}>{head.question_count} questions · {ASSIGNMENT_DIFFICULTIES[head.difficulty]?.label || 'Adaptive'}{head.min_accuracy ? ` · Pass ${head.min_accuracy}%` : ''}</span>}
                         </div>

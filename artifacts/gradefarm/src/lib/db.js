@@ -1398,6 +1398,35 @@ export async function createBatchAssignment({ type, subject, topics, due_date, q
   })
 }
 
+/** Recurring assignments the tutor has set (every tutor's with `allTutors`), each with `next_on`. */
+export async function fetchAssignmentSchedules({ allTutors = false } = {}) {
+  const json = await tutorFetch(`/api/tutor/assignment-schedules${allTutors ? '?scope=all' : ''}`)
+  return json.schedules || []
+}
+
+/** Create a recurring assignment: the same work set again on `days_of_week` (0 = Sunday),
+ *  every week or every other week, each due `due_days` after it's set. Returns { schedule, issued }. */
+export async function createAssignmentSchedule({ type, subject, topics, question_count, difficulty, min_accuracy = null, pass_mode = 'until_pass', remediation = true, studentIds = [], classIds = [], allRoster = false, days_of_week, every_weeks = 1, due_days = 0, start_date, end_date = null, notify = true } = {}) {
+  return tutorFetch('/api/tutor/assignment-schedules', {
+    method: 'POST',
+    body: JSON.stringify({ type, subject, topics, question_count, difficulty, min_accuracy, pass_mode, remediation, studentIds, classIds, allRoster, days_of_week, every_weeks, due_days, start_date, end_date, notify }),
+  })
+}
+
+/** Pause or resume a recurring assignment. */
+export async function setAssignmentSchedulePaused(scheduleId, paused) {
+  const json = await tutorFetch(`/api/tutor/assignment-schedules/${encodeURIComponent(scheduleId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ paused }),
+  })
+  return json.schedule
+}
+
+/** Stop a recurring assignment. Work it has already set stays. */
+export async function deleteAssignmentSchedule(scheduleId) {
+  await tutorFetch(`/api/tutor/assignment-schedules/${encodeURIComponent(scheduleId)}`, { method: 'DELETE' })
+}
+
 /** Fetch pending (not completed) assignments for a student. */
 export async function fetchAssignmentsForStudent(studentId) {
   const { data, error } = await supabase

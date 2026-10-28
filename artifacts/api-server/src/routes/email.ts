@@ -6,6 +6,7 @@ import {
   verifyParentUnsubscribeToken, verifyUnsubscribeToken,
 } from "../lib/email";
 import { runAutomatedEmails } from "../lib/automated-emails";
+import { runRecurringAssignments, type IssueSummary } from "../lib/recurring-assignments";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -14,6 +15,8 @@ const router = Router();
 // Called every 15 minutes by .github/workflows/automated-emails.yml with
 // `Authorization: Bearer $CRON_SECRET` (the same header Vercel Cron sends).
 // ?dry_run=1 lists what would be sent without sending; ?max=N caps the run.
+// A real run first sets the day's recurring assignments, so their emails go
+// out in the same run.
 
 function isCronCaller(req: Request): boolean {
   const secret = process.env.CRON_SECRET ?? "";
@@ -40,6 +43,15 @@ async function handleCron(req: Request, res: Response) {
   }
   const dryRun = ["1", "true"].includes(String(req.query.dry_run ?? ""));
   const max = Number(req.query.max);
+  let recurring: IssueSummary | { error: string } | undefined;
+  if (!dryRun) {
+    try {
+      recurring = await runRecurringAssignments(getServiceClient());
+    } catch (err) {
+      logger.error({ err }, "recurring assignments: run failed");
+      recurring = { error: err instanceof Error ? err.message : "Recurring assignments failed" };
+    }
+  }
   try {
     const summary = await runAutomatedEmails(getServiceClient(), getResend(), {
       dryRun,
@@ -47,11 +59,11 @@ async function handleCron(req: Request, res: Response) {
     });
     logger.info({ summary: { ...summary, planned: summary.planned?.length } }, "emails: cron run finished");
     // The response lands in GitHub Actions logs, so don't print addresses.
-    res.json({ ...summary, planned: summary.planned?.map((p) => ({ ...p, to: maskEmail(p.to) })) });
+    res.json({ ...summary, planned: summary.planned?.map((p) => ({ ...p, to: maskEmail(p.to) })), recurring });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Email run failed";
     const summary = (err as { summary?: unknown }).summary;
-    res.status(500).json({ error: message, ...(summary ? { summary } : {}) });
+    res.status(500).json({ error: message, ...(summary ? { summary } : {}), recurring });
   }
 }
 
