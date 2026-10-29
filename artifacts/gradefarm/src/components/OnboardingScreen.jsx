@@ -174,22 +174,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
 
   const stepWelcome = () => (
     <div style={{ textAlign: 'center', animation: 'slideIn 0.55s cubic-bezier(0.34,1.2,0.64,1) both' }}>
-      <div style={{ position: 'relative', display: 'inline-block', marginBottom: 24 }}>
-        <div style={{
-          width: 80, height: 80, borderRadius: '50%',
-          background: `conic-gradient(${GOLD}, ${GOLDL}, ${GOLD}40, transparent 70%)`,
-          animation: 'spin 6s linear infinite',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{ width: 68, height: 68, borderRadius: '50%', background: NAVYD, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 18, color: GOLD, letterSpacing: 1 }}>GF</span>
-          </div>
-        </div>
-        <div style={{ position: 'absolute', top: -4, left: '50%', transformOrigin: '0 44px', animation: 'spin 3s linear infinite', width: 8, height: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}` }} />
-        </div>
-      </div>
-
       <h2 style={{ fontFamily: FONT_D, fontSize: 24, color: '#f1f5f9', margin: '0 0 10px', letterSpacing: 1, lineHeight: 1.3 }}>
         WELCOME TO<br /><span style={{ color: GOLD }}>GRADEFARM.</span>
       </h2>
@@ -453,7 +437,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         @keyframes slideIn  { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes spin     { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes shimmer  { 0%{left:-100%} 60%{left:160%} 100%{left:160%} }
         @keyframes pulseBtn { 0%,100%{box-shadow:0 8px 32px rgba(241,190,67,0.5)} 50%{box-shadow:0 8px 52px rgba(241,190,67,0.8)} }
         @keyframes float1   { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(30px,-40px) scale(1.08)} }
@@ -486,12 +469,12 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         {/* Top glow edge */}
         <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: 1, background: 'linear-gradient(90deg, transparent, rgba(241,190,67,0.7), transparent)', borderRadius: 99 }} />
 
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        {step > 0 && <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <span style={{ fontFamily: FONT_D, fontSize: 22, letterSpacing: 1 }}>
             <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
           </span>
           <div style={{ fontSize: 10, color: '#475569', letterSpacing: '0.08em', marginTop: 3, fontFamily: FONT_B }}>by Titanium Tutoring</div>
-        </div>
+        </div>}
         {progressBar()}
         {[stepWelcome, stepDetails, stepGoals, stepConfirm][step]()}
       </div>
