@@ -247,6 +247,17 @@ export function nextPassageSibling(questions, pool, sessionAnsweredIds) {
 }
 
 /**
+ * Ids of the bank questions answered wrong in one session (main questions
+ * only: remediation practice doesn't count), for reviewing just those. Not
+ * getQuestionCounts().wrong, which counts every question ever got wrong.
+ */
+export function sessionWrongIds(sessionResults, questions) {
+  const inBank = new Set((questions || []).map(q => q.id))
+  const ids = (sessionResults || []).filter(r => !r.remediation && !r.correct).map(r => r.id)
+  return [...new Set(ids)].filter(id => inBank.has(id))
+}
+
+/**
  * Count unseen, wrong, and total questions for session start UI.
  */
 export function getQuestionCounts(questions, struggleMap, subtopics = []) {

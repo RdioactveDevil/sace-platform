@@ -7,7 +7,7 @@ import {
   getRemediationCompletionBonus,
   getLevelProgress,
   rankAccuracy,
-  getQuestionCounts,
+  sessionWrongIds,
   getQuestionConceptTag,
   seenQuestionChecker,
   questionContentKey,
@@ -366,6 +366,8 @@ export default function QuizScreen({
   loadingTip: _loadingTip, setLoadingTip,
   quizMode: _quizMode, setQuizMode,
   quizSubtopics: _quizSubtopics,
+  // 'review' mode: the questions to go back over (a finished session's wrong answers).
+  reviewIds: _reviewIds, setReviewIds,
   remediationMode: _remediationMode, setRemediationMode,
   remediationStreak: _remediationStreak, setRemediationStreak,
   remediationTarget: _remediationTarget, setRemediationTarget,
@@ -489,6 +491,7 @@ export default function QuizScreen({
   const loadingTip = _loadingTip ?? false
   const quizMode = _quizMode ?? 'new'
   const quizSubtopics = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
+  const reviewIds = Array.isArray(_reviewIds) ? _reviewIds : []
   const effectiveSubtopics = consolidation ? consolidation.subtopics : quizSubtopics
   const round = consolidation ? consolidationRound(sessionResults) : null
   const remediationMode = _remediationMode ?? false
@@ -567,7 +570,9 @@ export default function QuizScreen({
     startTime.current = Date.now()
   }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns])
 
-  const loadNext = useCallback((answered, map, mode = 'new', subtopics = [], targetDiff = null) => {
+  // `review` is the list to draw from in 'review' mode; starting a review
+  // passes it in, since the reviewIds prop only updates on the next render.
+  const loadNext = useCallback((answered, map, mode = 'new', subtopics = [], targetDiff = null, review = reviewIds) => {
     // A consolidation round ends once it has its run of right answers or its
     // question count. Remediation for the last answer finishes first: it calls
     // this when it's done.
@@ -575,8 +580,10 @@ export default function QuizScreen({
       setFinished(true)
       return
     }
+    // Reviewing a session's wrong answers: just those, each once.
+    const pool = mode === 'review' ? questions.filter(q => review.includes(q.id)) : questions
     const q = selectNextQuestion(
-      questions, map, answered, mode, subtopics,
+      pool, map, answered, mode === 'review' ? 'all' : mode, subtopics,
       assignmentBand ? assignmentBand.target : targetDiff, assignmentBand,
     )
     if (!q) {
@@ -584,7 +591,7 @@ export default function QuizScreen({
       return
     }
     setDisplayQuestion(q)
-  }, [questions, setDisplayQuestion, assignmentBand, consolidation, sessionResults])
+  }, [questions, setDisplayQuestion, assignmentBand, consolidation, sessionResults, reviewIds])
 
   const clearRemediation = useCallback(() => {
     setRemediationMode(false)
@@ -736,8 +743,9 @@ export default function QuizScreen({
   // running state (updated here the same way the RPC updates the row) so it
   // survives this screen remounting; the RPC decides completion.
   // The question, response and time go into the tutor's assignment report.
+  // Reviewing wrong answers is practice: redoing a miss mustn't count.
   const countAssignmentAnswer = (isCorrect, response, timeMs) => {
-    if (!activeAssignment?.question_count) return
+    if (!activeAssignment?.question_count || quizMode === 'review') return
     const next = applyAssignmentAnswer(activeAssignment, isCorrect)
     onAssignmentProgress?.({ progress_count: next.progress_count, recent_results: next.recent_results })
     const id = activeAssignment.id
@@ -759,6 +767,7 @@ export default function QuizScreen({
     if (!sessionEnded) return
     if (sessionCompletedRef.current) return
     if (!activeAssignment || activeAssignment.question_count) return
+    if (quizMode === 'review') return
     if (sessionResults.length === 0) return  // guard: no questions answered, don't auto-complete
     sessionCompletedRef.current = true
 
@@ -1508,17 +1517,8 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
   }
 
-  // Walks the whole bank, so only redo it when the inputs change (not on every
-  // keystroke in an answer box or tick of the exam timer).
-  const subtopicsKey = effectiveSubtopics.join('\u0000')
-  const counts = useMemo(
-    () => getQuestionCounts(questions, struggleMap, effectiveSubtopics),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [questions, struggleMap, subtopicsKey],
-  )
-
   if (finished || (!currentQ && sessionResults.length > 0)) {
-    const startMode = (mode) => {
+    const startMode = (mode, ids = []) => {
       generatingMoreRef.current = false
       bankExhaustionAttempted.current = false
       backgroundPrefetchAttempted.current = false
@@ -1528,6 +1528,7 @@ export default function QuizScreen({
       setCompletedGoal(null)
       setEndedForGoal(false)
       setQuizMode(mode)
+      setReviewIds?.(ids)
       setSessionAnswered([])
       setSessionResults([])
       setQNumber(1)
@@ -1536,7 +1537,7 @@ export default function QuizScreen({
       setSessionTipLoading(false)
       clearRemediation()
       setFinished(false)
-      loadNext([], struggleMap, mode, effectiveSubtopics)
+      loadNext([], struggleMap, mode, effectiveSubtopics, null, ids)
     }
 
     // ── Session summary calculations ────────────────────────────────────────
@@ -1559,7 +1560,9 @@ export default function QuizScreen({
       .map(([topic, s]) => ({ topic, ...s, pct: Math.round((s.correct / s.total) * 100) }))
       .sort((a, b) => a.pct - b.pct) // weakest first
 
-    const weakTopics = topicBreakdown.filter(t => t.pct < 70)
+    // This session's misses, not every question ever got wrong in these topics
+    // (Home and the Study Plan offer that review).
+    const wrongThisSession = sessionWrongIds(sessionResults, questions)
     const weakSubtopics = [...new Set(
       sessionResults.filter(r => !r.correct && !r.remediation && r.subtopic).map(r => r.subtopic)
     )].slice(0, 4)
@@ -1570,7 +1573,7 @@ export default function QuizScreen({
       ? (timeLeft <= 0 ? "Time's Up!" : 'Exam Complete!')
       : quizMode === 'new'
         ? 'Session Complete!'
-        : quizMode === 'wrong'
+        : quizMode === 'wrong' || quizMode === 'review'
           ? 'Wrongs Reviewed!'
           : 'Session Complete!'
 
@@ -1738,13 +1741,13 @@ export default function QuizScreen({
                 {consolidation.canReturn ? 'Back to my quiz →' : 'Practise the whole subject →'}
               </button>
             )}
-            {!consolidation && weakTopics.length > 0 && counts.wrong > 0 && (
-              <button onClick={() => startMode('wrong')}
+            {!consolidation && wrongThisSession.length > 0 && (
+              <button onClick={() => startMode('review', wrongThisSession)}
                 style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                Fix {counts.wrong} wrong answer{counts.wrong !== 1 ? 's' : ''} →
+                Fix {wrongThisSession.length} wrong answer{wrongThisSession.length !== 1 ? 's' : ''} →
               </button>
             )}
-            {!consolidation && counts.wrong === 0 && quizMode !== 'all' && (
+            {!consolidation && wrongThisSession.length === 0 && quizMode !== 'all' && (
               <button onClick={() => startMode('all')}
                 style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                 Repeat all questions

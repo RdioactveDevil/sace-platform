@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeWeights, selectNextQuestion, STARTING_DIFFICULTY, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts, ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel, assignmentStanding, applyAssignmentAnswer } from './engine.js'
+import { computeWeights, selectNextQuestion, STARTING_DIFFICULTY, nextPassageSibling, seenQuestionChecker, questionContentKey, getQuestionCounts, sessionWrongIds, ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel, assignmentStanding, applyAssignmentAnswer } from './engine.js'
 
 // A spread of unseen questions across the full difficulty range.
 const bank = [
@@ -128,6 +128,19 @@ test('unseen counts ignore answered questions and count duplicates once', () => 
   assert.equal(getQuestionCounts(qs, {}).unseen, 3)
   assert.equal(getQuestionCounts(qs, { b: seen }).unseen, 2)
   assert.equal(getQuestionCounts(qs, { a: seen }).unseen, 2)
+})
+
+test("a session's wrong answers are only its own main questions", () => {
+  const qs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
+  const results = [
+    { id: 'a', correct: false },
+    { id: 'b', correct: true },
+    { id: 'c', correct: false, remediation: true },
+    { id: 'gone', correct: false },
+    { id: 'a', correct: false },
+  ]
+  // Lifetime misses elsewhere in the bank (d) don't count either.
+  assert.deepEqual(sessionWrongIds(results, qs), ['a'])
 })
 
 test('an assignment difficulty band only serves questions inside it', () => {
