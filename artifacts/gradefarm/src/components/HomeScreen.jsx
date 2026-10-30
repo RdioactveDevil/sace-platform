@@ -191,8 +191,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const card = {
     background: t.bgCard,
     border: `1px solid ${t.border}`,
-    borderRadius: 16,
-    boxShadow: theme === 'light' ? '0 2px 12px rgba(12,16,55,0.07)' : '0 2px 12px rgba(0,0,0,0.25)',
+    borderRadius: 12,
   }
 
   // ── Session builder ───────────────────────────────────────────────────────

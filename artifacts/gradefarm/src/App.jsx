@@ -193,9 +193,14 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-// Flat navy surface: one raised shade for the active row, the subject switcher
-// and the account menu; gold only on the active icon, the logo and badges.
-const SB = { bg: '#080b22', raise: '#141a3d', line: '#1d2350', fg: '#eef0fa', sub: '#a5abcc', dim: '#8389ad' }
+// The window colour: the sidebar sits on it and the page is an inset sheet on
+// top (the page sheet itself is the theme's bg). One raised shade marks the
+// active row and the menus; gold only on the logo, the active icon and badges.
+function shellColors(theme) {
+  return theme === 'dark'
+    ? { bg: '#191c2e', raise: '#262a40', hover: 'rgba(255,255,255,0.04)', line: 'rgba(255,255,255,0.08)', fg: '#eef0f8', sub: '#b4b9d3', dim: '#8389ad', icon: GOLD, menuShadow: '0 12px 32px rgba(0,0,0,0.35)' }
+    : { bg: '#eef0f7', raise: '#ffffff', hover: '#e5e8f2', line: '#e2e6f0', fg: '#0c1037', sub: '#4d5578', dim: '#6b7393', icon: '#b07d0c', menuShadow: '0 12px 32px rgba(12,16,55,0.12)' }
+}
 
 function UnreadBadge({ count }) {
   if (count <= 0) return null
@@ -222,7 +227,7 @@ function useDismiss(open, ref, onDismiss) {
 let subjectTilesCache = null
 
 /** One sidebar link: the study pages, and the portals under Manage. */
-function SidebarLink({ icon, label, active, badge = 0, target, onClick }) {
+function SidebarLink({ sb, icon, label, active, badge = 0, target, onClick }) {
   return (
     <button
       type="button"
@@ -233,11 +238,12 @@ function SidebarLink({ icon, label, active, badge = 0, target, onClick }) {
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 12px', borderRadius: 8, border: 'none',
-        background: active ? SB.raise : 'transparent', color: active ? '#fff' : SB.sub,
+        background: active ? sb.raise : 'transparent', color: active ? sb.fg : sb.sub,
+        boxShadow: active ? `0 0 0 1px ${sb.line}` : 'none',
         fontFamily: FONT_B, fontSize: 13.5, fontWeight: active ? 700 : 500, textAlign: 'left', cursor: 'pointer',
       }}
     >
-      <span className="gf-nav-icon" style={{ display: 'flex', color: active ? GOLD : 'inherit' }}>
+      <span className="gf-nav-icon" style={{ display: 'flex', color: active ? sb.icon : 'inherit' }}>
         <NavIcon name={icon} size={17} color="currentColor" />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
@@ -251,6 +257,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
   const location  = useLocation()
   const { level, pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
   const rank = RANKS[level]
+  const SB = shellColors(theme)
   const [accountOpen, setAccountOpen] = useState(false)
   const accountRef = useRef(null)
   const [subjectsOpen, setSubjectsOpen] = useState(false)
@@ -312,15 +319,15 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
     }}>
       <style>{`
         .gf-nav-btn:focus-visible, .gf-side-btn:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
-        .gf-nav-btn[data-active="false"]:hover { background: rgba(255,255,255,0.04) !important; color: ${SB.fg} !important; }
-        .gf-side-btn:hover { background: rgba(255,255,255,0.05) !important; }
+        .gf-nav-btn[data-active="false"]:hover { background: ${SB.hover} !important; color: ${SB.fg} !important; }
+        .gf-side-btn:hover { background: ${SB.hover} !important; }
       `}</style>
 
       {/* Logo */}
       <div style={{ padding: '20px 20px 16px', flexShrink: 0 }}>
         <button type="button" onClick={() => go('/home')} aria-label="gradefarm home"
           style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
-          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          <span style={{ color: SB.fg }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
 
@@ -346,7 +353,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
         </button>
         {subjectsOpen && (
           <div id="gf-subject-menu" role="listbox" aria-label="Your subjects"
-            style={{ marginTop: 6, padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, display: 'flex', flexDirection: 'column', maxHeight: 320, overflowY: 'auto' }}>
+            style={{ marginTop: 6, padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, boxShadow: SB.menuShadow, display: 'flex', flexDirection: 'column', maxHeight: 320, overflowY: 'auto' }}>
             {subjectTiles === null
               ? <div style={{ padding: '8px 10px', fontSize: 12.5, color: SB.dim }}>Loading subjects…</div>
               : mySubjects.map(tile => {
@@ -371,7 +378,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
       {/* Study navigation */}
       <nav aria-label="Main" style={{ flex: '1 0 auto', padding: '14px 12px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {navItems.map(item => (
-          <SidebarLink key={item.id} icon={item.icon} label={item.label} active={isActivePath(item.path)}
+          <SidebarLink sb={SB} key={item.id} icon={item.icon} label={item.label} active={isActivePath(item.path)}
             target={`nav-${item.id}`} onClick={() => go(item.path)} />
         ))}
 
@@ -379,33 +386,33 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           <>
             <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>Manage</div>
             {hasTutoring && (
-              <SidebarLink icon="portal" label="Student Portal" active={portalActive} target="nav-portal"
+              <SidebarLink sb={SB} icon="portal" label="Student Portal" active={portalActive} target="nav-portal"
                 badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
             )}
             {isTutor && (
-              <SidebarLink icon="tutor" label="Tutor Portal" active={tutorActive} target="nav-tutor"
+              <SidebarLink sb={SB} icon="tutor" label="Tutor Portal" active={tutorActive} target="nav-tutor"
                 badge={unreadMessages} onClick={() => go('/tutor')} />
             )}
             {isAdmin && (
-              <SidebarLink icon="admin" label="Admin" active={adminActive} target="nav-admin" onClick={() => go('/admin')} />
+              <SidebarLink sb={SB} icon="admin" label="Admin" active={adminActive} target="nav-admin" onClick={() => go('/admin')} />
             )}
           </>
         )}
       </nav>
 
       {/* Footer: family switcher (parents), then the account row and its menu */}
-      <div ref={accountRef} style={{ borderTop: `1px solid ${SB.line}`, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        <FamilySwitcher profile={profile} />
+      <div ref={accountRef} style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        <FamilySwitcher profile={profile} sb={SB} />
         {accountOpen && (
-          <div id="gf-account-menu" style={{ padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, display: 'flex', flexDirection: 'column' }}>
+          <div id="gf-account-menu" style={{ padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, boxShadow: SB.menuShadow, display: 'flex', flexDirection: 'column' }}>
             <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/my-account') }}>
               <UserRound size={16} color={SB.sub} aria-hidden="true" />My account
             </button>
             <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
               <Moon size={16} color={SB.sub} aria-hidden="true" />
               <span style={{ flex: 1 }}>Dark mode</span>
-              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? GOLD : SB.line, position: 'relative', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? '#06091f' : SB.sub, transition: 'left 0.15s' }} />
+              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? GOLD : '#c8cee0', position: 'relative', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? '#06091f' : '#ffffff', transition: 'left 0.15s' }} />
               </span>
             </button>
             <button type="button" className="gf-side-btn" style={menuItem} onClick={onSignOut}>
@@ -623,13 +630,16 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
   }, [])
 
   const sProps = { profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme }
+  const shell = shellColors(theme)
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: t.bg }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}`}</style>
+    // Desktop: the sidebar sits on the window colour and the page is an inset
+    // sheet beside it. Phones: the page fills the screen.
+    <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg }}>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}@media(min-width:860px){.gf-panel .tutor-desktop-sidebar,.gf-panel .td-main{height:100%!important}}`}</style>
 
       {!isMobile && (
-        <div style={{ width: 252, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
+        <div style={{ width: 244, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', zIndex: 10 }}>
           <SidebarContent {...sProps} />
         </div>
       )}
@@ -637,22 +647,25 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
       {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100dvh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100dvh', animation: 'slideIn 0.25s ease', zIndex: 1000, boxShadow: shell.menuShadow }}>
             <SidebarContent {...sProps} onClose={() => setMenuOpen(false)} />
           </div>
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100vh' : 0, overflow: isMobile ? 'visible' : 'hidden' }}>
+      <div className="gf-panel" style={{
+        flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100vh' : 0, overflow: isMobile ? 'visible' : 'hidden',
+        ...(isMobile ? {} : { background: t.bg, margin: '8px 8px 8px 0', borderRadius: 12, border: `1px solid ${shell.line}` }),
+      }}>
         {isMobile && (
-          <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#080d28', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
-              <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
-              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
+          <div style={{ position: 'sticky', top: 0, zIndex: 100, background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <button onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
+              <div style={{ width: 14, height: 2, background: t.text, borderRadius: 2 }} />
+              <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
             </button>
             <span onClick={() => navigate('/home')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
-              <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+              <span style={{ color: t.text }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', color: GOLD }}>{theme === 'dark' ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}</button>
