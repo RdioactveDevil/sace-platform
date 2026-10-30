@@ -1756,12 +1756,14 @@ function AppInner() {
             const nextSubtopics = Array.isArray(opts?.subtopics) ? opts.subtopics : []
             setActiveAssignment(opts?.assignment ?? null)
 
-            // If assignment specifies a subject, switch to it and load the right question bank
+            // If the session is for a subject (an assignment's, or a finished
+            // assignment being reviewed), switch to it and load its question bank
             let activeQuestions = questions
             let activeSubject = selectedSubject
-            if (opts?.assignment?.subject) {
+            const sessionSubject = opts?.assignment?.subject || opts?.subject
+            if (sessionSubject) {
               const tiles = await fetchLiveCurricula().then(cs => cs.map(curriculumToSubjectTile)).catch(() => [])
-              const matchingSubject = findTileForSubjectString(tiles, opts.assignment.subject)
+              const matchingSubject = findTileForSubjectString(tiles, sessionSubject)
               if (matchingSubject && matchingSubject.id !== selectedSubject?.id) {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))
@@ -1800,7 +1802,7 @@ function AppInner() {
             }
 
             setQuizMode(nextMode)
-            setQuizReviewIds([])
+            setQuizReviewIds(nextMode === 'review' && Array.isArray(opts?.reviewIds) ? opts.reviewIds : [])
             setQuizSubtopics(expandedSubtopics)
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)
