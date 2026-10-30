@@ -107,13 +107,13 @@ function studentSteps(isTutor) {
       path: '/question-bank',
       target: 'subject-chip',
       title: 'Your subject',
-      body: 'Everything in this sidebar is scoped to the subject you chose. Use Change subject anytime to switch courses.',
+      body: 'Everything in this sidebar is scoped to the subject you chose. Click it anytime to switch to another subject.',
     },
     {
       path: '/question-bank',
       target: 'nav-practice',
       title: 'Practice',
-      body: 'Adaptive practice sessions from the Question Bank — this is where you earn XP.',
+      body: 'Adaptive practice sessions, or a timed exam — this is where you earn XP.',
     },
     {
       path: '/learn',
@@ -141,19 +141,11 @@ function studentSteps(isTutor) {
           target: 'nav-tutor',
           title: 'Tutor Portal',
           body:
-            'Your Tutor Portal sits above Change Subject. Manage your roster, classes, lessons, assignments and messages from here.',
+            'Your Tutor Portal sits under Manage. Manage your roster, classes, lessons, assignments and messages from here.',
         },
       ]
     : []
-  const tail = [
-    {
-      path: '/question-bank',
-      target: 'change-subject',
-      title: 'Switch courses',
-      body: 'Use Change subject to pick another enrolled topic — the whole sidebar updates with it.',
-    },
-  ]
-  return [...base, ...tutorStep, ...tail]
+  return [...base, ...tutorStep]
 }
 
 function SpotlightSlices({ rect }) {

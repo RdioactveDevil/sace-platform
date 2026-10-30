@@ -13,7 +13,7 @@ import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
@@ -193,37 +193,40 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-/** A portal entry above Change Subject (Student Portal, Tutor Portal, Admin), set apart from the study navigation. */
-function PortalLink({ icon, title, subtitle, active, badge = 0, target, onClick }) {
+// Flat navy surface: one raised shade for the active row, the subject switcher
+// and the account menu; gold only on the active icon, the logo and badges.
+const SB = { bg: '#080b22', raise: '#141a3d', line: '#1d2350', fg: '#eef0fa', sub: '#a5abcc', dim: '#8389ad' }
+
+function UnreadBadge({ count }) {
+  if (count <= 0) return null
+  return (
+    <span aria-label={`${count} unread message${count === 1 ? '' : 's'}`} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: '#06091f', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>
+      {count > 9 ? '9+' : count}
+    </span>
+  )
+}
+
+/** One sidebar link: the study pages, and the portals under Manage. */
+function SidebarLink({ icon, label, active, badge = 0, target, onClick }) {
   return (
     <button
       type="button"
+      className="gf-nav-btn"
+      data-active={active}
       data-tutorial-target={target}
-      className="gf-footer-btn"
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
       style={{
-        width: '100%', padding: '10px 11px', borderRadius: 12, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left',
-        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-        border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : 'rgba(255,255,255,0.09)'}`,
-        background: active ? 'linear-gradient(135deg, rgba(241,190,67,0.22), rgba(241,190,67,0.07))' : 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', transition: 'background 0.15s, border-color 0.15s',
+        display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 12px', borderRadius: 8, border: 'none',
+        background: active ? SB.raise : 'transparent', color: active ? '#fff' : SB.sub,
+        fontFamily: FONT_B, fontSize: 13.5, fontWeight: active ? 700 : 500, textAlign: 'left', cursor: 'pointer',
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)' }}
-      onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
     >
-      <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#06091f' }}>
-        <NavIcon name={icon} size={18} color="currentColor" />
+      <span className="gf-nav-icon" style={{ display: 'flex', color: active ? GOLD : 'inherit' }}>
+        <NavIcon name={icon} size={17} color="currentColor" />
       </span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: active ? GOLD : '#f1f5f9' }}>{title}</span>
-        <span style={{ display: 'block', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</span>
-      </span>
-      {badge > 0 && (
-        <span aria-label={`${badge} unread message${badge === 1 ? '' : 's'}`} style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: GOLD, color: '#06091f', fontSize: 11, fontWeight: 800, lineHeight: '20px', textAlign: 'center', flexShrink: 0 }}>
-          {badge > 9 ? '9+' : badge}
-        </span>
-      )}
+      <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
+      <UnreadBadge count={badge} />
     </button>
   )
 }
@@ -233,19 +236,31 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
   const location  = useLocation()
   const { level, pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
   const rank = RANKS[level]
+  const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef(null)
 
   const go = (path) => { navigate(path); onClose?.() }
+
+  // Close the account menu on a click outside it or Escape.
+  useEffect(() => {
+    if (!accountOpen) return undefined
+    const onDown = (e) => { if (!accountRef.current?.contains(e.target)) setAccountOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setAccountOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [accountOpen])
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
   const hasTutoring = useHasTutoring(profile?.id)
   const isTutor = !!profile?.is_tutor
   const isAdmin = !!profile?.is_admin
-  // Tutors see unread student messages on the Tutor Portal button, students on the Student Portal one.
+  // Tutors see unread student messages on the Tutor Portal link, students on the Student Portal one.
   const unreadMessages = useUnreadMessages(hasTutoring || isTutor)
   const portalActive = sectionForPath(location.pathname)?.id === 'portal'
   const tutorActive = location.pathname.startsWith('/tutor')
   const adminActive = location.pathname.startsWith('/admin')
-  // Study navigation only; the portals (student, tutor, admin) sit above Change Subject.
+  // Study navigation only; the portals (student, tutor, admin) sit under Manage.
   const navItems = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const isActivePath = (p) =>
     sectionForPath(location.pathname)?.pages[0].path === p ||
@@ -255,174 +270,119 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
     // Writing module uses /writing/* routes
     (p.startsWith('/writing/') && location.pathname === p)
 
+  const menuItem = {
+    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', borderRadius: 7, border: 'none',
+    background: 'transparent', color: SB.fg, fontFamily: FONT_B, fontSize: 13, fontWeight: 500, textAlign: 'left', cursor: 'pointer',
+  }
+
   return (
     <div className="gf-sidebar" style={{
-      display: 'flex', flexDirection: 'column', height: '100%', fontFamily: FONT_B,
-      // Layered premium-dark surface: deeper base + radial highlight + top inner highlight + soft outer shadow.
-      background: `radial-gradient(120% 60% at 0% 0%, rgba(241,190,67,0.06) 0%, rgba(241,190,67,0) 55%), linear-gradient(180deg, #07091f 0%, #05071a 100%)`,
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), inset -1px 0 0 rgba(255,255,255,0.04), 4px 0 24px rgba(0,0,0,0.35)',
+      display: 'flex', flexDirection: 'column', height: '100%', fontFamily: FONT_B, background: SB.bg,
       // The whole panel scrolls (short screens, phone drawer); the nav list grows
-      // to keep the portal buttons and Change Subject at the bottom when there's room.
+      // to keep the account row at the bottom when there's room.
       position: 'relative', overflowX: 'hidden', overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'thin',
     }}>
       <style>{`
-        .gf-nav-btn { position: relative; isolation: isolate; }
-        .gf-nav-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
-        .gf-nav-btn[data-active="true"] { background: linear-gradient(135deg, rgba(241,190,67,0.16), rgba(241,190,67,0.06)) !important; border-color: rgba(241,190,67,0.28) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.2) !important; }
-        /* Preserve a visible focus ring even when the focused nav item is the active one */
-        .gf-nav-btn[data-active="true"]:focus-visible { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.65), 0 0 0 4px rgba(241,190,67,0.18) !important; }
-        .gf-nav-btn[data-active="false"]:hover { background: rgba(255,255,255,0.04) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.06) !important; }
-        .gf-nav-btn[data-active="false"]:hover .gf-nav-icon { color: #f1f5f9 !important; }
-        .gf-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.5) !important; }
-        .gf-footer-btn:focus-visible { outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
+        .gf-nav-btn:focus-visible, .gf-side-btn:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
+        .gf-nav-btn[data-active="false"]:hover { background: rgba(255,255,255,0.04) !important; color: ${SB.fg} !important; }
+        .gf-side-btn:hover { background: rgba(255,255,255,0.05) !important; }
       `}</style>
 
-      {/* Header — logo + theme toggle, with extra breathing room */}
-      <div style={{ padding: '20px 18px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, position: 'relative' }}>
-        <div onClick={() => go('/home')} style={{ cursor: 'pointer', lineHeight: 1 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5 }}>
-            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-          </span>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', fontFamily: FONT_B, letterSpacing: '0.08em', marginTop: 5, textTransform: 'uppercase' }}>by Titanium Tutoring</div>
-        </div>
-        <button
-          className="gf-icon-btn"
-          onClick={onToggleTheme}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'border-color 0.2s, background 0.2s' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)'; e.currentTarget.style.background = 'rgba(241,190,67,0.06)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-        >
-          <span style={{ display: 'flex', color: GOLD }}>{theme === 'dark' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}</span>
-          <div style={{ width: 26, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.08)', position: 'relative', flexShrink: 0 }}>
-            <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 12, width: 10, height: 10, borderRadius: '50%', background: GOLD, transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)', boxShadow: `0 0 6px ${GOLD}80` }} />
-          </div>
+      {/* Logo */}
+      <div style={{ padding: '20px 20px 16px', flexShrink: 0 }}>
+        <button type="button" onClick={() => go('/home')} aria-label="gradefarm home"
+          style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
+          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
 
-      {/* Hairline divider */}
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.07) 20%, rgba(255,255,255,0.07) 80%, transparent)', flexShrink: 0 }} />
-
-      {/* Subject context chip */}
-      <div style={{ padding: '14px 18px 10px', flexShrink: 0 }}>
-        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.30)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Studying</div>
-        <div
+      {/* Subject: shows it and switches it */}
+      <div style={{ padding: '0 12px', flexShrink: 0 }}>
+        <button
+          type="button"
+          className="gf-side-btn"
           data-tutorial-target="subject-chip"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{formatSubjectLabel(subject || {}) || 'No subject selected'}</div>
-        </div>
-      </div>
-
-      {/* Profile / XP card */}
-      <div style={{ padding: '0 14px 14px', flexShrink: 0 }}>
-        <div
-          onClick={() => go('/my-account')}
-          style={{ padding: '12px 12px 14px', borderRadius: 14, cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s', background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.18)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
+          onClick={onChangeSubject}
+          title="Change subject"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', padding: '9px 10px', borderRadius: 9, border: `1px solid ${SB.line}`, background: SB.raise, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12 }}>
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900, color: '#06091f', boxShadow: `0 4px 14px ${GOLD}55, inset 0 1px 0 rgba(255,255,255,0.4)` }}>
-                {profile.display_name[0].toUpperCase()}
-              </div>
-              <div style={{ position: 'absolute', right: -2, bottom: -2, width: 12, height: 12, borderRadius: '50%', background: '#0b1030', border: '2px solid #07091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: GOLD, fontWeight: 800 }}>{level}</div>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{profile.display_name}</div>
-              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 2, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={12} /> {rank}</div>
-            </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', flexShrink: 0 }}>›</div>
-          </div>
-          <div style={{ position: 'relative', background: 'rgba(255,255,255,0.06)', borderRadius: 999, height: 4, overflow: 'hidden', marginBottom: 6, boxShadow: 'inset 0 1px 0 rgba(0,0,0,0.25)' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s ease', borderRadius: 999, boxShadow: `0 0 8px ${GOLD}80` }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.36)', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase' }}>Level {level}</span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{profile.xp.toLocaleString()} XP</span>
-          </div>
-        </div>
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 11, color: SB.dim, fontWeight: 500 }}>Subject</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: SB.fg, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {formatSubjectLabel(subject || {}) || 'Choose a subject'}
+            </span>
+          </span>
+          <ChevronsUpDown size={15} color={SB.dim} aria-hidden="true" style={{ flexShrink: 0 }} />
+        </button>
       </div>
 
-      {/* Hairline divider */}
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent)', flexShrink: 0 }} />
+      {/* Study navigation */}
+      <nav aria-label="Main" style={{ flex: '1 0 auto', padding: '14px 12px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {navItems.map(item => (
+          <SidebarLink key={item.id} icon={item.icon} label={item.label} active={isActivePath(item.path)}
+            target={`nav-${item.id}`} onClick={() => go(item.path)} />
+        ))}
 
-      {/* Nav items */}
-      <div style={{ padding: '14px 14px 6px', flexShrink: 0 }}>
-        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', paddingLeft: 4 }}>Navigate</div>
-      </div>
-      <nav style={{ flex: '1 0 auto', padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {navItems.map(item => {
-          const active = isActivePath(item.path)
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className="gf-nav-btn"
-              data-active={active}
-              data-tutorial-target={`nav-${item.id}`}
-              onClick={() => go(item.path)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 11,
-                padding: '10px 12px', borderRadius: 10,
-                border: '1px solid transparent', background: 'transparent',
-                color: active ? GOLD : 'rgba(255,255,255,0.62)',
-                fontSize: 13.5, fontWeight: active ? 700 : 500,
-                cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%',
-                transition: 'color 0.18s, background 0.18s, border-color 0.18s, box-shadow 0.18s',
-                letterSpacing: active ? '-0.01em' : '0',
-              }}
-            >
-              <span className="gf-nav-icon" style={{ display: 'flex', color: active ? GOLD : 'rgba(255,255,255,0.55)', transition: 'color 0.18s' }}>
-                <NavIcon name={item.icon} size={17} color="currentColor" />
-              </span>
-              <span style={{ flex: 1 }}>{item.label}</span>
-              {/* Gold indicator dot for the active item */}
-              {active && <span style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}, 0 0 0 2px rgba(241,190,67,0.18)`, flexShrink: 0 }} />}
-            </button>
-          )
-        })}
-      </nav>
-
-      {/* Hairline divider */}
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent)', flexShrink: 0 }} />
-
-      {/* Footer actions */}
-      <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        {/* Portals — kept apart from the study navigation above */}
         {(hasTutoring || isTutor || isAdmin) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+          <>
+            <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>Manage</div>
             {hasTutoring && (
-              <PortalLink icon="portal" title="Student Portal" subtitle="Your tutor & lessons" target="nav-portal"
-                active={portalActive} badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
+              <SidebarLink icon="portal" label="Student Portal" active={portalActive} target="nav-portal"
+                badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
             )}
             {isTutor && (
-              <PortalLink icon="tutor" title="Tutor Portal" subtitle="Students & lessons" target="nav-tutor"
-                active={tutorActive} badge={unreadMessages} onClick={() => go('/tutor')} />
+              <SidebarLink icon="tutor" label="Tutor Portal" active={tutorActive} target="nav-tutor"
+                badge={unreadMessages} onClick={() => go('/tutor')} />
             )}
             {isAdmin && (
-              <PortalLink icon="admin" title="Admin" subtitle="Manage gradefarm." target="nav-admin"
-                active={adminActive} onClick={() => go('/admin')} />
+              <SidebarLink icon="admin" label="Admin" active={adminActive} target="nav-admin" onClick={() => go('/admin')} />
             )}
+          </>
+        )}
+      </nav>
+
+      {/* Footer: family switcher (parents), then the account row and its menu */}
+      <div ref={accountRef} style={{ borderTop: `1px solid ${SB.line}`, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        <FamilySwitcher profile={profile} />
+        {accountOpen && (
+          <div id="gf-account-menu" style={{ padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, display: 'flex', flexDirection: 'column' }}>
+            <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/my-account') }}>
+              <UserRound size={16} color={SB.sub} aria-hidden="true" />My account
+            </button>
+            <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
+              <Moon size={16} color={SB.sub} aria-hidden="true" />
+              <span style={{ flex: 1 }}>Dark mode</span>
+              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? GOLD : SB.line, position: 'relative', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? '#06091f' : SB.sub, transition: 'left 0.15s' }} />
+              </span>
+            </button>
+            <button type="button" className="gf-side-btn" style={menuItem} onClick={onSignOut}>
+              <LogOut size={16} color={SB.sub} aria-hidden="true" />Sign out
+            </button>
           </div>
         )}
-        <FamilySwitcher profile={profile} />
         <button
-          data-tutorial-target="change-subject"
-          className="gf-footer-btn"
-          onClick={onChangeSubject}
-          style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.28)', background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', color: GOLD, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, letterSpacing: '0.01em' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(241,190,67,0.20), rgba(241,190,67,0.08))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.45)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.28)' }}
-        >⇄ Change Subject</button>
-        <button
-          className="gf-footer-btn"
-          onClick={onSignOut}
-          style={{ width: '100%', height: 32, padding: '0 12px', borderRadius: 10, border: '1px solid transparent', background: 'transparent', color: 'rgba(255,255,255,0.32)', fontSize: 11.5, cursor: 'pointer', fontFamily: FONT_B, transition: 'color 0.15s, background 0.15s, border-color 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
-        >Sign out</button>
+          type="button"
+          className="gf-side-btn"
+          aria-expanded={accountOpen}
+          aria-controls="gf-account-menu"
+          onClick={() => setAccountOpen(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: 10, borderRadius: 9, border: 'none', background: accountOpen ? SB.raise : 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
+        >
+          <span style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, color: '#06091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+            {profile.display_name[0].toUpperCase()}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: SB.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: SB.dim }}>
+              <RankIcon level={level} size={11} />{rank} · {profile.xp.toLocaleString()} XP
+            </span>
+            <span title={`Level ${level}`} style={{ display: 'block', height: 3, borderRadius: 2, background: SB.line, overflow: 'hidden', marginTop: 5 }}>
+              <span style={{ display: 'block', width: `${pct}%`, height: '100%', background: GOLD }} />
+            </span>
+          </span>
+          <Ellipsis size={16} color={SB.dim} aria-hidden="true" style={{ flexShrink: 0 }} />
+        </button>
       </div>
     </div>
   )
