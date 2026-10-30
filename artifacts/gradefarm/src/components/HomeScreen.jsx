@@ -543,15 +543,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       .sort((a, b) => new Date(a.date) - new Date(b.date))
     const next = upcoming[0] || null
 
-    if (!next) return (
-      <div style={{ ...card, padding: '16px 18px', border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={16} aria-hidden="true" />Exam Countdown</div>
-        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>Add assessments in My Progress to track upcoming exams and tests.</div>
-        <button onClick={() => navigate('/my-progress')} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
-          Add assessment →
-        </button>
-      </div>
-    )
+    // Only shown once the student has an upcoming test or exam to count down to.
+    if (!next) return null
 
     const daysLeft = Math.max(0, Math.ceil((new Date(next.date) - today) / 86400000))
     const isExam   = next.type === 'Exam'
