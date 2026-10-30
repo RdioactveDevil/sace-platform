@@ -13,7 +13,7 @@ import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
@@ -206,6 +206,21 @@ function UnreadBadge({ count }) {
   )
 }
 
+/** Close a popover on a click outside `ref` or on Escape. */
+function useDismiss(open, ref, onDismiss) {
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => { if (!ref.current?.contains(e.target)) onDismiss() }
+    const onKey = (e) => { if (e.key === 'Escape') onDismiss() }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+// Live subjects for the sidebar's switcher; loaded once per page.
+let subjectTilesCache = null
+
 /** One sidebar link: the study pages, and the portals under Manage. */
 function SidebarLink({ icon, label, active, badge = 0, target, onClick }) {
   return (
@@ -231,25 +246,38 @@ function SidebarLink({ icon, label, active, badge = 0, target, onClick }) {
   )
 }
 
-function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
+function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, subscriptions = [], fullAccess = false, onSignOut, theme, onToggleTheme, onClose }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { level, pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
   const rank = RANKS[level]
   const [accountOpen, setAccountOpen] = useState(false)
   const accountRef = useRef(null)
+  const [subjectsOpen, setSubjectsOpen] = useState(false)
+  const subjectsRef = useRef(null)
+  const [subjectTiles, setSubjectTiles] = useState(subjectTilesCache)
 
   const go = (path) => { navigate(path); onClose?.() }
 
-  // Close the account menu on a click outside it or Escape.
+  useDismiss(accountOpen, accountRef, () => setAccountOpen(false))
+  useDismiss(subjectsOpen, subjectsRef, () => setSubjectsOpen(false))
+
+  // The student's subjects, fetched the first time the switcher opens.
   useEffect(() => {
-    if (!accountOpen) return undefined
-    const onDown = (e) => { if (!accountRef.current?.contains(e.target)) setAccountOpen(false) }
-    const onKey = (e) => { if (e.key === 'Escape') setAccountOpen(false) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
-  }, [accountOpen])
+    if (!subjectsOpen || subjectTilesCache) return
+    let cancelled = false
+    fetchLiveCurricula()
+      .then(cs => { subjectTilesCache = cs.map(curriculumToSubjectTile); if (!cancelled) setSubjectTiles(subjectTilesCache) })
+      .catch(() => { if (!cancelled) setSubjectTiles([]) })
+    return () => { cancelled = true }
+  }, [subjectsOpen])
+  const mySubjects = (subjectTiles || []).filter(s => s.available && subjectAccess(subscriptions, s, fullAccess) !== 'none')
+
+  const switchTo = (tile) => {
+    setSubjectsOpen(false)
+    onSwitchSubject(tile)
+    onClose?.()
+  }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
   const hasTutoring = useHasTutoring(profile?.id)
@@ -296,14 +324,16 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
         </button>
       </div>
 
-      {/* Subject: shows it and switches it */}
-      <div style={{ padding: '0 12px', flexShrink: 0 }}>
+      {/* Subject: shows it and switches it in place */}
+      <div ref={subjectsRef} style={{ padding: '0 12px', flexShrink: 0 }}>
         <button
           type="button"
           className="gf-side-btn"
           data-tutorial-target="subject-chip"
-          onClick={onChangeSubject}
-          title="Change subject"
+          onClick={() => (onSwitchSubject ? setSubjectsOpen(v => !v) : onChangeSubject())}
+          aria-expanded={onSwitchSubject ? subjectsOpen : undefined}
+          aria-controls={onSwitchSubject ? 'gf-subject-menu' : undefined}
+          title="Switch subject"
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', padding: '9px 10px', borderRadius: 9, border: `1px solid ${SB.line}`, background: SB.raise, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
         >
           <span style={{ minWidth: 0 }}>
@@ -314,6 +344,28 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           </span>
           <ChevronsUpDown size={15} color={SB.dim} aria-hidden="true" style={{ flexShrink: 0 }} />
         </button>
+        {subjectsOpen && (
+          <div id="gf-subject-menu" role="listbox" aria-label="Your subjects"
+            style={{ marginTop: 6, padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, display: 'flex', flexDirection: 'column', maxHeight: 320, overflowY: 'auto' }}>
+            {subjectTiles === null
+              ? <div style={{ padding: '8px 10px', fontSize: 12.5, color: SB.dim }}>Loading subjects…</div>
+              : mySubjects.map(tile => {
+                  const current = tile.id === subject?.id
+                  return (
+                    <button key={tile.id} type="button" role="option" aria-selected={current} className="gf-side-btn"
+                      onClick={() => (current ? setSubjectsOpen(false) : switchTo(tile))}
+                      style={{ ...menuItem, fontWeight: current ? 700 : 500 }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{formatSubjectLabel(tile)}</span>
+                      {current && <Check size={15} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                    </button>
+                  )
+                })}
+            <button type="button" className="gf-side-btn" onClick={() => { setSubjectsOpen(false); onChangeSubject(); onClose?.() }}
+              style={{ ...menuItem, color: SB.sub, fontSize: 12.5, borderTop: subjectTiles === null || mySubjects.length === 0 ? 'none' : `1px solid ${SB.line}`, borderRadius: 0, marginTop: 4, paddingTop: 10 }}>
+              Browse all subjects
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Study navigation */}
@@ -530,7 +582,7 @@ function LiveLessonBanner({ profile, theme }) {
   )
 }
 
-function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, tutorialOverlay = null, onProfileUpdated }) {
+function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, tutorialOverlay = null, onProfileUpdated }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
@@ -570,7 +622,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
+  const sProps = { profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: t.bg }}>
@@ -631,7 +683,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 // Bank doesn't also load History, the leaderboard, Titan AI's quota, etc.
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
-  onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
+  onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
   tutorialOverlay,
   onReplayFeatureTour,
@@ -646,7 +698,7 @@ function AppShellScreens({
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate }
-  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut, tutorialOverlay, onProfileUpdated }
+  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, tutorialOverlay, onProfileUpdated }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -1179,10 +1231,9 @@ function AppInner() {
     navigate('/home', { replace: true })
   }
 
-  const handleChangeSubject = () => {
+  // Leaving a subject: drop its questions and any quiz in progress.
+  const resetSubjectSession = () => {
     setConsolidation(null)
-    setSelectedSubject(null)
-    localStorage.removeItem('gf-subject')
     clearQuestions()
     setQuizQ(null)
     setQuizSelected(null)
@@ -1210,8 +1261,28 @@ function AppInner() {
     setQuizRemediationOriginalQ(null)
     setQuizRemediationUsedIds([])
     setQuizRemediationWrongCount(0)
+  }
+
+  const handleChangeSubject = () => {
+    resetSubjectSession()
+    setSelectedSubject(null)
+    localStorage.removeItem('gf-subject')
     setSubscriptionsLoaded(false)
     navigate('/subject-picker')
+  }
+
+  /** Switch straight to another subject from the sidebar, staying on the current page (a quiz goes back to Practice). */
+  const handleSwitchSubject = async (subject) => {
+    if (!subject || subject.id === selectedSubject?.id) return
+    resetSubjectSession()
+    setSelectedSubject(subject)
+    localStorage.setItem('gf-subject', JSON.stringify(subject))
+    if (location.pathname === '/quiz') navigate('/question-bank')
+    try {
+      const qs = await loadQuestions(subject)
+      // A quicker second switch wins.
+      if (questionsLoad.current.key === subject.id) setQuestions(qs)
+    } catch {}
   }
 
   const commonProps  = { theme, onToggleTheme: toggleTheme }
@@ -1455,6 +1526,9 @@ function AppInner() {
     profile,
     subject: selectedSubject,
     onChangeSubject: handleChangeSubject,
+    onSwitchSubject: handleSwitchSubject,
+    subscriptions,
+    fullAccess: hasFullAccess,
     onSignOut: handleSignOut,
     tutorialOverlay,
     onProfileUpdated: (updates) => setProfile(prev => (prev ? { ...prev, ...updates } : prev)),
