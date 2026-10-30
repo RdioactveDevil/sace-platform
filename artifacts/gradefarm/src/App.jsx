@@ -319,15 +319,17 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
     }}>
       <style>{`
         .gf-nav-btn:focus-visible, .gf-side-btn:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
+        .gf-logo:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
         .gf-nav-btn[data-active="false"]:hover { background: ${SB.hover} !important; color: ${SB.fg} !important; }
         .gf-side-btn:hover { background: ${SB.hover} !important; }
       `}</style>
 
-      {/* Logo */}
-      <div style={{ padding: '20px 20px 16px', flexShrink: 0 }}>
-        <button type="button" onClick={() => go('/home')} aria-label="gradefarm home"
-          style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
-          <span style={{ color: SB.fg }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+      {/* Logo: the brand's own colours (as in the app icon), in a navy box the
+          same shape as the subject row below it */}
+      <div style={{ padding: '14px 12px 10px', flexShrink: 0 }}>
+        <button type="button" className="gf-logo" onClick={() => go('/home')} aria-label="gradefarm home"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : '#0c1037'}`, background: '#0c1037', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
+          <span style={{ color: '#ffffff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
 
