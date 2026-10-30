@@ -485,6 +485,11 @@ export async function recordAnswer(userId, questionId, correct, selected = null,
     p_time_ms: Number.isFinite(timeTakenMs) ? Math.round(timeTakenMs) : null,
   })
   if (!error) return
+  // A session id the log won't take (not a uuid, or no such sessions row)
+  // mustn't lose the answer: record it without one.
+  if (sessionId && (error.code === '22P02' || error.code === '23503')) {
+    return recordAnswer(userId, questionId, correct, selected, null, timeTakenMs)
+  }
   if (error.code !== 'PGRST202') throw error
 
   // Before that migration: three requests, and answer_log.selected is NOT NULL.

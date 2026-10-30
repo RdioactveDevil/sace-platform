@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
 import { supabase } from '../lib/supabase'
+import { groupAnswersIntoSessions } from '../lib/sessionHistory'
 import { Zap, GraduationCap, Trophy, TrendingUp, Dumbbell, Gamepad2, Music } from 'lucide-react'
 
 const GOLD = '#f1be43'
@@ -24,7 +25,14 @@ function formatDate(date) {
   })
 }
 
-export default function HistoryScreen({ profile, theme, embedded }) {
+// The most common subject among a session's questions, to load its question bank.
+function sessionSubject(answers) {
+  const counts = {}
+  for (const a of answers) if (a.subject) counts[a.subject] = (counts[a.subject] || 0) + 1
+  return Object.keys(counts).sort((x, y) => counts[y] - counts[x])[0] || null
+}
+
+export default function HistoryScreen({ profile, theme, embedded, active = true, onStartSession }) {
   const t = THEMES[theme]
   const [quizSessions, setQuizSessions] = useState([])
   const [learnSessions, setLearnSessions] = useState([])
@@ -32,9 +40,11 @@ export default function HistoryScreen({ profile, theme, embedded }) {
   const [tab, setTab] = useState('quiz')
   const [expanded, setExpanded] = useState(null)
 
+  // Reload each time History is opened, so a session just finished is listed.
   useEffect(() => {
-    loadHistory()
-  }, [profile.id])
+    if (active) loadHistory()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id, active])
 
   const loadHistory = async () => {
     setLoading(true)
@@ -52,28 +62,23 @@ export default function HistoryScreen({ profile, theme, embedded }) {
     if (qIds.length > 0) {
       const { data: qs } = await supabase
         .from('questions')
-        .select('id, question, topic, subtopic')
+        .select('id, question, topic, subtopic, subject')
         .in('id', qIds)
       ;(qs || []).forEach(q => { questionMap[q.id] = q })
     }
 
-    const sessionMap = {}
     ;(answers || []).forEach((a) => {
       const q = questionMap[a.question_id]
       a.question_text = q?.question || null
       a.topic        = q?.topic    || null
       a.subtopic     = q?.subtopic || null
-      const bucket = Math.floor(new Date(a.answered_at).getTime() / (30 * 60 * 1000))
-      if (!sessionMap[bucket]) sessionMap[bucket] = { id: String(bucket), date: a.answered_at, answers: [], correct: 0, total: 0 }
-      sessionMap[bucket].answers.push(a)
-      sessionMap[bucket].total += 1
-      if (a.correct) sessionMap[bucket].correct += 1
+      a.subject      = q?.subject  || null
     })
 
     setQuizSessions(
-      Object.values(sessionMap)
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
+      groupAnswersIntoSessions(answers)
         .slice(0, 20)
+        .map(s => ({ ...s, subject: sessionSubject(s.answers) }))
     )
 
     const { data: learns } = await supabase
@@ -86,6 +91,10 @@ export default function HistoryScreen({ profile, theme, embedded }) {
     setLearnSessions(learns || [])
     setLoading(false)
   }
+
+  // Go back over a past session's questions as practice (the 'review' mode).
+  const redo = (session, ids) =>
+    onStartSession({ mode: 'review', subtopics: [], subject: session.subject, reviewIds: ids })
 
   const card = {
     background: t.bgCard,
@@ -160,6 +169,24 @@ export default function HistoryScreen({ profile, theme, embedded }) {
                           <div style={{ color: t.textMuted, transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', fontSize: 11 }}>▼</div>
                         </div>
                       </div>
+                      {onStartSession && session.allIds.length > 0 && (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 18px 14px' }}>
+                          <button
+                            onClick={() => redo(session, session.allIds)}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+                          >
+                            Redo all {session.allIds.length}
+                          </button>
+                          {session.wrongIds.length > 0 && (
+                            <button
+                              onClick={() => redo(session, session.wrongIds)}
+                              style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+                            >
+                              Redo {session.wrongIds.length} wrong
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {isOpen && (
                         <div style={{ borderTop: `1px solid ${t.border}`, padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {session.answers.slice(0, 15).map((a, j) => (
