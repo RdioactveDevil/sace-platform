@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Calculator as CalculatorIcon, Atom, Ruler, Repeat, Wrench } from 'lucide-react'
+import { appZoom } from '../lib/appZoom'
 import { THEMES } from '../lib/theme'
 import { ELEMENTS, CATEGORIES } from '../lib/periodicTable'
 import { CONSTANTS, FORMULAS } from '../lib/dataSheet'
@@ -64,10 +65,12 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
     const origin = { ...pos }
     dragRef.current = { startX, startY, origin }
     const move = (ev) => {
-      const dx = ev.clientX - dragRef.current.startX
-      const dy = ev.clientY - dragRef.current.startY
-      const maxX = window.innerWidth - 120
-      const maxY = window.innerHeight - 60
+      // Pointer moves are in screen pixels; the dock sits inside the zoomed app.
+      const z = appZoom()
+      const dx = (ev.clientX - dragRef.current.startX) / z
+      const dy = (ev.clientY - dragRef.current.startY) / z
+      const maxX = window.innerWidth / z - 120
+      const maxY = window.innerHeight / z - 60
       setPos({
         x: Math.max(8, Math.min(maxX, dragRef.current.origin.x + dx)),
         y: Math.max(8, Math.min(maxY, dragRef.current.origin.y + dy)),
@@ -83,7 +86,7 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
 
   const frameStyle = isMobile
     ? { position: 'fixed', inset: '8px', width: 'auto', height: 'auto', maxHeight: 'calc(100vh - 16px)' }
-    : { position: 'fixed', left: pos.x, top: pos.y, width: tool.w, maxWidth: 'calc(100vw - 16px)', height: tool.h, maxHeight: 'calc(100vh - 16px)' }
+    : { position: 'fixed', left: pos.x, top: pos.y, width: tool.w, maxWidth: `calc(100vw / ${appZoom()} - 16px)`, height: tool.h, maxHeight: `calc(100vh / ${appZoom()} - 16px)` }
 
   return (
     <div
@@ -442,7 +445,7 @@ export default function QuizToolsDock({ theme = 'dark' }) {
   // Cascade initial positions so multiple windows don't stack perfectly.
   const initialFor = (id) => {
     const idx = TOOLS.findIndex(tt => tt.id === id)
-    return { x: Math.max(16, window.innerWidth - 380 - idx * 28), y: 88 + idx * 28 }
+    return { x: Math.max(16, window.innerWidth / appZoom() - 380 - idx * 28), y: 88 + idx * 28 }
   }
 
   return (

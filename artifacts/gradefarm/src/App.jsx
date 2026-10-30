@@ -23,6 +23,7 @@ import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
 import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import ParentConsentBanner from './components/ParentConsentBanner'
 import FamilySwitcher from './components/FamilySwitcher'
+import { appZoom } from './lib/appZoom'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
@@ -625,8 +626,9 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
     }
   }, [])
 
+  const [zoom, setZoom] = useState(appZoom)
   useEffect(() => {
-    const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
+    const h = () => { setIsMobile(window.innerWidth < 860); setZoom(appZoom()); if (window.innerWidth >= 860) setMenuOpen(false) }
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
@@ -634,14 +636,19 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
   const sProps = { profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme }
   const shell = shellColors(theme)
 
+  // One screen tall in the shell's own (zoomed) CSS pixels.
+  const screenH = zoom === 1 ? '100vh' : `calc(100vh / ${zoom})`
+
   return (
-    // Desktop: the sidebar sits on the window colour and the page is an inset
-    // sheet beside it. Phones: the page fills the screen.
-    <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg }}>
+    <>
+    {/* Desktop: the sidebar sits on the window colour and the page is an inset
+        sheet beside it. Phones: the page fills the screen. Wide screens draw
+        the whole shell at appZoom(). */}
+    <div style={{ display: 'flex', minHeight: screenH, height: isMobile ? 'auto' : screenH, overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg, zoom }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}@media(min-width:860px){.gf-panel .tutor-desktop-sidebar,.gf-panel .td-main{height:100%!important}}`}</style>
 
       {!isMobile && (
-        <div style={{ width: 244, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', zIndex: 10 }}>
+        <div style={{ width: 244, flexShrink: 0, position: 'sticky', top: 0, height: screenH, zIndex: 10 }}>
           <SidebarContent {...sProps} />
         </div>
       )}
@@ -684,10 +691,12 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
           <Suspense fallback={<RouteFallback theme={theme} />}>{children}</Suspense>
         </div>
       </div>
-      {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
-      {portalWelcome && <PortalWelcome theme={theme} onTour={() => closePortalWelcome(true)} onClose={() => closePortalWelcome(false)} />}
-      {portalTour && <WebsiteTutorialOverlay theme={theme} steps={PORTAL_TOUR_STEPS} onFinish={() => setPortalTour(false)} />}
     </div>
+    {/* Outside the zoom: the walkthrough lines its highlight up with on-screen positions. */}
+    {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
+    {portalWelcome && <PortalWelcome theme={theme} onTour={() => closePortalWelcome(true)} onClose={() => closePortalWelcome(false)} />}
+    {portalTour && <WebsiteTutorialOverlay theme={theme} steps={PORTAL_TOUR_STEPS} onFinish={() => setPortalTour(false)} />}
+    </>
   )
 }
 
