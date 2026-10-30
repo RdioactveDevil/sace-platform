@@ -1465,6 +1465,13 @@ export async function recordAssignmentAnswer(assignmentId, correct, { questionId
   return Array.isArray(data) ? data[0] || null : data
 }
 
+/** The student's most recently finished assignments, each with the
+ *  wrong_question_ids they got wrong in it (for redoing just those). */
+export async function fetchCompletedAssignmentsForStudent() {
+  const json = await tutorFetch('/api/assignments/completed')
+  return json.assignments || []
+}
+
 /** Tell the API a student's assignment just finished, so it can email the tutor. */
 export async function notifyAssignmentFinished(assignmentId) {
   return tutorFetch(`/api/assignments/${encodeURIComponent(assignmentId)}/finished`, { method: 'POST' })

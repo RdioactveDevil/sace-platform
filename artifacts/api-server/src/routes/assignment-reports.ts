@@ -290,6 +290,62 @@ Use 1–4 items per list; leave a list empty rather than invent something.`;
   }
 });
 
+// ── The student's finished assignments ──────────────────────────────────────
+
+/**
+ * GET /assignments/completed — the caller's five most recently finished
+ * assignments, each with the questions they got wrong in it, so they can go
+ * back over just those. Legacy assignments (no question_count) recorded no
+ * answers and are left out.
+ */
+router.get("/assignments/completed", async (req: Request, res: Response) => {
+  try {
+    const caller = await getCaller(req, res);
+    if (!caller) return;
+    const { data, error } = await caller.admin
+      .from("assignments")
+      .select(ASSIGNMENT_COLUMNS)
+      .eq("student_id", caller.userId)
+      .not("completed_at", "is", null)
+      .not("question_count", "is", null)
+      .order("completed_at", { ascending: false })
+      .limit(5);
+    if (error) return res.status(500).json({ error: error.message });
+    const rows = (data ?? []) as unknown as AssignmentRow[];
+
+    const wrongBy = new Map<string, Set<string>>();
+    if (rows.length) {
+      const { data: answers, error: answersError } = await caller.admin
+        .from("assignment_answers")
+        .select("assignment_id, question_id")
+        .in("assignment_id", rows.map((a) => a.id))
+        .eq("correct", false);
+      if (answersError) return res.status(500).json({ error: answersError.message });
+      for (const r of (answers ?? []) as { assignment_id: string; question_id: string | null }[]) {
+        if (!r.question_id) continue;
+        if (!wrongBy.has(r.assignment_id)) wrongBy.set(r.assignment_id, new Set());
+        wrongBy.get(r.assignment_id)!.add(r.question_id);
+      }
+    }
+
+    return res.json({
+      assignments: rows.map((a) => ({
+        id: a.id,
+        type: a.type,
+        subject: a.subject,
+        topics: a.topics,
+        completed_at: a.completed_at,
+        min_accuracy: a.min_accuracy,
+        passed: a.passed,
+        score: scoreOf(a),
+        wrong_question_ids: [...(wrongBy.get(a.id) ?? [])],
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
+  }
+});
+
 // ── Tutor email when an assignment finishes ─────────────────────────────────
 
 /** POST /assignments/:id/finished — called by the student's app once an assignment completes. */

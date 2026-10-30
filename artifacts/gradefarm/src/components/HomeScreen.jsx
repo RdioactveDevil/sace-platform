@@ -6,7 +6,7 @@ import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
 import { currentStreak } from '../lib/streak'
 import { supabase } from '../lib/supabase'
-import { getAssessments, fetchAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
+import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
@@ -29,6 +29,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [examDuration, setExamDuration] = useState(45)
   const [assessments, setAssessments] = useState([])
   const [assignments, setAssignments] = useState([])
+  // Finished assignments the student got something wrong in, to redo those questions.
+  const [finishedAssignments, setFinishedAssignments] = useState([])
   const [resources, setResources] = useState([])
   const [invites, setInvites] = useState([])
   const [diagnostics, setDiagnostics] = useState([])
@@ -40,6 +42,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     let cancelled = false
     getAssessments(profile.id).then(rows => { if (!cancelled) setAssessments(rows) }).catch(() => {})
     fetchAssignmentsForStudent(profile.id).then(rows => { if (!cancelled) setAssignments(rows) }).catch(() => {})
+    fetchCompletedAssignmentsForStudent()
+      .then(rows => { if (!cancelled) setFinishedAssignments(rows.filter(a => a.wrong_question_ids?.length > 0)) })
+      .catch(() => {})
     fetchStudentResources().then(rows => { if (!cancelled) setResources(rows) }).catch(() => {})
     fetchMyInvites().then(rows => { if (!cancelled) setInvites(rows) }).catch(() => {})
     fetchMyDiagnostics().then(rows => { if (!cancelled) setDiagnostics(rows) }).catch(() => {})
@@ -374,7 +379,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   }
 
   const AssignedTasksCard = () => {
-    if (assignments.length === 0) return null
+    if (assignments.length === 0 && finishedAssignments.length === 0) return null
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><ClipboardList size={16} aria-hidden="true" />Assigned Tasks</div>
@@ -416,6 +421,35 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
         {assignments.length > 5 && (
           <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{assignments.length - 5} more tasks</div>
+        )}
+        {finishedAssignments.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: assignments.length > 0 ? '14px 0 8px' : '0 0 8px' }}>Finished</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {finishedAssignments.slice(0, 3).map(a => {
+                const wrong = a.wrong_question_ids.length
+                return (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} · {a.subject}</div>
+                      {a.score?.total > 0 && (
+                        <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
+                          Scored {a.score.correct}/{a.score.total}{a.passed != null ? (a.passed ? ' · Passed' : ' · Not passed') : ''}
+                        </div>
+                      )}
+                    </div>
+                    {/* Practice only: a finished assignment doesn't change. */}
+                    <button
+                      onClick={() => onStartSession({ mode: 'review', subtopics: [], subject: a.subject, reviewIds: a.wrong_question_ids })}
+                      style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+                    >
+                      Redo {wrong} wrong
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
     )
