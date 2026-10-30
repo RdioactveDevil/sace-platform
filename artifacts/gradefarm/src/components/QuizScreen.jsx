@@ -441,6 +441,8 @@ export default function QuizScreen({
   const [endedForGoal, setEndedForGoal] = useState(false)
   // The exam ended on its question count or its timer, not the bank running out.
   const [endedForExam, setEndedForExam] = useState(false)
+  // The student pressed End Session (also not the bank running out).
+  const [endedEarly, setEndedEarly] = useState(false)
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
   const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
@@ -851,7 +853,7 @@ export default function QuizScreen({
     // Ending on an assignment's question count or a consolidation round's end
     // is not the bank running out. (The round's end is read from the results,
     // which are settled by now, not from state set alongside `finished`.)
-    if (endedForGoal || endedForExam || round?.done) return
+    if (endedForGoal || endedForExam || endedEarly || round?.done) return
     if (generatingMoreRef.current) return
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
@@ -1131,6 +1133,7 @@ export default function QuizScreen({
     setGenerationError(null)
     setCompletedGoal(null)
     setEndedForGoal(false)
+    setEndedEarly(false)
     setRemediationWrongCount(0)
     setRemediationDifficultyTarget(null)
     onEndConsolidation?.()
@@ -1250,6 +1253,17 @@ export default function QuizScreen({
         setSessionXP(s => s + bonus)
       } catch {}
     }
+  }
+
+  // End Session: show the summary for what was answered (nothing answered yet
+  // means there's nothing to sum up, so go straight back to Practice).
+  const endSession = () => {
+    setShowExit(false)
+    if (!sessionResults.some(r => !r.remediation)) { onHome(); return }
+    clearRemediation()
+    if (currentQ && showAns && !sessionAnswered.includes(currentQ.id)) setSessionAnswered([...sessionAnswered, currentQ.id])
+    setEndedEarly(true)
+    setFinished(true)
   }
 
   // Exam mode: the answer isn't shown, so answering moves straight on to the
@@ -1565,6 +1579,7 @@ export default function QuizScreen({
       setCompletedGoal(null)
       setEndedForGoal(false)
       setEndedForExam(false)
+      setEndedEarly(false)
       setTimeLeft(timerSeconds)
       setQuizMode(mode)
       setReviewIds?.(ids)
@@ -1647,6 +1662,8 @@ export default function QuizScreen({
                     : `That's every question on ${consolidation.label} for now.`
                 : examRun
                 ? `You answered ${sessTotal} question${sessTotal !== 1 ? 's' : ''}${timerSeconds > 0 && timeLeft <= 0 ? ' before the time ran out' : ''}. Your answers are below.`
+                : endedEarly
+                ? `You answered ${sessTotal} question${sessTotal !== 1 ? 's' : ''} this session.`
                 : endedForGoal && goalDisplay
                 ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
                 : quizMode === 'new' && sessTotal > 0
@@ -1958,13 +1975,15 @@ export default function QuizScreen({
             <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center', color: GOLD }}><Pause size={36} aria-hidden="true" /></div>
             <div style={{ fontFamily: FONT_D, fontSize: 20, color: t.text, marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.65 }}>
-              {examRun
-                ? 'Your answers so far are saved, but the exam will end here.'
-                : <>You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved — you can resume anytime.</>}
+              {sessionResults.some(r => !r.remediation)
+                ? examRun
+                  ? "The exam ends here and you'll see your answers so far."
+                  : <>You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span>. You'll see a summary of this session next.</>
+                : "You haven't answered any questions yet."}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '13px', borderRadius: 11, border: `1px solid ${t.border}`, background: t.bgSubtle, color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>Keep going</button>
-              <button onClick={onHome} style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, boxShadow: '0 4px 16px rgba(239,68,68,0.3)' }}>End session</button>
+              <button onClick={endSession} style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, boxShadow: '0 4px 16px rgba(239,68,68,0.3)' }}>End session</button>
             </div>
           </div>
         </div>
