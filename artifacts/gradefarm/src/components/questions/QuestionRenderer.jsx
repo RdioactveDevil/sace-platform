@@ -258,7 +258,7 @@ function ImageLabel({ question, response, onChange, showAns, theme }) {
  * (mcq is intentionally NOT handled here — the legacy quiz card renders mcq
  * inline so its instant-answer behaviour and styling stay byte-identical.)
  */
-export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false }) {
+export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer' }) {
   const t = THEMES[theme]
   const type = getQuestionType(question)
   const canSubmit = !showAns && responseIsComplete(question, response)
@@ -295,7 +295,7 @@ export default function QuestionRenderer({ question, response, onChange, showAns
             boxShadow: canSubmit ? `0 6px 20px rgba(241,190,67,0.3)` : 'none',
           }}
         >
-          Check answer
+          {checkLabel}
         </button>
       )}
     </div>

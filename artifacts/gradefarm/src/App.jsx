@@ -93,14 +93,14 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 // Student navigation: three sections in the sidebar, each with tabs across the
 // top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
-// appear for subjects that switch it on (Admin → Curricula → Features); Exam
-// Mode and Essay Marker are full-screen, so their tabs open those screens.
+// appear for subjects that switch it on (Admin → Curricula → Features); Essay
+// Marker is full-screen, so its tab opens that screen. Exam mode is a switch in
+// the Practice session builder rather than a page of its own.
 // Sections marked `tutoring` only show for students with a tutor or a lesson.
 // The Student Portal (`separate`) sits apart from the rest, above Change Subject.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
-    { id: 'exam',  label: 'Exam Mode',     path: '/exam', feature: 'exam_mode' },
   ]},
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
@@ -310,7 +310,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
           data-tutorial-target="subject-chip"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{[subject?.name, subject?.stage].filter(Boolean).join(' · ') || 'No subject selected'}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{formatSubjectLabel(subject || {}) || 'No subject selected'}</div>
         </div>
       </div>
 
@@ -1022,6 +1022,8 @@ function AppInner() {
   const [activeAssignment, setActiveAssignment] = useState(null)
   const [quizExamMode, setQuizExamMode] = useState(false)
   const [quizTimerSeconds, setQuizTimerSeconds] = useState(0)
+  // Exam mode only: the session ends after this many questions (0 = no limit).
+  const [quizQuestionLimit, setQuizQuestionLimit] = useState(0)
   const [quizFinished, setQuizFinished] = useState(false)
   const [quizSessionTip, setQuizSessionTip] = useState('')
   const [quizSessionTipLoading, setQuizSessionTipLoading] = useState(false)
@@ -1202,6 +1204,7 @@ function AppInner() {
     setQuizSubtopics([])
     setQuizExamMode(false)
     setQuizTimerSeconds(0)
+    setQuizQuestionLimit(0)
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
     setQuizRemediationTarget(3)
@@ -1284,6 +1287,7 @@ function AppInner() {
     sessionTipLoading: quizSessionTipLoading, setSessionTipLoading: setQuizSessionTipLoading,
     examMode: quizExamMode,
     timerSeconds: quizTimerSeconds,
+    questionLimit: quizQuestionLimit,
   }
 
   const quizIsActive = location.pathname === '/quiz' && quizAnswered.length > 0 && !quizFinished
@@ -1321,6 +1325,7 @@ function AppInner() {
       setActiveAssignment(null)
       setQuizExamMode(false)
       setQuizTimerSeconds(0)
+      setQuizQuestionLimit(0)
       resetQuizSession()
       navigate('/quiz')
     },
@@ -1337,7 +1342,7 @@ function AppInner() {
     q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
     earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
     results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
-    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, examMode: quizExamMode, timerSeconds: quizTimerSeconds,
+    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit,
     assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
     remediation: {
       mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
@@ -1365,6 +1370,7 @@ function AppInner() {
     setQuizReviewIds(saved.reviewIds || [])
     setQuizExamMode(saved.examMode)
     setQuizTimerSeconds(saved.timerSeconds)
+    setQuizQuestionLimit(saved.questionLimit || 0)
     setActiveAssignment(saved.assignment)
     setQuizFinished(saved.finished)
     setQuizSessionTip(saved.sessionTip)
@@ -1806,6 +1812,7 @@ function AppInner() {
             setQuizSubtopics(expandedSubtopics)
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)
+            setQuizQuestionLimit(opts?.examMode && opts?.questionLimit > 0 ? opts.questionLimit : 0)
             setQuizQ(null)
             setQuizSelected(null)
             setQuizShowAns(false)

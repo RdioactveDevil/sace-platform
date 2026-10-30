@@ -1,10 +1,9 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, BookOpen, Zap, Target, Calendar, Timer } from 'lucide-react'
+import { ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, Target, Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
-import { currentStreak } from '../lib/streak'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
@@ -13,8 +12,8 @@ import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
+const NAVY_FILL = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
@@ -25,8 +24,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const navigate = useNavigate()
   const [selectedSubtopics, setSelectedSubtopics] = useState([])
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
+  // Session builder: which questions, and the exam settings.
+  const [sessionMode, setSessionMode] = useState('new')
   const [examMode, setExamMode] = useState(false)
-  const [examDuration, setExamDuration] = useState(45)
+  const [examCount, setExamCount] = useState(10)
+  const [examMinutes, setExamMinutes] = useState(15)
+  const [customMinutes, setCustomMinutes] = useState('45')
   const [assessments, setAssessments] = useState([])
   const [assignments, setAssignments] = useState([])
   // Finished assignments the student got something wrong in, to redo those questions.
@@ -144,41 +147,20 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     }
   })
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
-  const selectedNormTopicCount = MACRO_GROUPS.reduce((acc, macro) => {
-    return acc + macro.topics.filter(tn => {
-      const subs = normTopicToSubs[tn] || []
-      return subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
-    }).length
-  }, 0)
   const topicsInBankCount = MACRO_GROUPS.reduce((n, m) => n + m.topics.filter(tn => normTopicGroups[tn]).length, 0)
-  const hasNoTopicsSelected = selectedSubtopics.length === 0
   const isAllTopicsSelected = allSubtopics.length > 0 && selectedSubtopics.length === allSubtopics.length
-  // With All Topics ticked, pass an empty filter so the session draws from the
-  // whole bank, including questions that have no subtopic.
+  // Nothing ticked, or everything ticked, means the whole bank: an empty filter
+  // also takes in questions that have no subtopic.
   const effectiveSubtopics = isAllTopicsSelected ? [] : selectedSubtopics
-  const filteredCounts = hasNoTopicsSelected
-    ? { unseen: 0, wrong: 0, total: 0 }
-    : getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
-  const selectedQuestionTotal = filteredCounts.total
-
-  const selectedTopicsSummary = hasNoTopicsSelected
-    ? 'No topics selected'
-    : isAllTopicsSelected
-      ? 'All topics'
-      : [...new Set(questions.filter(q => selectedSubtopics.includes(q.subtopic)).map(q => q.topic))]
-          .map(tn => (topicNormFn ? (topicNormFn(tn) ?? tn) : tn) || '')
-          .join(', ')
+  const filteredCounts = getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
+  const tickedTopicCount = MACRO_GROUPS.reduce((acc, macro) => acc + macro.topics.filter(tn =>
+    (normTopicToSubs[tn] || []).some(s => selectedSubtopics.includes(s))).length, 0)
+  const answeredCount = Object.values(currentStruggleMap).filter(s => s.attempts > 0).length
 
   const topStruggles = priorityTopics(normTopicGroups)
 
-  const totalAttempts = Object.values(currentStruggleMap).reduce((s, v) => s + (v.attempts || 0), 0)
-  const totalWrong = Object.values(currentStruggleMap).reduce((s, v) => s + (v.wrong || 0), 0)
-  const accuracy = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : 0
-  const days = ['M','T','W','T','F','S','S']
-  const [weekActivity, setWeekActivity] = useState([0,0,0,0,0,0,0])
-  const [todayStats, setTodayStats]     = useState({ total: 0, correct: 0 })
+  const [weekStats, setWeekStats]       = useState({ total: 0, correct: 0 })
   const [showComeback, setShowComeback] = useState(false)
-  const maxAct = Math.max(...weekActivity, 1)
 
   useEffect(() => {
     if (!profile?.id) return
@@ -195,10 +177,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
     monday.setHours(0, 0, 0, 0)
 
-    // Start of today
-    const todayMidnight = new Date()
-    todayMidnight.setHours(0, 0, 0, 0)
-
     supabase
       .from('answer_log')
       .select('answered_at, correct')
@@ -206,17 +184,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       .gte('answered_at', monday.toISOString())
       .then(({ data }) => {
         if (!data?.length) return
-        const counts = [0, 0, 0, 0, 0, 0, 0]
-        let todayTotal = 0, todayCorrect = 0
-        data.forEach(a => {
-          counts[(new Date(a.answered_at).getDay() + 6) % 7]++
-          if (new Date(a.answered_at) >= todayMidnight) {
-            todayTotal++
-            if (a.correct) todayCorrect++
-          }
-        })
-        setWeekActivity(counts)
-        setTodayStats({ total: todayTotal, correct: todayCorrect })
+        setWeekStats({ total: data.length, correct: data.filter(a => a.correct).length })
       })
   }, [profile.id, profile.last_active])
 
@@ -227,78 +195,151 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     boxShadow: theme === 'light' ? '0 2px 12px rgba(12,16,55,0.07)' : '0 2px 12px rgba(0,0,0,0.25)',
   }
 
-  const actionButtonBase = {
-    width: '100%',
-    borderRadius: 12,
-    cursor: 'pointer',
-    fontFamily: FONT_B,
+  // ── Session builder ───────────────────────────────────────────────────────
+  // Exam mode holds every answer back until the end and turns off remediation,
+  // so a set number of questions is exactly what the student gets.
+  const examAvailable = subjectHasFeature(subject, 'exam_mode')
+  const examOn = examAvailable && examMode
+  const examTimerMinutes = examMinutes === 'custom' ? Number(customMinutes) : examMinutes
+  const examTimerValid = Number.isInteger(examTimerMinutes) && examTimerMinutes >= 1 && examTimerMinutes <= 180
+  // "Got wrong" is a fixed list; New and Mixed keep going because the bank tops itself up.
+  const startMode = sessionMode === 'wrong' && filteredCounts.wrong === 0 ? 'new' : sessionMode
+  const canStart = questions.length > 0 && (!examOn || examTimerValid)
+
+  const startSession = () => {
+    if (!canStart) return
+    onStartSession({
+      mode: startMode,
+      subtopics: effectiveSubtopics,
+      examMode: examOn,
+      timerSeconds: examOn ? examTimerMinutes * 60 : 0,
+      questionLimit: examOn ? examCount : 0,
+    })
   }
 
-  const renderActionButton = ({ label, onClick, variant = 'secondary', disabled = false, small = false }) => {
-    const styles = {
-      primary: {
-        border: 'none',
-        background: disabled ? (theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#eceef8') : `linear-gradient(135deg,${GOLD},${GOLDL})`,
-        color: disabled ? t.textFaint : '#0c1037',
-        boxShadow: disabled ? 'none' : '0 6px 24px rgba(241,190,67,0.35)',
-      },
-      danger: {
-        border: '1px solid rgba(239,68,68,0.3)',
-        background: disabled ? 'transparent' : 'rgba(239,68,68,0.06)',
-        color: disabled ? t.textFaint : t.danger,
-      },
-      secondary: {
-        border: `1px solid ${t.border}`,
-        background: 'transparent',
-        color: disabled ? t.textFaint : t.textMuted,
-      },
-    }
-
-    return (
-      <button
-        onClick={disabled ? undefined : onClick}
-        disabled={disabled}
-        style={{
-          ...actionButtonBase,
-          ...styles[variant],
-          padding: small ? '12px 14px' : '14px 16px',
-          fontSize: small ? 13 : 14,
-          fontWeight: variant === 'primary' ? 800 : 700,
-          opacity: disabled ? 0.65 : 1,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {label}
-      </button>
-    )
-  }
-
-  const PriorityCard = () => topStruggles.length > 0 ? (
-    <div style={{ ...card, padding: '18px 20px' }}>
-      <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Focus</div>
-      <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text, marginBottom: 2 }}>Priority Topics</div>
-      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Your lowest-scoring topics — tap one to practise it</div>
-      {topStruggles.map((s, i) => {
-        const pct = Math.round(s.accuracy * 100)
-        const tone = pct >= 40 ? GOLD : t.danger
+  const segment = (options, value, onChange, label) => (
+    <div role="radiogroup" aria-label={label} style={{ display: 'flex', border: `1px solid ${t.border}`, borderRadius: 9, overflow: 'hidden' }}>
+      {options.map((o, i) => {
+        const on = o.value === value
         return (
-          <button
-            key={s.topic}
-            onClick={() => onStartSession({ mode: 'new', subtopics: normTopicToSubs[s.topic] || [] })}
-            title={`Practise ${s.topic}`}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 0', border: 'none', borderBottom: `1px solid ${t.border}`, background: 'transparent', cursor: 'pointer', textAlign: 'left', fontFamily: FONT_B }}
-          >
-            <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${tone}15`, border: `1px solid ${tone}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: tone, flexShrink: 0 }}>{i+1}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.topic}</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 1 }}>{s.correct}/{s.answers} correct</div>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: tone, flexShrink: 0 }}>{pct}%</div>
+          <button key={String(o.value)} type="button" role="radio" aria-checked={on} disabled={o.disabled}
+            onClick={() => onChange(o.value)}
+            style={{
+              flex: 1, padding: '8px 4px', border: 'none', borderLeft: i > 0 ? `1px solid ${t.border}` : 'none',
+              background: on ? segOnBg : 'transparent', color: on ? segOnFg : o.disabled ? t.textFaint : t.textMuted,
+              fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+              cursor: o.disabled ? 'not-allowed' : 'pointer', opacity: o.disabled ? 0.6 : 1,
+            }}>
+            {o.label}
           </button>
         )
       })}
     </div>
-  ) : null
+  )
+
+  // Selected options: navy on light, gold on dark (navy would vanish there).
+  const segOnBg = theme === 'dark' ? GOLD : NAVY_FILL
+  const segOnFg = theme === 'dark' ? NAVY_FILL : '#fff'
+  const fieldLabel = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6 }
+
+  const renderBuilder = () => (
+    <div style={{ ...card, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>Your session</div>
+        <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
+          {tickedTopicCount === 0 || isAllTopicsSelected ? 'All topics' : `${tickedTopicCount} topic${tickedTopicCount !== 1 ? 's' : ''} ticked`}
+        </div>
+      </div>
+
+      <div>
+        <span style={fieldLabel}>Questions</span>
+        {segment([
+          { value: 'new', label: 'New' },
+          { value: 'wrong', label: `Got wrong · ${filteredCounts.wrong}`, disabled: filteredCounts.wrong === 0 },
+          { value: 'all', label: 'Mixed' },
+        ], startMode, setSessionMode, 'Questions')}
+      </div>
+
+      {examAvailable && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12, borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span id="exam-mode-label" style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Exam mode</span>
+            <button type="button" role="switch" aria-checked={examMode} aria-labelledby="exam-mode-label" onClick={() => setExamMode(v => !v)}
+              style={{ width: 36, height: 20, borderRadius: 999, border: 'none', padding: 0, position: 'relative', cursor: 'pointer', background: examMode ? segOnBg : t.border, flexShrink: 0 }}>
+              <span style={{ position: 'absolute', top: 3, left: examMode ? 19 : 3, width: 14, height: 14, borderRadius: '50%', background: examMode ? segOnFg : '#fff', transition: 'left 0.15s' }} />
+            </button>
+          </div>
+          {examMode && (
+            <>
+              <div>
+                <span style={fieldLabel}>How many</span>
+                {segment([5, 10, 20, 30, 40].map(n => ({ value: n, label: String(n) })), examCount, setExamCount, 'How many questions')}
+              </div>
+              <div>
+                <span style={fieldLabel}>Time limit</span>
+                {segment([
+                  ...[10, 15, 20, 30].map(m => ({ value: m, label: `${m}m` })),
+                  { value: 'custom', label: 'Custom' },
+                ], examMinutes, setExamMinutes, 'Time limit')}
+                {examMinutes === 'custom' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <input id="exam-custom-minutes" type="number" min={1} max={180} inputMode="numeric" value={customMinutes}
+                      onChange={e => setCustomMinutes(e.target.value)} aria-label="Time limit in minutes"
+                      style={{ width: 80, padding: '7px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 13 }} />
+                    <span style={{ fontSize: 12, color: t.textMuted }}>minutes</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <button type="button" onClick={startSession} disabled={!canStart}
+        style={{
+          width: '100%', padding: '13px', borderRadius: 10, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
+          background: canStart ? GOLD : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed',
+        }}>
+        {examOn ? 'Start exam' : 'Start practice'}
+      </button>
+    </div>
+  )
+
+  const accuracyTone = (pct) => pct < 40 ? t.danger : pct < 70 ? t.goldText : t.success
+
+  const WeakestTopicsCard = () => (
+    <div style={{ ...card, padding: '16px 18px' }}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Weakest topics</div>
+      {topStruggles.length > 0 ? (
+        <>
+          <div style={{ fontSize: 12, color: t.textMuted, margin: '2px 0 6px' }}>Click one to practise it</div>
+          {topStruggles.map((s, i) => {
+            const pct = Math.round(s.accuracy * 100)
+            return (
+              <button
+                key={s.topic}
+                onClick={() => onStartSession({ mode: 'new', subtopics: normTopicToSubs[s.topic] || [] })}
+                title={`Practise ${s.topic}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 0', border: 'none', borderTop: i > 0 ? `1px solid ${t.border}` : 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontFamily: FONT_B }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.topic}</div>
+                  <div style={{ fontSize: 11, color: t.textMuted, marginTop: 1 }}>{s.correct} of {s.answers} correct</div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: accuracyTone(pct), flexShrink: 0 }}>{pct}%</div>
+              </button>
+            )
+          })}
+        </>
+      ) : (
+        <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.5 }}>Answer a few questions and the topics you find hardest will show here.</div>
+      )}
+      <button onClick={() => navigate('/study-plan')}
+        style={{ display: 'block', width: '100%', marginTop: 10, padding: '12px 0 0', border: 'none', borderTop: `1px solid ${t.border}`, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 3 }}>
+        Open study plan
+      </button>
+    </div>
+  )
 
   const respondInvite = async (token, accept) => {
     setInviteBusy(token); setInviteError('')
@@ -492,62 +533,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     )
   }
 
-  const SprintCard = () => (
-    <div style={{ ...card, padding: '16px 18px', background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(241,190,67,0.15)' : t.border}` }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}><BookOpen size={16} aria-hidden="true" />Study Plan</div>
-      <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>See what to review today and your schedule for the week.</div>
-      <button
-        onClick={() => navigate('/study-plan')}
-        style={{ width: '100%', padding: '9px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.25)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
-      >
-        View Study Plan →
-      </button>
-    </div>
-  )
-
-  // ── Daily Missions ────────────────────────────────────────────────────────
-  const daysActiveThisWeek = weekActivity.filter(c => c > 0).length
-  const missions = [
-    { icon: Zap, label: 'Answer 10 questions', progress: Math.min(todayStats.total, 10), target: 10 },
-    { icon: Target, label: 'Get 8 correct today',  progress: Math.min(todayStats.correct, 8), target: 8 },
-    { icon: Calendar, label: 'Study 5 days this week', progress: Math.min(daysActiveThisWeek, 5), target: 5 },
-  ]
-  const allMissionsDone = missions.every(m => m.progress >= m.target)
-
-  const MissionsCard = () => (
-    <div style={{ ...card, padding: '18px 20px' }}>
-      <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>Today</div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1, color: t.text }}>Daily Missions</div>
-        {allMissionsDone && <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 700 }}>✓ All done!</span>}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {missions.map(m => {
-          const done = m.progress >= m.target
-          const pct  = Math.round((m.progress / m.target) * 100)
-          return (
-            <div key={m.label}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: done ? '#4ade80' : t.text, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <m.icon size={14} aria-hidden="true" />{m.label}
-                </span>
-                <span style={{ fontSize: 11, color: done ? '#4ade80' : t.textMuted, fontWeight: 700 }}>
-                  {m.progress}/{m.target}
-                </span>
-              </div>
-              <div style={{ background: t.border, borderRadius: 999, height: 5, overflow: 'hidden' }}>
-                <div style={{
-                  width: `${pct}%`, height: '100%', borderRadius: 999,
-                  background: done ? '#4ade80' : `linear-gradient(90deg,${GOLD},${GOLDL})`,
-                  transition: 'width 0.5s ease',
-                }} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
 
   // ── Exam Countdown ────────────────────────────────────────────────────────
   const ExamCountdownCard = () => {
@@ -638,46 +623,57 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     else setSelectedSubtopics(prev => [...new Set([...prev, ...subs])])
   }
 
-  const normTopicStatusColor = (topicName) => {
-    const tg = normTopicGroups[topicName]
-    if (!tg || tg.attempted === 0) return GOLD
-    const rate = tg.wrong / tg.attempted
-    if (rate >= 0.5) return t.danger
-    if (rate >= 0.25) return GOLD
-    return t.success
+
+  // Answer accuracy for a topic (null before any answers): what the colour shows.
+  const topicAccuracy = (groups) => {
+    const correct = groups.reduce((n, g) => n + (g?.correct || 0), 0)
+    const wrong = groups.reduce((n, g) => n + (g?.wrong || 0), 0)
+    return correct + wrong > 0 ? Math.round((correct / (correct + wrong)) * 100) : null
   }
+
+  const checkbox = (state, size = 16) => (
+    <span aria-hidden="true" style={{
+      width: size, height: size, borderRadius: 4, flexShrink: 0, boxSizing: 'border-box',
+      border: `1.5px solid ${state ? segOnBg : t.textFaint}`, background: state === 'all' ? segOnBg : 'transparent',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size - 6, fontWeight: 800, lineHeight: 1, color: state === 'all' ? segOnFg : segOnBg,
+    }}>
+      {state === 'all' ? '✓' : state === 'some' ? '−' : ''}
+    </span>
+  )
+
+  const statCell = (answered, total, pct) => (
+    <>
+      <span style={{ width: 56, textAlign: 'right', fontSize: 12, color: t.textFaint, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{answered}/{total}</span>
+      <span style={{ width: 44, textAlign: 'right', fontSize: 12, fontWeight: 700, flexShrink: 0, color: pct === null ? t.textFaint : accuracyTone(pct), fontVariantNumeric: 'tabular-nums' }}>
+        {pct === null ? 'New' : `${pct}%`}
+      </span>
+    </>
+  )
+
+  const rowSelected = theme === 'dark' ? 'rgba(241,190,67,0.08)' : '#fdf6e1'
+  const weekPct = weekStats.total > 0 ? Math.round((weekStats.correct / weekStats.total) * 100) : null
 
   return (
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         .hs-wrap  { display: flex; align-items: flex-start; gap: 24px; flex: 1; min-height: 0; }
-        .hs-main  { flex: 1; min-width: 0; padding: 32px 24px 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-        .hs-right { width: 328px; flex-shrink: 0; padding: 32px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-        .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
-        .hs-selected-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
-        .hs-topic-grid { display: grid; grid-template-columns: minmax(280px, 340px) 180px 56px; align-items: center; column-gap: 18px; width: 100%; }
-        .hs-topic-track { width: 180px; height: 4px; border-radius: 999px; overflow: hidden; justify-self: start; }
+        .hs-main  { flex: 1; min-width: 0; padding: 28px 8px 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-right { width: 360px; flex-shrink: 0; padding: 28px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; }
+        .hs-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; }
+        .hs-row:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
+        .hs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         @media (max-width: 1240px) {
-          .hs-main  { padding-right: 16px; }
-          .hs-right { width: 300px; padding-right: 24px; }
-        }
-        @media (max-width: 1100px) {
-          .hs-selected-actions { grid-template-columns: 1fr; }
-          .hs-topic-grid { grid-template-columns: minmax(220px, 1fr) 140px 48px; column-gap: 14px; }
-          .hs-topic-track { width: 140px; }
-          .hs-right { width: 280px; padding-right: 20px; }
+          .hs-right { width: 320px; padding-right: 24px; }
         }
         @media (max-width: 860px) {
           .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }
           .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; }
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
-          .hs-topic-grid { grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 0; align-items: center; }
-          .hs-topic-track { display: none !important; }
-        }
-        @media (max-width: 560px) {
-          .hs-topic-grid { grid-template-columns: minmax(0, 1fr) auto; }
+          .hs-name { white-space: normal; }
         }
       `}</style>
 
@@ -685,201 +681,92 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         <div className="hs-main">
           {/* Comeback banner */}
           {showComeback && (
-            <div style={{ marginBottom: 16, padding: '14px 18px', borderRadius: 14, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ marginBottom: 16, padding: '14px 18px', borderRadius: 12, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 3 }}>Welcome back!</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>You've been away a while. Pick up where you left off — your study plan is waiting.</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 3 }}>Welcome back</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>You've been away a while. Start with the questions you got wrong last time.</div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <button onClick={() => onStartSession({ mode: 'wrong', subtopics: [] })} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                  Start session →
+                <button onClick={() => onStartSession({ mode: 'wrong', subtopics: [] })} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: GOLD, color: NAVY_FILL, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                  Start session
                 </button>
-                <button onClick={() => { setShowComeback(false); localStorage.setItem(`gf-comeback-${new Date().toDateString()}`, '1') }}
+                <button aria-label="Dismiss" onClick={() => { setShowComeback(false); localStorage.setItem(`gf-comeback-${new Date().toDateString()}`, '1') }}
                   style={{ padding: '8px 10px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>✕</button>
               </div>
             </div>
           )}
 
-          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Questions</div>
-          <h1 style={{ fontSize: 24, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, marginBottom: 4, color: t.text }}>Question Bank</h1>
-          <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>
-            {[subject?.stage, subject?.name].filter(Boolean).join(' · ') || 'No subject selected'} · {questions.length} questions
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
+            <div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, color: t.text }}>Practice</h1>
+              <p style={{ fontSize: 13, color: t.textMuted, margin: '2px 0 0' }}>
+                {isTwoLevel ? MACRO_GROUPS.length : topicsInBankCount} topics · {questions.length} questions
+              </p>
+            </div>
+            <div style={{ fontSize: 13, color: t.textMuted }}>
+              {weekStats.total > 0
+                ? <><strong style={{ color: t.text }}>{weekStats.total}</strong> answered this week · <strong style={{ color: t.text }}>{weekPct}%</strong> correct</>
+                : 'Nothing answered yet this week'}
+            </div>
+          </div>
 
-          <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ padding: '5px 14px', borderRadius: 20, background: GOLD, color: '#0c1037', fontSize: 12, fontWeight: 700 }}>This Week</span>
-              </div>
-              <div style={{ display: 'flex', gap: 20 }}>
-                {[
-                  { val: totalAttempts, label: 'answered' },
-                  { val: `${accuracy}%`, label: 'correct' },
-                  { val: currentStreak(profile.streak, profile.last_active), label: 'streak' },
-                ].map(s => (
-                  <div key={s.label} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>{s.val}</div>
-                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{s.label}</div>
+          <div className="hs-mobile-cards" style={{ marginBottom: 14 }}>
+            {renderBuilder()}
+          </div>
+
+          <div style={{ ...card, padding: '6px 0', marginBottom: 14 }}>
+            <button className="hs-row" onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)} aria-pressed={isAllTopicsSelected}
+              style={{ padding: '10px 16px', background: isAllTopicsSelected ? rowSelected : 'transparent', borderBottom: `1px solid ${t.border}` }}>
+              {checkbox(isAllTopicsSelected ? 'all' : selectedSubtopics.length > 0 ? 'some' : null)}
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: t.text }}>All topics</span>
+              <span style={{ fontSize: 12, color: t.textFaint }}>{answeredCount} answered</span>
+            </button>
+
+            {MACRO_GROUPS.map((macro, mi) => {
+              const macroSubs = macro.topics.flatMap(tp => normTopicToSubs[tp] || [])
+              const macroSelected = macroSubs.length > 0 && macroSubs.every(s => selectedSubtopics.includes(s))
+              const macroPartial = !macroSelected && macroSubs.some(s => selectedSubtopics.includes(s))
+              const isMacroExpanded = expandedMacros.has(macro.id)
+              // Also count questions keyed by the macro label itself (when q.topic = macro label)
+              const macroLabelGroup = normTopicGroups[macro.label] || { total: 0, attempted: 0 }
+              const macroTotal = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.total || 0), 0) + macroLabelGroup.total
+              const macroAttempted = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.attempted || 0), 0) + macroLabelGroup.attempted
+              const macroPct = topicAccuracy([...macro.topics.map(tp => normTopicGroups[tp]), normTopicGroups[macro.label]])
+              return (
+                <div key={macro.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', marginTop: 2, background: macroSelected ? rowSelected : 'transparent' }}>
+                    <button className="hs-row" onClick={() => toggleMacro(macro.id)} aria-pressed={macroSelected} aria-label={`Select ${macro.label}`} style={{ width: 'auto', padding: '10px 0' }}>
+                      {checkbox(macroSelected ? 'all' : macroPartial ? 'some' : null)}
+                    </button>
+                    <button className="hs-row" onClick={() => toggleMacroExpand(macro.id)} aria-expanded={isMacroExpanded} style={{ flex: 1, minWidth: 0, padding: '10px 0' }}>
+                      <span aria-hidden="true" style={{ width: 12, color: t.textFaint, fontSize: 11, flexShrink: 0 }}>{isMacroExpanded ? '▾' : '▸'}</span>
+                      <span className="hs-name" style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: t.text }}>
+                        <span style={{ color: t.textFaint, marginRight: 6 }}>{macro.num ?? mi + 1}</span>{macro.label}
+                      </span>
+                      {statCell(macroAttempted, macroTotal, macroPct)}
+                    </button>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 48 }}>
-              {days.map((d, i) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: '100%', background: weekActivity[i] > 0 ? GOLD : t.border, borderRadius: '3px 3px 0 0', height: weekActivity[i] > 0 ? `${Math.max((weekActivity[i]/maxAct)*38, 8)}px` : '3px' }} />
-                  <div style={{ fontSize: 10, color: i === (new Date().getDay() + 6) % 7 ? GOLD : t.textFaint, fontWeight: i === (new Date().getDay() + 6) % 7 ? 700 : 400 }}>{d}</div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div style={{ ...card, padding: '16px 20px', marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Selected for next session</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
-                  {isAllTopicsSelected
-                    ? `${topicsInBankCount} topic${topicsInBankCount !== 1 ? 's' : ''} selected`
-                    : `${selectedNormTopicCount} topic${selectedNormTopicCount !== 1 ? 's' : ''} selected`}
-                </div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{selectedTopicsSummary}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: GOLD }}>{selectedQuestionTotal}</div>
-                  <div style={{ fontSize: 12, color: t.textMuted }}>questions included</div>
-                </div>
-                {subjectHasFeature(subject, 'exam_mode') && <button
-                  onClick={() => setExamMode(v => !v)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `1px solid ${examMode ? GOLD : t.border}`, background: examMode ? 'rgba(241,190,67,0.1)' : 'transparent', color: examMode ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
-                >
-                  <Timer size={14} aria-hidden="true" />{examMode ? 'Exam On' : 'Exam Mode'}
-                </button>}
-              </div>
-            </div>
-
-            {examMode && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span style={{ fontSize: 11, color: t.textMuted, fontWeight: 600 }}>Duration:</span>
-                {[30, 45, 60, 90].map(m => (
-                  <button
-                    key={m}
-                    onClick={() => setExamDuration(m)}
-                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${examDuration === m ? GOLD : t.border}`, background: examDuration === m ? 'rgba(241,190,67,0.12)' : 'transparent', color: examDuration === m ? GOLD : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
-                  >
-                    {m}m
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="hs-selected-actions">
-              {renderActionButton({
-                label: examMode
-                  ? `Start ${examDuration}-min exam · ${filteredCounts.unseen} new`
-                  : `Start session · ${filteredCounts.unseen} new`,
-                variant: 'primary',
-                disabled: hasNoTopicsSelected || filteredCounts.unseen === 0,
-                onClick: () => onStartSession({ mode: 'new', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-              })}
-              {renderActionButton({
-                label: `Re-attempt wrong · ${filteredCounts.wrong}`,
-                variant: 'danger',
-                disabled: hasNoTopicsSelected || filteredCounts.wrong === 0,
-                onClick: () => onStartSession({ mode: 'wrong', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-              })}
-              {renderActionButton({
-                label: 'Repeat selected',
-                disabled: hasNoTopicsSelected || selectedQuestionTotal === 0,
-                onClick: () => onStartSession({ mode: 'all', subtopics: effectiveSubtopics, examMode, timerSeconds: examMode ? examDuration * 60 : 0 }),
-              })}
-            </div>
-
-            {hasNoTopicsSelected ? (
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>Tick All Topics, or pick topics below, to start a session.</div>
-            ) : filteredCounts.unseen === 0 && selectedQuestionTotal > 0 && (
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>You've attempted every question in this selection. Re-attempt or repeat them to keep practising.</div>
-            )}
-          </div>
-
-          <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 14 }}>
-            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 2 }}>Topic Progress</div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>{isTwoLevel ? MACRO_GROUPS.length : topicsInBankCount} topics · {questions.length} questions</div>
-            </div>
-
-            <div onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)}
-              style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: isAllTopicsSelected ? 'rgba(241,190,67,0.07)' : 'transparent', borderBottom: `1px solid ${t.border}` }}>
-              <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${isAllTopicsSelected ? GOLD : t.border}`, background: isAllTopicsSelected ? GOLD : 'transparent', marginRight: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {isAllTopicsSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-              </div>
-              <span style={{ fontSize: 14, fontWeight: 800, color: isAllTopicsSelected ? GOLD : t.text, flex: 1 }}>All Topics</span>
-              <span style={{ fontSize: 13, color: t.textMuted }}>{Object.values(currentStruggleMap).filter(s => s.attempts > 0).length}/{questions.length}</span>
-            </div>
-
-            <div style={{ maxHeight: 560, overflowY: 'auto' }}>
-              {MACRO_GROUPS.map((macro, mi) => {
-                const macroSubs = macro.topics.flatMap(tp => normTopicToSubs[tp] || [])
-                const macroSelected = macroSubs.length > 0 && macroSubs.every(s => selectedSubtopics.includes(s))
-                const macroPartial = macroSubs.some(s => selectedSubtopics.includes(s)) && !macroSelected
-                const isMacroExpanded = expandedMacros.has(macro.id)
-                // Also count questions keyed by the macro label itself (when q.topic = macro label)
-                const macroLabelGroup = normTopicGroups[macro.label] || { total: 0, attempted: 0 }
-                const macroTotal = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.total || 0), 0) + macroLabelGroup.total
-                const macroAttempted = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.attempted || 0), 0) + macroLabelGroup.attempted
-                return (
-                  <div key={macro.id}>
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderBottom: `1px solid ${t.border}`, background: isMacroExpanded ? (theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)') : 'transparent', gap: 10 }}>
-                      <div onClick={() => toggleMacro(macro.id)} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${macroSelected || macroPartial ? GOLD : t.border}`, background: macroSelected ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                        {macroSelected && <span style={{ fontSize: 10, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                        {macroPartial && !macroSelected && <span style={{ fontSize: 10, color: GOLD, fontWeight: 800 }}>−</span>}
-                      </div>
-                      <button onClick={() => toggleMacroExpand(macro.id)} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', color: t.textMuted, fontSize: 14, lineHeight: 1, width: 14, flexShrink: 0 }}>
-                        {isMacroExpanded ? '▾' : '▸'}
+                  {isMacroExpanded && macro.topics.map((topicName, ti) => {
+                    const tg = normTopicGroups[topicName]
+                    if (!tg) return null
+                    const subs = normTopicToSubs[topicName] || []
+                    const topicSel = subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
+                    const topicPartial = !topicSel && subs.some(s => selectedSubtopics.includes(s))
+                    return (
+                      <button key={topicName} className="hs-row" onClick={() => toggleNormTopic(topicName)} aria-pressed={topicSel} title={topicName}
+                        style={{ padding: '8px 16px 8px 38px', background: topicSel ? rowSelected : 'transparent' }}>
+                        {checkbox(topicSel ? 'all' : topicPartial ? 'some' : null, 15)}
+                        <span className="hs-name" style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.text }}>
+                          {macro.num ?? mi + 1}.{ti + 1} {topicName}
+                        </span>
+                        {statCell(tg.attempted, tg.total, topicAccuracy([tg]))}
                       </button>
-                      <div onClick={() => toggleMacroExpand(macro.id)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                        <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Topic {macro.num}</div>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{macro.label}</div>
-                      </div>
-                      <span style={{ fontSize: 12, color: t.textMuted, flexShrink: 0 }}>{macroAttempted}/{macroTotal}</span>
-                    </div>
-
-                    {isMacroExpanded && macro.topics.map((topicName, ti) => {
-                      const tg = normTopicGroups[topicName]
-                      if (!tg) return null
-                      const subs = normTopicToSubs[topicName] || []
-                      const topicSel = subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
-                      const topicPartial = subs.some(s => selectedSubtopics.includes(s)) && !topicSel
-                      const accent = normTopicStatusColor(topicName)
-                      const topicPct = tg.total > 0 ? Math.round((tg.attempted / tg.total) * 100) : 0
-                      return (
-                        <div key={topicName}>
-                          <div
-                            onClick={() => toggleNormTopic(topicName)}
-                            style={{ display: 'flex', alignItems: 'center', padding: '9px 16px 9px 30px', borderBottom: `1px solid ${t.border}`, gap: 8, cursor: 'pointer' }}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleNormTopic(topicName) } }}
-                          >
-                            <div style={{ width: 15, height: 15, borderRadius: 4, border: `2px solid ${topicSel || topicPartial ? GOLD : t.border}`, background: topicSel ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                              {topicSel && <span style={{ fontSize: 9, color: '#0c1037', fontWeight: 800 }}>✓</span>}
-                              {topicPartial && !topicSel && <span style={{ fontSize: 9, color: GOLD, fontWeight: 800 }}>−</span>}
-                            </div>
-                            <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} title={topicName}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }} aria-label={topicName}>{mi + 1}.{ti + 1} {topicName}</span>
-                              <span style={{ fontSize: 11, color: t.textMuted }}> ({tg.attempted}/{tg.total})</span>
-                            </div>
-                            <span style={{ fontSize: 11, color: t.textFaint, flexShrink: 0 }}>{topicPct}%</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
           </div>
 
           <div className="hs-mobile-cards">
@@ -888,21 +775,18 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <AssignedTasksCard />
             <ClassResourcesCard />
             <ExamCountdownCard />
-            <MissionsCard />
-            <PriorityCard />
-            <SprintCard />
+            <WeakestTopicsCard />
           </div>
         </div>
 
         <div className="hs-right">
+          {renderBuilder()}
           <TutorInvitesCard />
           <DiagnosticResultsCard />
           <AssignedTasksCard />
           <ClassResourcesCard />
           <ExamCountdownCard />
-          <MissionsCard />
-          <PriorityCard />
-          <SprintCard />
+          <WeakestTopicsCard />
         </div>
       </div>
     </div>

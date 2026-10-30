@@ -50,7 +50,7 @@ import PassageView from './PassageView'
 import QuizToolsDock from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
-import { buildQuestionHelpContext } from '../lib/questionHelp'
+import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 
 const GOLD = '#f1be43'
@@ -348,7 +348,10 @@ function StatusToast({ status, onReturnToQuiz, theme = 'dark' }) {
 
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
-  examMode = false, timerSeconds = 0, subjectTile,
+  // Exam mode: answers stay hidden until the summary, there's no remediation,
+  // and the session ends after questionLimit questions (0 = no limit) or when
+  // the timer runs out.
+  examMode = false, timerSeconds = 0, questionLimit = 0, subjectTile,
   onOpenLearn,
   // A consolidation round from Titan AI ({ label, subtopics, canReturn }) and how to end it.
   consolidation, onEndConsolidation,
@@ -436,6 +439,8 @@ export default function QuizScreen({
   // locally because App clears activeAssignment as soon as it completes.
   const [completedGoal, setCompletedGoal] = useState(null)
   const [endedForGoal, setEndedForGoal] = useState(false)
+  // The exam ended on its question count or its timer, not the bank running out.
+  const [endedForExam, setEndedForExam] = useState(false)
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
   const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
@@ -468,14 +473,18 @@ export default function QuizScreen({
   // Reset timer when a new exam session starts
   useEffect(() => { setTimeLeft(timerSeconds) }, [timerSeconds])
 
+  // Fixing an exam's wrong answers afterwards is ordinary practice: answers
+  // shown, no clock.
+  const examRun = examMode && _quizMode !== 'review'
+
   // Countdown tick — auto-ends session when time expires
   // Uses _finished (prop) not finished (const declared later) to avoid TDZ
   useEffect(() => {
-    if (!examMode || timerSeconds <= 0 || _finished) return
-    if (timeLeft <= 0) { setFinished(true); return }
+    if (!examRun || timerSeconds <= 0 || _finished) return
+    if (timeLeft <= 0) { setEndedForExam(true); setFinished(true); return }
     const id = setInterval(() => setTimeLeft(s => Math.max(0, s - 1)), 1000)
     return () => clearInterval(id)
-  }, [examMode, timerSeconds, _finished, timeLeft])
+  }, [examRun, timerSeconds, _finished, timeLeft])
 
   const currentQ = _currentQ ?? null
   const selected = _selected ?? null
@@ -508,7 +517,7 @@ export default function QuizScreen({
   // Nor inside a consolidation round: the round already is targeted practice on
   // that concept, and remediation on each miss could keep a struggling student
   // in it indefinitely.
-  const remediationAllowed = activeAssignment?.remediation !== false && !consolidation
+  const remediationAllowed = activeAssignment?.remediation !== false && !consolidation && !examRun
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   // Background top-ups for a student working at 4+ ask for exam-grade questions
@@ -842,7 +851,7 @@ export default function QuizScreen({
     // Ending on an assignment's question count or a consolidation round's end
     // is not the bank running out. (The round's end is read from the results,
     // which are settled by now, not from state set alongside `finished`.)
-    if (endedForGoal || round?.done) return
+    if (endedForGoal || endedForExam || round?.done) return
     if (generatingMoreRef.current) return
     // Only attempt generation once per session to prevent infinite retry loops.
     if (bankExhaustionAttempted.current) return
@@ -1243,6 +1252,22 @@ export default function QuizScreen({
     }
   }
 
+  // Exam mode: the answer isn't shown, so answering moves straight on to the
+  // next question, or ends the exam once it has its question count.
+  const advanceExam = () => {
+    const answered = [...sessionAnswered, currentQ.id]
+    setSessionAnswered(answered)
+    const mainAnswered = sessionResults.filter(r => !r.remediation).length + 1
+    if (questionLimit > 0 && mainAnswered >= questionLimit) {
+      setEndedForExam(true)
+      setFinished(true)
+      return
+    }
+    const targetDiff = getTargetDifficulty(sessionResults, questions)
+    setQNumber(n => n + 1)
+    setStruggleMap(prev => { loadNext(answered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
+  }
+
   const handleAnswer = async (idx) => {
     if (showAns || !currentQ) return
 
@@ -1260,10 +1285,10 @@ export default function QuizScreen({
     setEarnedXP(xpEarned)
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, remediation: isRemediationQuestion }])
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, remediation: isRemediationQuestion, response: idx }])
     if (!isRemediationQuestion) countAssignmentAnswer(isCorrect, idx, timeTakenMs)
 
-    if (isCorrect) {
+    if (isCorrect && !examRun) {
       setFloatXP(xpEarned)
       setTimeout(() => setFloatXP(null), 1400)
     }
@@ -1305,6 +1330,12 @@ export default function QuizScreen({
 
     const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
       .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
+
+    if (examRun) {
+      advanceExam()
+      await Promise.all([xpWrite, answerWrite])
+      return
+    }
 
     if (!isCorrect) {
       // Remediation state was already set synchronously above. Load the queue in
@@ -1352,10 +1383,10 @@ export default function QuizScreen({
     setEarnedXP(xpEarned)
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant }])
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant, response }])
     if (!isVariant) countAssignmentAnswer(isCorrect, response, timeTakenMs)
 
-    if (isCorrect) {
+    if (isCorrect && !examRun) {
       setFloatXP(xpEarned)
       setTimeout(() => setFloatXP(null), 1400)
     }
@@ -1389,6 +1420,12 @@ export default function QuizScreen({
     })
 
     const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs).catch(() => {})
+
+    if (examRun) {
+      advanceExam()
+      await Promise.all([xpWrite, answerWrite])
+      return
+    }
 
     if (!isCorrect) {
       setLoadingTip(true)
@@ -1527,6 +1564,8 @@ export default function QuizScreen({
       setSessionEpoch(e => e + 1)
       setCompletedGoal(null)
       setEndedForGoal(false)
+      setEndedForExam(false)
+      setTimeLeft(timerSeconds)
       setQuizMode(mode)
       setReviewIds?.(ids)
       setSessionAnswered([])
@@ -1560,6 +1599,12 @@ export default function QuizScreen({
       .map(([topic, s]) => ({ topic, ...s, pct: Math.round((s.correct / s.total) * 100) }))
       .sort((a, b) => a.pct - b.pct) // weakest first
 
+    // Exam mode: each main answer with its question, for the answers list.
+    const questionById = new Map(questions.map(q => [q.id, q]))
+    const examReview = examRun
+      ? mainResults.map(r => ({ r, q: questionById.get(r.id) })).filter(x => x.q)
+      : []
+
     // This session's misses, not every question ever got wrong in these topics
     // (Home and the Study Plan offer that review).
     const wrongThisSession = sessionWrongIds(sessionResults, questions)
@@ -1569,8 +1614,8 @@ export default function QuizScreen({
 
     const headlineText = consolidation
       ? (round.byStreak ? 'Nice work!' : 'Round complete')
-      : examMode
-      ? (timeLeft <= 0 ? "Time's Up!" : 'Exam Complete!')
+      : examRun
+      ? (timerSeconds > 0 && timeLeft <= 0 ? "Time's Up!" : 'Exam Complete!')
       : quizMode === 'new'
         ? 'Session Complete!'
         : quizMode === 'wrong' || quizMode === 'review'
@@ -1600,6 +1645,8 @@ export default function QuizScreen({
                   : round.done
                     ? `You've practised ${round.answered} questions on ${consolidation.label}. The ones you missed will come back in your Study Plan.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
                     : `That's every question on ${consolidation.label} for now.`
+                : examRun
+                ? `You answered ${sessTotal} question${sessTotal !== 1 ? 's' : ''}${timerSeconds > 0 && timeLeft <= 0 ? ' before the time ran out' : ''}. Your answers are below.`
                 : endedForGoal && goalDisplay
                 ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
                 : quizMode === 'new' && sessTotal > 0
@@ -1710,6 +1757,40 @@ export default function QuizScreen({
             </div>
           )}
 
+          {/* Exam answers, held back until now */}
+          {examRun && examReview.length > 0 && (
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowCard }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 12 }}>Your answers</div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {examReview.map(({ r, q }, i) => (
+                  <details key={`${q.id}-${i}`} style={{ borderTop: i > 0 ? `1px solid ${t.border}` : 'none', padding: '10px 0' }}>
+                    <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10, listStyle: 'none' }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: r.correct ? t.success : t.danger, width: 44, flexShrink: 0, paddingTop: 2 }}>
+                        {r.correct ? '✓' : '✗'} Q{i + 1}
+                      </span>
+                      <span style={{ fontSize: 13, color: t.text, lineHeight: 1.55, minWidth: 0, flex: 1 }}><MathText text={q.question} /></span>
+                    </summary>
+                    <div style={{ padding: '8px 0 0 54px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, lineHeight: 1.55 }}>
+                      <div style={{ color: r.correct ? t.success : t.danger }}>
+                        <span style={{ fontWeight: 700 }}>Your answer: </span>
+                        <MathText text={describeResponse(q, r.response) || 'No answer'} />
+                      </div>
+                      {!r.correct && (
+                        <div style={{ color: t.success }}>
+                          <span style={{ fontWeight: 700 }}>Correct answer: </span>
+                          <MathText text={describeCorrectAnswer(q)} />
+                        </div>
+                      )}
+                      {q.solution && (
+                        <div style={{ color: t.textMuted }}><MathText text={q.solution} /></div>
+                      )}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Weak spots callout */}
           {weakSubtopics.length > 0 && (
             <div style={{ background: t.dangerBg, border: `1px solid ${t.danger}33`, borderRadius: 14, padding: '14px 18px', marginBottom: 20 }}>
@@ -1761,7 +1842,7 @@ export default function QuizScreen({
             )}
             <button onClick={onHome}
               style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid rgba(241,190,67,0.3)`, background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-              ← Back to Question Bank
+              ← Back to Practice
             </button>
           </div>
         </div>
@@ -1811,7 +1892,7 @@ export default function QuizScreen({
             </button>
             <button type="button" onClick={onHome}
               style={{ height: 40, borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              Back to Question Bank
+              Back to Practice
             </button>
           </div>
         </div>
@@ -1877,7 +1958,9 @@ export default function QuizScreen({
             <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center', color: GOLD }}><Pause size={36} aria-hidden="true" /></div>
             <div style={{ fontFamily: FONT_D, fontSize: 20, color: t.text, marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.65 }}>
-              You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved — you can resume anytime.
+              {examRun
+                ? 'Your answers so far are saved, but the exam will end here.'
+                : <>You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span> so far. Your progress is saved — you can resume anytime.</>}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '13px', borderRadius: 11, border: `1px solid ${t.border}`, background: t.bgSubtle, color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>Keep going</button>
@@ -1890,7 +1973,7 @@ export default function QuizScreen({
       {/* Top status bar — gold gradient (brand) */}
       <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}{examRun && questionLimit > 0 ? ` of ${questionLimit}` : ''}</span>
           {goalDisplay && (
             <span title="Questions answered toward your tutor's assignment" style={{ fontSize: 11, fontWeight: 800, color: NAVY, background: 'rgba(255,255,255,0.3)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
               Assignment {goalDisplay.progress}/{goalDisplay.goal}
@@ -1904,10 +1987,11 @@ export default function QuizScreen({
           <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={14} aria-hidden="true" />{streak} streak</span>}
-          {accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
-          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{signedXP(sessionXP)} XP</span>
-          {examMode && timerSeconds > 0 && (() => {
+          {/* Score signals would give away answers during an exam. */}
+          {!examRun && streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={14} aria-hidden="true" />{streak} streak</span>}
+          {!examRun && accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
+          {!examRun && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{signedXP(sessionXP)} XP</span>}
+          {examRun && timerSeconds > 0 && (() => {
             const m = Math.floor(timeLeft / 60)
             const s = timeLeft % 60
             const urgent = timeLeft < 300
@@ -1922,12 +2006,12 @@ export default function QuizScreen({
       </div>
 
       {/* Level progress bar */}
-      <div style={{ height: 3, background: t.borderMid, flexShrink: 0 }}>
+      {!examRun && <div style={{ height: 3, background: t.borderMid, flexShrink: 0 }}>
         <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
-      </div>
+      </div>}
 
       {/* Session stats strip */}
-      <div style={{ background: t.bgSubtle, borderBottom: `1px solid ${t.border}`, padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
+      {!examRun && <div style={{ background: t.bgSubtle, borderBottom: `1px solid ${t.border}`, padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>This session</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.success }}>{sessionCorrect}</span> correct</span>
         <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</span> wrong</span>
@@ -1938,7 +2022,7 @@ export default function QuizScreen({
             Remediation · {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
           </span>
         )}
-      </div>
+      </div>}
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
         <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2095,7 +2179,7 @@ export default function QuizScreen({
                       boxShadow: selected != null ? `0 6px 20px rgba(241,190,67,0.3)` : 'none',
                     }}
                   >
-                    Check answer
+                    {examRun ? 'Submit answer' : 'Check answer'}
                   </button>
                 )}
               </div>
@@ -2107,6 +2191,7 @@ export default function QuizScreen({
                   showAns={showAns}
                   onSubmit={handleSubmitResponse}
                   theme={theme}
+                  checkLabel={examRun ? 'Submit answer' : 'Check answer'}
                 />
               )}
             </div>
