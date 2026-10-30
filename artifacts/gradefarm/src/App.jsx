@@ -1007,6 +1007,7 @@ function AppInner() {
   const [quizLoadingTip,  setQuizLoadingTip]  = useState(false)
   const [quizMode,        setQuizMode]        = useState('new')
   const [quizSubtopics,   setQuizSubtopics]   = useState([])
+  const [quizReviewIds,   setQuizReviewIds]   = useState([])
   const [quizRemediationMode,      setQuizRemediationMode]      = useState(false)
   const [quizRemediationStreak,    setQuizRemediationStreak]    = useState(0)
   const [quizRemediationTarget,    setQuizRemediationTarget]    = useState(3)
@@ -1194,6 +1195,7 @@ function AppInner() {
     setQuizQNumber(1)
     setQuizSessionXP(0)
     setQuizMode('new')
+    setQuizReviewIds([])
     setQuizFinished(false)
     setQuizSessionTip('')
     setQuizSessionTipLoading(false)
@@ -1229,6 +1231,7 @@ function AppInner() {
     setQuizQNumber(1)
     setQuizSessionXP(0)
     setQuizMode('new')
+    setQuizReviewIds([])
     setQuizFinished(false)
     setQuizSessionTip('')
     setQuizSessionTipLoading(false)
@@ -1262,6 +1265,7 @@ function AppInner() {
     qNumber: quizQNumber,      setQNumber: setQuizQNumber,
     quizMode,                  setQuizMode,
     quizSubtopics,             setQuizSubtopics,
+    reviewIds: quizReviewIds,  setReviewIds: setQuizReviewIds,
     aiTip: quizAiTip,          setAiTip: setQuizAiTip,
     loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
     remediationMode: quizRemediationMode,           setRemediationMode: setQuizRemediationMode,
@@ -1333,7 +1337,7 @@ function AppInner() {
     q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
     earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
     results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
-    mode: quizMode, subtopics: quizSubtopics, examMode: quizExamMode, timerSeconds: quizTimerSeconds,
+    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, examMode: quizExamMode, timerSeconds: quizTimerSeconds,
     assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
     remediation: {
       mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
@@ -1358,6 +1362,7 @@ function AppInner() {
     setQuizLoadingTip(false)
     setQuizMode(saved.mode)
     setQuizSubtopics(saved.subtopics)
+    setQuizReviewIds(saved.reviewIds || [])
     setQuizExamMode(saved.examMode)
     setQuizTimerSeconds(saved.timerSeconds)
     setActiveAssignment(saved.assignment)
@@ -1395,6 +1400,7 @@ function AppInner() {
     setQuizAiTip('')
     setQuizLoadingTip(false)
     setQuizMode('new')
+    setQuizReviewIds([])
     setQuizSubtopics([])
     setQuizFinished(false)
     setQuizSessionTip('')
@@ -1794,6 +1800,7 @@ function AppInner() {
             }
 
             setQuizMode(nextMode)
+            setQuizReviewIds([])
             setQuizSubtopics(expandedSubtopics)
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)
