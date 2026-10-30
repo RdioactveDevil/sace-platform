@@ -650,9 +650,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes hs-fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .hs-wrap  { display: flex; align-items: flex-start; gap: 24px; flex: 1; min-height: 0; }
-        .hs-main  { flex: 1; min-width: 0; padding: 28px 8px 32px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-        .hs-right { width: 360px; flex-shrink: 0; padding: 28px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        /* One scroll for the whole page, so the scrollbar sits at the far right; the
+           right column stays in view while a long topic list scrolls. */
+        .hs-wrap  { display: flex; align-items: flex-start; gap: 24px; flex: 1; min-height: 0; overflow-y: auto; }
+        .hs-main  { flex: 1; min-width: 0; padding: 28px 0 32px 32px; box-sizing: border-box; }
+        .hs-right { width: 360px; flex-shrink: 0; padding: 28px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; }
         .hs-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; }
         .hs-row:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
@@ -662,7 +664,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         }
         @media (max-width: 860px) {
           .hs-wrap  { display: block !important; flex: none !important; height: auto !important; overflow: visible !important; min-height: auto !important; }
-          .hs-main  { height: auto !important; overflow-y: visible !important; padding: 18px 14px !important; }
+          .hs-main  { padding: 18px 14px !important; }
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
           .hs-name { white-space: normal; }
