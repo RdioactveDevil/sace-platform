@@ -2020,6 +2020,14 @@ export default function QuizScreen({
                   let lBg = t.borderMid
                   let lCol = t.text
 
+                  if (!showAns && isSelectedOpt) {
+                    bg = 'rgba(241,190,67,0.10)'
+                    border = `1px solid ${GOLD}`
+                    color = t.text
+                    lBg = GOLD
+                    lCol = NAVY
+                  }
+
                   if (showAns) {
                     if (isCorrectOpt) {
                       bg = t.successBg
@@ -2045,7 +2053,9 @@ export default function QuizScreen({
                   return (
                     <button
                       key={i}
-                      onClick={() => handleAnswer(i)}
+                      // Choosing only selects: a misclick can be changed before Check answer.
+                      onClick={() => { if (!showAns) setSelected(i) }}
+                      aria-pressed={!showAns ? isSelectedOpt : undefined}
                       className={showAns ? '' : 'qopt'}
                       style={{
                         background: bg,
@@ -2073,6 +2083,21 @@ export default function QuizScreen({
                     </button>
                   )
                 })}
+                {!showAns && (
+                  <button
+                    onClick={() => { if (selected != null) handleAnswer(selected) }}
+                    disabled={selected == null}
+                    style={{
+                      marginTop: 8, width: '100%', padding: '13px', borderRadius: 12, border: 'none',
+                      background: selected != null ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.bgHover,
+                      color: selected != null ? NAVY : t.textFaint, fontSize: 14, fontWeight: 800,
+                      cursor: selected != null ? 'pointer' : 'default', fontFamily: FONT_B,
+                      boxShadow: selected != null ? `0 6px 20px rgba(241,190,67,0.3)` : 'none',
+                    }}
+                  >
+                    Check answer
+                  </button>
+                )}
               </div>
               ) : (
                 <QuestionRenderer
