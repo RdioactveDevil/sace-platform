@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Zap, Trophy, TrendingUp, Dumbbell, TriangleAlert, CircleCheck, Bot, Pause, Flame, Timer, Pin, Lightbulb, Lock } from 'lucide-react'
+import { Zap, TriangleAlert, CircleCheck, Bot, Pause, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   selectNextQuestion,
   calcXP,
@@ -443,6 +443,8 @@ export default function QuizScreen({
   const [endedForExam, setEndedForExam] = useState(false)
   // The student pressed End Session (also not the bank running out).
   const [endedEarly, setEndedEarly] = useState(false)
+  // Rows opened in the summary's answer list.
+  const [openAnswers, setOpenAnswers] = useState(() => new Set())
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
   const sessionCompletedRef = useRef(false)
   const startTime = useRef(null)
@@ -1299,7 +1301,7 @@ export default function QuizScreen({
     setEarnedXP(xpEarned)
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, remediation: isRemediationQuestion, response: idx }])
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isRemediationQuestion, response: idx, timeMs: timeTakenMs }])
     if (!isRemediationQuestion) countAssignmentAnswer(isCorrect, idx, timeTakenMs)
 
     if (isCorrect && !examRun) {
@@ -1397,7 +1399,7 @@ export default function QuizScreen({
     setEarnedXP(xpEarned)
     setStreak(newStreak)
     setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant, response }])
+    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant, response, timeMs: timeTakenMs }])
     if (!isVariant) countAssignmentAnswer(isCorrect, response, timeTakenMs)
 
     if (isCorrect && !examRun) {
@@ -1580,6 +1582,7 @@ export default function QuizScreen({
       setEndedForGoal(false)
       setEndedForExam(false)
       setEndedEarly(false)
+      setOpenAnswers(new Set())
       setTimeLeft(timerSeconds)
       setQuizMode(mode)
       setReviewIds?.(ids)
@@ -1594,274 +1597,213 @@ export default function QuizScreen({
       loadNext([], struggleMap, mode, effectiveSubtopics, null, ids)
     }
 
-    // ── Session summary calculations ────────────────────────────────────────
+    // ── Session summary ─────────────────────────────────────────────────────
     const mainResults   = sessionResults.filter(r => !r.remediation)
     const sessCorrect   = mainResults.filter(r => r.correct).length
     const sessTotal     = mainResults.length
-    const sessAccuracy  = sessTotal > 0 ? Math.round((sessCorrect / sessTotal) * 100) : 0
-    const accColor      = sessAccuracy >= 70 ? '#4ade80' : sessAccuracy >= 40 ? GOLD : '#f87171'
-    const AccIcon       = sessAccuracy >= 70 ? Trophy : sessAccuracy >= 40 ? TrendingUp : Dumbbell
+    const sessWrong     = sessTotal - sessCorrect
+    const toneFor = (pct) => (pct < 40 ? t.danger : pct < 70 ? t.goldText : t.success)
 
-    // Per-topic breakdown (main questions only)
+    // Time on task: every answer's time, remediation included.
+    const totalMs = sessionResults.reduce((sum, r) => sum + (r.timeMs || 0), 0)
+    const totalMin = Math.round(totalMs / 60000)
+    const timeLabel = totalMs <= 0 ? null : totalMin >= 1 ? `${totalMin} min` : `${Math.max(1, Math.round(totalMs / 1000))} sec`
+    const clock = (ms) => {
+      if (!ms) return ''
+      const s = Math.round(ms / 1000)
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+    }
+
+    // Per subtopic (falling back to topic), main questions only, weakest first.
     const topicMap = {}
     mainResults.forEach(r => {
-      if (!r.topic) return
-      if (!topicMap[r.topic]) topicMap[r.topic] = { correct: 0, total: 0 }
-      topicMap[r.topic].total++
-      if (r.correct) topicMap[r.topic].correct++
+      const key = r.subtopic || r.topic
+      if (!key) return
+      if (!topicMap[key]) topicMap[key] = { correct: 0, total: 0 }
+      topicMap[key].total++
+      if (r.correct) topicMap[key].correct++
     })
     const topicBreakdown = Object.entries(topicMap)
       .map(([topic, s]) => ({ topic, ...s, pct: Math.round((s.correct / s.total) * 100) }))
-      .sort((a, b) => a.pct - b.pct) // weakest first
-
-    // Exam mode: each main answer with its question, for the answers list.
-    const questionById = new Map(questions.map(q => [q.id, q]))
-    const examReview = examRun
-      ? mainResults.map(r => ({ r, q: questionById.get(r.id) })).filter(x => x.q)
-      : []
+      .sort((a, b) => a.pct - b.pct)
 
     // This session's misses, not every question ever got wrong in these topics
     // (Home and the Study Plan offer that review).
     const wrongThisSession = sessionWrongIds(sessionResults, questions)
-    const weakSubtopics = [...new Set(
-      sessionResults.filter(r => !r.correct && !r.remediation && r.subtopic).map(r => r.subtopic)
-    )].slice(0, 4)
+    const questionById = new Map(questions.map(q => [q.id, q]))
+    const answerRows = mainResults.map((r, i) => ({ r, q: questionById.get(r.id), key: `${r.id}-${i}` })).filter(x => x.q)
 
-    const headlineText = consolidation
-      ? (round.byStreak ? 'Nice work!' : 'Round complete')
+    const timeUp = examRun && timerSeconds > 0 && timeLeft <= 0
+    const status = consolidation
+      ? (round.byStreak ? 'Nice work' : 'Round complete')
       : examRun
-      ? (timerSeconds > 0 && timeLeft <= 0 ? "Time's Up!" : 'Exam Complete!')
-      : quizMode === 'new'
-        ? 'Session Complete!'
-        : quizMode === 'wrong' || quizMode === 'review'
-          ? 'Wrongs Reviewed!'
-          : 'Session Complete!'
+        ? (timeUp ? "Time's up" : 'Exam finished')
+        : endedEarly ? 'Session ended' : 'Session finished'
+    // A longer note only where there's something specific to say.
+    const note = consolidation
+      ? round.byStreak
+        ? `${CONSOLIDATION_STREAK} in a row on ${consolidation.label}.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
+        : round.done
+          ? `You've practised ${round.answered} questions on ${consolidation.label}. The ones you missed will come back in your Study Plan.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
+          : `That's every question on ${consolidation.label} for now.`
+      : endedForGoal && goalDisplay
+        ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
+        : null
+
+    const nextStep = consolidation
+      ? { text: consolidation.canReturn ? 'This round is done.' : 'This round is done. Carry on with the whole subject.', label: consolidation.canReturn ? 'Back to my quiz' : 'Practise the whole subject', onClick: leaveConsolidation }
+      : wrongThisSession.length > 0
+        ? { text: `Redo the ${wrongThisSession.length === 1 ? 'question' : `${wrongThisSession.length} questions`} you missed while the working is fresh.`, label: `Redo ${wrongThisSession.length} wrong answer${wrongThisSession.length !== 1 ? 's' : ''}`, onClick: () => startMode('review', wrongThisSession) }
+        : sessTotal > 0
+          ? { text: 'Every question right. Keep the run going with new questions.', label: 'Practise new questions', onClick: () => startMode('new') }
+          : { text: 'Pick some topics on Practice to start a new session.', label: 'Back to Practice', onClick: onHome }
+
+    const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
+    const banner = (tone, title, body, Icon) => (
+      <div style={{ ...card, padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: 10, borderColor: tone }}>
+        <Icon size={18} color={tone} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{title}</div>
+          {body && <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2, lineHeight: 1.5 }}>{body}</div>}
+        </div>
+      </div>
+    )
+    const toggleAnswer = (key) => setOpenAnswers(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
     return (
-      <div style={{ minHeight: '100%', background: t.bg, fontFamily: FONT_B, overflowY: 'auto', position: 'relative' }}>
+      <div style={{ height: '100%', minHeight: '100%', background: t.bg, fontFamily: FONT_B, overflowY: 'auto', color: t.text }}>
         <style>{`
-          @keyframes ss-fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-          .ss-grid { background-image: linear-gradient(rgba(241,190,67,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(241,190,67,0.03) 1px, transparent 1px); background-size: 52px 52px; }
+          .ss-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+          .ss-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 180px) 52px 14px; gap: 12px; align-items: center; width: 100%; padding: 11px 16px; border: none; background: transparent; text-align: left; cursor: pointer; font-family: inherit; color: inherit; }
+          .ss-row:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
+          @media (max-width: 760px) {
+            .ss-grid { grid-template-columns: 1fr; }
+            .ss-row { grid-template-columns: 22px minmax(0, 1fr) 14px; }
+            .ss-row .ss-hide { display: none; }
+          }
         `}</style>
-        <div className="ss-grid" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 600, height: 300, borderRadius: '50%', background: `radial-gradient(circle,rgba(241,190,67,0.07) 0%,transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none' }} />
-        <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 20px 60px', animation: 'ss-fadeUp 0.35s ease', position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '20px 16px 48px' : '32px 32px 56px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: accColor }}><AccIcon size={52} aria-hidden="true" /></div>
-            <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text, letterSpacing: 1, marginBottom: 6 }}>
-              {headlineText}
-            </div>
-            <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
-              {consolidation
-                ? round.byStreak
-                  ? `${CONSOLIDATION_STREAK} in a row on ${consolidation.label}.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
-                  : round.done
-                    ? `You've practised ${round.answered} questions on ${consolidation.label}. The ones you missed will come back in your Study Plan.${consolidation.canReturn ? ' Time to get back to your quiz.' : ''}`
-                    : `That's every question on ${consolidation.label} for now.`
-                : examRun
-                ? `You answered ${sessTotal} question${sessTotal !== 1 ? 's' : ''}${timerSeconds > 0 && timeLeft <= 0 ? ' before the time ran out' : ''}. Your answers are below.`
-                : endedEarly
-                ? `You answered ${sessTotal} question${sessTotal !== 1 ? 's' : ''} this session.`
-                : endedForGoal && goalDisplay
-                ? `You've answered all ${goalDisplay.goal} questions your tutor set${goalDisplay.minAccuracy && goalDisplay.passed !== false ? ` and hit the ${goalDisplay.minAccuracy}% pass mark` : ''}.`
-                : quizMode === 'new' && sessTotal > 0
-                  ? "You've worked through every question in this set."
-                  : 'Good work finishing the session.'}
-            </div>
-          </div>
-
-          {/* Auto-generation failure banner — shown when the bank ran out but
-              the AI top-up could not produce questions, so the cause is visible
-              instead of the session silently ending. */}
-          {generationError && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.dangerBg || 'rgba(248,113,113,0.12)', border: `1px solid ${(t.danger || '#f87171')}55`, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <TriangleAlert size={18} color={t.danger || '#f87171'} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.danger || '#f87171' }}>
-                  Couldn’t generate more questions
-                </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2, lineHeight: 1.5 }}>{generationError}</div>
+          {/* Header: status, time (XP) and the score */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: t.textMuted }}>
+                {status}
+                {timeLabel && <> · <strong style={{ color: t.text }}>{timeLabel}</strong></>}
+                {' '}({signedXP(sessionXP)} XP)
               </div>
+              <h1 style={{ margin: '2px 0 0', fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>
+                {sessTotal > 0 ? `${sessCorrect} of ${sessTotal} correct` : 'No questions answered'}
+              </h1>
+              {note && <p style={{ margin: '6px 0 0', fontSize: 13, color: t.textMuted, lineHeight: 1.55, maxWidth: 620 }}>{note}</p>}
             </div>
-          )}
-
-          {/* One-attempt assignment finished below the pass mark */}
-          {assignmentsCompleted.length > 0 && completedGoal?.passed === false && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.bgCard, border: `1px solid ${t.borderAccent}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Pin size={18} color={GOLD} style={{ flexShrink: 0 }} aria-hidden="true" />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
-                  Assignment finished: {completedGoal.accuracy}% (pass mark {completedGoal.minAccuracy}%)
-                </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>You didn’t reach the pass mark this time. Your tutor has your results and will go through them with you.</div>
-              </div>
-            </div>
-          )}
-
-          {/* Assignments completed banner */}
-          {assignmentsCompleted.length > 0 && completedGoal?.passed !== false && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}55`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <CircleCheck size={20} color={t.success} style={{ flexShrink: 0 }} aria-hidden="true" />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.success }}>
-                  {assignmentsCompleted.length === 1 ? 'Assignment completed!' : `${assignmentsCompleted.length} assignments completed!`}
-                  {completedGoal?.passed && ` You scored ${completedGoal.accuracy}%, above the ${completedGoal.minAccuracy}% pass mark.`}
-                </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>Your tutor has been notified.</div>
-              </div>
-            </div>
-          )}
-
-          {/* Unfinished assignment — the session ended before the tutor's goal */}
-          {assignmentsCompleted.length === 0 && assignmentStand && !assignmentStand.complete && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, background: t.bgCard, border: `1px solid ${t.borderAccent}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Pin size={18} color={GOLD} style={{ flexShrink: 0 }} aria-hidden="true" />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
-                  Assignment progress: {assignmentStand.progress}/{assignmentStand.goal} questions
-                </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 1 }}>
-                  {assignmentStand.progress < assignmentStand.goal
-                    ? `Your progress is saved. Answer ${assignmentStand.goal - assignmentStand.progress} more to ${assignmentStand.oneAttempt ? 'finish' : 'complete'} it${assignmentStand.minAccuracy ? `, scoring at least ${assignmentStand.minAccuracy}%${assignmentStand.oneAttempt ? ' to pass' : ''}` : ''}.`
-                    : `Score at least ${assignmentStand.minAccuracy}% on your last ${assignmentStand.goal} answers to complete it — you're on ${assignmentStand.accuracy}%. Keep practising.`}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
-            {[
-              { label: 'Accuracy',  val: `${sessAccuracy}%`,      color: accColor, isXP: false },
-              { label: 'Correct',   val: `${sessCorrect}/${sessTotal}`, color: t.text, isXP: false },
-              { label: 'XP Earned', val: signedXP(sessionXP),         color: GOLD, isXP: true },
-            ].map(s => (
-              <div key={s.label} style={{
-                background: s.isXP ? t.accentGlow : t.bgCard,
-                border: `1px solid ${s.isXP ? t.borderAccent : t.border}`,
-                borderRadius: 14,
-                padding: '16px 10px',
-                textAlign: 'center',
-                boxShadow: t.shadowCard,
-              }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: s.color, fontFamily: FONT_D, letterSpacing: 0.5 }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: s.isXP ? GOLD : t.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Topic breakdown */}
-          {topicBreakdown.length > 0 && (
-            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowCard }}>
-              <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Topic Breakdown</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {topicBreakdown.map(tb => {
-                  const tc = tb.pct >= 70 ? t.success : tb.pct >= 40 ? GOLD : t.danger
-                  return (
-                    <div key={tb.topic}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{tb.topic}</span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: tc }}>{tb.correct}/{tb.total}</span>
-                      </div>
-                      <div style={{ background: t.borderMid || t.border, borderRadius: 999, height: 5, overflow: 'hidden' }}>
-                        <div style={{ width: `${tb.pct}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width 0.6s ease' }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Exam answers, held back until now */}
-          {examRun && examReview.length > 0 && (
-            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowCard }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 12 }}>Your answers</div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {examReview.map(({ r, q }, i) => (
-                  <details key={`${q.id}-${i}`} style={{ borderTop: i > 0 ? `1px solid ${t.border}` : 'none', padding: '10px 0' }}>
-                    <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 10, listStyle: 'none' }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: r.correct ? t.success : t.danger, width: 44, flexShrink: 0, paddingTop: 2 }}>
-                        {r.correct ? '✓' : '✗'} Q{i + 1}
-                      </span>
-                      <span style={{ fontSize: 13, color: t.text, lineHeight: 1.55, minWidth: 0, flex: 1 }}><MathText text={q.question} /></span>
-                    </summary>
-                    <div style={{ padding: '8px 0 0 54px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, lineHeight: 1.55 }}>
-                      <div style={{ color: r.correct ? t.success : t.danger }}>
-                        <span style={{ fontWeight: 700 }}>Your answer: </span>
-                        <MathText text={describeResponse(q, r.response) || 'No answer'} />
-                      </div>
-                      {!r.correct && (
-                        <div style={{ color: t.success }}>
-                          <span style={{ fontWeight: 700 }}>Correct answer: </span>
-                          <MathText text={describeCorrectAnswer(q)} />
-                        </div>
-                      )}
-                      {q.solution && (
-                        <div style={{ color: t.textMuted }}><MathText text={q.solution} /></div>
-                      )}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Weak spots callout */}
-          {weakSubtopics.length > 0 && (
-            <div style={{ background: t.dangerBg, border: `1px solid ${t.danger}33`, borderRadius: 14, padding: '14px 18px', marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: t.danger, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Needs Work</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {weakSubtopics.map(sub => (
-                  <span key={sub} style={{ background: t.dangerBg, border: `1px solid ${t.danger}44`, borderRadius: 6, padding: '4px 10px', fontSize: 12, color: t.danger }}>{sub}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* AI Coaching Tip */}
-          {(sessionTipLoading || sessionTip) && (
-            <div style={{ background: t.purpleBg, border: `1px solid ${t.purple}33`, borderRadius: 14, padding: '14px 18px', marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: t.purple, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>AI Coach</div>
-              {sessionTipLoading
-                ? <div style={{ fontSize: 13, color: t.textFaint, fontStyle: 'italic' }}>Getting your coaching tip…</div>
-                : <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.65, display: 'flex', alignItems: 'flex-start', gap: 8 }}><Bot size={14} color={t.purple} style={{ flexShrink: 0, marginTop: 4 }} aria-hidden="true" /><span>{sessionTip}</span></div>
-              }
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {consolidation && (
-              <button onClick={leaveConsolidation}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                {consolidation.canReturn ? 'Back to my quiz →' : 'Practise the whole subject →'}
-              </button>
-            )}
-            {!consolidation && wrongThisSession.length > 0 && (
-              <button onClick={() => startMode('review', wrongThisSession)}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                Fix {wrongThisSession.length} wrong answer{wrongThisSession.length !== 1 ? 's' : ''} →
-              </button>
-            )}
-            {!consolidation && wrongThisSession.length === 0 && quizMode !== 'all' && (
-              <button onClick={() => startMode('all')}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-                Repeat all questions
-              </button>
-            )}
-            {!consolidation && onGoToStudyPlan && (
-              <button onClick={onGoToStudyPlan}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
-                Go to Study Plan →
-              </button>
-            )}
-            <button onClick={onHome}
-              style={{ width: '100%', padding: '14px', borderRadius: 12, border: `1px solid rgba(241,190,67,0.3)`, background: 'transparent', color: GOLD, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-              ← Back to Practice
+            <button type="button" onClick={onHome}
+              style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }}>
+              Back to Practice
             </button>
           </div>
+
+          {generationError && banner(t.danger, 'Couldn’t generate more questions', generationError, TriangleAlert)}
+          {assignmentsCompleted.length > 0 && completedGoal?.passed === false && banner(t.borderAccent, `Assignment finished: ${completedGoal.accuracy}% (pass mark ${completedGoal.minAccuracy}%)`, 'You didn’t reach the pass mark this time. Your tutor has your results and will go through them with you.', Pin)}
+          {assignmentsCompleted.length > 0 && completedGoal?.passed !== false && banner(t.success, `${assignmentsCompleted.length === 1 ? 'Assignment completed' : `${assignmentsCompleted.length} assignments completed`}${completedGoal?.passed ? `. You scored ${completedGoal.accuracy}%, above the ${completedGoal.minAccuracy}% pass mark.` : ''}`, 'Your tutor has been notified.', CircleCheck)}
+          {assignmentsCompleted.length === 0 && assignmentStand && !assignmentStand.complete && banner(t.borderAccent, `Assignment progress: ${assignmentStand.progress}/${assignmentStand.goal} questions`,
+            assignmentStand.progress < assignmentStand.goal
+              ? `Your progress is saved. Answer ${assignmentStand.goal - assignmentStand.progress} more to ${assignmentStand.oneAttempt ? 'finish' : 'complete'} it${assignmentStand.minAccuracy ? `, scoring at least ${assignmentStand.minAccuracy}%${assignmentStand.oneAttempt ? ' to pass' : ''}` : ''}.`
+              : `Score at least ${assignmentStand.minAccuracy}% on your last ${assignmentStand.goal} answers to complete it. You're on ${assignmentStand.accuracy}%. Keep practising.`, Pin)}
+
+          {/* AI summary */}
+          {(sessionTipLoading || sessionTip) && (
+            <div style={{ ...card, padding: '14px 16px', fontSize: 14, lineHeight: 1.6, color: t.textSub }}>
+              {sessionTipLoading ? <span style={{ color: t.textFaint }}>Writing a summary of this session…</span> : sessionTip}
+            </div>
+          )}
+
+          {sessTotal > 0 && (
+            <div className="ss-grid">
+              {/* Score: right/wrong bar, then each topic */}
+              <div style={{ ...card, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div aria-hidden="true" style={{ display: 'flex', gap: 2, height: 10, borderRadius: 5, overflow: 'hidden', background: t.border }}>
+                  {sessCorrect > 0 && <div style={{ flex: sessCorrect, background: t.success }} />}
+                  {sessWrong > 0 && <div style={{ flex: sessWrong, background: t.danger }} />}
+                </div>
+                <div style={{ display: 'flex', gap: 18, fontSize: 13, color: t.textMuted }}>
+                  <span><strong style={{ color: t.success }}>{sessCorrect}</strong> right</span>
+                  <span><strong style={{ color: t.danger }}>{sessWrong}</strong> wrong</span>
+                </div>
+                {topicBreakdown.length > 1 && (
+                  <div>
+                    {topicBreakdown.map((tb, i) => (
+                      <div key={tb.topic} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 70px 44px', gap: 12, alignItems: 'center', padding: '9px 0', borderTop: i > 0 ? `1px solid ${t.border}` : 'none', fontSize: 13 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tb.topic}>{tb.topic}</span>
+                        <span aria-hidden="true" style={{ height: 5, borderRadius: 3, background: t.border, overflow: 'hidden' }}>
+                          <span style={{ display: 'block', height: '100%', width: `${tb.pct}%`, background: toneFor(tb.pct) }} />
+                        </span>
+                        <span style={{ textAlign: 'right', fontWeight: 700, color: toneFor(tb.pct), fontVariantNumeric: 'tabular-nums' }}>{tb.correct}/{tb.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {topicBreakdown.length === 1 && (
+                  <div style={{ fontSize: 13, color: t.textMuted }}>All in {topicBreakdown[0].topic}</div>
+                )}
+              </div>
+
+              {/* One recommended next step */}
+              <div style={{ ...card, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Next step</div>
+                <p style={{ margin: 0, fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>{nextStep.text}</p>
+                <button type="button" onClick={nextStep.onClick}
+                  style={{ padding: '12px', borderRadius: 10, border: 'none', background: t.accent, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                  {nextStep.label}
+                </button>
+                {!consolidation && onGoToStudyPlan && (
+                  <button type="button" onClick={onGoToStudyPlan}
+                    style={{ padding: '11px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                    Open study plan
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Every question answered; open one for your answer, the correct one and the solution */}
+          {answerRows.length > 0 && (
+            <div style={{ ...card, overflow: 'hidden' }}>
+              {answerRows.map(({ r, q, key }, i) => {
+                const open = openAnswers.has(key)
+                return (
+                  <div key={key} style={{ borderTop: i > 0 ? `1px solid ${t.border}` : 'none', background: open ? t.bgSubtle : 'transparent' }}>
+                    <button type="button" className="ss-row" aria-expanded={open} onClick={() => toggleAnswer(key)}>
+                      <span aria-label={r.correct ? 'Correct' : 'Wrong'} style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: r.correct ? t.successBg : t.dangerBg, color: r.correct ? t.success : t.danger }}>
+                        {r.correct ? '✓' : '✗'}
+                      </span>
+                      <span style={{ fontSize: 13.5, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><MathText text={q.question} /></span>
+                      <span className="ss-hide" style={{ fontSize: 12, color: t.textFaint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.subtopic || q.topic}</span>
+                      <span className="ss-hide" style={{ fontSize: 12, color: t.textFaint, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{clock(r.timeMs)}</span>
+                      <span aria-hidden="true" style={{ display: 'flex', color: t.textFaint }}>{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
+                    </button>
+                    {open && (
+                      <div style={{ padding: '0 16px 14px 50px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, lineHeight: 1.6 }}>
+                        <div style={{ color: t.text }}><MathText text={q.question} /></div>
+                        <div style={{ color: r.correct ? t.success : t.danger }}>
+                          <strong>Your answer: </strong><MathText text={describeResponse(q, r.response) || 'No answer'} />
+                        </div>
+                        {!r.correct && (
+                          <div style={{ color: t.success }}><strong>Correct answer: </strong><MathText text={describeCorrectAnswer(q)} /></div>
+                        )}
+                        {q.solution && <div style={{ color: t.textMuted }}><MathText text={q.solution} /></div>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     )
