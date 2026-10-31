@@ -64,9 +64,9 @@ export default function AdminUsersTab({ profile }) {
   }
 
   return (
-    <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{users.length} user{users.length === 1 ? '' : 's'}</span>
+        <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{users.length} user{users.length === 1 ? '' : 's'}</span>
         <input
           value={filter}
           onChange={e => setFilter(e.target.value)}
@@ -74,9 +74,9 @@ export default function AdminUsersTab({ profile }) {
           style={{
             marginLeft: 'auto',
             padding: '8px 12px', borderRadius: 8,
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+            background: 'rgba(var(--ink-rgb),0.04)',
+            border: '1px solid rgba(var(--ink-rgb),0.08)',
+            color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
             minWidth: 240,
           }}
         />
@@ -88,7 +88,7 @@ export default function AdminUsersTab({ profile }) {
             flexShrink: 0,
             padding: '8px 12px', borderRadius: 8, fontFamily: FONT_B,
             border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)',
-            color: GOLD, fontSize: 12, fontWeight: 700,
+            color: 'var(--t-goldText)', fontSize: 12, fontWeight: 700,
             cursor: loading || filtered.length === 0 ? 'not-allowed' : 'pointer',
             opacity: loading || filtered.length === 0 ? 0.5 : 1,
           }}
@@ -98,17 +98,17 @@ export default function AdminUsersTab({ profile }) {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: '#f87171', marginBottom: 12 }}>
+        <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }}>
           {error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: 13 }}>Loading users…</div>
+        <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading users…</div>
       ) : (
-        <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ border: '1px solid rgba(var(--ink-rgb),0.06)', borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left' }}>
+            <thead style={{ background: 'rgba(var(--ink-rgb),0.03)', textAlign: 'left' }}>
               <tr>
                 <th style={th}>User</th>
                 <th style={th}>Role</th>
@@ -121,10 +121,10 @@ export default function AdminUsersTab({ profile }) {
                 const isSelf = u.id === profile?.id
                 const busy = busyId === u.id
                 return (
-                  <tr key={u.id} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <tr key={u.id} style={{ borderTop: '1px solid rgba(var(--ink-rgb),0.05)' }}>
                     <td style={td}>
-                      <div style={{ fontWeight: 700, color: '#f1f5f9' }}>{u.display_name || '—'}</div>
-                      <div style={{ fontSize: 11, color: '#64748b' }}>{u.email}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--t-text)' }}>{u.display_name || '—'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{u.email}</div>
                     </td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -163,7 +163,7 @@ export default function AdminUsersTab({ profile }) {
                 )
               })}
               {filtered.length === 0 && (
-                <tr><td style={{ ...td, color: '#64748b' }} colSpan={4}>No users match.</td></tr>
+                <tr><td style={{ ...td, color: 'var(--t-textMuted)' }} colSpan={4}>No users match.</td></tr>
               )}
             </tbody>
           </table>
@@ -173,7 +173,7 @@ export default function AdminUsersTab({ profile }) {
   )
 }
 
-const th = { padding: '10px 12px', fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }
+const th = { padding: '10px 12px', fontSize: 11, color: 'var(--t-textMuted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }
 const td = { padding: '10px 12px', verticalAlign: 'middle' }
 
 function statusColor(s) {
@@ -201,8 +201,8 @@ function Btn({ children, onClick, disabled, variant, title }) {
       title={title}
       style={{
         padding: '6px 10px', borderRadius: 6,
-        border: '1px solid ' + (isPrimary ? '#f1be4399' : 'rgba(255,255,255,0.12)'),
-        background: isPrimary ? '#f1be4322' : 'rgba(255,255,255,0.04)',
+        border: '1px solid ' + (isPrimary ? '#f1be4399' : 'rgba(var(--ink-rgb),0.12)'),
+        background: isPrimary ? '#f1be4322' : 'rgba(var(--ink-rgb),0.04)',
         color: isPrimary ? '#f1be43' : '#e2e8f0',
         fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,

@@ -169,7 +169,7 @@ export default function AdminQuestionPreviewTab() {
             <div style={s.optionsWrap}>
               {(question.options || []).map((opt, i) => {
                 const isCorrect = i === question.answer_index
-                let bg = 'rgba(255,255,255,0.04)', border = '1px solid rgba(255,255,255,0.1)', color = 'rgba(255,255,255,0.7)', lBg = 'rgba(255,255,255,0.1)', lCol = '#fff'
+                let bg = 'rgba(var(--ink-rgb),0.04)', border = '1px solid rgba(var(--ink-rgb),0.1)', color = 'rgba(var(--ink-rgb),0.7)', lBg = 'rgba(var(--ink-rgb),0.1)', lCol = '#fff'
                 if (revealed && isCorrect) { bg = 'rgba(16,185,129,0.1)'; border = '1px solid rgba(16,185,129,0.35)'; color = '#4ade80'; lBg = 'rgba(16,185,129,0.2)'; lCol = '#4ade80' }
                 return (
                   <div key={i} style={{ ...s.option, background: bg, border, color }}>
@@ -193,7 +193,7 @@ export default function AdminQuestionPreviewTab() {
 
           {/* ── Right: editor ── */}
           <div style={{ ...s.card, flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Edit visuals</div>
+            <div style={{ color: 'var(--t-text)', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Edit visuals</div>
 
             {/* Image */}
             <div>
@@ -266,21 +266,21 @@ export default function AdminQuestionPreviewTab() {
 
 const styles = {
   page: { padding: '28px 32px', maxWidth: 900, fontFamily: FONT_B },
-  sub: { color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: '0 0 24px' },
+  sub: { color: 'rgba(var(--ink-rgb),0.4)', fontSize: 13, margin: '0 0 24px' },
   searchRow: { display: 'flex', gap: 8, marginBottom: 20 },
   input: {
     flex: 1, width: '100%',
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 8, color: '#fff', fontSize: 13,
+    background: 'rgba(var(--ink-rgb),0.06)',
+    border: '1px solid rgba(var(--ink-rgb),0.12)',
+    borderRadius: 8, color: 'var(--t-text)', fontSize: 13,
     padding: '10px 14px', fontFamily: FONT_B, outline: 'none',
     boxSizing: 'border-box',
   },
   textarea: {
     width: '100%',
     background: 'rgba(0,0,0,0.3)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 8, color: 'rgba(255,255,255,0.8)', fontSize: 11,
+    border: '1px solid rgba(var(--ink-rgb),0.1)',
+    borderRadius: 8, color: 'rgba(var(--ink-rgb),0.8)', fontSize: 11,
     padding: '10px 12px', fontFamily: 'monospace', outline: 'none',
     resize: 'vertical', boxSizing: 'border-box',
   },
@@ -290,15 +290,15 @@ const styles = {
     padding: '10px 20px', cursor: 'pointer', fontFamily: FONT_B,
   },
   uploadBtn: {
-    background: 'rgba(255,255,255,0.07)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: 6, color: 'rgba(255,255,255,0.6)',
+    background: 'rgba(var(--ink-rgb),0.07)',
+    border: '1px solid rgba(var(--ink-rgb),0.15)',
+    borderRadius: 6, color: 'rgba(var(--ink-rgb),0.6)',
     fontSize: 12, fontWeight: 600, padding: '6px 12px', cursor: 'pointer',
   },
-  error: { color: '#f87171', fontSize: 13, margin: '0 0 16px' },
+  error: { color: 'var(--t-danger)', fontSize: 13, margin: '0 0 16px' },
   card: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'rgba(var(--ink-rgb),0.04)',
+    border: '1px solid rgba(var(--ink-rgb),0.1)',
     borderRadius: 14, padding: 24,
   },
   metaRow: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 18 },
@@ -306,8 +306,8 @@ const styles = {
     background: `${color}22`, border: `1px solid ${color}55`, color,
     borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700,
   }),
-  metaText: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
-  questionText: { color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1.7, marginBottom: 18 },
+  metaText: { color: 'rgba(var(--ink-rgb),0.4)', fontSize: 12 },
+  questionText: { color: 'var(--t-text)', fontSize: 16, fontWeight: 700, lineHeight: 1.7, marginBottom: 18 },
   optionsWrap: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 },
   option: {
     display: 'flex', alignItems: 'center', gap: 12,
@@ -320,23 +320,23 @@ const styles = {
   },
   revealBtn: {
     background: 'rgba(241,190,67,0.12)', border: `1px solid rgba(241,190,67,0.3)`,
-    borderRadius: 8, color: GOLD, fontSize: 13, fontWeight: 700,
+    borderRadius: 8, color: 'var(--t-goldText)', fontSize: 13, fontWeight: 700,
     padding: '9px 18px', cursor: 'pointer', fontFamily: FONT_B,
   },
   solution: {
     background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)',
     borderRadius: 10, padding: '14px 16px',
-    color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1.7,
+    color: 'rgba(var(--ink-rgb),0.8)', fontSize: 13, lineHeight: 1.7,
   },
   solutionLabel: {
-    display: 'block', color: '#4ade80', fontSize: 11, fontWeight: 700,
+    display: 'block', color: 'var(--t-success)', fontSize: 11, fontWeight: 700,
     marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em',
   },
-  fieldLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 },
+  fieldLabel: { color: 'rgba(var(--ink-rgb),0.4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 },
   details: { marginTop: 4 },
-  summary: { color: 'rgba(255,255,255,0.3)', fontSize: 11, cursor: 'pointer', userSelect: 'none' },
+  summary: { color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11, cursor: 'pointer', userSelect: 'none' },
   pre: {
     background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 10,
-    fontSize: 10, color: 'rgba(255,255,255,0.6)', overflowX: 'auto', marginTop: 6,
+    fontSize: 10, color: 'rgba(var(--ink-rgb),0.6)', overflowX: 'auto', marginTop: 6,
   },
 }

@@ -74,7 +74,7 @@ export default function AdminOverviewTab() {
   useEffect(() => { load() }, [load])
 
   if (loading) {
-    return <div style={{ color: '#64748b', fontFamily: FONT_B, fontSize: 13, padding: '40px 0' }}>Loading overview…</div>
+    return <div style={{ color: 'var(--t-textMuted)', fontFamily: FONT_B, fontSize: 13, padding: '40px 0' }}>Loading overview…</div>
   }
 
   if (error || !data) {
@@ -90,7 +90,7 @@ export default function AdminOverviewTab() {
   if (data.pendingApps > 0) {
     attention.push({
       key: 'apps',
-      color: GOLD,
+      color: 'var(--t-goldText)',
       label: `${data.pendingApps} tutor application${data.pendingApps !== 1 ? 's' : ''} awaiting review`,
       cta: 'Review applications',
       path: '/admin/applications',
@@ -100,7 +100,7 @@ export default function AdminOverviewTab() {
   if (reviewTotal > 0) {
     attention.push({
       key: 'drafts',
-      color: '#38bdf8',
+      color: 'var(--t-blue)',
       label: `${reviewTotal} draft question${reviewTotal !== 1 ? 's' : ''} in the review queue`,
       cta: 'Open review queue',
       path: '/admin/review',
@@ -109,7 +109,7 @@ export default function AdminOverviewTab() {
   if (data.overdueAssignments > 0) {
     attention.push({
       key: 'overdue',
-      color: '#f87171',
+      color: 'var(--t-danger)',
       label: `${data.overdueAssignments} assignment${data.overdueAssignments !== 1 ? 's' : ''} overdue across all tutors`,
       cta: 'View assignments',
       path: '/admin/assignments',
@@ -118,7 +118,7 @@ export default function AdminOverviewTab() {
   if (data.onboardingTodo > 0) {
     attention.push({
       key: 'onboarding',
-      color: '#a78bfa',
+      color: 'var(--t-purple)',
       label: `${data.onboardingTodo} student${data.onboardingTodo !== 1 ? 's have' : ' has'} not finished onboarding`,
       cta: 'View students',
       path: '/admin/students',
@@ -126,9 +126,9 @@ export default function AdminOverviewTab() {
   }
 
   const kpis = [
-    { label: 'Students',        value: data.studentCount.toLocaleString(), color: GOLD,      sub: `${data.activeWeek} active this week`, path: '/admin/students' },
-    { label: 'Active today',    value: data.activeToday.toLocaleString(),  color: '#4ade80', sub: 'studied in last 24h',               path: '/admin/students' },
-    { label: 'Tutors',          value: data.tutorCount.toLocaleString(),   color: '#38bdf8', sub: `${data.pendingAssignments} assignments pending`, path: '/admin/tutors' },
+    { label: 'Students',        value: data.studentCount.toLocaleString(), color: 'var(--t-goldText)',      sub: `${data.activeWeek} active this week`, path: '/admin/students' },
+    { label: 'Active today',    value: data.activeToday.toLocaleString(),  color: 'var(--t-success)', sub: 'studied in last 24h',               path: '/admin/students' },
+    { label: 'Tutors',          value: data.tutorCount.toLocaleString(),   color: 'var(--t-blue)', sub: `${data.pendingAssignments} assignments pending`, path: '/admin/tutors' },
     { label: 'Live curricula',  value: data.liveCurricula.toLocaleString(),color: '#c084fc', sub: data.generatingCurricula > 0 ? `${data.generatingCurricula} generating` : `${data.curriculaCount} total`, path: '/admin/curricula' },
   ]
 
@@ -140,7 +140,7 @@ export default function AdminOverviewTab() {
   ]
 
   return (
-    <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 26 }}>
         {kpis.map(k => (
@@ -150,15 +150,15 @@ export default function AdminOverviewTab() {
             style={{
               textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B,
               padding: '18px 18px', borderRadius: 14,
-              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.08)',
               transition: 'background 0.15s, border-color 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.25)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.06)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.25)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)'; e.currentTarget.style.borderColor = 'rgba(var(--ink-rgb),0.08)' }}
           >
             <div style={{ fontSize: 28, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
-            <div style={{ fontSize: 13, color: '#cbd5e1', fontWeight: 700, marginTop: 6 }}>{k.label}</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{k.sub}</div>
+            <div style={{ fontSize: 13, color: 'var(--t-textSub)', fontWeight: 700, marginTop: 6 }}>{k.label}</div>
+            <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>{k.sub}</div>
           </button>
         ))}
       </div>
@@ -171,7 +171,7 @@ export default function AdminOverviewTab() {
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '16px 18px', borderRadius: 12,
             background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)',
-            color: '#4ade80', fontSize: 13, fontWeight: 600,
+            color: 'var(--t-success)', fontSize: 13, fontWeight: 600,
           }}>
             <span style={{ fontSize: 16 }}>✓</span> You're all caught up — nothing needs review right now.
           </div>
@@ -184,7 +184,7 @@ export default function AdminOverviewTab() {
                 background: `${a.color}10`, border: `1px solid ${a.color}33`,
               }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.color, flexShrink: 0, boxShadow: `0 0 8px ${a.color}` }} />
-                <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>{a.label}</span>
+                <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>{a.label}</span>
                 <button
                   onClick={() => navigate(a.path)}
                   style={{
@@ -212,22 +212,22 @@ export default function AdminOverviewTab() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B,
                 padding: '14px 16px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.08)',
                 transition: 'background 0.15s, border-color 0.15s',
               }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.08)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.3)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)'; e.currentTarget.style.borderColor = 'rgba(var(--ink-rgb),0.08)' }}
             >
               <span style={{
                 width: 36, height: 36, borderRadius: 10, flexShrink: 0,
                 background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: GOLD,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t-goldText)',
               }}>
                 <ActionIcon name={q.icon} />
               </span>
               <span style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{q.label}</div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>{q.desc}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>{q.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{q.desc}</div>
               </span>
             </button>
           ))}
@@ -239,7 +239,7 @@ export default function AdminOverviewTab() {
 
 function SectionTitle({ children }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: '#64748b', textTransform: 'uppercase', marginBottom: 12 }}>
+    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--t-textMuted)', textTransform: 'uppercase', marginBottom: 12 }}>
       {children}
     </div>
   )
@@ -260,10 +260,10 @@ function ActionIcon({ name }) {
 const errorBox = {
   padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
   border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8,
-  fontSize: 13, color: '#f87171', marginBottom: 12,
+  fontSize: 13, color: 'var(--t-danger)', marginBottom: 12,
 }
 const ghostBtn = {
-  padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
-  background: 'transparent', color: '#e2e8f0', fontSize: 13, fontWeight: 700,
+  padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(var(--ink-rgb),0.15)',
+  background: 'transparent', color: 'var(--t-textSub)', fontSize: 13, fontWeight: 700,
   cursor: 'pointer', fontFamily: FONT_B,
 }

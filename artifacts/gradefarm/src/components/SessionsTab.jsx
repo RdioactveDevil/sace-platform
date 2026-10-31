@@ -170,7 +170,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     color: sessionType === type ? '#0c1037' : t.textMuted,
   })
 
-  const modalBg = isDark ? 'rgba(7,9,30,0.97)' : t.bgCard
+  const modalBg = t.bgCard
   const modalBdr = isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`
   const toggleBg = isDark ? 'rgba(255,255,255,0.04)' : t.bgSubtle
   const toggleBdr = isDark ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`

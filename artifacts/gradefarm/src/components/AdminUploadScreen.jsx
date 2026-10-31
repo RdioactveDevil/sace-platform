@@ -70,14 +70,14 @@ export default function AdminUploadScreen() {
 
   return (
     <div>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 0 }}>
+      <p style={{ color: 'rgba(var(--ink-rgb),0.5)', fontSize: 13, marginTop: 0 }}>
         Upload a SACE Chemistry exam or textbook. Claude will extract all MCQs into the draft queue.
         {' '}PDFs up to 50 MB are supported.
       </p>
 
       {/* Stage selector */}
       <div style={{ marginBottom: 20 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stage</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stage</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {stageOptions.map(opt => (
             <button
@@ -85,9 +85,9 @@ export default function AdminUploadScreen() {
               onClick={() => setStage(opt.value)}
               style={{
                 padding: '8px 16px', borderRadius: 8,
-                border: `1px solid ${stage === opt.value ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                border: `1px solid ${stage === opt.value ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
                 background: stage === opt.value ? 'rgba(241,190,67,0.1)' : 'transparent',
-                color: stage === opt.value ? GOLD : 'rgba(255,255,255,0.5)',
+                color: stage === opt.value ? GOLD : 'rgba(var(--ink-rgb),0.5)',
                 fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
               }}
             >
@@ -103,12 +103,12 @@ export default function AdminUploadScreen() {
         onDragOver={e => e.preventDefault()}
         onClick={() => fileRef.current?.click()}
         style={{
-          border: `2px dashed ${file ? GOLD : 'rgba(255,255,255,0.15)'}`,
+          border: `2px dashed ${file ? GOLD : 'rgba(var(--ink-rgb),0.15)'}`,
           borderRadius: 12,
           padding: '36px 24px',
           textAlign: 'center',
           cursor: 'pointer',
-          background: file ? 'rgba(241,190,67,0.04)' : 'rgba(255,255,255,0.02)',
+          background: file ? 'rgba(241,190,67,0.04)' : 'rgba(var(--ink-rgb),0.02)',
           marginBottom: 20,
           transition: 'all 0.15s',
         }}
@@ -121,8 +121,8 @@ export default function AdminUploadScreen() {
           onChange={e => handleFile(e.target.files[0])}
         />
         {file
-          ? <span style={{ color: GOLD, fontWeight: 700, fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}><FileText size={16} aria-hidden="true" /> {file.name}</span>
-          : <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14 }}>Drop a PDF here or click to browse</span>
+          ? <span style={{ color: 'var(--t-goldText)', fontWeight: 700, fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}><FileText size={16} aria-hidden="true" /> {file.name}</span>
+          : <span style={{ color: 'rgba(var(--ink-rgb),0.35)', fontSize: 14 }}>Drop a PDF here or click to browse</span>
         }
       </div>
 
@@ -131,8 +131,8 @@ export default function AdminUploadScreen() {
         disabled={!file || loading}
         style={{
           padding: '12px 28px', borderRadius: 10, border: 'none',
-          background: (!file || loading) ? 'rgba(255,255,255,0.08)' : GOLD,
-          color: (!file || loading) ? 'rgba(255,255,255,0.3)' : '#0c1037',
+          background: (!file || loading) ? 'rgba(var(--ink-rgb),0.08)' : GOLD,
+          color: (!file || loading) ? 'rgba(var(--ink-rgb),0.3)' : '#0c1037',
           fontSize: 14, fontWeight: 800,
           cursor: (!file || loading) ? 'not-allowed' : 'pointer',
           fontFamily: FONT_B,
@@ -143,18 +143,18 @@ export default function AdminUploadScreen() {
 
       {result && (
         <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
-          <div style={{ color: '#4ade80', fontWeight: 700 }}>
+          <div style={{ color: 'var(--t-success)', fontWeight: 700 }}>
             ✓ {result.inserted} questions extracted
             {result.needs_review > 0 && ` (${result.needs_review} need topic review)`}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 4 }}>
+          <div style={{ color: 'rgba(var(--ink-rgb),0.4)', fontSize: 12, marginTop: 4 }}>
             Go to the Review Queue tab to approve them.
           </div>
         </div>
       )}
 
       {error && (
-        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171', fontSize: 13 }}>
+        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--t-danger)', fontSize: 13 }}>
           {error}
         </div>
       )}

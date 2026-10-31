@@ -4,12 +4,12 @@ import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS } from '../lib/pricing'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
-const BG     = '#080d28'
+const BG     = 'var(--t-bgInput)'
 
 function Section({ title, children }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: '24px 28px', marginBottom: 24 }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: GOLD, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>{title}</div>
+    <div style={{ background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.08)', borderRadius: 16, padding: '24px 28px', marginBottom: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--t-goldText)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>{title}</div>
       {children}
     </div>
   )
@@ -18,9 +18,9 @@ function Section({ title, children }) {
 function Field({ label, hint, children }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)', marginBottom: 6 }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(var(--ink-rgb),0.65)', marginBottom: 6 }}>
         {label}
-        {hint && <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.35)', marginLeft: 8 }}>{hint}</span>}
+        {hint && <span style={{ fontWeight: 400, color: 'rgba(var(--ink-rgb),0.35)', marginLeft: 8 }}>{hint}</span>}
       </label>
       {children}
     </div>
@@ -28,10 +28,10 @@ function Field({ label, hint, children }) {
 }
 
 const inputStyle = {
-  background: 'rgba(255,255,255,0.06)',
-  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(var(--ink-rgb),0.06)',
+  border: '1px solid rgba(var(--ink-rgb),0.12)',
   borderRadius: 8,
-  color: '#f1f5f9',
+  color: 'var(--t-text)',
   fontFamily: FONT_B,
   fontSize: 14,
   padding: '9px 12px',
@@ -53,8 +53,8 @@ const btnStyle = {
 
 const disabledBtnStyle = {
   ...btnStyle,
-  background: 'rgba(255,255,255,0.1)',
-  color: 'rgba(255,255,255,0.3)',
+  background: 'rgba(var(--ink-rgb),0.1)',
+  color: 'rgba(var(--ink-rgb),0.3)',
   cursor: 'default',
 }
 
@@ -107,14 +107,14 @@ export default function AdminSettingsTab() {
   }
 
   if (loading) {
-    return <div style={{ color: 'rgba(255,255,255,0.4)', fontFamily: FONT_B, fontSize: 14 }}>Loading settings…</div>
+    return <div style={{ color: 'rgba(var(--ink-rgb),0.4)', fontFamily: FONT_B, fontSize: 14 }}>Loading settings…</div>
   }
 
   return (
     <div style={{ fontFamily: FONT_B }}>
       {/* ── Student access ── */}
       <Section title="Student access">
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 13, color: 'rgba(var(--ink-rgb),0.6)', lineHeight: 1.6 }}>
           Every student can pick one free subject (limited questions per day). Paid subjects are one Stripe plan per
           student, billed weekly or monthly (their choice), cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
           give a student a subject for free, grant it from <strong>Students</strong>; removing a paid subject there takes
@@ -187,8 +187,8 @@ export default function AdminSettingsTab() {
           </Field>
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>Tutor Plans</div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 12, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(var(--ink-rgb),0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>Tutor Plans</div>
+        <div style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.45)', marginBottom: 12, lineHeight: 1.5 }}>
           Tutors need one of these to use the tutor portal, billed monthly or yearly (annual discount above). A plan
           caps students on the roster plus pending invites and the subjects a tutor can tutor in (999 means
           unlimited), and says whether they can record lessons and send weekly parent reports. Tutors already
@@ -221,7 +221,7 @@ export default function AdminSettingsTab() {
                 </Field>
               ))}
               {[['subject_swaps', 'Tutors can swap subjects'], ['recordings', 'Lesson recordings'], ['parent_reports', 'Weekly parent reports']].map(([field, label]) => (
-                <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)', cursor: 'pointer' }}>
+                <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'rgba(var(--ink-rgb),0.65)', cursor: 'pointer' }}>
                   <input type="checkbox" checked={plan[field] !== false} onChange={e => updateTutorPlan(idx, field, e.target.checked)} />
                   {label}
                 </label>

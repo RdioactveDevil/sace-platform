@@ -24,7 +24,6 @@ import { adminListTutorApplications } from '../lib/db'
 import { getDraftQuestions } from '../lib/adminDb'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 
@@ -45,8 +44,8 @@ function CurriculaRouter() {
 
 // ── Navigation model ──────────────────────────────────────────────────────────
 // Laid out like the Tutor Portal (TutorScreen): a portal sidebar beside the app
-// sidebar, a title bar per section, and a tab strip on phones. The admin tabs
-// are styled for dark, so this portal stays dark in both themes.
+// sidebar, a title bar per section, and a tab strip on phones. Colours come
+// from the theme's CSS variables (set by App), so it follows light and dark.
 const NAV_GROUPS = [
   { label: 'Main', items: [
     { path: 'overview',     label: 'Overview',           icon: LayoutDashboard, sub: 'Platform health and what needs attention.' },
@@ -75,15 +74,15 @@ const NAV_GROUPS = [
 ]
 const NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items)
 
-// Dark portal palette — the same values TutorScreen uses in dark theme.
+// Portal colours: the theme's own tokens, the same ones TutorScreen uses.
 const C = {
-  bg:        '#06071a',
-  sidebarBdr:'rgba(255,255,255,0.07)',
-  headerBg:  'rgba(6,7,26,0.92)',
-  groupLbl:  'rgba(255,255,255,0.22)',
-  item:      'rgba(255,255,255,0.52)',
-  text:      '#f0f4ff',
-  textMuted: 'rgba(255,255,255,0.5)',
+  bg:        'var(--t-bg)',
+  sidebarBdr:'var(--t-border)',
+  headerBg:  'var(--t-bg)',
+  groupLbl:  'var(--t-textFaint)',
+  item:      'var(--t-textMuted)',
+  text:      'var(--t-text)',
+  textMuted: 'var(--t-textMuted)',
 }
 
 // Count badges: neutral for totals, red for things waiting on an admin.
@@ -94,16 +93,16 @@ function NavBadge({ value, attention = false, compact = false }) {
       fontSize: 10, fontWeight: compact ? 800 : 700, borderRadius: 20, lineHeight: compact ? '17px' : undefined,
       minWidth: compact ? 17 : undefined, height: compact ? 17 : undefined, textAlign: 'center',
       padding: compact ? '0 5px' : '2px 7px',
-      background: attention ? 'rgba(248,113,113,0.18)' : 'rgba(255,255,255,0.08)',
-      color: attention ? '#f87171' : 'rgba(255,255,255,0.7)',
-      border: compact ? 'none' : `1px solid ${attention ? 'rgba(248,113,113,0.30)' : 'rgba(255,255,255,0.10)'}`,
+      background: attention ? 'rgba(248,113,113,0.18)' : 'rgba(var(--ink-rgb),0.08)',
+      color: attention ? '#f87171' : 'rgba(var(--ink-rgb),0.7)',
+      border: compact ? 'none' : `1px solid ${attention ? 'rgba(248,113,113,0.30)' : 'rgba(var(--ink-rgb),0.10)'}`,
     }}>
       {value}
     </span>
   )
 }
 
-export default function AdminScreen({ profile }) {
+export default function AdminScreen({ profile, theme = 'dark' }) {
   const location = useLocation()
   const [studentCount, setStudentCount] = useState(null)
   const [pendingApps, setPendingApps]   = useState(0)
@@ -152,16 +151,15 @@ export default function AdminScreen({ profile }) {
   const sidebar = (
     <aside style={{
       width: SIDEBAR_W, flexShrink: 0,
-      background: 'linear-gradient(180deg, #08091f 0%, #070918 100%)',
+      background: C.bg,
       borderRight: `1px solid ${C.sidebarBdr}`,
       display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
-      boxShadow: '4px 0 24px rgba(0,0,0,0.28)',
     }}>
       {/* Portal label. The app sidebar beside this one already shows the logo. */}
       <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0 12px' : '0 20px', borderBottom: `1px solid ${C.sidebarBdr}` }}>
-        <div title={collapsed ? 'Admin Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.28)', borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: '0 0 8px rgba(241,190,67,0.9)', flexShrink: 0 }} />
-          {!collapsed && <span style={{ fontFamily: FONT_D, fontSize: 10, letterSpacing: '0.18em', color: GOLD, whiteSpace: 'nowrap' }}>ADMIN PORTAL</span>}
+        <div title={collapsed ? 'Admin Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'transparent', border: `1px solid ${C.sidebarBdr}`, borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0 }} />
+          {!collapsed && <span style={{ fontSize: 12, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' }}>Admin Portal</span>}
         </div>
       </div>
 
@@ -169,7 +167,7 @@ export default function AdminScreen({ profile }) {
         {NAV_GROUPS.map(group => (
           <div key={group.label} style={{ marginTop: 14 }}>
             {!collapsed && (
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.groupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: C.groupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
             )}
             {group.items.map(item => {
               const active = section === item.path
@@ -183,7 +181,7 @@ export default function AdminScreen({ profile }) {
                     justifyContent: collapsed ? 'center' : undefined,
                     margin: '1px 0', textDecoration: 'none',
                     fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
-                    color: active ? GOLD : C.item,
+                    color: active ? C.text : C.item,
                   }}
                 >
                   <span style={{ display: 'flex', flexShrink: 0, opacity: active ? 1 : 0.75 }}><item.icon size={17} aria-hidden="true" /></span>
@@ -198,20 +196,19 @@ export default function AdminScreen({ profile }) {
 
       {/* User profile footer */}
       <div style={{ padding: '10px 10px 12px', borderTop: `1px solid ${C.sidebarBdr}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.07)' }}>
           <div style={{
             width: 34, height: 34, borderRadius: '50%',
             background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 700, color: '#0c1037', flexShrink: 0, fontSize: 14,
-            boxShadow: '0 0 14px rgba(241,190,67,0.35)',
           }}>
             {(profile?.display_name || '?')[0].toUpperCase()}
           </div>
           {!collapsed && (
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.display_name || 'Admin'}</div>
-              <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Admin</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(var(--ink-rgb),0.92)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.display_name || 'Admin'}</div>
+              <div style={{ fontSize: 11, color: 'var(--t-goldText)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Admin</div>
             </div>
           )}
         </div>
@@ -225,10 +222,9 @@ export default function AdminScreen({ profile }) {
       style={{
         flex: 1, display: 'flex', minHeight: 0,
         background: C.bg,
-        backgroundImage: 'radial-gradient(ellipse 900px 700px at 85% -8%, rgba(241,190,67,0.055) 0%, transparent 55%), radial-gradient(ellipse 700px 600px at -5% 95%, rgba(99,102,241,0.05) 0%, transparent 60%)',
-        fontFamily: FONT_B, color: '#fff',
-        // Dark scrollbars, date pickers and dropdown menus to match the portal.
-        colorScheme: 'dark',
+        fontFamily: FONT_B, color: C.text,
+        // Scrollbars, date pickers and dropdown menus follow the theme.
+        colorScheme: theme === 'dark' ? 'dark' : 'light',
       }}
     >
       {/* Desktop sidebar */}
@@ -243,9 +239,9 @@ export default function AdminScreen({ profile }) {
         }}>
           <span className="td-header-sep" />
           <button className="td-collapse-btn" onClick={() => setCollapsed(v => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
+            style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid rgba(var(--ink-rgb),0.10)', background: 'rgba(var(--ink-rgb),0.05)', color: 'rgba(var(--ink-rgb),0.5)', cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.04em', color: C.text, lineHeight: 1.1 }}>{meta.label}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em', color: C.text, lineHeight: 1.1 }}>{meta.label}</div>
             <div className="td-header-sub" style={{ fontSize: 11, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
           </div>
           {/* Phones: every section as a swipeable strip of tabs */}
@@ -256,9 +252,9 @@ export default function AdminScreen({ profile }) {
               return (
                 <NavLink key={item.path} to={`/admin/${item.path}`} ref={active ? activeMobileTab : undefined} aria-current={active ? 'page' : undefined}
                   style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 999, textDecoration: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: active ? 800 : 600, whiteSpace: 'nowrap',
-                    border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : 'rgba(255,255,255,0.10)'}`,
-                    background: active ? 'rgba(241,190,67,0.16)' : 'transparent',
-                    color: active ? GOLD : C.item }}>
+                    border: `1px solid ${active ? C.text : 'var(--t-border)'}`,
+                    background: active ? 'rgba(var(--ink-rgb),0.06)' : 'transparent',
+                    color: active ? C.text : C.item }}>
                   <item.icon size={14} aria-hidden="true" />
                   {item.label}
                   {badge && <NavBadge {...badge} compact />}

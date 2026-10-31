@@ -79,9 +79,9 @@ export default function AdminAssignmentsTab() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
-    <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{total.toLocaleString()} assignment{total === 1 ? '' : 's'}</span>
+        <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{total.toLocaleString()} assignment{total === 1 ? '' : 's'}</span>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14, alignItems: 'center' }}>
@@ -108,7 +108,7 @@ export default function AdminAssignmentsTab() {
           <option value="due">Sort: Due date</option>
         </select>
         {hasFilters && (
-          <button onClick={clearFilters} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
+          <button onClick={clearFilters} style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
             Clear filters
           </button>
         )}
@@ -117,14 +117,14 @@ export default function AdminAssignmentsTab() {
       {error && <div style={errorBox}>{error}</div>}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: 13, padding: '24px 0' }}>Loading assignments…</div>
+        <div style={{ color: 'var(--t-textMuted)', fontSize: 13, padding: '24px 0' }}>Loading assignments…</div>
       ) : assignments.length === 0 ? (
         <div style={emptyBox}>{hasFilters ? 'No assignments match the current filters.' : 'No assignments have been issued yet.'}</div>
       ) : (
         <>
-          <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflowX: 'auto' }}>
+          <div style={{ border: '1px solid rgba(var(--ink-rgb),0.06)', borderRadius: 10, overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 980 }}>
-              <thead style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left' }}>
+              <thead style={{ background: 'rgba(var(--ink-rgb),0.03)', textAlign: 'left' }}>
                 <tr>
                   <th style={th}>Type</th>
                   <th style={th}>Tutor</th>
@@ -137,24 +137,24 @@ export default function AdminAssignmentsTab() {
               </thead>
               <tbody>
                 {assignments.map(a => (
-                  <tr key={a.id} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td style={{ ...td, fontWeight: 700, color: '#f1f5f9' }}>{a.type}</td>
+                  <tr key={a.id} style={{ borderTop: '1px solid rgba(var(--ink-rgb),0.04)' }}>
+                    <td style={{ ...td, fontWeight: 700, color: 'var(--t-text)' }}>{a.type}</td>
                     <td style={td}>{a.tutor_name}</td>
                     <td style={td}>{a.student_name}</td>
                     <td style={td}>
-                      <div style={{ color: '#cbd5e1' }}>{a.subject}</div>
+                      <div style={{ color: 'var(--t-textSub)' }}>{a.subject}</div>
                       {a.topics?.length > 0 && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 1, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 1, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {a.topics.join(', ')}
                         </div>
                       )}
                     </td>
-                    <td style={{ ...td, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(a.created_at)}</td>
-                    <td style={{ ...td, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(a.due_date)}</td>
+                    <td style={{ ...td, color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtDate(a.created_at)}</td>
+                    <td style={{ ...td, color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtDate(a.due_date)}</td>
                     <td style={td}>
                       <StatusBadge status={a.status} />
                       {a.completed_at && (
-                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{fmtDate(a.completed_at)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--t-textMuted)', marginTop: 2 }}>{fmtDate(a.completed_at)}</div>
                       )}
                     </td>
                   </tr>
@@ -164,7 +164,7 @@ export default function AdminAssignmentsTab() {
           </div>
 
           {totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 12, fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 12, fontSize: 12, color: 'var(--t-textMuted)' }}>
               <button
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                 disabled={offset === 0}
@@ -195,13 +195,13 @@ function StatusBadge({ status }) {
   )
 }
 
-const th = { padding: '9px 10px', fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }
+const th = { padding: '9px 10px', fontSize: 10, color: 'var(--t-textMuted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }
 const td = { padding: '9px 10px', verticalAlign: 'middle' }
-const selectStyle = { padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#f1f5f9', fontSize: 12, fontFamily: FONT_B, outline: 'none', cursor: 'pointer' }
-const errorBox = { padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: '#f87171', marginBottom: 12 }
-const emptyBox = { padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: 13, border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 10 }
+const selectStyle = { padding: '8px 12px', borderRadius: 8, background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)', color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B, outline: 'none', cursor: 'pointer' }
+const errorBox = { padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }
+const emptyBox = { padding: '32px 16px', textAlign: 'center', color: 'var(--t-textMuted)', fontSize: 13, border: '1px dashed rgba(var(--ink-rgb),0.08)', borderRadius: 10 }
 const pagerBtn = (disabled) => ({
   padding: '6px 12px', borderRadius: 7, fontSize: 12, fontFamily: FONT_B, fontWeight: 700,
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.12)',
   color: disabled ? '#475569' : '#e2e8f0', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
 })

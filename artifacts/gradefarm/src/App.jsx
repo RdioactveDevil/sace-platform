@@ -870,6 +870,15 @@ function AppInner() {
   })
   const [showAuth, setShowAuth]               = useState(false)
   const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
+  // Every theme token as a CSS variable (--t-bg, --t-text, ...), plus the ink
+  // colour as an RGB triple for translucent lines and fills, so screens can
+  // style with var() and follow light and dark without their own palettes.
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.theme = theme
+    for (const [key, value] of Object.entries(THEMES[theme])) root.style.setProperty(`--t-${key}`, value)
+    root.style.setProperty('--ink-rgb', theme === 'dark' ? '255,255,255' : '12,16,55')
+  }, [theme])
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
   const [welcomeCelebration, setWelcomeCelebration] = useState(false)
@@ -1761,7 +1770,7 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           : <AdminRoute profile={profile}>
               <AppShell {...shellProps}>
-                <AdminScreen profile={profile} />
+                <AdminScreen profile={profile} theme={theme} />
               </AppShell>
             </AdminRoute>
       } />

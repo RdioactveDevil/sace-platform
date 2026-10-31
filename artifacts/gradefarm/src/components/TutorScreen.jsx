@@ -2638,32 +2638,29 @@ export default function TutorScreen({ profile, theme, subject }) {
   const meta = SECTION_META[activeTab] || { title: '', sub: '' }
 
   const isDark      = theme === 'dark'
-  const sidebarBg   = isDark ? '#07091e' : '#f8f9fc'
-  const sidebarBdr  = isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'
-  const headerBg    = isDark ? 'rgba(6,7,26,0.92)' : 'rgba(255,255,255,0.90)'
-  const headerBdr   = isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'
-  const navGroupLbl = isDark ? 'rgba(255,255,255,0.22)' : '#94a3b8'
-  const navItemDflt = isDark ? 'rgba(255,255,255,0.52)' : '#64748b'
-  const navAccent   = isDark ? GOLD : '#0f172a'
-  // Layout is identical in both themes; only these colours change.
+  // Portal colours come straight from the theme, so light and dark both work.
+  const sidebarBg   = t.bg
+  const sidebarBdr  = t.border
+  const headerBg    = t.bg
+  const headerBdr   = t.border
+  const navGroupLbl = t.textFaint
+  const navItemDflt = t.textMuted
+  const navAccent   = t.text
   const goldText    = t.goldText
 
   const sidebar = (
     <aside className={isDark ? '' : 'td-sidebar-light'} style={{
       width: SIDEBAR_W, flexShrink: 0,
-      background: isDark
-        ? 'linear-gradient(180deg, #08091f 0%, #070918 100%)'
-        : sidebarBg,
+      background: sidebarBg,
       borderRight: `1px solid ${sidebarBdr}`,
       display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
-      boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.28)' : 'none',
     }}>
       {/* Portal label. The app sidebar beside this one already shows the
           gradefarm logo, so it isn't repeated here. */}
       <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0 12px' : '0 20px', borderBottom: `1px solid ${sidebarBdr}` }}>
-        <div title={collapsed ? 'Tutor Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: isDark ? 'rgba(241,190,67,0.12)' : 'rgba(241,190,67,0.16)', border: `1px solid ${isDark ? 'rgba(241,190,67,0.28)' : 'rgba(241,190,67,0.45)'}`, borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: isDark ? '0 0 8px rgba(241,190,67,0.9)' : 'none', flexShrink: 0 }} />
-          {!collapsed && <span style={{ fontFamily: FONT_D, fontSize: 10, letterSpacing: '0.18em', color: goldText, whiteSpace: 'nowrap' }}>TUTOR PORTAL</span>}
+        <div title={collapsed ? 'Tutor Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'transparent', border: `1px solid ${sidebarBdr}`, borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0 }} />
+          {!collapsed && <span style={{ fontSize: 12, fontWeight: 700, color: t.text, whiteSpace: 'nowrap' }}>Tutor Portal</span>}
         </div>
       </div>
 
@@ -2671,7 +2668,7 @@ export default function TutorScreen({ profile, theme, subject }) {
         {NAV_GROUPS.map(group => (
           <div key={group.label} style={{ marginTop: 14 }}>
             {!collapsed && (
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: navGroupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: navGroupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
             )}
             {group.items.map(item => {
               const active = activeTab === item.id
@@ -2711,8 +2708,8 @@ export default function TutorScreen({ profile, theme, subject }) {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '9px 10px', borderRadius: 12,
-          background: isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'}`,
+          background: t.bgCard,
+          border: `1px solid ${t.border}`,
           cursor: 'default',
         }}>
           <div style={{
@@ -2720,13 +2717,12 @@ export default function TutorScreen({ profile, theme, subject }) {
             background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 700, color: '#0c1037', flexShrink: 0, fontSize: 14,
-            boxShadow: isDark ? '0 0 14px rgba(241,190,67,0.35)' : 'none',
           }}>
             {(profile.display_name || '?')[0].toUpperCase()}
           </div>
           {!collapsed && (
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.92)' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
               <div style={{ fontSize: 11, color: goldText, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tutor</div>
             </div>
           )}
@@ -2740,10 +2736,7 @@ export default function TutorScreen({ profile, theme, subject }) {
       className="td-root"
       style={{
         flex: 1, display: 'flex',
-        background: theme === 'dark' ? '#06071a' : t.bg,
-        backgroundImage: theme === 'dark'
-          ? 'radial-gradient(ellipse 900px 700px at 85% -8%, rgba(241,190,67,0.055) 0%, transparent 55%), radial-gradient(ellipse 700px 600px at -5% 95%, rgba(99,102,241,0.05) 0%, transparent 60%)'
-          : 'none',
+        background: t.bg,
         fontFamily: FONT_B, color: t.text, minHeight: 0,
       }}
     >
@@ -2764,10 +2757,10 @@ export default function TutorScreen({ profile, theme, subject }) {
         }}>
           <span className="td-header-sep" />
           <button className="td-collapse-btn" onClick={() => setCollapsed(v => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: isDark ? 'rgba(255,255,255,0.5)' : '#94a3b8', cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
+            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.04em', color: isDark ? t.text : '#0f172a', lineHeight: 1.1 }}>{meta.title}</div>
-            <div className="td-header-sub" style={{ fontSize: 11, color: isDark ? t.textMuted : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em', color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
+            <div className="td-header-sub" style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {isAdmin && (
@@ -2890,7 +2883,7 @@ function GlobalSearch({ theme, roster, classes, resources, assignments, onNaviga
         />
       </div>
       {open && q.trim() && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: theme === 'dark' ? 'rgba(7,9,30,0.96)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : t.border}`, borderRadius: 12, boxShadow: theme === 'dark' ? '0 8px 32px rgba(0,0,0,0.6)' : t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto', backdropFilter: 'blur(12px)' }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : t.border}`, borderRadius: 12, boxShadow: theme === 'dark' ? '0 8px 32px rgba(0,0,0,0.6)' : t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto', backdropFilter: 'blur(12px)' }}>
           {results.length === 0 ? (
             <div style={{ padding: '14px 16px', fontSize: 13, color: t.textMuted }}>No matches for “{q.trim()}”.</div>
           ) : results.map((r, i) => (

@@ -139,9 +139,9 @@ export default function AdminTutorsTab() {
   }, [tutors, search])
 
   return (
-    <div style={{ fontFamily: FONT_B, color: '#e2e8f0', position: 'relative' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        {!loading && <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{filtered.length}{search ? ` of ${tutors.length}` : ''} tutor{(search ? tutors.length : filtered.length) === 1 ? '' : 's'}</span>}
+        {!loading && <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{filtered.length}{search ? ` of ${tutors.length}` : ''} tutor{(search ? tutors.length : filtered.length) === 1 ? '' : 's'}</span>}
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -155,13 +155,13 @@ export default function AdminTutorsTab() {
       )}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: 13, padding: '24px 0' }}>Loading tutors…</div>
+        <div style={{ color: 'var(--t-textMuted)', fontSize: 13, padding: '24px 0' }}>Loading tutors…</div>
       ) : filtered.length === 0 ? (
         <div style={emptyBox}>{search ? 'No tutors match your search.' : 'No tutors found.'}</div>
       ) : (
-        <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflowX: 'auto' }}>
+        <div style={{ border: '1px solid rgba(var(--ink-rgb),0.06)', borderRadius: 10, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 880 }}>
-            <thead style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left' }}>
+            <thead style={{ background: 'rgba(var(--ink-rgb),0.03)', textAlign: 'left' }}>
               <tr>
                 <th style={th}>Tutor</th>
                 <th style={th}>Roster</th>
@@ -178,27 +178,27 @@ export default function AdminTutorsTab() {
                 <tr key={t.id}
                   onClick={() => openDetail(t)}
                   style={{
-                    borderTop: '1px solid rgba(255,255,255,0.04)',
+                    borderTop: '1px solid rgba(var(--ink-rgb),0.04)',
                     cursor: 'pointer',
                     background: selected?.id === t.id ? 'rgba(241,190,67,0.06)' : 'transparent',
                   }}
-                  onMouseEnter={e => { if (selected?.id !== t.id) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseEnter={e => { if (selected?.id !== t.id) e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = selected?.id === t.id ? 'rgba(241,190,67,0.06)' : 'transparent' }}
                 >
                   <td style={td}>
-                    <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{t.display_name || '—'}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{t.email || '—'}</div>
-                    {t.school && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{t.school}</div>}
-                    {t.can_include_subject && <div style={{ fontSize: 10, color: '#4ade80', marginTop: 2, fontWeight: 700 }}>Includes free subjects</div>}
+                    <div style={{ fontWeight: 700, color: 'var(--t-text)', fontSize: 13 }}>{t.display_name || '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 1 }}>{t.email || '—'}</div>
+                    {t.school && <div style={{ fontSize: 10, color: 'var(--t-textMuted)', marginTop: 1 }}>{t.school}</div>}
+                    {t.can_include_subject && <div style={{ fontSize: 10, color: 'var(--t-success)', marginTop: 2, fontWeight: 700 }}>Includes free subjects</div>}
                     <div style={{ fontSize: 10, marginTop: 2, fontWeight: 700, color: t.plan_active ? '#a78bfa' : '#f87171' }}>{tutorPlanLabel(t)}</div>
                   </td>
-                  <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.roster_size}</span></td>
-                  <td style={td}><span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.assignments_total}</span></td>
-                  <td style={td}><span style={{ color: '#4ade80', fontWeight: 600 }}>{t.assignments_completed}</span></td>
-                  <td style={td}><span style={{ color: GOLD, fontWeight: 600 }}>{t.assignments_pending}</span></td>
+                  <td style={td}><span style={{ color: 'var(--t-textSub)', fontWeight: 600 }}>{t.roster_size}</span></td>
+                  <td style={td}><span style={{ color: 'var(--t-textSub)', fontWeight: 600 }}>{t.assignments_total}</span></td>
+                  <td style={td}><span style={{ color: 'var(--t-success)', fontWeight: 600 }}>{t.assignments_completed}</span></td>
+                  <td style={td}><span style={{ color: 'var(--t-goldText)', fontWeight: 600 }}>{t.assignments_pending}</span></td>
                   <td style={td}><span style={{ color: t.assignments_overdue > 0 ? '#f87171' : '#475569', fontWeight: 600 }}>{t.assignments_overdue}</span></td>
-                  <td style={{ ...td, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelative(t.last_active)}</td>
-                  <td style={{ ...td, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelative(t.last_assignment_at)}</td>
+                  <td style={{ ...td, color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtRelative(t.last_active)}</td>
+                  <td style={{ ...td, color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtRelative(t.last_assignment_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -215,61 +215,61 @@ export default function AdminTutorsTab() {
             aria-label={`Tutor details: ${selected.display_name || selected.email || ''}`}
             style={panelStyle}
           >
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(var(--ink-rgb),0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9' }}>{selected.display_name || 'Unnamed tutor'}</div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>{selected.email}</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--t-text)' }}>{selected.display_name || 'Unnamed tutor'}</div>
+                <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{selected.email}</div>
               </div>
               <button onClick={closeDetail} style={closeBtn}>×</button>
             </div>
 
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(var(--ink-rgb),0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Include free subjects</div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>Include free subjects</div>
+                <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>
                   Lets this tutor give their students the subjects they tutor them in, free, while they're on their roster. Turning it off keeps subjects already included.
                 </div>
               </div>
               <button onClick={toggleIncludeSubject} disabled={includeBusy} role="switch" aria-checked={!!selected.can_include_subject}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: includeBusy ? 'default' : 'pointer',
-                  background: selected.can_include_subject ? '#4ade80' : 'rgba(255,255,255,0.08)', color: selected.can_include_subject ? '#0c1037' : '#94a3b8' }}>
+                  background: selected.can_include_subject ? '#4ade80' : 'rgba(var(--ink-rgb),0.08)', color: selected.can_include_subject ? '#0c1037' : '#94a3b8' }}>
                 {includeBusy ? '…' : selected.can_include_subject ? 'On' : 'Off'}
               </button>
             </div>
 
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(var(--ink-rgb),0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Free tutor portal</div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>Free tutor portal</div>
+                <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>
                   {tutorPlanLabel(selected)}. On: this tutor uses the tutor portal without a plan and with no student limit. Off: they need a paid plan.
                 </div>
               </div>
               <button onClick={toggleBillingExempt} disabled={exemptBusy} role="switch" aria-checked={!!selected.billing_exempt}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: exemptBusy ? 'default' : 'pointer',
-                  background: selected.billing_exempt ? '#4ade80' : 'rgba(255,255,255,0.08)', color: selected.billing_exempt ? '#0c1037' : '#94a3b8' }}>
+                  background: selected.billing_exempt ? '#4ade80' : 'rgba(var(--ink-rgb),0.08)', color: selected.billing_exempt ? '#0c1037' : '#94a3b8' }}>
                 {exemptBusy ? '…' : selected.billing_exempt ? 'On' : 'Off'}
               </button>
             </div>
 
             {selected.plan_subjects?.length > 0 && (
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Plan subjects</div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, marginBottom: 8 }}>
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(var(--ink-rgb),0.07)' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>Plan subjects</div>
+                <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2, marginBottom: 8 }}>
                   The subjects this tutor's plan covers, in the order they started using them. Removing one lets them use another in its place.
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {selected.plan_subjects.map(name => (
-                    <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>
+                    <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', borderRadius: 999, border: '1px solid rgba(var(--ink-rgb),0.12)', fontSize: 12, fontWeight: 700, color: 'var(--t-textSub)' }}>
                       {name}
                       <button onClick={() => removePlanSubject(name)} disabled={exemptBusy} aria-label={`Remove ${name}`}
-                        style={{ border: 'none', background: 'none', padding: 0, color: '#94a3b8', cursor: exemptBusy ? 'default' : 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                        style={{ border: 'none', background: 'none', padding: 0, color: 'var(--t-textMuted)', cursor: exemptBusy ? 'default' : 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
                     </span>
                   ))}
                 </div>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ display: 'flex', gap: 4, padding: '10px 20px 0', borderBottom: '1px solid rgba(var(--ink-rgb),0.07)' }}>
               {[['roster', `Roster${detail ? ` (${detail.roster.length})` : ''}`], ['assignments', `Assignments${detail ? ` (${detail.assignments.length})` : ''}`]].map(([key, label]) => (
                 <button key={key} onClick={() => setDetailTab(key)}
                   style={{
@@ -287,9 +287,9 @@ export default function AdminTutorsTab() {
 
             <div style={{ padding: 18, flex: 1, overflowY: 'auto' }}>
               {detailLoading ? (
-                <div style={{ color: '#64748b', fontSize: 13 }}>Loading…</div>
+                <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading…</div>
               ) : !detail ? (
-                <div style={{ color: '#64748b', fontSize: 13 }}>Could not load tutor details.</div>
+                <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Could not load tutor details.</div>
               ) : detailTab === 'roster' ? (
                 <>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -302,7 +302,7 @@ export default function AdminTutorsTab() {
                   </select>
                   <button onClick={() => changeLink(async () => { await adminLinkTutor(selected.id, addStudentId); setAddStudentId('') })}
                     disabled={!addStudentId || linkBusy}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: !addStudentId || linkBusy ? 'rgba(255,255,255,0.06)' : GOLD, color: !addStudentId || linkBusy ? '#64748b' : '#0c1037', fontSize: 12, fontWeight: 800, cursor: !addStudentId || linkBusy ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: !addStudentId || linkBusy ? 'rgba(var(--ink-rgb),0.06)' : GOLD, color: !addStudentId || linkBusy ? '#64748b' : '#0c1037', fontSize: 12, fontWeight: 800, cursor: !addStudentId || linkBusy ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
                     Assign
                   </button>
                 </div>
@@ -313,9 +313,9 @@ export default function AdminTutorsTab() {
                     {detail.roster.map(s => (
                       <div key={s.student_id} style={rosterRow}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{s.display_name || '—'}</div>
-                          {s.email && <div style={{ fontSize: 11, color: '#64748b' }}>{s.email}</div>}
-                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>{s.display_name || '—'}</div>
+                          {s.email && <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{s.email}</div>}
+                          <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>
                             Added {fmtDate(s.invited_at)} · Last active {fmtRelative(s.last_active)}
                           </div>
                         </div>
@@ -328,7 +328,7 @@ export default function AdminTutorsTab() {
                             color={s.accuracy == null ? '#475569' : s.accuracy >= 70 ? '#4ade80' : s.accuracy >= 50 ? GOLD : '#f87171'}
                           />
                           <button onClick={() => changeLink(() => adminUnlinkTutor(selected.id, s.student_id))} disabled={linkBusy} title="Unassign from this tutor"
-                            style={{ alignSelf: 'center', border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>×</button>
+                            style={{ alignSelf: 'center', border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: 'var(--t-danger)', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>×</button>
                         </div>
                       </div>
                     ))}
@@ -344,16 +344,16 @@ export default function AdminTutorsTab() {
                       <div key={a.id} style={asgnRow}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{a.type}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>{a.type}</span>
                             <StatusBadge status={a.status} />
                           </div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                            <strong style={{ color: '#cbd5e1' }}>{a.student_name || a.student_id}</strong> · {a.subject}
+                          <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>
+                            <strong style={{ color: 'var(--t-textSub)' }}>{a.student_name || a.student_id}</strong> · {a.subject}
                           </div>
                           {a.topics?.length > 0 && (
-                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{a.topics.join(', ')}</div>
+                            <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>{a.topics.join(', ')}</div>
                           )}
-                          <div style={{ fontSize: 10, color: '#475569', marginTop: 3 }}>
+                          <div style={{ fontSize: 10, color: 'var(--t-textFaint)', marginTop: 3 }}>
                             Created {fmtDate(a.created_at)} · Due {fmtDate(a.due_date)}
                             {a.completed_at && ` · Completed ${fmtDate(a.completed_at)}`}
                           </div>
@@ -375,7 +375,7 @@ function Stat({ label, value, color }) {
   return (
     <div style={{ textAlign: 'center', minWidth: 50 }}>
       <div style={{ fontSize: 14, fontWeight: 800, color }}>{value}</div>
-      <div style={{ fontSize: 9, color: '#64748b', fontWeight: 600, letterSpacing: 0.4 }}>{label.toUpperCase()}</div>
+      <div style={{ fontSize: 9, color: 'var(--t-textMuted)', fontWeight: 600, letterSpacing: 0.4 }}>{label.toUpperCase()}</div>
     </div>
   )
 }
@@ -387,12 +387,12 @@ function StatusBadge({ status }) {
   )
 }
 
-const th = { padding: '9px 10px', fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }
+const th = { padding: '9px 10px', fontSize: 10, color: 'var(--t-textMuted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }
 const td = { padding: '9px 10px', verticalAlign: 'middle' }
-const inputStyle = { padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#f1f5f9', fontSize: 13, fontFamily: FONT_B, outline: 'none', minWidth: 240, flex: 1, maxWidth: 320 }
-const errorBox = { padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: '#f87171', marginBottom: 12 }
-const emptyBox = { padding: '24px 16px', textAlign: 'center', color: '#64748b', fontSize: 13, border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 10 }
-const panelStyle = { position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50, width: 460, maxWidth: '100vw', background: '#0f172a', borderLeft: '1px solid rgba(255,255,255,0.08)', overflowY: 'auto', fontFamily: FONT_B, display: 'flex', flexDirection: 'column' }
-const closeBtn = { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: 4 }
-const rosterRow = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 9 }
-const asgnRow = { padding: '11px 13px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 9 }
+const inputStyle = { padding: '8px 12px', borderRadius: 8, background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none', minWidth: 240, flex: 1, maxWidth: 320 }
+const errorBox = { padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }
+const emptyBox = { padding: '24px 16px', textAlign: 'center', color: 'var(--t-textMuted)', fontSize: 13, border: '1px dashed rgba(var(--ink-rgb),0.08)', borderRadius: 10 }
+const panelStyle = { position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50, width: 460, maxWidth: '100vw', background: 'var(--t-bgCard)', borderLeft: '1px solid rgba(var(--ink-rgb),0.08)', overflowY: 'auto', fontFamily: FONT_B, display: 'flex', flexDirection: 'column' }
+const closeBtn = { background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: 4 }
+const rosterRow = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.05)', borderRadius: 9 }
+const asgnRow = { padding: '11px 13px', background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.05)', borderRadius: 9 }

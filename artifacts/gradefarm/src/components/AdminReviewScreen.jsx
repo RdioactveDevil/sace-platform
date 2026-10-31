@@ -14,10 +14,10 @@ function StatusBadge({ status }) {
     .trim()
     .toLowerCase()
   const map = {
-    pending:      { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: GOLD },
-    needs_review: { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: '#f87171' },
-    approved:     { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: '#4ade80' },
-    rejected:     { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  color: 'rgba(255,255,255,0.3)' },
+    pending:      { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: 'var(--t-goldText)' },
+    needs_review: { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: 'var(--t-danger)' },
+    approved:     { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: 'var(--t-success)' },
+    rejected:     { bg: 'rgba(var(--ink-rgb),0.05)', border: 'rgba(var(--ink-rgb),0.1)',  color: 'rgba(var(--ink-rgb),0.3)' },
   }
   const c = map[key] || map.pending
   return (
@@ -301,20 +301,20 @@ export default function AdminReviewScreen({ profile }) {
 
   const inputStyle = {
     width: '100%', padding: '8px 10px', borderRadius: 8,
-    border: '1px solid rgba(255,255,255,0.12)',
-    background: '#0c1037',
-    color: '#fff', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+    border: '1px solid rgba(var(--ink-rgb),0.12)',
+    background: 'var(--t-bgInput)',
+    color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
     boxSizing: 'border-box',
   }
 
   const AI_STATUS_COLORS = {
-    pending:     { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: GOLD },
+    pending:     { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: 'var(--t-goldText)' },
     processing:  { bg: 'rgba(99,102,241,0.1)',   border: 'rgba(99,102,241,0.3)',   color: '#a5b4fc' },
-    dismissed:   { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  color: 'rgba(255,255,255,0.35)' },
-    fixed_index: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: '#4ade80' },
-    regenerated: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: '#4ade80' },
-    deleted:     { bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)',   color: '#f87171' },
-    error:       { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: '#f87171' },
+    dismissed:   { bg: 'rgba(var(--ink-rgb),0.05)', border: 'rgba(var(--ink-rgb),0.1)',  color: 'rgba(var(--ink-rgb),0.35)' },
+    fixed_index: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: 'var(--t-success)' },
+    regenerated: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: 'var(--t-success)' },
+    deleted:     { bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)',   color: 'var(--t-danger)' },
+    error:       { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: 'var(--t-danger)' },
   }
 
   return (
@@ -328,9 +328,9 @@ export default function AdminReviewScreen({ profile }) {
             style={{
               padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
               fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.15s',
-              border: `1px solid ${activeTab === tab ? GOLD : 'rgba(255,255,255,0.12)'}`,
+              border: `1px solid ${activeTab === tab ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
               background: activeTab === tab ? 'rgba(241,190,67,0.08)' : 'transparent',
-              color: activeTab === tab ? GOLD : 'rgba(255,255,255,0.4)',
+              color: activeTab === tab ? GOLD : 'rgba(var(--ink-rgb),0.4)',
             }}
           >{label}</button>
         ))}
@@ -339,7 +339,7 @@ export default function AdminReviewScreen({ profile }) {
       {activeTab === 'reports' && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{loadingReports ? '' : `${reports.length} report${reports.length === 1 ? '' : 's'}`}</span>
+            <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{loadingReports ? '' : `${reports.length} report${reports.length === 1 ? '' : 's'}`}</span>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {['all', 'pending', 'processing', 'fixed_index', 'regenerated', 'dismissed', 'error'].map(s => (
                 <button
@@ -348,9 +348,9 @@ export default function AdminReviewScreen({ profile }) {
                   style={{
                     padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
                     fontFamily: FONT_B, cursor: 'pointer',
-                    border: `1px solid ${reportFilter === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                    border: `1px solid ${reportFilter === s ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
                     background: reportFilter === s ? 'rgba(241,190,67,0.08)' : 'transparent',
-                    color: reportFilter === s ? GOLD : 'rgba(255,255,255,0.35)',
+                    color: reportFilter === s ? GOLD : 'rgba(var(--ink-rgb),0.35)',
                   }}
                 >{s}</button>
               ))}
@@ -360,8 +360,8 @@ export default function AdminReviewScreen({ profile }) {
                 style={{
                   padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
                   fontFamily: FONT_B, cursor: loadingReports ? 'default' : 'pointer',
-                  border: '1px solid rgba(255,255,255,0.12)', background: 'transparent',
-                  color: 'rgba(255,255,255,0.4)',
+                  border: '1px solid rgba(var(--ink-rgb),0.12)', background: 'transparent',
+                  color: 'rgba(var(--ink-rgb),0.4)',
                 }}
               >{loadingReports ? '…' : '↻ Refresh'}</button>
               <button
@@ -389,31 +389,31 @@ export default function AdminReviewScreen({ profile }) {
           </div>
 
           {scanResult && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', color: '#4ade80', fontSize: 13, fontFamily: FONT_B }}>
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--t-success)', fontSize: 13, fontFamily: FONT_B }}>
               Queued {scanResult.queued} question{scanResult.queued !== 1 ? 's' : ''} for AI review.
               {scanResult.message ? ` ${scanResult.message}` : ''}
             </div>
           )}
           {scanError && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: '#f87171', fontSize: 13, fontFamily: FONT_B }}>
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: 'var(--t-danger)', fontSize: 13, fontFamily: FONT_B }}>
               {scanError}
             </div>
           )}
           {retryResult && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', color: GOLD, fontSize: 13, fontFamily: FONT_B }}>
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', color: 'var(--t-goldText)', fontSize: 13, fontFamily: FONT_B }}>
               {retryResult.retried === 0 ? (retryResult.message || 'No stuck reports found.') : `Retried ${retryResult.retried} stuck report${retryResult.retried !== 1 ? 's' : ''}.`}
             </div>
           )}
           {retryError && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: '#f87171', fontSize: 13, fontFamily: FONT_B }}>
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: 'var(--t-danger)', fontSize: 13, fontFamily: FONT_B }}>
               {retryError}
             </div>
           )}
 
           {loadingReports ? (
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading…</div>
+            <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13 }}>Loading…</div>
           ) : reports.length === 0 ? (
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
+            <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
               No reports{reportFilter !== 'all' ? ` with status "${reportFilter}"` : ''}.
             </div>
           ) : (
@@ -422,26 +422,26 @@ export default function AdminReviewScreen({ profile }) {
                 const q = r.questions
                 const sc = AI_STATUS_COLORS[r.ai_status] || AI_STATUS_COLORS.pending
                 return (
-                  <div key={r.id} style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div key={r.id} style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.07)' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: q ? 6 : 0 }}>
                       <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}>
                         {r.ai_status}
                       </span>
-                      <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {q?.question || r.question_id}
                       </span>
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.3)', flexShrink: 0 }}>
                         {new Date(r.reported_at).toLocaleDateString()}
                       </span>
                     </div>
                     {r.resolution_note && (
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4, paddingLeft: 4 }}>
+                      <div style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.45)', marginTop: 4, paddingLeft: 4 }}>
                         {r.resolution_note}
                         {r.ai_verdict?.explanation ? ` — ${r.ai_verdict.explanation}` : ''}
                       </div>
                     )}
                     {q && (
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.25)', marginTop: 4 }}>
                         {[q.subject, q.topic, q.subtopic].filter(Boolean).join(' · ')}
                         {q.difficulty ? ` · D${q.difficulty}` : ''}
                       </div>
@@ -458,7 +458,7 @@ export default function AdminReviewScreen({ profile }) {
       {/* Left: table */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{loading ? '' : `${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}</span>
+          <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{loading ? '' : `${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {drafts.length > 0 && (
               <button
@@ -466,9 +466,9 @@ export default function AdminReviewScreen({ profile }) {
                 disabled={saving}
                 style={{
                   padding: '5px 12px', borderRadius: 8,
-                  border: `1px solid ${allChecked ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                  border: `1px solid ${allChecked ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
                   background: allChecked ? 'rgba(241,190,67,0.08)' : 'transparent',
-                  color: allChecked ? GOLD : 'rgba(255,255,255,0.4)',
+                  color: allChecked ? GOLD : 'rgba(var(--ink-rgb),0.4)',
                   fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
                 }}
               >
@@ -490,9 +490,9 @@ export default function AdminReviewScreen({ profile }) {
                 onClick={() => { setFilterStatus(s); setChecked(new Set()) }}
                 style={{
                   padding: '5px 12px', borderRadius: 8,
-                  border: `1px solid ${filterStatus === s ? GOLD : 'rgba(255,255,255,0.12)'}`,
+                  border: `1px solid ${filterStatus === s ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
                   background: filterStatus === s ? 'rgba(241,190,67,0.08)' : 'transparent',
-                  color: filterStatus === s ? GOLD : 'rgba(255,255,255,0.4)',
+                  color: filterStatus === s ? GOLD : 'rgba(var(--ink-rgb),0.4)',
                   fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
                 }}
               >
@@ -510,7 +510,7 @@ export default function AdminReviewScreen({ profile }) {
               borderRadius: 10,
               background: 'rgba(16,185,129,0.1)',
               border: '1px solid rgba(16,185,129,0.28)',
-              color: '#4ade80',
+              color: 'var(--t-success)',
               fontSize: 13,
               fontFamily: FONT_B,
             }}
@@ -526,7 +526,7 @@ export default function AdminReviewScreen({ profile }) {
               borderRadius: 10,
               background: 'rgba(239,68,68,0.1)',
               border: '1px solid rgba(239,68,68,0.28)',
-              color: '#f87171',
+              color: 'var(--t-danger)',
               fontSize: 13,
               fontFamily: FONT_B,
             }}
@@ -536,9 +536,9 @@ export default function AdminReviewScreen({ profile }) {
         )}
 
         {loading ? (
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading…</div>
+          <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13 }}>Loading…</div>
         ) : drafts.length === 0 ? (
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
+          <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
             No drafts with status "{filterStatus}".
           </div>
         ) : (
@@ -550,8 +550,8 @@ export default function AdminReviewScreen({ profile }) {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '10px 14px', borderRadius: 10,
-                  background: selected?.id === draft.id ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${selected?.id === draft.id ? 'rgba(241,190,67,0.2)' : 'rgba(255,255,255,0.07)'}`,
+                  background: selected?.id === draft.id ? 'rgba(241,190,67,0.06)' : 'rgba(var(--ink-rgb),0.03)',
+                  border: `1px solid ${selected?.id === draft.id ? 'rgba(241,190,67,0.2)' : 'rgba(var(--ink-rgb),0.07)'}`,
                   cursor: 'pointer', transition: 'background 0.1s',
                 }}
               >
@@ -562,13 +562,13 @@ export default function AdminReviewScreen({ profile }) {
                   onClick={e => e.stopPropagation()}
                   style={{ cursor: 'pointer', flexShrink: 0 }}
                 />
-                <span style={{ fontSize: 11, color: GOLD, fontWeight: 700, width: 36, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: 'var(--t-goldText)', fontWeight: 700, width: 36, flexShrink: 0 }}>
                   {draft.topic_code || '?'}
                 </span>
-                <span style={{ flex: 1, fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <MathText text={draft.question} style={{ whiteSpace: 'nowrap' }} />
                 </span>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.3)', flexShrink: 0 }}>
                   D{draft.difficulty ?? '?'}
                 </span>
                 {(() => {
@@ -600,13 +600,13 @@ export default function AdminReviewScreen({ profile }) {
         <div style={{
           width: 400, flexShrink: 0,
           position: 'sticky', top: 24, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(var(--ink-rgb),0.03)',
+          border: '1px solid rgba(var(--ink-rgb),0.08)',
           borderRadius: 14, padding: 20,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: GOLD }}>Edit Draft</span>
-            <button onClick={closePanel} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-goldText)' }}>Edit Draft</span>
+            <button onClick={closePanel} style={{ background: 'none', border: 'none', color: 'rgba(var(--ink-rgb),0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
           </div>
 
           {/* Variant count info */}
@@ -616,12 +616,12 @@ export default function AdminReviewScreen({ profile }) {
               return (
                 <div style={{
                   marginBottom: 16, padding: '10px 12px', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(var(--ink-rgb),0.03)',
+                  border: '1px solid rgba(var(--ink-rgb),0.08)',
                   display: 'flex', alignItems: 'center', gap: 8,
                 }}>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Stored Variants</span>
-                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>unavailable</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Stored Variants</span>
+                  <span style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.3)' }}>unavailable</span>
                 </div>
               )
             }
@@ -637,7 +637,7 @@ export default function AdminReviewScreen({ profile }) {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
               }}>
                 <div>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Concept Variants</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Concept Variants</span>
                   <div style={{ marginTop: 2, fontSize: 18, fontWeight: 800, color: isZero ? '#f87171' : '#4ade80' }}>
                     {vc}
                   </div>
@@ -645,7 +645,7 @@ export default function AdminReviewScreen({ profile }) {
                 {isZero && (
                   <span style={{
                     padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                    background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171',
+                    background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--t-danger)',
                   }}>
                     No variants — needs generation
                   </span>
@@ -656,7 +656,7 @@ export default function AdminReviewScreen({ profile }) {
 
           {/* Topic */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Topic</label>
+            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Topic</label>
             <select
               value={editState.topic_code || ''}
               onChange={e => {
@@ -674,7 +674,7 @@ export default function AdminReviewScreen({ profile }) {
 
           {/* Subtopic */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Subtopic</label>
+            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Subtopic</label>
             <input
               style={inputStyle}
               value={editState.subtopic || ''}
@@ -685,7 +685,7 @@ export default function AdminReviewScreen({ profile }) {
 
           {/* Difficulty */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Difficulty (1–5)</label>
+            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Difficulty (1–5)</label>
             <input
               type="number" min={1} max={5}
               style={{ ...inputStyle, width: 80 }}
@@ -696,7 +696,7 @@ export default function AdminReviewScreen({ profile }) {
 
           {/* Question */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Question</label>
+            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Question</label>
             <textarea
               rows={4}
               style={{ ...inputStyle, resize: 'vertical' }}
@@ -704,7 +704,7 @@ export default function AdminReviewScreen({ profile }) {
               onChange={e => setEditState(prev => ({ ...prev, question: e.target.value }))}
             />
             {editState.question && (
-              <div style={{ marginTop: 4, padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 13, color: '#e2e8f0' }}>
+              <div style={{ marginTop: 4, padding: '8px 10px', borderRadius: 6, background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.06)', fontSize: 13, color: 'var(--t-textSub)' }}>
                 <MathText text={editState.question} />
               </div>
             )}
@@ -713,7 +713,7 @@ export default function AdminReviewScreen({ profile }) {
           {/* Options */}
           {(editState.options || []).map((opt, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
-              <label style={{ display: 'block', fontSize: 11, color: editState.answer_index === i ? '#4ade80' : 'rgba(255,255,255,0.4)', marginBottom: 3, textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: 11, color: editState.answer_index === i ? '#4ade80' : 'rgba(var(--ink-rgb),0.4)', marginBottom: 3, textTransform: 'uppercase' }}>
                 Option {OPTION_LABELS[i]}{editState.answer_index === i ? ' ✓ correct' : ''}
               </label>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -731,9 +731,9 @@ export default function AdminReviewScreen({ profile }) {
                   title="Mark as correct"
                   style={{
                     flexShrink: 0, width: 28, height: 28, borderRadius: 6,
-                    border: `1px solid ${editState.answer_index === i ? '#4ade80' : 'rgba(255,255,255,0.12)'}`,
+                    border: `1px solid ${editState.answer_index === i ? '#4ade80' : 'rgba(var(--ink-rgb),0.12)'}`,
                     background: editState.answer_index === i ? 'rgba(74,222,128,0.12)' : 'transparent',
-                    color: editState.answer_index === i ? '#4ade80' : 'rgba(255,255,255,0.3)',
+                    color: editState.answer_index === i ? '#4ade80' : 'rgba(var(--ink-rgb),0.3)',
                     cursor: 'pointer', fontSize: 14,
                   }}
                 >
@@ -745,7 +745,7 @@ export default function AdminReviewScreen({ profile }) {
 
           {/* Solution */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Solution / Explanation</label>
+            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Solution / Explanation</label>
             <textarea
               rows={4}
               style={{ ...inputStyle, resize: 'vertical' }}
@@ -759,7 +759,7 @@ export default function AdminReviewScreen({ profile }) {
             <button
               onClick={handleSave}
               disabled={saving}
-              style={{ padding: '9px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
+              style={{ padding: '9px', borderRadius: 8, border: '1px solid rgba(var(--ink-rgb),0.15)', background: 'transparent', color: 'var(--t-text)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
             >
               {saving ? 'Saving…' : 'Save Edits'}
             </button>
@@ -773,7 +773,7 @@ export default function AdminReviewScreen({ profile }) {
             <button
               onClick={() => handleReject(editState.id)}
               disabled={saving}
-              style={{ padding: '9px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
+              style={{ padding: '9px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: 'var(--t-danger)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
             >
               Reject
             </button>

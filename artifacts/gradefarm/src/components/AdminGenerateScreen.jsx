@@ -158,27 +158,27 @@ export default function AdminGenerateScreen() {
 
   const selectStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: '1px solid rgba(255,255,255,0.12)',
-    background: '#0c1037', color: '#fff', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+    border: '1px solid rgba(var(--ink-rgb),0.12)',
+    background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
   }
 
   const chipBtn = (active) => ({
     padding: '8px 16px', borderRadius: 8,
-    border: `1px solid ${active ? GOLD : 'rgba(255,255,255,0.12)'}`,
+    border: `1px solid ${active ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
     background: active ? 'rgba(241,190,67,0.1)' : 'transparent',
-    color: active ? GOLD : 'rgba(255,255,255,0.5)',
+    color: active ? GOLD : 'rgba(var(--ink-rgb),0.5)',
     fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
   })
 
   return (
     <div>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 0 }}>
+      <p style={{ color: 'rgba(var(--ink-rgb),0.5)', fontSize: 13, marginTop: 0 }}>
         Pick a subject and one or more subtopics, then let Claude generate MCQs. They land in the draft queue for your review.
       </p>
 
       {/* Subject */}
       <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {filteredBuiltIn.map(s => (
             <button key={s.id} onClick={() => handleSubjectChange(s.id)} style={chipBtn(subject === s.id)}>{s.label}</button>
@@ -197,17 +197,17 @@ export default function AdminGenerateScreen() {
       {groups.length > 0 && (
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <label style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Topics</label>
-            <button onClick={selectAll} style={{ background: 'none', border: 'none', color: GOLD, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, padding: 0 }}>Select all</button>
-            <button onClick={clearAll}  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, padding: 0 }}>Clear</button>
+            <label style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Topics</label>
+            <button onClick={selectAll} style={{ background: 'none', border: 'none', color: 'var(--t-goldText)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, padding: 0 }}>Select all</button>
+            <button onClick={clearAll}  style={{ background: 'none', border: 'none', color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, padding: 0 }}>Clear</button>
             {selectedCodes.size > 0 && (
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: GOLD, fontWeight: 700 }}>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--t-goldText)', fontWeight: 700 }}>
                 {selectedCodes.size} subtopic{selectedCodes.size !== 1 ? 's' : ''} · {totalQuestions} questions total
               </span>
             )}
           </div>
 
-          <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ border: '1px solid rgba(var(--ink-rgb),0.1)', borderRadius: 10, overflow: 'hidden' }}>
             {groups.map((group, gi) => {
               const groupCodes = group.subtopics.map(t => t.code)
               const allSel  = groupCodes.every(c => selectedCodes.has(c))
@@ -215,10 +215,10 @@ export default function AdminGenerateScreen() {
               const expanded = expandedGroups.has(group.name)
 
               return (
-                <div key={group.name} style={{ borderBottom: gi < groups.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
+                <div key={group.name} style={{ borderBottom: gi < groups.length - 1 ? '1px solid rgba(var(--ink-rgb),0.07)' : 'none' }}>
                   {/* Group header row */}
                   <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(var(--ink-rgb),0.03)', cursor: 'pointer' }}
                     onClick={() => toggleExpanded(group.name)}
                   >
                     {/* group checkbox */}
@@ -226,7 +226,7 @@ export default function AdminGenerateScreen() {
                       onClick={e => { e.stopPropagation(); toggleGroup(group.name, group.subtopics) }}
                       style={{
                         width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                        border: `2px solid ${allSel ? GOLD : someSel ? GOLD : 'rgba(255,255,255,0.25)'}`,
+                        border: `2px solid ${allSel ? GOLD : someSel ? GOLD : 'rgba(var(--ink-rgb),0.25)'}`,
                         background: allSel ? GOLD : someSel ? 'rgba(241,190,67,0.3)' : 'transparent',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer',
@@ -234,11 +234,11 @@ export default function AdminGenerateScreen() {
                     >
                       {(allSel || someSel) && <span style={{ color: allSel ? '#0c1037' : GOLD, fontSize: 10, fontWeight: 900, lineHeight: 1 }}>{allSel ? '✓' : '−'}</span>}
                     </div>
-                    <span style={{ color: '#fff', fontSize: 13, fontWeight: 700, flex: 1 }}>{group.name}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
+                    <span style={{ color: 'var(--t-text)', fontSize: 13, fontWeight: 700, flex: 1 }}>{group.name}</span>
+                    <span style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11 }}>
                       {someSel ? `${groupCodes.filter(c => selectedCodes.has(c)).length}/${group.subtopics.length}` : group.subtopics.length} subtopics
                     </span>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+                    <span style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
                   </div>
 
                   {/* Subtopics */}
@@ -259,14 +259,14 @@ export default function AdminGenerateScreen() {
                           >
                             <div style={{
                               width: 15, height: 15, borderRadius: 3, flexShrink: 0,
-                              border: `2px solid ${checked ? GOLD : 'rgba(255,255,255,0.2)'}`,
+                              border: `2px solid ${checked ? GOLD : 'rgba(var(--ink-rgb),0.2)'}`,
                               background: checked ? GOLD : 'transparent',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
                               {checked && <span style={{ color: '#0c1037', fontSize: 9, fontWeight: 900 }}>✓</span>}
                             </div>
-                            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700, minWidth: 36 }}>{t.code}</span>
-                            <span style={{ color: checked ? '#fff' : 'rgba(255,255,255,0.65)', fontSize: 13 }}>{t.name}</span>
+                            <span style={{ color: 'rgba(var(--ink-rgb),0.4)', fontSize: 12, fontWeight: 700, minWidth: 36 }}>{t.code}</span>
+                            <span style={{ color: checked ? '#fff' : 'rgba(var(--ink-rgb),0.65)', fontSize: 13 }}>{t.name}</span>
                           </div>
                         )
                       })}
@@ -281,14 +281,14 @@ export default function AdminGenerateScreen() {
 
       {/* Count */}
       <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Questions per Subtopic</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Questions per Subtopic</label>
         <div style={{ display: 'flex', gap: 8 }}>
           {COUNTS.map(c => (
             <button key={c} onClick={() => setCount(c)} style={chipBtn(count === c)}>{c}</button>
           ))}
         </div>
         {selectedCodes.size > 1 && (
-          <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+          <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(var(--ink-rgb),0.35)' }}>
             {selectedCodes.size} subtopics × {count} = {totalQuestions} questions total
           </div>
         )}
@@ -296,7 +296,7 @@ export default function AdminGenerateScreen() {
 
       {/* Difficulty */}
       <div style={{ marginBottom: 24 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Difficulty</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Difficulty</label>
         <select value={difficulty} onChange={e => setDifficulty(e.target.value)} style={selectStyle}>
           {DIFFICULTIES.map(d => (
             <option key={d.value} value={d.value}>{d.label}</option>
@@ -306,9 +306,9 @@ export default function AdminGenerateScreen() {
 
       {/* Question formats — opt into types beyond plain multiple choice */}
       <div style={{ marginBottom: 24 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Question formats</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Question formats</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: 'rgba(241,190,67,0.16)', border: '1px solid rgba(241,190,67,0.4)', color: GOLD }}>
+          <span style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: 'rgba(241,190,67,0.16)', border: '1px solid rgba(241,190,67,0.4)', color: 'var(--t-goldText)' }}>
             Multiple choice ✓
           </span>
           {[
@@ -328,15 +328,15 @@ export default function AdminGenerateScreen() {
                 })}
                 style={{
                   padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
-                  color: on ? GOLD : 'rgba(255,255,255,0.6)',
+                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
+                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
+                  color: on ? GOLD : 'rgba(var(--ink-rgb),0.6)',
                 }}
               >{on ? `${tp.label} ✓` : tp.label}</button>
             )
           })}
         </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: FONT_B }}>
+        <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(var(--ink-rgb),0.35)', fontFamily: FONT_B }}>
           {extraTypes.size
             ? 'Claude will mix these formats with multiple choice. (~half stay MCQ.)'
             : 'Multiple choice only. Enable extra formats to generate a varied mix.'}
@@ -345,9 +345,9 @@ export default function AdminGenerateScreen() {
           onClick={() => setIncludeDiagrams(v => !v)}
           style={{
             marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-            background: includeDiagrams ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
-            border: `1px solid ${includeDiagrams ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
-            color: includeDiagrams ? GOLD : 'rgba(255,255,255,0.6)',
+            background: includeDiagrams ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
+            border: `1px solid ${includeDiagrams ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
+            color: includeDiagrams ? GOLD : 'rgba(var(--ink-rgb),0.6)',
           }}
         >
           {includeDiagrams ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
@@ -358,16 +358,16 @@ export default function AdminGenerateScreen() {
           onClick={() => setExamGrade(v => !v)}
           style={{
             marginTop: 12, marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-            background: examGrade ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
-            border: `1px solid ${examGrade ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
-            color: examGrade ? GOLD : 'rgba(255,255,255,0.6)',
+            background: examGrade ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
+            border: `1px solid ${examGrade ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
+            color: examGrade ? GOLD : 'rgba(var(--ink-rgb),0.6)',
           }}
         >
           {examGrade ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
           Exam-grade (hardest questions + graphs)
         </button>
         {examGrade && (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(var(--ink-rgb),0.5)', lineHeight: 1.5 }}>
             Uses the strongest model with reasoning: difficulty 4–5 multiple choice, graphs wherever the topic allows, up to 3 questions
             per subtopic and 4 subtopics per run. Questions that fail a strict answer check are dropped; the rest go to the review queue. Slower and costs more per question.
           </div>
@@ -379,8 +379,8 @@ export default function AdminGenerateScreen() {
         disabled={!selectedCodes.size || loading}
         style={{
           padding: '12px 28px', borderRadius: 10, border: 'none',
-          background: (!selectedCodes.size || loading) ? 'rgba(255,255,255,0.08)' : GOLD,
-          color: (!selectedCodes.size || loading) ? 'rgba(255,255,255,0.3)' : '#0c1037',
+          background: (!selectedCodes.size || loading) ? 'rgba(var(--ink-rgb),0.08)' : GOLD,
+          color: (!selectedCodes.size || loading) ? 'rgba(var(--ink-rgb),0.3)' : '#0c1037',
           fontSize: 14, fontWeight: 800,
           cursor: (!selectedCodes.size || loading) ? 'not-allowed' : 'pointer',
           fontFamily: FONT_B,
@@ -396,7 +396,7 @@ export default function AdminGenerateScreen() {
       </button>
 
       {loading && (
-        <div style={{ marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,0.35)', fontFamily: FONT_B }}>
+        <div style={{ marginTop: 12, fontSize: 12, color: 'rgba(var(--ink-rgb),0.35)', fontFamily: FONT_B }}>
           {elapsed < 10
             ? 'Calling Claude API…'
             : elapsed < 30
@@ -409,19 +409,19 @@ export default function AdminGenerateScreen() {
 
       {result && (
         <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
-          <div style={{ color: '#4ade80', fontWeight: 700 }}>✓ {result.inserted} questions added to the draft queue</div>
+          <div style={{ color: 'var(--t-success)', fontWeight: 700 }}>✓ {result.inserted} questions added to the draft queue</div>
           {result.topicsProcessed > 1 && (
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>{result.topicsProcessed} subtopics processed</div>
+            <div style={{ color: 'rgba(var(--ink-rgb),0.5)', fontSize: 12, marginTop: 2 }}>{result.topicsProcessed} subtopics processed</div>
           )}
           {result.errors?.length > 0 && (
-            <div style={{ color: '#f87171', fontSize: 12, marginTop: 4 }}>{result.errors.length} subtopic(s) had errors: {result.errors.join(', ')}</div>
+            <div style={{ color: 'var(--t-danger)', fontSize: 12, marginTop: 4 }}>{result.errors.length} subtopic(s) had errors: {result.errors.join(', ')}</div>
           )}
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 4 }}>Go to the Review Queue tab to approve them.</div>
+          <div style={{ color: 'rgba(var(--ink-rgb),0.4)', fontSize: 12, marginTop: 4 }}>Go to the Review Queue tab to approve them.</div>
         </div>
       )}
 
       {error && (
-        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171', fontSize: 13 }}>
+        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--t-danger)', fontSize: 13 }}>
           {error}
         </div>
       )}

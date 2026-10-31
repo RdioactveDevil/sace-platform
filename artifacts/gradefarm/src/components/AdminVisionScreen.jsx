@@ -16,9 +16,9 @@ const TYPE_OPTIONS = [
 
 const field = {
   width: '100%', padding: '10px 12px', borderRadius: 9, fontSize: 13, fontFamily: FONT_B,
-  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9', outline: 'none',
+  background: 'rgba(var(--ink-rgb),0.05)', border: '1px solid rgba(var(--ink-rgb),0.12)', color: 'var(--t-text)', outline: 'none',
 }
-const labelStyle = { display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }
+const labelStyle = { display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }
 
 export default function AdminVisionScreen() {
   const [subject, setSubject] = useState('')
@@ -81,8 +81,8 @@ export default function AdminVisionScreen() {
   const preview = imageData?.preview || imageUrl
 
   return (
-    <div style={{ maxWidth: 720, fontFamily: FONT_B, color: '#f1f5f9' }}>
-      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 0, marginBottom: 24, lineHeight: 1.6 }}>
+    <div style={{ maxWidth: 720, fontFamily: FONT_B, color: 'var(--t-text)' }}>
+      <p style={{ fontSize: 13, color: 'rgba(var(--ink-rgb),0.5)', marginTop: 0, marginBottom: 24, lineHeight: 1.6 }}>
         Upload an exam figure, diagram, graph or map (or paste an image URL). Claude reads the image and writes questions from it — including click-the-region and label-the-diagram formats. The image is hosted and attached to each question.
       </p>
 
@@ -90,15 +90,15 @@ export default function AdminVisionScreen() {
       <div style={{ marginBottom: 20 }}>
         <label style={labelStyle}>Image</label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)', color: GOLD, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => fileRef.current?.click()} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)', color: 'var(--t-goldText)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Upload size={14} aria-hidden="true" /> Upload image
           </button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>or</span>
+          <span style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.35)' }}>or</span>
           <input type="url" value={imageUrl} onChange={(e) => { setImageUrl(e.target.value); setImageData(null) }} placeholder="Paste a public image URL" style={{ ...field, flex: 1, minWidth: 200 }} />
         </div>
         {preview && (
-          <img src={preview} alt="Preview" style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)' }} />
+          <img src={preview} alt="Preview" style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 12, border: '1px solid rgba(var(--ink-rgb),0.12)' }} />
         )}
       </div>
 
@@ -131,9 +131,9 @@ export default function AdminVisionScreen() {
             return (
               <button key={tp.id} onClick={() => toggleType(tp.id)}
                 style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(255,255,255,0.12)'}`,
-                  color: on ? GOLD : 'rgba(255,255,255,0.6)' }}>
+                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
+                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
+                  color: on ? GOLD : 'rgba(var(--ink-rgb),0.6)' }}>
                 {on ? `${tp.label} ✓` : tp.label}
               </button>
             )
@@ -142,11 +142,11 @@ export default function AdminVisionScreen() {
       </div>
 
       <button onClick={generate} disabled={loading}
-        style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: loading ? 'rgba(255,255,255,0.08)' : GOLD, color: loading ? 'rgba(255,255,255,0.3)' : '#0c1037', fontSize: 14, fontWeight: 800, cursor: loading ? 'default' : 'pointer', fontFamily: FONT_B }}>
+        style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: loading ? 'rgba(var(--ink-rgb),0.08)' : GOLD, color: loading ? 'rgba(var(--ink-rgb),0.3)' : '#0c1037', fontSize: 14, fontWeight: 800, cursor: loading ? 'default' : 'pointer', fontFamily: FONT_B }}>
         {loading ? 'Reading image & generating…' : 'Generate questions from image'}
       </button>
 
-      {error && <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: 'var(--t-danger)', fontSize: 13 }}>{error}</div>}
       {result && (
         <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 10, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', fontSize: 13 }}>
           ✓ Inserted {result.inserted} question{result.inserted !== 1 ? 's' : ''} {result.draft ? 'to the review queue' : 'into the live bank'} from this image.

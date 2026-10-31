@@ -10,10 +10,10 @@ const GOLD   = '#f1be43'
 
 function StatusBadge({ status }) {
   const map = {
-    live:       { bg: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.3)',  color: '#4ade80' },
-    generating: { bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)',  color: '#38bdf8' },
-    draft:      { bg: 'rgba(241,190,67,0.1)',  border: 'rgba(241,190,67,0.3)',  color: GOLD },
-    archived:   { bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', color: '#94a3b8' },
+    live:       { bg: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.3)',  color: 'var(--t-success)' },
+    generating: { bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)',  color: 'var(--t-blue)' },
+    draft:      { bg: 'rgba(241,190,67,0.1)',  border: 'rgba(241,190,67,0.3)',  color: 'var(--t-goldText)' },
+    archived:   { bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', color: 'var(--t-textMuted)' },
   }
   const s = map[status] || map.draft
   return (
@@ -138,7 +138,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div style={{ fontFamily: FONT_B, color: '#e2e8f0' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
       <style>{`
         @keyframes curricPulse {
           0%, 100% { opacity: 1; }
@@ -155,12 +155,12 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
       {error && <div style={errorBox}>{error}</div>}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: 13 }}>Loading curricula…</div>
+        <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading curricula…</div>
       ) : curricula.length === 0 ? (
         <div style={{
           textAlign: 'center', padding: '64px 24px',
-          border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 14,
-          color: '#64748b', fontSize: 14,
+          border: '1px dashed rgba(var(--ink-rgb),0.08)', borderRadius: 14,
+          color: 'var(--t-textMuted)', fontSize: 14,
         }}>
           <div style={{ marginBottom: 16 }}>No curricula yet.</div>
           <button onClick={openModal} style={outlineBtn}>Add your first subject</button>
@@ -172,11 +172,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               key={c.id}
               onClick={() => onSelectCurriculum(c.id)}
               style={c.archived_at ? { ...card, opacity: 0.55 } : card}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.06)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)'}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.3, flex: 1 }}>{c.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)', lineHeight: 1.3, flex: 1 }}>{c.name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                   <StatusBadge status={c.archived_at ? 'archived' : c.status} />
                   <button
@@ -184,7 +184,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                     title={c.archived_at ? 'Unarchive — show to students again' : 'Archive — hide from students, keep everything'}
                     style={{
                       background: 'none', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 5,
-                      color: '#94a3b8', fontSize: 11, fontWeight: 700, cursor: 'pointer', height: 22,
+                      color: 'var(--t-textMuted)', fontSize: 11, fontWeight: 700, cursor: 'pointer', height: 22,
                       padding: '0 7px', fontFamily: FONT_B,
                     }}
                   >
@@ -207,33 +207,33 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                   </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#64748b', marginBottom: 10 }}>
+              <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 10 }}>
                 <span>{c.topic_count} topic{c.topic_count !== 1 ? 's' : ''}</span>
                 <span>{c.subtopic_count} subtopic{c.subtopic_count !== 1 ? 's' : ''}</span>
                 {(c.level_label || '').trim() ? (
-                  <span style={{ color: GOLD }}>{(c.level_label || '').trim()}</span>
+                  <span style={{ color: 'var(--t-goldText)' }}>{(c.level_label || '').trim()}</span>
                 ) : null}
               </div>
               {bankCounts[c.name] != null && (
-                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 8 }}>
                   {bankCounts[c.name]} question{bankCounts[c.name] !== 1 ? 's' : ''} in bank
                 </div>
               )}
               {c.status !== 'draft' && c.questions_total > 0 && (
                 <div style={{ marginBottom: 8 }}>
-                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 4 }}>
+                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(var(--ink-rgb),0.06)', overflow: 'hidden', marginBottom: 4 }}>
                     <div style={{
                       height: '100%', borderRadius: 2, background: '#4ade80',
                       width: `${Math.min(100, Math.round((c.questions_generated / c.questions_total) * 100))}%`,
                       transition: 'width 0.4s',
                     }} />
                   </div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                  <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>
                     {c.questions_generated} / {c.questions_total} questions generated
                   </div>
                 </div>
               )}
-              <div style={{ fontSize: 11, color: '#475569' }}>{fmtDate(c.created_at)}</div>
+              <div style={{ fontSize: 11, color: 'var(--t-textFaint)' }}>{fmtDate(c.created_at)}</div>
             </div>
           ))}
         </div>
@@ -244,11 +244,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         <>
           <div onClick={closeModal} style={backdrop} />
           <div style={modal}>
-            <h3 style={{ margin: '0 0 6px', color: '#f1f5f9', fontSize: 16 }}>New Curriculum</h3>
-            <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
+            <h3 style={{ margin: '0 0 6px', color: 'var(--t-text)', fontSize: 16 }}>New Curriculum</h3>
+            <p style={{ margin: '0 0 14px', color: 'var(--t-textMuted)', fontSize: 13, lineHeight: 1.6 }}>
               Name the subject, choose Stage 1 / Stage 2 or a year level (required), then describe the course or upload a syllabus. Claude will generate a topic and subtopic plan scoped to that cohort.
             </p>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Subject name (short)
             </label>
             <input
@@ -259,14 +259,14 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               disabled={creating}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: '#0c1037', color: '#f1f5f9',
+                border: '1px solid rgba(var(--ink-rgb),0.12)',
+                background: 'var(--t-bgInput)', color: 'var(--t-text)',
                 fontSize: 13, fontFamily: FONT_B, outline: 'none',
                 boxSizing: 'border-box', marginBottom: 10,
                 opacity: creating ? 0.6 : 1,
               }}
             />
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Stage / year level *
             </label>
             <select
@@ -275,8 +275,8 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               disabled={creating}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: '#0c1037', color: '#f1f5f9',
+                border: '1px solid rgba(var(--ink-rgb),0.12)',
+                background: 'var(--t-bgInput)', color: 'var(--t-text)',
                 fontSize: 13, fontFamily: FONT_B, outline: 'none',
                 boxSizing: 'border-box', marginBottom: 12,
                 opacity: creating ? 0.6 : 1,
@@ -287,7 +287,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Question features
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, opacity: creating ? 0.6 : 1 }}>
@@ -304,12 +304,12 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                     disabled={creating}
                     style={{ width: 15, height: 15, accentColor: '#f1be43', cursor: 'inherit' }}
                   />
-                  <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600 }}>{label}</span>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>{desc}</span>
+                  <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>{label}</span>
+                  <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{desc}</span>
                 </label>
               ))}
             </div>
-            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Course description (optional if uploading a document)
             </label>
             <textarea
@@ -320,21 +320,21 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               disabled={creating}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: '#0c1037', color: '#f1f5f9',
+                border: '1px solid rgba(var(--ink-rgb),0.12)',
+                background: 'var(--t-bgInput)', color: 'var(--t-text)',
                 fontSize: 13, fontFamily: FONT_B, outline: 'none',
                 resize: 'vertical', boxSizing: 'border-box',
                 opacity: creating ? 0.6 : 1,
               }}
             />
             <div style={{ marginTop: 10 }}>
-              <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Upload curriculum document (optional)
               </label>
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '9px 12px', borderRadius: 8, cursor: creating ? 'not-allowed' : 'pointer',
-                border: uploadedDoc ? '1px solid rgba(74,222,128,0.3)' : '1px dashed rgba(255,255,255,0.15)',
+                border: uploadedDoc ? '1px solid rgba(74,222,128,0.3)' : '1px dashed rgba(var(--ink-rgb),0.15)',
                 background: uploadedDoc ? 'rgba(74,222,128,0.05)' : 'transparent',
               }}>
                 <input type="file" accept=".pdf,.txt" disabled={creating} onChange={handleFileUpload} style={{ display: 'none' }} />
@@ -342,7 +342,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                   {uploadedDoc ? `✓ ${uploadedDoc.name}` : 'Choose PDF or text file…'}
                 </span>
                 {uploadedDoc && (
-                  <button onClick={e => { e.preventDefault(); setUploadedDoc(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                  <button onClick={e => { e.preventDefault(); setUploadedDoc(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                 )}
               </label>
             </div>
@@ -378,21 +378,21 @@ const goldBtn = {
 const outlineBtn = {
   padding: '10px 22px', borderRadius: 9,
   border: `1px solid ${GOLD}55`, background: `${GOLD}15`,
-  color: GOLD, fontSize: 13, fontWeight: 700,
+  color: 'var(--t-goldText)', fontSize: 13, fontWeight: 700,
   cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
 }
 
 const cancelBtn = {
   padding: '9px 18px', borderRadius: 8,
-  border: '1px solid rgba(255,255,255,0.12)', background: 'transparent',
-  color: '#94a3b8', fontSize: 13, fontWeight: 600,
+  border: '1px solid rgba(var(--ink-rgb),0.12)', background: 'transparent',
+  color: 'var(--t-textMuted)', fontSize: 13, fontWeight: 600,
   cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
 }
 
 const card = {
   padding: 18, borderRadius: 12,
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid rgba(255,255,255,0.07)',
+  background: 'rgba(var(--ink-rgb),0.03)',
+  border: '1px solid rgba(var(--ink-rgb),0.07)',
   cursor: 'pointer', transition: 'background 0.15s',
 }
 
@@ -404,7 +404,7 @@ const modal = {
   position: 'fixed', top: '50%', left: '50%',
   transform: 'translate(-50%, -50%)',
   zIndex: 51, width: 480, maxWidth: '95vw',
-  background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)',
+  background: 'var(--t-bgCard)', border: '1px solid rgba(var(--ink-rgb),0.1)',
   borderRadius: 16, padding: 28,
   fontFamily: "'Plus Jakarta Sans', sans-serif",
 }
@@ -412,5 +412,5 @@ const modal = {
 const errorBox = {
   padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
   border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8,
-  fontSize: 13, color: '#f87171',
+  fontSize: 13, color: 'var(--t-danger)',
 }

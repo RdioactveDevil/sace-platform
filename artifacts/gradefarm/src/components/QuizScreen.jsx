@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Zap, TriangleAlert, CircleCheck, Bot, Pause, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight } from 'lucide-react'
+import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   selectNextQuestion,
   calcXP,
@@ -1864,7 +1864,6 @@ export default function QuizScreen({
   const isStruggle = (struggleMap[baseQuestionId]?.wrong ?? 0) >= 2
   const sessionCorrect = sessionResults.filter(r => r.correct).length
   const sessionTotal = sessionResults.length
-  const accuracy = sessionTotal > 0 ? Math.round((sessionCorrect / sessionTotal) * 100) : null
   const inRemediationQuestion = remediationMode && !!currentQ?.is_variant
   const remediationPendingEntry = remediationMode && !currentQ?.is_variant && remediationOriginalQ?.id === currentQ?.id
 
@@ -1882,6 +1881,7 @@ export default function QuizScreen({
       ? 'Next Similar Question →'
       : 'Next Question →'
 
+  const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: t.textSub, background: t.bgSubtle, border: `1px solid ${t.border}`, padding: '2px 9px', borderRadius: 999 }
   const explainOpen = !isMobile && showAns
   // Decide the passage layout on the width left once the explanation panel is
   // open, so answering doesn't flip the passage from beside to above the question.
@@ -1913,76 +1913,64 @@ export default function QuizScreen({
 
       {showExit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
-          <div style={{ background: t.bgCard, border: `1px solid ${t.borderAccent}`, borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', animation: 'popIn 0.2s ease', boxShadow: t.shadowModal }}>
-            <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center', color: GOLD }}><Pause size={36} aria-hidden="true" /></div>
-            <div style={{ fontFamily: FONT_D, fontSize: 20, color: t.text, marginBottom: 8, letterSpacing: 0.5 }}>END THIS SESSION?</div>
-            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.65 }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="gf-end-title" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '24px', maxWidth: 380, width: '90%', animation: 'popIn 0.2s ease', boxShadow: t.shadowModal }}>
+            <div id="gf-end-title" style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 6 }}>End this session?</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 22, lineHeight: 1.6 }}>
               {sessionResults.some(r => !r.remediation)
                 ? examRun
                   ? "The exam ends here and you'll see your answers so far."
-                  : <>You've earned <span style={{ color: GOLD, fontWeight: 700 }}>{sessionXP} XP</span>. You'll see a summary of this session next.</>
+                  : <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>. You'll see a summary of this session next.</>
                 : "You haven't answered any questions yet."}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '13px', borderRadius: 11, border: `1px solid ${t.border}`, background: t.bgSubtle, color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}>Keep going</button>
-              <button onClick={endSession} style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, boxShadow: '0 4px 16px rgba(239,68,68,0.3)' }}>End session</button>
+              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Keep going</button>
+              <button onClick={endSession} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: t.danger, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End session</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Top status bar — gold gradient (brand) */}
-      <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Q{qNumber}{examRun && questionLimit > 0 ? ` of ${questionLimit}` : ''}</span>
+      {/* Status bar on the page colour: where you are on the left, how the
+          session is going on the right. Score signals are hidden in an exam. */}
+      <div style={{ background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8, fontSize: 12.5, color: t.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>Q{qNumber}{examRun && questionLimit > 0 ? ` of ${questionLimit}` : ''}</span>
+          <span style={{ color: t.text, fontWeight: 600 }}>{currentQ.subtopic}</span>
+          <span aria-label={`Difficulty ${currentQ.difficulty} of 5`} style={{ color: t.textFaint, letterSpacing: 1 }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
           {goalDisplay && (
-            <span title="Questions answered toward your tutor's assignment" style={{ fontSize: 11, fontWeight: 800, color: NAVY, background: 'rgba(255,255,255,0.3)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums' }}>
+            <span title="Questions answered toward your tutor's assignment" style={chip}>
               Assignment {goalDisplay.progress}/{goalDisplay.goal}
               {goalDisplay.minAccuracy && goalDisplay.accuracy !== null && ` · ${goalDisplay.accuracy}% (pass ${goalDisplay.minAccuracy}%)`}
             </span>
           )}
-          <div style={{ width: 1, height: 14, background: 'rgba(0,0,0,0.15)' }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: NAVY, background: 'rgba(0,0,0,0.1)', padding: '2px 10px', borderRadius: 20 }}>{currentQ.subtopic}</span>
-          {isStruggle && <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d', background: 'rgba(127,29,29,0.15)', padding: '2px 9px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Priority</span>}
-          {inRemediationQuestion && <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: 'rgba(255,255,255,0.2)', padding: '2px 9px', borderRadius: 20 }}>Remediation</span>}
-          <span style={{ fontSize: 11, color: 'rgba(12,16,55,0.6)' }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
+          {isStruggle && <span style={{ ...chip, color: t.danger }}><Zap size={12} aria-hidden="true" />Priority</span>}
+          {remediationMode && (
+            <span style={chip}>Extra practice · {Math.min(remediationStreak, remediationTarget)}/{remediationTarget} in a row</span>
+          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Score signals would give away answers during an exam. */}
-          {!examRun && streak >= 2 && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={14} aria-hidden="true" />{streak} streak</span>}
-          {!examRun && accuracy !== null && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{accuracy}% accuracy</span>}
-          {!examRun && <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>{signedXP(sessionXP)} XP</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          {!examRun && sessionTotal > 0 && (
+            <span><strong style={{ color: t.success }}>{sessionCorrect}</strong> right · <strong style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</strong> wrong</span>
+          )}
+          {!examRun && streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: t.text, fontWeight: 700 }}><Flame size={14} color={t.goldText} aria-hidden="true" />{streak}</span>}
+          {!examRun && <span>{signedXP(sessionXP)} XP</span>}
           {examRun && timerSeconds > 0 && (() => {
             const m = Math.floor(timeLeft / 60)
             const s = timeLeft % 60
             const urgent = timeLeft < 300
             return (
-              <span style={{ fontSize: 12, fontWeight: 800, color: urgent ? '#ef4444' : NAVY, background: urgent ? 'rgba(239,68,68,0.15)' : 'rgba(0,0,0,0.12)', padding: '2px 9px', borderRadius: 20, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontWeight: 800, color: urgent ? t.danger : t.text, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Timer size={14} aria-hidden="true" />{m}:{String(s).padStart(2, '0')}
               </span>
             )
           })()}
-          <button onClick={() => setShowExit(true)} style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End Session</button>
+          <button onClick={() => setShowExit(true)} style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End session</button>
         </div>
       </div>
 
-      {/* Level progress bar */}
-      {!examRun && <div style={{ height: 3, background: t.borderMid, flexShrink: 0 }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s' }} />
-      </div>}
-
-      {/* Session stats strip */}
-      {!examRun && <div style={{ background: t.bgSubtle, borderBottom: `1px solid ${t.border}`, padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>This session</span>
-        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.success }}>{sessionCorrect}</span> correct</span>
-        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</span> wrong</span>
-        <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700 }}><span style={{ color: GOLD }}>{signedXP(sessionXP)}</span> XP</span>
-        {streak > 0 && <span style={{ fontSize: 12, color: t.textSub, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={14} aria-hidden="true" />{streak}</span>}
-        {remediationMode && (
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 10px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow2, fontSize: 11, fontWeight: 700, color: GOLD }}>
-            Remediation · {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
-          </span>
-        )}
+      {/* Level progress */}
+      {!examRun && <div style={{ height: 2, background: t.border, flexShrink: 0 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: t.accent, transition: 'width 0.8s' }} />
       </div>}
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
@@ -2134,10 +2122,9 @@ export default function QuizScreen({
                     disabled={selected == null}
                     style={{
                       marginTop: 8, width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-                      background: selected != null ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.bgHover,
+                      background: selected != null ? t.accent : t.bgHover,
                       color: selected != null ? NAVY : t.textFaint, fontSize: 14, fontWeight: 800,
                       cursor: selected != null ? 'pointer' : 'default', fontFamily: FONT_B,
-                      boxShadow: selected != null ? `0 6px 20px rgba(241,190,67,0.3)` : 'none',
                     }}
                   >
                     {examRun ? 'Submit answer' : 'Check answer'}
@@ -2168,13 +2155,12 @@ export default function QuizScreen({
                         padding: '14px',
                         borderRadius: 12,
                         border: 'none',
-                        background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+                        background: t.accent,
                         color: NAVY,
                         fontSize: 15,
                         fontWeight: 800,
                         cursor: 'pointer',
                         fontFamily: FONT_B,
-                        boxShadow: `0 6px 20px rgba(241,190,67,0.3)`,
                         opacity: remediationStatus === 'generating' ? 0.7 : 1,
                         pointerEvents: remediationStatus === 'generating' ? 'none' : 'auto',
                       }}

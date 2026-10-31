@@ -26,7 +26,7 @@ import { Flame, TriangleAlert } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
-const BG     = '#080d28'
+const BG     = 'var(--t-bgInput)'
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -293,11 +293,11 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
   }
 
   return (
-    <div style={{ fontFamily: FONT_B, color: '#e2e8f0', position: 'relative' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)', position: 'relative' }}>
 
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        {!loading && <span style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{filtered.length}{hasFilters ? ` of ${students.length}` : ''} student{(hasFilters ? students.length : filtered.length) === 1 ? '' : 's'}</span>}
+        {!loading && <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{filtered.length}{hasFilters ? ` of ${students.length}` : ''} student{(hasFilters ? students.length : filtered.length) === 1 ? '' : 's'}</span>}
 
         <input
           value={search}
@@ -324,7 +324,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
         {hasFilters && (
           <button
             onClick={() => { setSearch(''); setFilterSchool(''); setFilterSubject(''); setFilterTutor('') }}
-            style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
+            style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
           >
             Clear filters
           </button>
@@ -338,7 +338,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
             marginLeft: 'auto', flexShrink: 0,
             padding: '7px 12px', borderRadius: 8, fontFamily: FONT_B,
             border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)',
-            color: GOLD, fontSize: 12, fontWeight: 700,
+            color: 'var(--t-goldText)', fontSize: 12, fontWeight: 700,
             cursor: loading || filtered.length === 0 ? 'not-allowed' : 'pointer',
             opacity: loading || filtered.length === 0 ? 0.5 : 1,
           }}
@@ -348,17 +348,17 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: '#f87171', marginBottom: 12 }}>
+        <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }}>
           {error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: 13, padding: '24px 0' }}>Loading students…</div>
+        <div style={{ color: 'var(--t-textMuted)', fontSize: 13, padding: '24px 0' }}>Loading students…</div>
       ) : (
-        <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflowX: 'auto' }}>
+        <div style={{ border: '1px solid rgba(var(--ink-rgb),0.06)', borderRadius: 10, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 780 }}>
-            <thead style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left' }}>
+            <thead style={{ background: 'rgba(var(--ink-rgb),0.03)', textAlign: 'left' }}>
               <tr>
                 <th style={th}>Student</th>
                 <th style={th}>School</th>
@@ -376,50 +376,50 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                   key={u.id}
                   onClick={() => openDetail(u)}
                   style={{
-                    borderTop: '1px solid rgba(255,255,255,0.04)',
+                    borderTop: '1px solid rgba(var(--ink-rgb),0.04)',
                     cursor: 'pointer',
                     background: selected?.id === u.id ? 'rgba(241,190,67,0.06)' : 'transparent',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={e => { if (selected?.id !== u.id) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseEnter={e => { if (selected?.id !== u.id) e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = selected?.id === u.id ? 'rgba(241,190,67,0.06)' : 'transparent' }}
                 >
                   <td style={td}>
-                    <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{u.display_name || '—'}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{u.email}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--t-text)', fontSize: 13 }}>{u.display_name || '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 1 }}>{u.email}</div>
                     {u.deactivated_at && (
-                      <div style={{ fontSize: 10, color: '#f87171', marginTop: 2 }}>Deactivated</div>
+                      <div style={{ fontSize: 10, color: 'var(--t-danger)', marginTop: 2 }}>Deactivated</div>
                     )}
                     {!u.onboarding_completed && (
                       <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 2 }}>Onboarding incomplete</div>
                     )}
                   </td>
-                  <td style={{ ...td, color: '#94a3b8' }}>{u.school || '—'}</td>
+                  <td style={{ ...td, color: 'var(--t-textMuted)' }}>{u.school || '—'}</td>
                   <td style={td}>
-                    <span style={{ color: GOLD, fontWeight: 700 }}>{u.xp.toLocaleString()}</span>
-                    <span style={{ color: '#64748b' }}> · </span>
+                    <span style={{ color: 'var(--t-goldText)', fontWeight: 700 }}>{u.xp.toLocaleString()}</span>
+                    <span style={{ color: 'var(--t-textMuted)' }}> · </span>
                     <span style={{ color: '#f97316' }}><Flame size={13} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 2 }} />{u.streak}</span>
                   </td>
-                  <td style={{ ...td, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelative(u.last_active)}</td>
+                  <td style={{ ...td, color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtRelative(u.last_active)}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {u.subjects.length === 0
-                        ? <span style={{ color: '#475569', fontSize: 11 }}>None</span>
+                        ? <span style={{ color: 'var(--t-textFaint)', fontSize: 11 }}>None</span>
                         : u.subjects.slice(0, 2).map((s, i) => (
                             <span key={i} style={pillStyle}>{s.subject_name}</span>
                           ))
                       }
                       {u.subjects.length > 2 && (
-                        <span style={{ ...pillStyle, background: 'rgba(100,116,139,0.2)', borderColor: 'rgba(100,116,139,0.3)', color: '#94a3b8' }}>
+                        <span style={{ ...pillStyle, background: 'rgba(100,116,139,0.2)', borderColor: 'rgba(100,116,139,0.3)', color: 'var(--t-textMuted)' }}>
                           +{u.subjects.length - 2}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td style={{ ...td, color: '#94a3b8', fontSize: 12, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {u.tutor_name || <span style={{ color: '#475569' }}>—</span>}
+                  <td style={{ ...td, color: 'var(--t-textMuted)', fontSize: 12, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {u.tutor_name || <span style={{ color: 'var(--t-textFaint)' }}>—</span>}
                   </td>
-                  <td style={{ ...td, color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDate(u.created_at)}</td>
+                  <td style={{ ...td, color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtDate(u.created_at)}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {u.is_admin && <Badge color="#a78bfa">Admin</Badge>}
@@ -431,7 +431,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ ...td, color: '#64748b', textAlign: 'center', padding: '24px 12px' }}>
+                  <td colSpan={8} style={{ ...td, color: 'var(--t-textMuted)', textAlign: 'center', padding: '24px 12px' }}>
                     {hasFilters ? 'No students match your filters.' : 'No students found.'}
                   </td>
                 </tr>
@@ -459,35 +459,35 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
             style={{
               position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50,
               width: 420, maxWidth: '100vw',
-              background: '#0f172a',
-              borderLeft: '1px solid rgba(255,255,255,0.08)',
+              background: 'var(--t-bgCard)',
+              borderLeft: '1px solid rgba(var(--ink-rgb),0.08)',
               overflowY: 'auto',
               fontFamily: FONT_B,
               display: 'flex', flexDirection: 'column',
             }}
           >
             {/* Panel header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(var(--ink-rgb),0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
                 width: 42, height: 42, borderRadius: '50%',
                 background: `linear-gradient(135deg, ${GOLD}44, ${GOLD}22)`,
                 border: `1px solid ${GOLD}44`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, fontWeight: 800, color: GOLD, flexShrink: 0,
+                fontSize: 16, fontWeight: 800, color: 'var(--t-goldText)', flexShrink: 0,
               }}>
                 {initials(selected.display_name, selected.email)}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--t-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selected.display_name || 'Unnamed student'}
                 </div>
-                <div style={{ fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 11, color: 'var(--t-textMuted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selected.email}
                 </div>
               </div>
               <button
                 onClick={closeDetail}
-                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}
+                style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}
               >
                 ×
               </button>
@@ -516,7 +516,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {/* Enrolled subjects */}
               <Section title="Enrolled Subjects">
                 {selected.subjects.length === 0 ? (
-                  <div style={{ fontSize: 12, color: '#475569' }}>No subjects enrolled.</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textFaint)' }}>No subjects enrolled.</div>
                 ) : (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {selected.subjects.map((s, i) => (
@@ -537,7 +537,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {/* Activity summary */}
               <Section title="Activity Summary">
                 {statsLoading ? (
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading…</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>Loading…</div>
                 ) : detailStats ? (
                   <>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 8 }}>
@@ -547,7 +547,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 12, color: '#475569' }}>Could not load activity stats.</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textFaint)' }}>Could not load activity stats.</div>
                 )}
               </Section>
 
@@ -555,10 +555,10 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {detailStats?.weakTopics?.length > 0 && (
                 <Section title="Top Weak Topics">
                   {detailStats.weakTopics.map((t, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < detailStats.weakTopics.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < detailStats.weakTopics.length - 1 ? '1px solid rgba(var(--ink-rgb),0.05)' : 'none' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.topic}</div>
-                        <div style={{ fontSize: 11, color: '#64748b' }}>{t.subject} · {t.attempts} attempts</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.topic}</div>
+                        <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{t.subject} · {t.attempts} attempts</div>
                       </div>
                       <div style={{
                         padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700,
@@ -577,28 +577,28 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {/* Assignment history */}
               <Section title="Assignment History">
                 {assignmentsLoading ? (
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading…</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>Loading…</div>
                 ) : !detailAssignments || detailAssignments.length === 0 ? (
-                  <div style={{ fontSize: 12, color: '#475569' }}>No assignments yet.</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textFaint)' }}>No assignments yet.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
                     {detailAssignments.map(a => {
                       const c = a.status === 'completed' ? '#4ade80' : a.status === 'overdue' ? '#f87171' : GOLD
                       return (
-                        <div key={a.id} style={{ padding: '9px 11px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                        <div key={a.id} style={{ padding: '9px 11px', background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.05)', borderRadius: 8 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9' }}>{a.type}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-text)' }}>{a.type}</span>
                             <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 10, border: `1px solid ${c}40`, background: `${c}15`, color: c, fontWeight: 700, textTransform: 'capitalize' }}>{a.status}</span>
                           </div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                            From <strong style={{ color: '#cbd5e1' }}>{a.tutor_name}</strong> · {a.subject}
+                          <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>
+                            From <strong style={{ color: 'var(--t-textSub)' }}>{a.tutor_name}</strong> · {a.subject}
                           </div>
                           {a.topics?.length > 0 && (
-                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {a.topics.join(', ')}
                             </div>
                           )}
-                          <div style={{ fontSize: 10, color: '#475569', marginTop: 3 }}>
+                          <div style={{ fontSize: 10, color: 'var(--t-textFaint)', marginTop: 3 }}>
                             Due {fmtDate(a.due_date)}
                             {a.completed_at && ` · Completed ${fmtDate(a.completed_at)}`}
                           </div>
@@ -612,25 +612,25 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {/* English writing practice */}
               <Section title="English writing">
                 {writingLoading ? (
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Loading…</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>Loading…</div>
                 ) : !writingAttempts || writingAttempts.length === 0 ? (
-                  <div style={{ fontSize: 12, color: '#475569' }}>No writing attempts yet.</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textFaint)' }}>No writing attempts yet.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
                     {writingAttempts.map(w => {
                       const sc = w.feedback?.overallScore
                       return (
-                        <div key={w.id} style={{ padding: '9px 11px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                        <div key={w.id} style={{ padding: '9px 11px', background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.05)', borderRadius: 8 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', textTransform: 'capitalize' }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-text)', textTransform: 'capitalize' }}>
                                 {w.essay_type} · {(w.mode || '').replace(/_/g, ' ')}
                               </div>
-                              <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{w.subject} · {fmtDate(w.created_at)}</div>
+                              <div style={{ fontSize: 10, color: 'var(--t-textMuted)', marginTop: 2 }}>{w.subject} · {fmtDate(w.created_at)}</div>
                               {typeof sc === 'number' && (
-                                <div style={{ fontSize: 11, fontWeight: 800, color: GOLD, marginTop: 6 }}>Overall {sc}/10</div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--t-goldText)', marginTop: 6 }}>Overall {sc}/10</div>
                               )}
-                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, maxHeight: 48, overflow: 'hidden' }}>{w.prompt}</div>
+                              <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 4, maxHeight: 48, overflow: 'hidden' }}>{w.prompt}</div>
                             </div>
                             <button
                               type="button"
@@ -648,7 +648,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                                 borderRadius: 6,
                                 border: `1px solid ${GOLD}55`,
                                 background: 'rgba(241,190,67,0.12)',
-                                color: GOLD,
+                                color: 'var(--t-goldText)',
                                 fontSize: 10,
                                 fontWeight: 700,
                                 cursor: !w.feedback || pdfBusyId === w.id ? 'not-allowed' : 'pointer',
@@ -708,7 +708,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {/* Role management */}
               <Section title="Role Management">
                 {roleError && (
-                  <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{roleError}</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-danger)', marginBottom: 8 }}>{roleError}</div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {selected.tutor_application_status === 'pending' && (
@@ -741,11 +741,11 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                       </Btn>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 11, color: 'var(--t-textFaint)', lineHeight: 1.5 }}>
                     Current role:&nbsp;
-                    {selected.is_admin ? <span style={{ color: '#a78bfa' }}>Admin</span>
-                      : selected.is_tutor ? <span style={{ color: GOLD }}>Tutor</span>
-                      : <span style={{ color: '#94a3b8' }}>Student</span>}
+                    {selected.is_admin ? <span style={{ color: 'var(--t-purple)' }}>Admin</span>
+                      : selected.is_tutor ? <span style={{ color: 'var(--t-goldText)' }}>Tutor</span>
+                      : <span style={{ color: 'var(--t-textMuted)' }}>Student</span>}
                   </div>
                 </div>
               </Section>
@@ -753,7 +753,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
               {/* Account management — deactivate (reversible) or delete (permanent) */}
               <Section title="Account">
                 {accountError && (
-                  <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{accountError}</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-danger)', marginBottom: 8 }}>{accountError}</div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -772,7 +772,7 @@ export default function AdminStudentsTab({ profile, onCountLoad }) {
                       Delete Account
                     </DangerBtn>
                   </div>
-                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 11, color: 'var(--t-textFaint)', lineHeight: 1.5 }}>
                     Deactivating blocks sign-in but keeps all data — reversible. Deleting permanently removes the account and every record tied to it.
                   </div>
                 </div>
@@ -811,14 +811,14 @@ function SubjectAccessSection({
   return (
     <Section title="Subject Access">
       {subsError && (
-        <div style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{subsError}</div>
+        <div style={{ fontSize: 12, color: 'var(--t-danger)', marginBottom: 8 }}>{subsError}</div>
       )}
 
       {/* Current subscriptions */}
       {subsLoading ? (
-        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Loading…</div>
+        <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 10 }}>Loading…</div>
       ) : subscriptions.length === 0 ? (
-        <div style={{ fontSize: 12, color: '#475569', marginBottom: 10 }}>No active subscriptions.</div>
+        <div style={{ fontSize: 12, color: 'var(--t-textFaint)', marginBottom: 10 }}>No active subscriptions.</div>
       ) : (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
           {subscriptions.map(sub => (
@@ -828,13 +828,13 @@ function SubjectAccessSection({
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 padding: '4px 8px 4px 10px', borderRadius: 6,
                 background: 'rgba(241,190,67,0.1)', border: `1px solid ${GOLD}44`,
-                fontSize: 12, fontWeight: 600, color: GOLD,
+                fontSize: 12, fontWeight: 600, color: 'var(--t-goldText)',
                 whiteSpace: 'nowrap',
               }}
             >
               {sub.subject_name}
               {sub.stage && <span style={{ opacity: 0.65, fontSize: 11 }}>{sub.stage}</span>}
-              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.08)', color: sub.source === 'stripe' ? '#34d399' : '#94a3b8' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', padding: '1px 6px', borderRadius: 4, background: 'rgba(var(--ink-rgb),0.08)', color: sub.source === 'stripe' ? '#34d399' : '#94a3b8' }}>
                 {sub.source === 'stripe' ? (sub.status === 'past_due' ? 'PAST DUE' : sub.cancel_at_period_end ? 'ENDING' : 'PAID') : sub.source === 'admin' ? 'GRANTED' : sub.source === 'tutor' ? 'TUTOR · INCLUDED' : sub.source === 'free' ? 'FREE · LIMITED' : 'BETA'}
               </span>
               <button
@@ -842,7 +842,7 @@ function SubjectAccessSection({
                 title="Remove subscription"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#f87171', fontSize: 14, lineHeight: 1, padding: '0 2px',
+                  color: 'var(--t-danger)', fontSize: 14, lineHeight: 1, padding: '0 2px',
                   display: 'flex', alignItems: 'center',
                 }}
               >
@@ -911,25 +911,25 @@ function TutorLinksSection({ studentId, onChange }) {
   const available = tutors.filter(t => !linkedIds.has(t.id) && t.id !== studentId)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--t-danger)' }}>{error}</div>}
       {links === null ? (
-        <div style={{ fontSize: 12, color: '#475569' }}>Loading…</div>
+        <div style={{ fontSize: 12, color: 'var(--t-textFaint)' }}>Loading…</div>
       ) : links.length === 0 ? (
-        <div style={{ fontSize: 12, color: '#475569' }}>No tutor assigned.</div>
+        <div style={{ fontSize: 12, color: 'var(--t-textFaint)' }}>No tutor assigned.</div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {links.map(l => (
-            <span key={l.tutor_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.1)', fontSize: 12, color: '#e2e8f0' }}>
+            <span key={l.tutor_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(var(--ink-rgb),0.1)', fontSize: 12, color: 'var(--t-textSub)' }}>
               {l.tutor_name || 'Unnamed tutor'}
               <button onClick={() => run(() => adminUnlinkTutor(l.tutor_id, studentId))} disabled={busy} title="Unassign tutor"
-                style={{ border: 'none', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+                style={{ border: 'none', background: 'transparent', color: 'var(--t-danger)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
             </span>
           ))}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8 }}>
         <select value={adding} onChange={e => setAdding(e.target.value)} disabled={busy}
-          style={{ flex: 1, padding: '7px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#f1f5f9', fontSize: 12, fontFamily: FONT_B }}>
+          style={{ flex: 1, padding: '7px 10px', borderRadius: 8, background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)', color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B }}>
           <option value="">Assign a tutor…</option>
           {available.map(t => <option key={t.id} value={t.id}>{t.display_name || 'Unnamed'}{t.is_admin ? ' (admin)' : ''}</option>)}
         </select>
@@ -942,7 +942,7 @@ function TutorLinksSection({ studentId, onChange }) {
 function Section({ title, children }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: '#475569', textTransform: 'uppercase', marginBottom: 10 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--t-textFaint)', textTransform: 'uppercase', marginBottom: 10 }}>
         {title}
       </div>
       {children}
@@ -952,8 +952,8 @@ function Section({ title, children }) {
 
 function Row({ label, value, valueColor }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <span style={{ fontSize: 12, color: '#64748b' }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(var(--ink-rgb),0.04)' }}>
+      <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{label}</span>
       <span style={{ fontSize: 12, color: valueColor || '#e2e8f0', fontWeight: 500 }}>{value}</span>
     </div>
   )
@@ -962,11 +962,11 @@ function Row({ label, value, valueColor }) {
 function StatCard({ label, value, color }) {
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+      background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.06)',
       borderRadius: 10, padding: '12px 10px', textAlign: 'center',
     }}>
       <div style={{ fontSize: 18, fontWeight: 800, color }}>{value}</div>
-      <div style={{ fontSize: 10, color: '#64748b', marginTop: 3, fontWeight: 600, letterSpacing: 0.4 }}>{label.toUpperCase()}</div>
+      <div style={{ fontSize: 10, color: 'var(--t-textMuted)', marginTop: 3, fontWeight: 600, letterSpacing: 0.4 }}>{label.toUpperCase()}</div>
     </div>
   )
 }
@@ -989,8 +989,8 @@ function Btn({ children, onClick, disabled, variant, title }) {
       title={title}
       style={{
         padding: '7px 12px', borderRadius: 7,
-        border: '1px solid ' + (isPrimary ? '#f1be4399' : 'rgba(255,255,255,0.12)'),
-        background: isPrimary ? '#f1be4322' : 'rgba(255,255,255,0.04)',
+        border: '1px solid ' + (isPrimary ? '#f1be4399' : 'rgba(var(--ink-rgb),0.12)'),
+        background: isPrimary ? '#f1be4322' : 'rgba(var(--ink-rgb),0.04)',
         color: isPrimary ? '#f1be43' : '#e2e8f0',
         fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
@@ -1011,7 +1011,7 @@ function DangerBtn({ children, onClick, disabled, title }) {
         padding: '7px 12px', borderRadius: 7,
         border: '1px solid rgba(248,113,113,0.5)',
         background: 'rgba(248,113,113,0.12)',
-        color: '#f87171',
+        color: 'var(--t-danger)',
         fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         fontFamily: FONT_B,
@@ -1023,7 +1023,7 @@ function DangerBtn({ children, onClick, disabled, title }) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const th = {
-  padding: '9px 10px', fontSize: 10, color: '#64748b',
+  padding: '9px 10px', fontSize: 10, color: 'var(--t-textMuted)',
   fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
   whiteSpace: 'nowrap',
 }
@@ -1031,18 +1031,18 @@ const td = { padding: '9px 10px', verticalAlign: 'middle' }
 
 const pillStyle = {
   padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 600,
-  color: '#38bdf8', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.25)',
+  color: 'var(--t-blue)', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.25)',
   whiteSpace: 'nowrap',
 }
 
 const inputStyle = {
   padding: '7px 12px', borderRadius: 8, flex: 1, minWidth: 180,
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-  color: '#f1f5f9', fontSize: 12, fontFamily: FONT_B, outline: 'none',
+  background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)',
+  color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B, outline: 'none',
 }
 
 const selectStyle = {
   padding: '7px 10px', borderRadius: 8,
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-  color: '#94a3b8', fontSize: 12, fontFamily: FONT_B, outline: 'none', cursor: 'pointer',
+  background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)',
+  color: 'var(--t-textMuted)', fontSize: 12, fontFamily: FONT_B, outline: 'none', cursor: 'pointer',
 }

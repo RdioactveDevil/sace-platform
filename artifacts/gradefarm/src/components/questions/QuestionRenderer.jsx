@@ -4,7 +4,6 @@ import { getQuestionType, gradeResponse, responseIsComplete, describeCorrectAnsw
 import MathText from '../MathText'
 
 const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
 const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_M = "'JetBrains Mono', monospace"
@@ -289,10 +288,9 @@ export default function QuestionRenderer({ question, response, onChange, showAns
           disabled={!canSubmit}
           style={{
             marginTop: 16, width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-            background: canSubmit ? `linear-gradient(135deg,${GOLD},${GOLDL})` : t.bgHover,
+            background: canSubmit ? t.accent : t.bgHover,
             color: canSubmit ? NAVY : t.textFaint, fontSize: 14, fontWeight: 800,
             cursor: canSubmit ? 'pointer' : 'default', fontFamily: FONT_B,
-            boxShadow: canSubmit ? `0 6px 20px rgba(241,190,67,0.3)` : 'none',
           }}
         >
           {checkLabel}
