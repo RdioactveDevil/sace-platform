@@ -236,9 +236,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     </div>
   )
 
-  // Selected options: navy on light, gold on dark (navy would vanish there).
-  const segOnBg = theme === 'dark' ? GOLD : NAVY_FILL
-  const segOnFg = theme === 'dark' ? NAVY_FILL : '#fff'
+  // Selected options stay quiet: navy on light, off-white on dark. Gold is
+  // kept for the Start button.
+  const segOnBg = theme === 'dark' ? t.text : NAVY_FILL
+  const segOnFg = theme === 'dark' ? t.bg : '#fff'
   const fieldLabel = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6 }
 
   const renderBuilder = () => (
@@ -297,7 +298,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       <button type="button" onClick={startSession} disabled={!canStart}
         style={{
           width: '100%', padding: '13px', borderRadius: 10, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
-          background: canStart ? GOLD : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed',
+          background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed',
         }}>
         {examOn ? 'Start exam' : 'Start practice'}
       </button>
@@ -643,7 +644,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     </>
   )
 
-  const rowSelected = theme === 'dark' ? 'rgba(241,190,67,0.08)' : '#fdf6e1'
+  const rowSelected = theme === 'dark' ? 'rgba(255,255,255,0.05)' : '#fdf6e1'
   const weekPct = weekStats.total > 0 ? Math.round((weekStats.correct / weekStats.total) * 100) : null
 
   return (

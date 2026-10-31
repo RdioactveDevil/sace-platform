@@ -199,7 +199,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 // active row and the menus; gold only on the logo, the active icon and badges.
 function shellColors(theme) {
   return theme === 'dark'
-    ? { bg: '#191c2e', raise: '#262a40', hover: 'rgba(255,255,255,0.04)', line: 'rgba(255,255,255,0.08)', fg: '#eef0f8', sub: '#b4b9d3', dim: '#8389ad', icon: GOLD, menuShadow: '0 12px 32px rgba(0,0,0,0.35)' }
+    ? { bg: '#111113', raise: '#1f1f23', hover: 'rgba(255,255,255,0.04)', line: '#2a2a30', fg: '#ececef', sub: '#a1a1aa', dim: '#8a8a94', icon: '#e2b54c', menuShadow: '0 12px 32px rgba(0,0,0,0.5)' }
     : { bg: '#eef0f7', raise: '#ffffff', hover: '#e5e8f2', line: '#e2e6f0', fg: '#0c1037', sub: '#4d5578', dim: '#6b7393', icon: '#b07d0c', menuShadow: '0 12px 32px rgba(12,16,55,0.12)' }
 }
 
@@ -329,7 +329,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           same shape as the subject row below it */}
       <div style={{ padding: '14px 12px 10px', flexShrink: 0 }}>
         <button type="button" className="gf-logo" onClick={() => go('/home')} aria-label="gradefarm home"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : '#0c1037'}`, background: '#0c1037', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : '#0c1037'}`, background: theme === 'dark' ? SB.raise : '#0c1037', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
           <span style={{ color: '#ffffff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
@@ -414,8 +414,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
             <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
               <Moon size={16} color={SB.sub} aria-hidden="true" />
               <span style={{ flex: 1 }}>Dark mode</span>
-              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? GOLD : '#c8cee0', position: 'relative', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? '#06091f' : '#ffffff', transition: 'left 0.15s' }} />
+              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? SB.fg : '#c8cee0', position: 'relative', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? SB.bg : '#ffffff', transition: 'left 0.15s' }} />
               </span>
             </button>
             <button type="button" className="gf-side-btn" style={menuItem} onClick={onSignOut}>

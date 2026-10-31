@@ -177,48 +177,48 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  /* Dark mode — deep charcoal body, deep navy sidebar */
-  --background: 234 20% 7%;
-  --foreground: 214 32% 96%;
+  /* Dark mode — Graphite: neutral greys (matches THEMES.dark in lib/theme.js) */
+  --background: 240 6% 10%;
+  --foreground: 240 5% 93%;
 
-  --border: 234 14% 18%;
+  --border: 240 7% 17%;
 
-  --card: 234 14% 11%;
-  --card-foreground: 214 32% 96%;
-  --card-border: 234 14% 18%;
+  --card: 240 6% 13%;
+  --card-foreground: 240 5% 93%;
+  --card-border: 240 7% 17%;
 
-  /* Sidebar: deep navy, slightly lighter than darkest bg */
-  --sidebar: 231 67% 9%;
-  --sidebar-foreground: 214 32% 96%;
-  --sidebar-border: 231 40% 14%;
+  /* Sidebar: the window colour, a step darker than the page */
+  --sidebar: 240 6% 7%;
+  --sidebar-foreground: 240 5% 93%;
+  --sidebar-border: 240 7% 17%;
   --sidebar-primary: 42 86% 60%;
   --sidebar-primary-foreground: 234 64% 13%;
   --sidebar-accent: 42 30% 14%;
   --sidebar-accent-foreground: 42 86% 60%;
   --sidebar-ring: 42 86% 60%;
 
-  --popover: 234 14% 10%;
-  --popover-foreground: 214 32% 96%;
-  --popover-border: 234 14% 18%;
+  --popover: 240 6% 13%;
+  --popover-foreground: 240 5% 93%;
+  --popover-border: 240 7% 17%;
 
   /* Gold as primary */
   --primary: 42 86% 60%;
   --primary-foreground: 234 64% 13%;
 
-  --secondary: 234 14% 14%;
-  --secondary-foreground: 214 32% 96%;
+  --secondary: 240 5% 15%;
+  --secondary-foreground: 240 5% 93%;
 
-  --muted: 234 14% 12%;
-  --muted-foreground: 215 20% 58%;
+  --muted: 240 5% 15%;
+  --muted-foreground: 240 5% 65%;
 
-  --accent: 234 14% 14%;
-  --accent-foreground: 214 32% 96%;
+  --accent: 240 5% 15%;
+  --accent-foreground: 240 5% 93%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
   /* Input border: higher contrast against card bg in dark mode */
-  --input: 234 14% 22%;
+  --input: 240 6% 22%;
   --ring: 42 86% 60%;
 
   --chart-1: 42 86% 60%;

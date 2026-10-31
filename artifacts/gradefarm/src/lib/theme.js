@@ -6,52 +6,53 @@ export const FONTS = {
 
 export const THEMES = {
   dark: {
-    // Background layers — breathable navy, not pure black
-    bg:           '#262a40',
-    bgCard:       '#2f334b',
-    bgNav:        '#222640',
-    bgInput:      '#2f334b',
-    bgHover:      '#3a3f5a',
-    bgSubtle:     '#2b2f46',
-    bgElevated:   '#363b54',
+    // Graphite: neutral greys with no blue in them. Each layer is a step
+    // lighter (window, page, card); depth comes from that, not shadows.
+    bg:           '#18181b',
+    bgCard:       '#1f1f23',
+    bgNav:        '#111113',
+    bgInput:      '#1f1f23',
+    bgHover:      '#2a2a30',
+    bgSubtle:     '#1c1c20',
+    bgElevated:   '#26262b',
 
-    // Borders — tiered opacity for depth
-    border:       'rgba(255,255,255,0.07)',
-    borderMid:    'rgba(255,255,255,0.12)',
-    borderStrong: 'rgba(255,255,255,0.18)',
-    borderAccent: 'rgba(241,190,67,0.22)',
-    borderNav:    'rgba(241,190,67,0.10)',
+    // Borders
+    border:       '#2a2a30',
+    borderMid:    '#36363d',
+    borderStrong: '#45454d',
+    borderAccent: 'rgba(226,181,76,0.28)',
+    borderNav:    'rgba(255,255,255,0.06)',
 
-    // Text — clear hierarchy
-    text:         '#f1f5f9',
-    textSub:      '#cbd5e1',
-    textMuted:    '#94a3b8',
-    textFaint:    '#475569',
+    // Text — off-white, never pure white
+    text:         '#ececef',
+    textSub:      '#d4d4d8',
+    textMuted:    '#a1a1aa',
+    textFaint:    '#71717a',
 
-    // Gold accent
-    accent:       '#f1be43',
-    accentLight:  '#f9d87a',
-    accentBlue:   '#f1be43',
-    accentGlow:   'rgba(241,190,67,0.14)',
-    accentGlow2:  'rgba(241,190,67,0.08)',
+    // Gold accent, a touch softer than the light theme's so it doesn't glow
+    accent:       '#e2b54c',
+    accentLight:  '#ecc96e',
+    accentBlue:   '#e2b54c',
+    accentGlow:   'rgba(226,181,76,0.12)',
+    accentGlow2:  'rgba(226,181,76,0.07)',
 
     // XP & gamification
-    xp:           '#f1be43',
+    xp:           '#e2b54c',
     // Gold for text and small labels (readable on this theme's background)
-    goldText:     '#f1be43',
+    goldText:     '#e2b54c',
 
-    // Status colours
-    danger:       '#f87171',
-    dangerBg:     'rgba(248,113,113,0.10)',
-    success:      '#34d399',
-    successBg:    'rgba(52,211,153,0.10)',
-    purple:       '#a78bfa',
-    purpleBg:     'rgba(167,139,250,0.10)',
-    blue:         '#60a5fa',
-    blueBg:       'rgba(96,165,250,0.10)',
+    // Status colours, turned down so lists of scores don't light up
+    danger:       '#e5736f',
+    dangerBg:     'rgba(229,115,111,0.10)',
+    success:      '#5bb98c',
+    successBg:    'rgba(91,185,140,0.10)',
+    purple:       '#a89ad9',
+    purpleBg:     'rgba(168,154,217,0.10)',
+    blue:         '#7fa7d9',
+    blueBg:       'rgba(127,167,217,0.10)',
 
-    // Shadows
-    shadowCard:   '0 2px 16px rgba(0,0,0,0.35)',
+    // Shadows: cards have none in dark mode; only floating things get one
+    shadowCard:   'none',
     shadowGold:   '0 4px 20px rgba(241,190,67,0.30)',
     shadowModal:  '0 32px 80px rgba(0,0,0,0.65)',
   },

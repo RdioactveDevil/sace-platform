@@ -28,7 +28,7 @@ export function useFamily(profile) {
  * one (no password), and adding a child. Sits in the sidebar footer.
  */
 // Sidebar colours (App.jsx shellColors); the dark set by default.
-const DARK_SIDEBAR = { raise: '#262a40', line: 'rgba(255,255,255,0.08)', fg: '#eef0f8', sub: '#b4b9d3', dim: '#8389ad', icon: GOLD }
+const DARK_SIDEBAR = { raise: '#1f1f23', line: '#2a2a30', fg: '#ececef', sub: '#a1a1aa', dim: '#8a8a94', icon: '#e2b54c' }
 
 export default function FamilySwitcher({ profile, sb = DARK_SIDEBAR }) {
   const family = useFamily(profile)
