@@ -24,7 +24,7 @@ const METHODS = [
  * preview. The tab comes from AdminScreen (?tab=); the add method (?method=)
  * and the previewed question (?id=) from the URL.
  */
-export default function AdminQuestionsScreen({ profile, tab, onReviewChange }) {
+export default function AdminQuestionsScreen({ profile, tab, onReviewChange, theme }) {
   const location = useLocation()
   const navigate = useNavigate()
   const params = new URLSearchParams(location.search)
@@ -46,7 +46,6 @@ export default function AdminQuestionsScreen({ profile, tab, onReviewChange }) {
             )
           })}
         </div>
-        <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: -8 }}>New questions go to the review queue before students see them.</div>
         {method === 'generate' && <AdminGenerateScreen />}
         {method === 'photo' && <AdminVisionScreen />}
         {method === 'pdf' && <AdminUploadScreen />}
@@ -54,7 +53,7 @@ export default function AdminQuestionsScreen({ profile, tab, onReviewChange }) {
     )
   }
   if (tab === 'review') return <AdminReviewScreen profile={profile} onChange={onReviewChange} />
-  if (tab === 'preview') return <AdminQuestionPreviewTab key={params.get('id') || ''} initialId={params.get('id')} />
+  if (tab === 'preview') return <AdminQuestionPreviewTab key={params.get('id') || ''} initialId={params.get('id')} theme={theme} />
   return <QuestionBank onOpen={(id) => navigate(`/admin/questions?tab=preview&id=${encodeURIComponent(id)}`)} />
 }
 

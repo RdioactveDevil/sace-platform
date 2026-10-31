@@ -3,27 +3,20 @@ import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDra
 import { getVariantCountsByConceptTags } from '../lib/db'
 import { getTopicsBySubject } from '../lib/adminTopics'
 import MathText from './MathText'
-
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
+import { Check, X } from 'lucide-react'
+import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
 function StatusBadge({ status }) {
-  const key = String(status || 'pending')
-    .trim()
-    .toLowerCase()
+  const key = String(status || 'pending').trim().toLowerCase()
   const map = {
-    pending:      { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: 'var(--t-goldText)' },
-    needs_review: { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: 'var(--t-danger)' },
-    approved:     { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: 'var(--t-success)' },
-    rejected:     { bg: 'rgba(var(--ink-rgb),0.05)', border: 'rgba(var(--ink-rgb),0.1)',  color: 'rgba(var(--ink-rgb),0.3)' },
+    pending:      ['Waiting', 'var(--t-textMuted)'],
+    needs_review: ['No clear topic', 'var(--t-goldText)'],
+    approved:     ['Approved', 'var(--t-success)'],
+    rejected:     ['Rejected', 'var(--t-textFaint)'],
   }
-  const c = map[key] || map.pending
-  return (
-    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: c.bg, border: `1px solid ${c.border}`, color: c.color }}>
-      {key}
-    </span>
-  )
+  const [label, color] = map[key] || map.pending
+  return <span style={{ fontSize: 12, fontWeight: 600, color }}>{label}</span>
 }
 
 export default function AdminReviewScreen({ profile, onChange }) {
@@ -245,220 +238,132 @@ export default function AdminReviewScreen({ profile, onChange }) {
 
   const topicsForSubject = (subject) => getTopicsBySubject(subject)
 
-  const inputStyle = {
-    width: '100%', padding: '8px 10px', borderRadius: 8,
-    border: '1px solid rgba(var(--ink-rgb),0.12)',
-    background: 'var(--t-bgInput)',
-    color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-    boxSizing: 'border-box',
+  const inputStyle = { ...ui.input, width: '100%' }
+  const fieldLabel = { ...ui.label, fontSize: 12 }
+
+  // How many stored variants a draft's concept has, or null when unknown.
+  const variantsFor = (id) => {
+    if (variantCounts === null) return null
+    const ct = draftConceptTagMap[id]
+    return ct ? (variantCounts[ct] ?? 0) : null
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-      {/* Left: table */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{loading ? '' : `${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}</span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {drafts.length > 0 && (
-              <button
-                onClick={handleSelectAll}
-                disabled={saving}
-                style={{
-                  padding: '5px 12px', borderRadius: 8,
-                  border: `1px solid ${allChecked ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
-                  background: allChecked ? 'rgba(241,190,67,0.08)' : 'transparent',
-                  color: allChecked ? GOLD : 'rgba(var(--ink-rgb),0.4)',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                }}
-              >
-                {allChecked ? 'Deselect All' : 'Select All'}
-              </button>
-            )}
-            {checked.size > 0 && (
-              <button
-                onClick={handleBulkApprove}
-                disabled={saving}
-                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#4ade80', color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
-              >
-                Approve {checked.size} selected
-              </button>
-            )}
-            {['pending', 'needs_review', 'all'].map(s => (
-              <button
-                key={s}
-                onClick={() => { setFilterStatus(s); setChecked(new Set()) }}
-                style={{
-                  padding: '5px 12px', borderRadius: 8,
-                  border: `1px solid ${filterStatus === s ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
-                  background: filterStatus === s ? 'rgba(241,190,67,0.08)' : 'transparent',
-                  color: filterStatus === s ? GOLD : 'rgba(var(--ink-rgb),0.4)',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: FONT_B }}>
+      <style>{`
+        .rv-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+        .rv-layout.has-panel { grid-template-columns: minmax(0, 1fr) 400px; }
+        .rv-panel { position: sticky; top: 0; max-height: calc(100vh - 200px); overflow-y: auto; }
+        .rv-row:hover { background: var(--t-bgHover); }
+        @media (max-width: 1100px) { .rv-layout.has-panel { grid-template-columns: minmax(0, 1fr); } .rv-panel { position: static; max-height: none; } }
+      `}</style>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div role="group" aria-label="Show" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[['pending', 'Waiting'], ['needs_review', 'No clear topic'], ['all', 'All']].map(([s, label]) => (
+            <button key={s} type="button" aria-pressed={filterStatus === s} onClick={() => { setFilterStatus(s); setChecked(new Set()) }} style={chip(filterStatus === s)}>{label}</button>
+          ))}
         </div>
+        {!loading && <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)' }}>{drafts.length} question{drafts.length === 1 ? '' : 's'}</span>}
+        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {drafts.length > 0 && (
+            <button type="button" onClick={handleSelectAll} disabled={saving} style={btn('secondary', saving)}>
+              {allChecked ? 'Clear selection' : 'Select all'}
+            </button>
+          )}
+          {checked.size > 0 && (
+            <button type="button" onClick={handleBulkApprove} disabled={saving} style={btn('primary', saving)}>
+              Approve {checked.size}
+            </button>
+          )}
+        </div>
+      </div>
 
-        {actionOk && (
-          <div
-            style={{
-              marginBottom: 14,
-              padding: '10px 14px',
-              borderRadius: 10,
-              background: 'rgba(16,185,129,0.1)',
-              border: '1px solid rgba(16,185,129,0.28)',
-              color: 'var(--t-success)',
-              fontSize: 13,
-              fontFamily: FONT_B,
-            }}
-          >
-            {actionOk}
-          </div>
-        )}
-        {actionError && (
-          <div
-            style={{
-              marginBottom: 14,
-              padding: '10px 14px',
-              borderRadius: 10,
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.28)',
-              color: 'var(--t-danger)',
-              fontSize: 13,
-              fontFamily: FONT_B,
-            }}
-          >
-            {actionError}
-          </div>
-        )}
+      {actionOk && <div role="status" style={note('success')}>{actionOk}</div>}
+      {actionError && <div role="alert" style={note('danger')}>{actionError}</div>}
 
+      <div className={`rv-layout${editState ? ' has-panel' : ''}`}>
+      {/* Left: the queue */}
+      <div style={{ minWidth: 0 }}>
         {loading ? (
-          <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13 }}>Loading…</div>
+          <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading…</div>
         ) : drafts.length === 0 ? (
-          <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
-            No drafts with status "{filterStatus}".
+          <div style={ui.empty}>
+            {filterStatus === 'pending' ? 'Nothing waiting for review. New questions from Add questions land here.' : 'No questions here.'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {drafts.map(draft => (
-              <div
-                key={draft.id}
-                onClick={() => openDraft(draft)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 14px', borderRadius: 10,
-                  background: selected?.id === draft.id ? 'rgba(241,190,67,0.06)' : 'rgba(var(--ink-rgb),0.03)',
-                  border: `1px solid ${selected?.id === draft.id ? 'rgba(241,190,67,0.2)' : 'rgba(var(--ink-rgb),0.07)'}`,
-                  cursor: 'pointer', transition: 'background 0.1s',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked.has(draft.id)}
-                  onChange={e => toggleCheck(draft.id, e)}
-                  onClick={e => e.stopPropagation()}
-                  style={{ cursor: 'pointer', flexShrink: 0 }}
-                />
-                <span style={{ fontSize: 11, color: 'var(--t-goldText)', fontWeight: 700, width: 36, flexShrink: 0 }}>
-                  {draft.topic_code || '?'}
-                </span>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <MathText text={draft.question} style={{ whiteSpace: 'nowrap' }} />
-                </span>
-                <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.3)', flexShrink: 0 }}>
-                  D{draft.difficulty ?? '?'}
-                </span>
-                {(() => {
-                  if (variantCounts === null) return null   // counts unavailable — don't show false zeros
-                  const ct = draftConceptTagMap[draft.id]
-                  if (!ct) return null                       // no concept_tag derivable from draft
-                  const vc = variantCounts[ct] ?? 0
-                  const isZero = vc === 0
-                  return (
-                    <span style={{
-                      padding: '2px 7px', borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0,
-                      background: isZero ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.08)',
-                      border: `1px solid ${isZero ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.2)'}`,
-                      color: isZero ? '#f87171' : '#4ade80',
-                    }}>
-                      {vc} concept variant{vc !== 1 ? 's' : ''}
+          <div style={{ ...ui.card, overflow: 'hidden' }}>
+            {drafts.map(draft => {
+              const on = selected?.id === draft.id
+              const vc = variantsFor(draft.id)
+              return (
+                <div
+                  key={draft.id}
+                  className="rv-row"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openDraft(draft)}
+                  onKeyDown={e => { if (e.key === 'Enter') openDraft(draft) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+                    background: on ? 'var(--t-bgSubtle)' : 'transparent', boxShadow: on ? 'inset 2px 0 0 var(--t-text)' : 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label="Select for approval"
+                    checked={checked.has(draft.id)}
+                    onChange={e => toggleCheck(draft.id, e)}
+                    onClick={e => e.stopPropagation()}
+                    style={{ cursor: 'pointer', flexShrink: 0, accentColor: 'var(--t-text)' }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--t-textMuted)', fontWeight: 700, width: 36, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                    {draft.topic_code || '—'}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--t-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <MathText text={draft.question} style={{ whiteSpace: 'nowrap' }} />
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--t-textMuted)', flexShrink: 0 }} title="Difficulty">Level {draft.difficulty ?? '?'}</span>
+                  {vc != null && (
+                    <span style={{ fontSize: 12, flexShrink: 0, color: vc === 0 ? 'var(--t-danger)' : 'var(--t-textMuted)' }}>
+                      {vc} variant{vc !== 1 ? 's' : ''}
                     </span>
-                  )
-                })()}
-                <span style={{ flexShrink: 0 }}><StatusBadge status={draft.status} /></span>
-              </div>
-            ))}
+                  )}
+                  {filterStatus === 'all' && <span style={{ flexShrink: 0 }}><StatusBadge status={draft.status} /></span>}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
 
       {/* Right: edit panel */}
       {editState && (
-        <div style={{
-          width: 400, flexShrink: 0,
-          position: 'sticky', top: 24, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
-          background: 'rgba(var(--ink-rgb),0.03)',
-          border: '1px solid rgba(var(--ink-rgb),0.08)',
-          borderRadius: 14, padding: 20,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-goldText)' }}>Edit Draft</span>
-            <button onClick={closePanel} style={{ background: 'none', border: 'none', color: 'rgba(var(--ink-rgb),0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+        <div className="rv-panel" style={{ ...ui.card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={ui.heading}>Check this question</span>
+            <button type="button" onClick={closePanel} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', display: 'flex', padding: 2 }}><X size={16} aria-hidden="true" /></button>
           </div>
 
           {/* Variant count info */}
           {(() => {
-            if (variantCounts === null) {
-              // counts fetch failed — show neutral unavailable state, not a false zero
-              return (
-                <div style={{
-                  marginBottom: 16, padding: '10px 12px', borderRadius: 10,
-                  background: 'rgba(var(--ink-rgb),0.03)',
-                  border: '1px solid rgba(var(--ink-rgb),0.08)',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Stored Variants</span>
-                  <span style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.3)' }}>unavailable</span>
-                </div>
-              )
-            }
-            const ct = draftConceptTagMap[editState.id]
-            if (!ct) return null
-            const vc = variantCounts[ct] ?? 0
-            const isZero = vc === 0
+            const vc = variantsFor(editState.id)
+            if (variantCounts === null) return <div style={ui.hint}>Stored variants: couldn’t load.</div>
+            if (vc == null) return null
             return (
-              <div style={{
-                marginBottom: 16, padding: '10px 12px', borderRadius: 10,
-                background: isZero ? 'rgba(239,68,68,0.07)' : 'rgba(16,185,129,0.06)',
-                border: `1px solid ${isZero ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.18)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-              }}>
-                <div>
-                  <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Concept Variants</span>
-                  <div style={{ marginTop: 2, fontSize: 18, fontWeight: 800, color: isZero ? '#f87171' : '#4ade80' }}>
-                    {vc}
-                  </div>
-                </div>
-                {isZero && (
-                  <span style={{
-                    padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                    background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--t-danger)',
-                  }}>
-                    No variants — needs generation
-                  </span>
-                )}
+              <div style={{ ...ui.hint, color: vc === 0 ? 'var(--t-danger)' : 'var(--t-textMuted)' }}>
+                {vc === 0 ? 'No stored variants for this concept yet. Students who miss it won’t get a similar question.' : `${vc} stored variant${vc === 1 ? '' : 's'} for this concept.`}
               </div>
             )
           })()}
 
           {/* Topic */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Topic</label>
+          <div>
+            <label htmlFor="rv-topic" style={fieldLabel}>Topic</label>
             <select
+              id="rv-topic"
               value={editState.topic_code || ''}
               onChange={e => {
                 const t = topicsForSubject(editState.subject).find(x => x.code === e.target.value)
@@ -466,88 +371,99 @@ export default function AdminReviewScreen({ profile, onChange }) {
               }}
               style={inputStyle}
             >
-              <option value="">Unknown / needs review</option>
+              <option value="">No clear topic</option>
               {topicsForSubject(editState.subject).map(t => (
-                <option key={t.code} value={t.code}>{t.code} — {t.name}</option>
+                <option key={t.code} value={t.code}>{t.code} · {t.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Subtopic */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Subtopic</label>
-            <input
-              style={inputStyle}
-              value={editState.subtopic || ''}
-              onChange={e => setEditState(prev => ({ ...prev, subtopic: e.target.value }))}
-              placeholder="e.g. Le Chatelier's principle"
-            />
-          </div>
-
-          {/* Difficulty */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Difficulty (1–5)</label>
-            <input
-              type="number" min={1} max={5}
-              style={{ ...inputStyle, width: 80 }}
-              value={editState.difficulty ?? ''}
-              onChange={e => setEditState(prev => ({ ...prev, difficulty: parseInt(e.target.value, 10) || null }))}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 90px', gap: 10 }}>
+            <div>
+              <label htmlFor="rv-subtopic" style={fieldLabel}>Subtopic</label>
+              <input
+                id="rv-subtopic"
+                style={inputStyle}
+                value={editState.subtopic || ''}
+                onChange={e => setEditState(prev => ({ ...prev, subtopic: e.target.value }))}
+                placeholder="e.g. Le Chatelier's principle"
+              />
+            </div>
+            <div>
+              <label htmlFor="rv-level" style={fieldLabel}>Level (1–5)</label>
+              <input
+                id="rv-level"
+                type="number" min={1} max={5}
+                style={inputStyle}
+                value={editState.difficulty ?? ''}
+                onChange={e => setEditState(prev => ({ ...prev, difficulty: parseInt(e.target.value, 10) || null }))}
+              />
+            </div>
           </div>
 
           {/* Question */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Question</label>
+          <div>
+            <label htmlFor="rv-question" style={fieldLabel}>Question</label>
             <textarea
+              id="rv-question"
               rows={4}
               style={{ ...inputStyle, resize: 'vertical' }}
               value={editState.question || ''}
               onChange={e => setEditState(prev => ({ ...prev, question: e.target.value }))}
             />
             {editState.question && (
-              <div style={{ marginTop: 4, padding: '8px 10px', borderRadius: 6, background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.06)', fontSize: 13, color: 'var(--t-textSub)' }}>
+              <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: 9, background: 'var(--t-bgSubtle)', fontSize: 13.5, color: 'var(--t-text)' }}>
                 <MathText text={editState.question} />
               </div>
             )}
           </div>
 
           {/* Options */}
-          {(editState.options || []).map((opt, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <label style={{ display: 'block', fontSize: 11, color: editState.answer_index === i ? '#4ade80' : 'rgba(var(--ink-rgb),0.4)', marginBottom: 3, textTransform: 'uppercase' }}>
-                Option {OPTION_LABELS[i]}{editState.answer_index === i ? ' ✓ correct' : ''}
-              </label>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  style={inputStyle}
-                  value={opt}
-                  onChange={e => setEditState(prev => {
-                    const opts = [...prev.options]
-                    opts[i] = e.target.value
-                    return { ...prev, options: opts }
-                  })}
-                />
-                <button
-                  onClick={() => setEditState(prev => ({ ...prev, answer_index: i }))}
-                  title="Mark as correct"
-                  style={{
-                    flexShrink: 0, width: 28, height: 28, borderRadius: 6,
-                    border: `1px solid ${editState.answer_index === i ? '#4ade80' : 'rgba(var(--ink-rgb),0.12)'}`,
-                    background: editState.answer_index === i ? 'rgba(74,222,128,0.12)' : 'transparent',
-                    color: editState.answer_index === i ? '#4ade80' : 'rgba(var(--ink-rgb),0.3)',
-                    cursor: 'pointer', fontSize: 14,
-                  }}
-                >
-                  ✓
-                </button>
-              </div>
+          <div>
+            <span style={fieldLabel}>Options <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>· tick the right one</span></span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(editState.options || []).map((opt, i) => {
+                const right = editState.answer_index === i
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span style={{ width: 14, fontSize: 12.5, fontWeight: 800, color: 'var(--t-textMuted)' }}>{OPTION_LABELS[i]}</span>
+                    <input
+                      aria-label={`Option ${OPTION_LABELS[i]}`}
+                      style={{ ...inputStyle, borderColor: right ? 'var(--t-success)' : 'var(--t-border)' }}
+                      value={opt}
+                      onChange={e => setEditState(prev => {
+                        const opts = [...prev.options]
+                        opts[i] = e.target.value
+                        return { ...prev, options: opts }
+                      })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditState(prev => ({ ...prev, answer_index: i }))}
+                      aria-pressed={right}
+                      aria-label={`Option ${OPTION_LABELS[i]} is the right answer`}
+                      title="The right answer"
+                      style={{
+                        flexShrink: 0, width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `1px solid ${right ? 'var(--t-success)' : 'var(--t-border)'}`,
+                        background: right ? 'var(--t-successBg)' : 'var(--t-bgCard)',
+                        color: right ? 'var(--t-success)' : 'var(--t-textFaint)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Check size={15} strokeWidth={3} aria-hidden="true" />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
-          ))}
+          </div>
 
           {/* Solution */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 4, textTransform: 'uppercase' }}>Solution / Explanation</label>
+          <div>
+            <label htmlFor="rv-solution" style={fieldLabel}>Worked solution</label>
             <textarea
+              id="rv-solution"
               rows={4}
               style={{ ...inputStyle, resize: 'vertical' }}
               value={editState.solution || ''}
@@ -556,29 +472,18 @@ export default function AdminReviewScreen({ profile, onChange }) {
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{ padding: '9px', borderRadius: 8, border: '1px solid rgba(var(--ink-rgb),0.15)', background: 'transparent', color: 'var(--t-text)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
-            >
-              {saving ? 'Saving…' : 'Save Edits'}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => handleApprove(editState.id)} disabled={saving} style={btn('primary', saving)}>
+              Approve
             </button>
-            <button
-              onClick={() => handleApprove(editState.id)}
-              disabled={saving}
-              style={{ padding: '9px', borderRadius: 8, border: 'none', background: saving ? 'rgba(74,222,128,0.4)' : '#4ade80', color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
-            >
-              ✓ Approve → Go Live
+            <button type="button" onClick={handleSave} disabled={saving} style={btn('secondary', saving)}>
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
-            <button
-              onClick={() => handleReject(editState.id)}
-              disabled={saving}
-              style={{ padding: '9px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: 'var(--t-danger)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
-            >
+            <button type="button" onClick={() => handleReject(editState.id)} disabled={saving} style={{ ...btn('danger', saving), marginLeft: 'auto' }}>
               Reject
             </button>
           </div>
+          <div style={ui.hint}>Approving puts the question in the live bank, where students can get it.</div>
         </div>
       )}
       </div>

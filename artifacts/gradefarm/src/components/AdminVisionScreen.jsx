@@ -2,8 +2,7 @@ import { useState, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import { adminApiPost } from '../lib/adminApi'
 
-const GOLD = '#f1be43'
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
+import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 
 const TYPE_OPTIONS = [
   { id: 'mcq',          label: 'Multiple choice' },
@@ -14,11 +13,6 @@ const TYPE_OPTIONS = [
   { id: 'image_label',  label: 'Label diagram' },
 ]
 
-const field = {
-  width: '100%', padding: '10px 12px', borderRadius: 9, fontSize: 13, fontFamily: FONT_B,
-  background: 'rgba(var(--ink-rgb),0.05)', border: '1px solid rgba(var(--ink-rgb),0.12)', color: 'var(--t-text)', outline: 'none',
-}
-const labelStyle = { display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }
 
 export default function AdminVisionScreen() {
   const [subject, setSubject] = useState('')
@@ -81,75 +75,70 @@ export default function AdminVisionScreen() {
   const preview = imageData?.preview || imageUrl
 
   return (
-    <div style={{ maxWidth: 720, fontFamily: FONT_B, color: 'var(--t-text)' }}>
-      <p style={{ fontSize: 13, color: 'rgba(var(--ink-rgb),0.5)', marginTop: 0, marginBottom: 24, lineHeight: 1.6 }}>
-        Upload an exam figure, diagram, graph or map (or paste an image URL). Claude reads the image and writes questions from it — including click-the-region and label-the-diagram formats. The image is hosted and attached to each question.
+    <div style={{ maxWidth: 760, fontFamily: FONT_B, color: 'var(--t-text)', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <p style={{ ...ui.hint, fontSize: 13, margin: 0 }}>
+        Upload an exam figure, diagram, graph or map, or paste a link to one. AI reads the image and writes questions from it, including click-the-region and label-the-diagram questions. The image is attached to each question.
       </p>
 
       {/* Image input */}
-      <div style={{ marginBottom: 20 }}>
-        <label style={labelStyle}>Image</label>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)', color: 'var(--t-goldText)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <div>
+        <span style={ui.label}>Image</span>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btn('secondary'), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Upload size={14} aria-hidden="true" /> Upload image
           </button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
-          <span style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.35)' }}>or</span>
-          <input type="url" value={imageUrl} onChange={(e) => { setImageUrl(e.target.value); setImageData(null) }} placeholder="Paste a public image URL" style={{ ...field, flex: 1, minWidth: 200 }} />
+          <span style={ui.hint}>or</span>
+          <input type="url" aria-label="Image link" value={imageUrl} onChange={(e) => { setImageUrl(e.target.value); setImageData(null) }} placeholder="Paste a public image link" style={{ ...ui.input, flex: 1, minWidth: 200 }} />
         </div>
         {preview && (
-          <img src={preview} alt="Preview" style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 12, border: '1px solid rgba(var(--ink-rgb),0.12)' }} />
+          <img src={preview} alt="The image questions will be written from" style={{ display: 'block', marginTop: 10, maxWidth: '100%', maxHeight: 260, borderRadius: 12, border: '1px solid var(--t-border)' }} />
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
+      <div className="av-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
         <div>
-          <label style={labelStyle}>Subject</label>
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={field} />
+          <label htmlFor="vis-subject" style={ui.label}>Subject</label>
+          <input id="vis-subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={{ ...ui.input, width: '100%' }} />
         </div>
         <div>
-          <label style={labelStyle}>Topic (optional)</label>
-          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Cell biology" style={field} />
+          <label htmlFor="vis-topic" style={ui.label}>Topic <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>(optional)</span></label>
+          <input id="vis-topic" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Cell biology" style={{ ...ui.input, width: '100%' }} />
         </div>
         <div>
-          <label style={labelStyle}>Subtopic</label>
-          <input value={subtopic} onChange={(e) => setSubtopic(e.target.value)} placeholder="e.g. Organelles" style={field} />
+          <label htmlFor="vis-subtopic" style={ui.label}>Subtopic</label>
+          <input id="vis-subtopic" value={subtopic} onChange={(e) => setSubtopic(e.target.value)} placeholder="e.g. Organelles" style={{ ...ui.input, width: '100%' }} />
         </div>
         <div>
-          <label style={labelStyle}>How many</label>
-          <select value={count} onChange={(e) => setCount(e.target.value)} style={field}>
+          <label htmlFor="vis-count" style={ui.label}>How many</label>
+          <select id="vis-count" value={count} onChange={(e) => setCount(e.target.value)} style={{ ...ui.input, width: '100%' }}>
             {[2, 3, 4, 5, 8].map((c) => <option key={c} value={c}>{c} questions</option>)}
           </select>
         </div>
       </div>
 
-      <div style={{ marginBottom: 22 }}>
-        <label style={labelStyle}>Question formats</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      <div>
+        <span style={ui.label}>Question formats</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {TYPE_OPTIONS.map((tp) => {
             const on = types.has(tp.id)
             return (
-              <button key={tp.id} onClick={() => toggleType(tp.id)}
-                style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
-                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
-                  color: on ? GOLD : 'rgba(var(--ink-rgb),0.6)' }}>
-                {on ? `${tp.label} ✓` : tp.label}
-              </button>
+              <button key={tp.id} type="button" aria-pressed={on} onClick={() => toggleType(tp.id)} style={chip(on)}>{tp.label}</button>
             )
           })}
         </div>
       </div>
 
-      <button onClick={generate} disabled={loading}
-        style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: loading ? 'rgba(var(--ink-rgb),0.08)' : GOLD, color: loading ? 'rgba(var(--ink-rgb),0.3)' : '#0c1037', fontSize: 14, fontWeight: 800, cursor: loading ? 'default' : 'pointer', fontFamily: FONT_B }}>
-        {loading ? 'Reading image & generating…' : 'Generate questions from image'}
-      </button>
+      <div>
+        <button type="button" onClick={generate} disabled={loading} style={btn('primary', loading)}>
+          {loading ? 'Reading the image…' : 'Write questions from this image'}
+        </button>
+      </div>
 
-      {error && <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: 'var(--t-danger)', fontSize: 13 }}>{error}</div>}
+      {error && <div role="alert" style={note('danger')}>{error}</div>}
       {result && (
-        <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 10, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', fontSize: 13 }}>
-          ✓ Inserted {result.inserted} question{result.inserted !== 1 ? 's' : ''} {result.draft ? 'to the review queue' : 'into the live bank'} from this image.
+        <div role="status" style={note('success')}>
+          Added {result.inserted} question{result.inserted !== 1 ? 's' : ''} {result.draft ? 'to the review queue' : 'straight to the live bank'} from this image.
         </div>
       )}
     </div>

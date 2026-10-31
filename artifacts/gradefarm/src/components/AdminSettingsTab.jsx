@@ -2,61 +2,29 @@ import { useState, useEffect } from 'react'
 import { getPlatformSettings, setPlatformSetting } from '../lib/db'
 import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS } from '../lib/pricing'
 
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
-const BG     = 'var(--t-bgInput)'
+import { ui, btn, FONT_B } from '../lib/adminUi'
 
-function Section({ title, children }) {
+function Section({ title, sub, children }) {
   return (
-    <div style={{ background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.08)', borderRadius: 16, padding: '24px 28px', marginBottom: 24 }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--t-goldText)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>{title}</div>
-      {children}
-    </div>
+    <section style={{ ...ui.card, padding: '18px 20px', marginBottom: 16 }}>
+      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--t-text)' }}>{title}</h2>
+      {sub && <div style={{ ...ui.hint, fontSize: 13, marginTop: 4, maxWidth: 760 }}>{sub}</div>}
+      <div style={{ marginTop: 16 }}>{children}</div>
+    </section>
   )
 }
 
 function Field({ label, hint, children }) {
   return (
-    <div style={{ marginBottom: 18 }}>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(var(--ink-rgb),0.65)', marginBottom: 6 }}>
-        {label}
-        {hint && <span style={{ fontWeight: 400, color: 'rgba(var(--ink-rgb),0.35)', marginLeft: 8 }}>{hint}</span>}
-      </label>
+    <label style={{ display: 'block' }}>
+      <span style={{ ...ui.label, marginBottom: hint ? 2 : 6 }}>{label}</span>
+      {hint && <span style={{ display: 'block', ...ui.hint, marginBottom: 6 }}>{hint}</span>}
       {children}
-    </div>
+    </label>
   )
 }
 
-const inputStyle = {
-  background: 'rgba(var(--ink-rgb),0.06)',
-  border: '1px solid rgba(var(--ink-rgb),0.12)',
-  borderRadius: 8,
-  color: 'var(--t-text)',
-  fontFamily: FONT_B,
-  fontSize: 14,
-  padding: '9px 12px',
-  width: '100%',
-  boxSizing: 'border-box',
-}
-
-const btnStyle = {
-  padding: '9px 22px',
-  borderRadius: 9,
-  border: 'none',
-  background: `linear-gradient(135deg, ${GOLD}, #f9d87a)`,
-  color: '#080d28',
-  fontFamily: FONT_B,
-  fontSize: 13,
-  fontWeight: 800,
-  cursor: 'pointer',
-}
-
-const disabledBtnStyle = {
-  ...btnStyle,
-  background: 'rgba(var(--ink-rgb),0.1)',
-  color: 'rgba(var(--ink-rgb),0.3)',
-  cursor: 'default',
-}
+const inputStyle = { ...ui.input, width: '100%' }
 
 // Default values (used as fallback while loading or if DB is empty)
 const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7, tutor_plans: [
@@ -107,43 +75,50 @@ export default function AdminSettingsTab() {
   }
 
   if (loading) {
-    return <div style={{ color: 'rgba(var(--ink-rgb),0.4)', fontFamily: FONT_B, fontSize: 14 }}>Loading settings…</div>
+    return <div style={{ color: 'var(--t-textMuted)', fontFamily: FONT_B, fontSize: 13 }}>Loading settings…</div>
   }
 
   return (
     <div style={{ fontFamily: FONT_B }}>
       {/* ── Student access ── */}
-      <Section title="Student access">
-        <div style={{ fontSize: 13, color: 'rgba(var(--ink-rgb),0.6)', lineHeight: 1.6 }}>
-          Every student can pick one free subject (limited questions per day). Paid subjects are one Stripe plan per
-          student, billed weekly or monthly (their choice), cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free. To
-          give a student a subject for free, grant it from <strong>Students</strong>; removing a paid subject there takes
+      <Section title="How students get subjects">
+        <div style={{ fontSize: 13, color: 'var(--t-textSub)', lineHeight: 1.6, maxWidth: 760 }}>
+          Every student can pick one free subject, with a daily question limit. Paid subjects are one Stripe plan per
+          student, billed weekly or monthly (their choice), cheaper for each extra subject (prices below). Subjects unlocked during the beta stay free.
+          To give a student a subject for free, open them in <strong>People</strong>; removing a paid subject there takes
           it off their plan. Tutors and admins can use every subject.
         </div>
       </Section>
 
       {/* ── Pricing ── */}
-      <Section title="Pricing (shown on pricing page)">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 4 }}>
-          {[['student_tiers', 'week'], ['student_monthly_tiers', 'month']].flatMap(([key, unit]) =>
-            ['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
-              <Field key={`${key}-${i}`} label={`${label} ($/${unit}, AUD)`} hint={i === 0 ? `New ${unit}ly plans use these prices` : undefined}>
-                <input
-                  style={inputStyle}
-                  type="number"
-                  min={1}
-                  step={0.5}
-                  value={(pr[key] || DEFAULT_PRICING[key])[i] ?? ''}
-                  onChange={e => setPr(p => {
-                    const next = [...(p[key] || DEFAULT_PRICING[key])]
-                    next[i] = e.target.value === '' ? '' : Number(e.target.value)
-                    return { ...p, [key]: next }
-                  })}
-                  placeholder={String(DEFAULT_PRICING[key][i])}
-                />
-              </Field>
-            )))}
-          <Field label="Free tier: Titan AI messages per day" hint="Students with no paid subject">
+      <Section title="Student prices and limits" sub="Shown on the pricing page. Prices are in AUD.">
+        {[['student_tiers', 'week', 'Weekly plans'], ['student_monthly_tiers', 'month', 'Monthly plans']].map(([key, unit, title]) => (
+          <div key={key} style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--t-text)', marginBottom: 8 }}>{title} <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>· price per {unit}. New {unit}ly plans use these.</span></div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, maxWidth: 720 }}>
+              {['1st subject', '2nd subject', '3rd+ subjects (each)'].map((label, i) => (
+                <Field key={`${key}-${i}`} label={label}>
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    min={1}
+                    step={0.5}
+                    value={(pr[key] || DEFAULT_PRICING[key])[i] ?? ''}
+                    onChange={e => setPr(p => {
+                      const next = [...(p[key] || DEFAULT_PRICING[key])]
+                      next[i] = e.target.value === '' ? '' : Number(e.target.value)
+                      return { ...p, [key]: next }
+                    })}
+                    placeholder={String(DEFAULT_PRICING[key][i])}
+                  />
+                </Field>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--t-text)', marginBottom: 8 }}>Free tier, trials and discounts</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <Field label="Free tier: AI tutor messages a day" hint="Students with no paid subject">
             <input
               style={inputStyle}
               type="number"
@@ -153,7 +128,7 @@ export default function AdminSettingsTab() {
               placeholder="10"
             />
           </Field>
-          <Field label="Free subject: questions per day">
+          <Field label="Free subject: questions a day">
             <input
               style={inputStyle}
               type="number"
@@ -163,7 +138,7 @@ export default function AdminSettingsTab() {
               placeholder="20"
             />
           </Field>
-          <Field label="Free trial: days on a student's first paid subject" hint="Card required; 0 turns trials off">
+          <Field label="Free trial days on a first paid subject" hint="Card required. 0 turns trials off.">
             <input
               style={inputStyle}
               type="number"
@@ -174,7 +149,7 @@ export default function AdminSettingsTab() {
               placeholder="7"
             />
           </Field>
-          <Field label="Annual discount %" hint="e.g. 15 for 15%">
+          <Field label="Annual discount (%)" hint="For tutor plans paid yearly">
             <input
               style={inputStyle}
               type="number"
@@ -187,18 +162,21 @@ export default function AdminSettingsTab() {
           </Field>
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(var(--ink-rgb),0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>Tutor Plans</div>
-        <div style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.45)', marginBottom: 12, lineHeight: 1.5 }}>
+      </Section>
+
+      <Section title="Tutor plans">
+        <div style={{ ...ui.hint, fontSize: 13, marginTop: -12, marginBottom: 16, maxWidth: 760 }}>
           Tutors need one of these to use the tutor portal, billed monthly or yearly (annual discount above). A plan
           caps students on the roster plus pending invites and the subjects a tutor can tutor in (999 means
           unlimited), and says whether they can record lessons and send weekly parent reports. Tutors already
           subscribed keep the price, limits and features they signed up with until they change plan. Don't rename a
           plan while tutors are on it.
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           {(pr.tutor_plans || []).map((plan, idx) => (
-            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Field label={`${plan.name || `Plan ${idx + 1}`}: price`} hint="$/month">
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderRadius: 10, border: '1px solid var(--t-border)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)' }}>{plan.name || `Plan ${idx + 1}`}</div>
+              <Field label="Price per month">
                 <input
                   style={inputStyle}
                   type="number"
@@ -221,8 +199,8 @@ export default function AdminSettingsTab() {
                 </Field>
               ))}
               {[['subject_swaps', 'Tutors can swap subjects'], ['recordings', 'Lesson recordings'], ['parent_reports', 'Weekly parent reports']].map(([field, label]) => (
-                <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'rgba(var(--ink-rgb),0.65)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={plan[field] !== false} onChange={e => updateTutorPlan(idx, field, e.target.checked)} />
+                <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--t-textSub)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={plan[field] !== false} onChange={e => updateTutorPlan(idx, field, e.target.checked)} style={{ accentColor: 'var(--t-text)' }} />
                   {label}
                 </label>
               ))}
@@ -230,13 +208,14 @@ export default function AdminSettingsTab() {
           ))}
         </div>
 
-        {prMsg && (
-          <div style={{ fontSize: 12, color: prMsg.ok ? '#10b981' : '#f87171', marginBottom: 10 }}>{prMsg.text}</div>
-        )}
-        <button style={prSaving ? disabledBtnStyle : btnStyle} onClick={savePr} disabled={prSaving}>
-          {prSaving ? 'Saving…' : 'Save Pricing Settings'}
-        </button>
       </Section>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button type="button" style={btn('primary', prSaving)} onClick={savePr} disabled={prSaving}>
+          {prSaving ? 'Saving…' : 'Save prices and plans'}
+        </button>
+        {prMsg && <span role="status" style={{ fontSize: 13, fontWeight: 600, color: prMsg.ok ? 'var(--t-success)' : 'var(--t-danger)' }}>{prMsg.text}</span>}
+      </div>
     </div>
   )
 }

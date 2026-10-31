@@ -519,7 +519,7 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
               {detailStats?.weakTopics?.length > 0 && (
                 <Section title="Weakest topics">
                   {detailStats.weakTopics.map((t, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < detailStats.weakTopics.length - 1 ? '1px solid rgba(var(--ink-rgb),0.05)' : 'none' }}>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < detailStats.weakTopics.length - 1 ? '1px solid var(--t-border)' : 'none' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.topic}</div>
                         <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{t.subject} · {t.attempts} attempts</div>
@@ -876,7 +876,7 @@ function TutorLinksSection({ studentId, onChange }) {
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {links.map(l => (
-            <span key={l.tutor_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(var(--ink-rgb),0.1)', fontSize: 12, color: 'var(--t-textSub)' }}>
+            <span key={l.tutor_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: '1px solid var(--t-border)', fontSize: 12, color: 'var(--t-textSub)' }}>
               {l.tutor_name || 'Unnamed tutor'}
               <button onClick={() => run(() => adminUnlinkTutor(l.tutor_id, studentId))} disabled={busy} title="Unassign tutor"
                 style={{ border: 'none', background: 'transparent', color: 'var(--t-danger)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
@@ -886,7 +886,7 @@ function TutorLinksSection({ studentId, onChange }) {
       )}
       <div style={{ display: 'flex', gap: 8 }}>
         <select value={adding} onChange={e => setAdding(e.target.value)} disabled={busy}
-          style={{ flex: 1, padding: '7px 10px', borderRadius: 8, background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)', color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B }}>
+          style={{ flex: 1, padding: '7px 10px', borderRadius: 8, background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B }}>
           <option value="">Assign a tutor…</option>
           {available.map(t => <option key={t.id} value={t.id}>{t.display_name || 'Unnamed'}{t.is_admin ? ' (admin)' : ''}</option>)}
         </select>

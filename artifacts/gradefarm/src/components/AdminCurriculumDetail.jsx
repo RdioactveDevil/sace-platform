@@ -15,8 +15,7 @@ import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
 
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
+import { ui, btn, note, FONT_B } from '../lib/adminUi'
 
 // Subtopics generated at once. Each is one Claude call plus answer
 // verification (~1 min), so a 125-subtopic curriculum takes ~40 min, not ~2 h.
@@ -49,7 +48,7 @@ function EditableText({ value, onSave, style }) {
         }}
         style={{
           ...style,
-          background: 'rgba(var(--ink-rgb),0.06)', border: '1px solid rgba(241,190,67,0.4)',
+          background: 'var(--t-bgInput)', border: '1px solid var(--t-borderStrong)',
           borderRadius: 5, padding: '2px 6px', outline: 'none', color: 'var(--t-text)',
           fontFamily: FONT_B, fontSize: 'inherit', width: '100%',
         }}
@@ -61,7 +60,7 @@ function EditableText({ value, onSave, style }) {
       onClick={() => { setDraft(value); setEditing(true) }}
       title="Click to rename"
       style={{ ...style, cursor: 'text', borderRadius: 4, padding: '2px 4px', transition: 'background 0.1s' }}
-      onMouseEnter={e => e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.05)'}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--t-bgHover)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
     >
       {value}
@@ -540,9 +539,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const remainingCount = (progress || []).length - doneCount - failedCount
   const isDraft     = curriculum.status === 'draft'
 
-  const statusColor = curriculum.status === 'live' ? '#4ade80' : curriculum.status === 'generating' ? '#38bdf8' : GOLD
-  const statusBg    = curriculum.status === 'live' ? 'rgba(74,222,128,0.1)' : curriculum.status === 'generating' ? 'rgba(56,189,248,0.1)' : 'rgba(241,190,67,0.1)'
-  const statusBdr   = curriculum.status === 'live' ? 'rgba(74,222,128,0.3)' : curriculum.status === 'generating' ? 'rgba(56,189,248,0.3)' : 'rgba(241,190,67,0.3)'
+  const statusLabel = { live: 'Live', generating: 'Generating', draft: 'Draft' }[curriculum.status] || curriculum.status
+  const statusColor = curriculum.status === 'live' ? 'var(--t-success)' : curriculum.status === 'generating' ? 'var(--t-textSub)' : 'var(--t-goldText)'
 
   return (
     <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
@@ -551,9 +549,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
         <button
           onClick={onBack}
-          style={{ background: 'none', border: 'none', color: 'rgba(var(--ink-rgb),0.4)', cursor: 'pointer', fontSize: 13, fontFamily: FONT_B, padding: 0 }}
+          style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 13, fontFamily: FONT_B, padding: 0 }}
         >
-          ← Curricula
+          ← Subjects
         </button>
         <EditableText
           value={curriculum.name}
@@ -561,18 +559,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           style={{ fontSize: 18, fontWeight: 800, color: 'var(--t-text)' }}
         />
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--t-textMuted)', marginLeft: 4 }}>
-          <span style={{ flexShrink: 0 }}>Cohort</span>
+          <span style={{ flexShrink: 0 }}>Level</span>
           <select
             value={curriculum.level_label || ''}
             onChange={e => setCurriculum(prev => ({ ...prev, level_label: e.target.value }))}
             disabled={generating}
-            style={{
-              padding: '4px 8px', borderRadius: 6,
-              border: '1px solid rgba(var(--ink-rgb),0.12)', background: 'var(--t-bgInput)',
-              color: 'var(--t-textSub)', fontSize: 12, fontFamily: FONT_B,
-              minWidth: 120,
-              opacity: generating ? 0.5 : 1,
-            }}
+            style={{ ...ui.input, padding: '5px 9px', fontSize: 12.5, minWidth: 120, opacity: generating ? 0.5 : 1 }}
           >
             <option value="">Select…</option>
             {COHORT_LEVEL_OPTIONS.map(opt => (
@@ -580,16 +572,10 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             ))}
           </select>
         </label>
-        <span style={{
-          padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-          background: statusBg, border: `1px solid ${statusBdr}`, color: statusColor,
-          textTransform: 'capitalize',
-        }}>
-          {curriculum.status}
-        </span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: statusColor }}>{statusLabel}</span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          {saveOk && <span style={{ fontSize: 12, color: 'var(--t-success)' }}>✓ Saved</span>}
+          {saveOk && <span role="status" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--t-success)' }}>Saved</span>}
           <button
             onClick={handleConsolidateSpellings}
             disabled={saving || generating || consolidating}
@@ -603,37 +589,31 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             disabled={saving || generating}
             style={secondaryBtn(saving || generating)}
           >
-            {saving ? 'Saving…' : 'Save Draft'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
           {isDraft && (
             <button
               onClick={handleApproveAndGenerate}
               disabled={saving || totalSubtopics === 0}
-              style={{
-                padding: '9px 18px', borderRadius: 9, border: 'none',
-                background: (saving || totalSubtopics === 0) ? 'rgba(241,190,67,0.4)' : GOLD,
-                color: '#0c1037', fontSize: 13, fontWeight: 800,
-                cursor: (saving || totalSubtopics === 0) ? 'not-allowed' : 'pointer',
-                fontFamily: FONT_B,
-              }}
+              style={btn('primary', saving || totalSubtopics === 0)}
             >
-              Approve & Generate →
+              Approve and generate questions
             </button>
           )}
         </div>
       </div>
 
-      {error && <div style={errorBox}>{error}</div>}
-      {genError && <div style={errorBox}>{genError}</div>}
+      {error && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{error}</div>}
+      {genError && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{genError}</div>}
 
       {/* Remap success notice */}
       {remapResult && (
         <div style={{
           marginBottom: 14, padding: '10px 14px',
-          background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)',
-          borderRadius: 8, fontSize: 13, color: 'var(--t-success)', display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--t-successBg)', border: '1px solid var(--t-success)',
+          borderRadius: 9, fontSize: 13, color: 'var(--t-success)', display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ✓ Remap complete — {remapResult.updated} group(s) remapped, {remapResult.deleted} group(s) deleted.
+          Done: {remapResult.updated} group{remapResult.updated === 1 ? '' : 's'} moved, {remapResult.deleted} deleted.
           <button onClick={() => setRemapResult(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--t-success)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       )}
@@ -642,28 +622,27 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       {orphanInfo && !showRemap && (
         <div style={{
           marginBottom: 14, padding: '12px 16px',
-          background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)',
+          background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)',
           borderRadius: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         }}>
-          <TriangleAlert size={18} color="#fbbf24" aria-hidden="true" style={{ flexShrink: 0 }} />
+          <TriangleAlert size={18} color="var(--t-goldText)" aria-hidden="true" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>
-              {orphanInfo.count} question{orphanInfo.count !== 1 ? 's' : ''} not mapped to any current subtopic
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-goldText)' }}>
+              {orphanInfo.count} question{orphanInfo.count !== 1 ? 's' : ''} no longer match a subtopic
             </div>
-            <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
-              These questions exist in the question bank but don't match any subtopic in the revised curriculum.
-              Remap them to new subtopics or delete them.
+            <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 2 }}>
+              They're in the question bank, but their subtopic isn't in this plan any more. Move them to a current subtopic or delete them.
             </div>
           </div>
           <button
             onClick={() => setShowRemap(true)}
             style={{
-              padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(251,191,36,0.4)',
-              background: 'rgba(251,191,36,0.12)', color: '#fbbf24',
+              padding: '7px 14px', borderRadius: 8, border: '1px solid var(--t-border)',
+              background: 'var(--t-bgSubtle)', color: 'var(--t-goldText)',
               fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0,
             }}
           >
-            Fix now →
+            Sort them out
           </button>
         </div>
       )}
@@ -676,17 +655,17 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         return (
           <div style={{
             marginBottom: 20, borderRadius: 12,
-            border: '1px solid rgba(251,191,36,0.3)',
-            background: 'rgba(251,191,36,0.04)', overflow: 'hidden',
+            border: '1px solid var(--t-border)',
+            background: 'var(--t-bgSubtle)', overflow: 'hidden',
           }}>
             {/* Panel header */}
             <div style={{
-              padding: '14px 16px', borderBottom: '1px solid rgba(251,191,36,0.15)',
+              padding: '14px 16px', borderBottom: '1px solid var(--t-border)',
               display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
             }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>
-                  Reallocate Orphaned Questions
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-goldText)' }}>
+                  Move questions to current subtopics
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 2 }}>
                   {orphanInfo.count} questions across {orphanInfo.orphanedSubtopics.length} old subtopic(s).
@@ -698,19 +677,19 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   onClick={handleSuggestRemap}
                   disabled={remapSuggesting || remapApplying}
                   style={{
-                    padding: '7px 13px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.3)',
-                    background: 'rgba(56,189,248,0.08)', color: remapSuggesting ? '#64748b' : '#38bdf8',
+                    padding: '7px 13px', borderRadius: 8, border: '1px solid var(--t-border)',
+                    background: 'var(--t-bgSubtle)', color: remapSuggesting ? 'var(--t-textMuted)' : 'var(--t-textSub)',
                     fontSize: 12, fontWeight: 700, cursor: remapSuggesting ? 'not-allowed' : 'pointer', fontFamily: FONT_B,
                     display: 'inline-flex', alignItems: 'center', gap: 6,
                   }}
                 >
                   <Sparkles size={13} aria-hidden="true" />
-                  {remapSuggesting ? 'Suggesting…' : 'AI Suggest'}
+                  {remapSuggesting ? 'Suggesting…' : 'Suggest with AI'}
                 </button>
                 <button
                   onClick={() => setShowRemap(false)}
                   style={{
-                    padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(var(--ink-rgb),0.1)',
+                    padding: '7px 12px', borderRadius: 8, border: '1px solid var(--t-border)',
                     background: 'transparent', color: 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
                   }}
                 >
@@ -727,7 +706,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   gridTemplateColumns: '1fr auto auto',
                   gap: 10, alignItems: 'center',
                   padding: '9px 12px', borderRadius: 8,
-                  background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.05)',
+                  background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
                 }}>
                   {/* Old subtopic info */}
                   <div style={{ minWidth: 0 }}>
@@ -750,13 +729,13 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                       ))
                     }}
                     style={{
-                      padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(var(--ink-rgb),0.1)',
+                      padding: '5px 8px', borderRadius: 6, border: '1px solid var(--t-border)',
                       background: 'var(--t-bgInput)', color: 'var(--t-textSub)', fontSize: 12, fontFamily: FONT_B, cursor: 'pointer',
                     }}
                   >
-                    <option value="remap">Remap to…</option>
+                    <option value="remap">Move to…</option>
                     <option value="delete">Delete questions</option>
-                    <option value="ignore">Leave as-is</option>
+                    <option value="ignore">Leave as they are</option>
                   </select>
 
                   {/* Destination picker */}
@@ -774,12 +753,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                         }
                       }}
                       style={{
-                        padding: '5px 8px', borderRadius: 6, border: `1px solid ${m.newSubtopic ? 'rgba(74,222,128,0.3)' : 'rgba(251,191,36,0.3)'}`,
-                        background: 'var(--t-bgInput)', color: m.newSubtopic ? '#4ade80' : '#fbbf24',
+                        padding: '5px 8px', borderRadius: 6, border: `1px solid ${m.newSubtopic ? 'var(--t-success)' : 'var(--t-border)'}`,
+                        background: 'var(--t-bgInput)', color: m.newSubtopic ? 'var(--t-success)' : 'var(--t-goldText)',
                         fontSize: 12, fontFamily: FONT_B, cursor: 'pointer', maxWidth: 280,
                       }}
                     >
-                      <option value="">— select subtopic —</option>
+                      <option value="">Choose a subtopic</option>
                       {allSubtopicOptions.map(opt => (
                         <option key={`${opt.topic}|||${opt.subtopic}`} value={`${opt.topic}|||${opt.subtopic}`}>
                           {opt.label}
@@ -787,7 +766,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                       ))}
                     </select>
                   ) : (
-                    <div style={{ width: 200, fontSize: 12, color: m.action === 'delete' ? '#f87171' : '#64748b', fontStyle: 'italic' }}>
+                    <div style={{ width: 200, fontSize: 12, color: m.action === 'delete' ? 'var(--t-danger)' : 'var(--t-textMuted)', fontStyle: 'italic' }}>
                       {m.action === 'delete' ? `${m.count} question${m.count !== 1 ? 's' : ''} will be deleted` : 'No change'}
                     </div>
                   )}
@@ -800,19 +779,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
               <button
                 onClick={handleApplyRemap}
                 disabled={remapApplying || remapMappings.every(m => m.action === 'ignore')}
-                style={{
-                  padding: '9px 18px', borderRadius: 9, border: 'none',
-                  background: (remapApplying || remapMappings.every(m => m.action === 'ignore'))
-                    ? 'rgba(241,190,67,0.3)' : GOLD,
-                  color: '#0c1037', fontSize: 13, fontWeight: 800,
-                  cursor: (remapApplying || remapMappings.every(m => m.action === 'ignore')) ? 'not-allowed' : 'pointer',
-                  fontFamily: FONT_B,
-                }}
+                style={btn('primary', remapApplying || remapMappings.every(m => m.action === 'ignore'))}
               >
-                {remapApplying ? 'Applying…' : 'Apply Remap'}
+                {remapApplying ? 'Applying…' : 'Apply'}
               </button>
               <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>
-                {remapMappings.filter(m => m.action === 'remap' && m.newSubtopic).length} remap · {remapMappings.filter(m => m.action === 'delete').length} delete · {remapMappings.filter(m => m.action === 'ignore').length} ignore
+                {remapMappings.filter(m => m.action === 'remap' && m.newSubtopic).length} to move · {remapMappings.filter(m => m.action === 'delete').length} to delete · {remapMappings.filter(m => m.action === 'ignore').length} left
               </span>
             </div>
           </div>
@@ -828,13 +800,13 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       {!generating && (
         <div style={{
           marginBottom: 20, padding: '14px 16px', borderRadius: 10,
-          background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.07)',
+          background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
         }}>
-          <div style={{ fontSize: 11, color: 'var(--t-textMuted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-            Exam Scope & Generation Context
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 4 }}>
+            About the exam
           </div>
-          <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 10 }}>
-            Notes about the real exam, injected into every question-generation prompt for this curriculum — structure ("30 MCQs, 1 mark each"), textbook terminology, scope limits. Saved with the draft.
+          <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 10 }}>
+            Notes on the real exam that AI uses whenever it writes questions for this subject: its structure ("30 multiple-choice questions, 1 mark each"), textbook terms, what's out of scope. Saved with the plan.
           </div>
           <textarea
             value={curriculum.exam_context || ''}
@@ -844,7 +816,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             placeholder={'e.g. "SACE Stage 2 exam: 30 multiple-choice questions worth 1 mark each, 90 minutes. Use Nelson Chemistry 3 & 4 terminology. Calculators permitted — include calculation-based questions."'}
             style={{
               width: '100%', padding: '8px 10px', borderRadius: 8,
-              border: '1px solid rgba(var(--ink-rgb),0.1)', background: 'var(--t-bgInput)',
+              border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
               color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
               resize: 'vertical', boxSizing: 'border-box',
             }}
@@ -862,10 +834,10 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       {!generating && (
         <div style={{
           marginBottom: 20, padding: '14px 16px', borderRadius: 10,
-          background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.07)',
+          background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
         }}>
-          <div style={{ fontSize: 11, color: 'var(--t-textMuted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            Revise with AI
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 10 }}>
+            Change the plan with AI
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -877,7 +849,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 disabled={revising}
                 style={{
                   width: '100%', padding: '8px 10px', borderRadius: 8,
-                  border: '1px solid rgba(var(--ink-rgb),0.1)', background: 'var(--t-bgInput)',
+                  border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
                   color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
                   resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
                 }}
@@ -887,9 +859,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 onClick={() => setShowPasteArea(v => !v)}
                 disabled={revising}
                 style={{
-                  alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: '1px dashed rgba(var(--ink-rgb),0.15)',
-                  background: showPasteArea ? 'rgba(241,190,67,0.08)' : 'transparent',
-                  color: showPasteArea ? '#f1be43' : '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
+                  alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: '1px dashed var(--t-border)',
+                  background: showPasteArea ? 'var(--t-bgSubtle)' : 'transparent',
+                  color: showPasteArea ? 'var(--t-goldText)' : 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
                 }}
               >
                 {showPasteArea ? '▾ Hide paste area' : '▸ Paste TOC / text document'}
@@ -903,7 +875,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   disabled={revising}
                   style={{
                     width: '100%', padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid rgba(241,190,67,0.2)', background: 'rgba(241,190,67,0.03)',
+                    border: '1px solid var(--t-border)', background: 'var(--t-bgSubtle)',
                     color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B, outline: 'none',
                     resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
                   }}
@@ -914,9 +886,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
                 borderRadius: 8, cursor: revising ? 'not-allowed' : 'pointer',
-                border: reviseDoc ? '1px solid rgba(74,222,128,0.3)' : '1px dashed rgba(var(--ink-rgb),0.12)',
-                background: reviseDoc ? 'rgba(74,222,128,0.05)' : 'transparent',
-                fontSize: 12, color: reviseDoc ? '#4ade80' : '#64748b', whiteSpace: 'nowrap',
+                border: reviseDoc ? '1px solid var(--t-success)' : '1px dashed var(--t-border)',
+                background: reviseDoc ? 'var(--t-successBg)' : 'transparent',
+                fontSize: 12, color: reviseDoc ? 'var(--t-success)' : 'var(--t-textMuted)', whiteSpace: 'nowrap',
               }}>
                 <input type="file" accept=".pdf,.txt" disabled={revising} onChange={handleReviseFileUpload} style={{ display: 'none' }} />
                 {reviseDoc ? `✓ ${reviseDoc.name}` : '↑ Upload doc'}
@@ -929,9 +901,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 disabled={revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())}
                 style={{
                   padding: '8px 16px', borderRadius: 8,
-                  border: '1px solid rgba(56,189,248,0.2)',
-                  background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.15)',
-                  color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? '#64748b' : '#38bdf8',
+                  border: '1px solid var(--t-border)',
+                  background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'var(--t-bgSubtle)' : 'var(--t-bgSubtle)',
+                  color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'var(--t-textMuted)' : 'var(--t-textSub)',
                   fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'not-allowed' : 'pointer',
                   fontFamily: FONT_B,
                 }}
@@ -943,17 +915,17 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
         {/* Left: tree editor */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: '1 1 420px', minWidth: 0 }}>
           {topics.map((topic, ti) => (
             <div key={ti} style={{ marginBottom: 14 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 14px', borderRadius: 10,
-                background: 'rgba(var(--ink-rgb),0.04)',
-                border: '1px solid rgba(var(--ink-rgb),0.08)',
+                background: 'var(--t-bgCard)',
+                border: '1px solid var(--t-border)',
               }}>
                 <span style={{ fontSize: 10, color: 'var(--t-textMuted)', fontWeight: 700, width: 22, flexShrink: 0 }}>T{ti + 1}</span>
                 <EditableText
@@ -967,8 +939,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   title="How questions for this topic are generated. Saved with the curriculum."
                   style={{
                     flexShrink: 0, padding: '3px 6px', borderRadius: 6, fontSize: 11, fontFamily: FONT_B,
-                    border: '1px solid rgba(var(--ink-rgb),0.1)', background: 'var(--t-bgInput)',
-                    color: topic.question_style === 'passage' ? GOLD : '#94a3b8',
+                    border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
+                    color: topic.question_style === 'passage' ? 'var(--t-goldText)' : 'var(--t-textMuted)',
                   }}
                 >
                   <option value="standard">Standard questions</option>
@@ -987,8 +959,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   <div key={si} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '7px 12px', borderRadius: 8,
-                    background: 'rgba(var(--ink-rgb),0.02)',
-                    border: '1px solid rgba(var(--ink-rgb),0.05)',
+                    background: 'var(--t-bgCard)',
+                    border: '1px solid var(--t-border)',
                   }}>
                     <span style={{ fontSize: 10, color: 'var(--t-textFaint)', width: 30, flexShrink: 0 }}>{ti + 1}.{si + 1}</span>
                     <EditableText
@@ -1004,41 +976,41 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                   </div>
                 ))}
                 <button onClick={() => addSubtopic(ti)} style={{ ...addBtn, marginTop: 2 }}>
-                  + Add Subtopic
+                  + Add subtopic
                 </button>
               </div>
             </div>
           ))}
 
           <button onClick={addTopic} style={{ ...addBtn, marginTop: 8, padding: '10px 16px', fontSize: 13 }}>
-            + Add Topic
+            + Add topic
           </button>
         </div>
 
         {/* Right: generation progress panel */}
         {progress && (
           <div style={{
-            width: 320, flexShrink: 0,
-            position: 'sticky', top: 24,
-            background: 'rgba(var(--ink-rgb),0.02)',
-            border: '1px solid rgba(var(--ink-rgb),0.07)',
-            borderRadius: 14, padding: 18,
-            maxHeight: 'calc(100vh - 160px)', overflowY: 'auto',
+            flex: '0 1 320px', minWidth: 260,
+            position: 'sticky', top: 0,
+            background: 'var(--t-bgCard)',
+            border: '1px solid var(--t-border)',
+            borderRadius: 12, padding: 16,
+            maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
           }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-textMuted)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12 }}>
-              Generation Progress
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 12 }}>
+              Generating questions
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ height: 6, borderRadius: 3, background: 'rgba(var(--ink-rgb),0.06)', overflow: 'hidden' }}>
+              <div style={{ height: 6, borderRadius: 3, background: 'var(--t-bgSubtle)', overflow: 'hidden' }}>
                 <div style={{
-                  height: '100%', borderRadius: 3, background: '#4ade80',
+                  height: '100%', borderRadius: 3, background: 'var(--t-success)',
                   width: `${progress.length > 0 ? Math.round(((doneCount + failedCount) / progress.length) * 100) : 0}%`,
                   transition: 'width 0.4s',
                 }} />
               </div>
               <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 5 }}>
-                {totalQs} questions · {doneCount}/{progress.length} subtopics done
+                {totalQs} questions · {doneCount} of {progress.length} subtopics done
                 {failedCount > 0 && <span style={{ color: 'var(--t-danger)' }}> · {failedCount} failed</span>}
               </div>
             </div>
@@ -1056,22 +1028,19 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 <div style={{ flex: 1, fontSize: 11, color: 'var(--t-goldText)', lineHeight: 1.4 }}>
                   Paused with {remainingCount} subtopic{remainingCount === 1 ? '' : 's'} to go.
                 </div>
-                <button onClick={handleResume} style={{
-                  padding: '9px 16px', borderRadius: 9, border: 'none', background: GOLD,
-                  color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B,
-                }}>Resume</button>
+                <button onClick={handleResume} style={btn('primary')}>Resume</button>
               </div>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {progress.map(p => {
-                const chipColor = p.gen_status === 'done' ? '#4ade80' : p.gen_status === 'failed' ? '#f87171' : p.gen_status === 'generating' ? '#38bdf8' : '#64748b'
+                const chipColor = p.gen_status === 'done' ? 'var(--t-success)' : p.gen_status === 'failed' ? 'var(--t-danger)' : p.gen_status === 'generating' ? 'var(--t-textSub)' : 'var(--t-textMuted)'
                 return (
                   <div key={p.id} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '7px 10px', borderRadius: 8,
-                    background: 'rgba(var(--ink-rgb),0.02)',
-                    border: '1px solid rgba(var(--ink-rgb),0.04)',
+                    background: 'var(--t-bgCard)',
+                    border: '1px solid var(--t-border)',
                   }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
@@ -1079,18 +1048,16 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                     <span style={{
                       fontSize: 10, fontWeight: 700, flexShrink: 0,
                       color: chipColor,
-                      padding: '1px 7px', borderRadius: 999,
-                      border: `1px solid ${chipColor}44`,
-                      background: `${chipColor}14`,
+                      padding: '1px 0',
                     }}>
-                      {p.gen_status === 'done' ? `✓ ${p.questions_generated}q` : p.gen_status === 'generating' ? '…' : p.gen_status === 'failed' ? '✗' : 'pending'}
+                      {p.gen_status === 'done' ? `${p.questions_generated} questions` : p.gen_status === 'generating' ? 'Writing…' : p.gen_status === 'failed' ? 'Failed' : 'Waiting'}
                     </span>
                     {p.gen_status === 'failed' && (
                       <button
                         onClick={() => handleRetry(p)}
                         style={{
-                          background: 'none', border: '1px solid rgba(248,113,113,0.3)',
-                          borderRadius: 5, color: 'var(--t-danger)', fontSize: 10,
+                          background: 'none', border: '1px solid var(--t-danger)',
+                          borderRadius: 6, color: 'var(--t-danger)', fontSize: 11.5, fontWeight: 700,
                           cursor: 'pointer', padding: '2px 7px', fontFamily: FONT_B,
                         }}
                       >
@@ -1119,9 +1086,9 @@ function IconBtn({ children, onClick, disabled, danger, small, title }) {
       style={{
         width: small ? 22 : 26, height: small ? 22 : 26,
         borderRadius: 5,
-        border: `1px solid ${danger ? 'rgba(248,113,113,0.25)' : 'rgba(var(--ink-rgb),0.08)'}`,
+        border: '1px solid var(--t-border)',
         background: 'transparent',
-        color: disabled ? '#374151' : danger ? '#f87171' : '#94a3b8',
+        color: disabled ? 'var(--t-textFaint)' : danger ? 'var(--t-danger)' : 'var(--t-textSub)',
         fontSize: small ? 11 : 13,
         cursor: disabled ? 'not-allowed' : 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1133,35 +1100,21 @@ function IconBtn({ children, onClick, disabled, danger, small, title }) {
   )
 }
 
-const errorBox = {
-  padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
-  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8,
-  fontSize: 13, color: 'var(--t-danger)', marginBottom: 14,
-}
-
 const addBtn = {
-  background: 'none', border: '1px dashed rgba(var(--ink-rgb),0.1)',
-  borderRadius: 7, color: 'rgba(var(--ink-rgb),0.3)',
-  fontSize: 12, cursor: 'pointer', padding: '6px 12px',
-  fontFamily: "'Plus Jakarta Sans', sans-serif",
+  background: 'none', border: '1px dashed var(--t-borderStrong)',
+  borderRadius: 8, color: 'var(--t-textMuted)',
+  fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: '7px 12px',
+  fontFamily: FONT_B,
   width: '100%', textAlign: 'left',
 }
 
-const secondaryBtn = (disabled) => ({
-  padding: '9px 16px', borderRadius: 9,
-  border: '1px solid rgba(var(--ink-rgb),0.12)',
-  background: 'transparent',
-  color: disabled ? '#64748b' : '#e2e8f0',
-  fontSize: 13, fontWeight: 700,
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  fontFamily: "'Plus Jakarta Sans', sans-serif",
-})
+const secondaryBtn = (disabled) => btn('secondary', disabled)
 
 /** Optional student tools for this subject. Everything is off unless switched on here. */
 function FeatureSwitches({ features, saving, onChange }) {
   const row = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', cursor: 'pointer' }
   const numInput = {
-    width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(var(--ink-rgb),0.1)',
+    width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--t-border)',
     background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B,
   }
   const commitNumber = (key) => (e) => {
@@ -1171,17 +1124,17 @@ function FeatureSwitches({ features, saving, onChange }) {
   return (
     <div style={{
       marginBottom: 20, padding: '14px 16px', borderRadius: 10,
-      background: 'rgba(var(--ink-rgb),0.02)', border: '1px solid rgba(var(--ink-rgb),0.07)',
+      background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
     }}>
-      <div style={{ fontSize: 11, color: 'var(--t-textMuted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-        Student features {saving && <span style={{ textTransform: 'none', letterSpacing: 0 }}>· saving…</span>}
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 4 }}>
+        Student features {saving && <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>· saving…</span>}
       </div>
       <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 6 }}>
         Optional tools shown to students of this subject only. Changes save immediately.
       </div>
 
       <label style={row}>
-        <input type="checkbox" checked={!!features.exam_mode} onChange={e => onChange({ exam_mode: e.target.checked })} />
+        <input type="checkbox" checked={!!features.exam_mode} onChange={e => onChange({ exam_mode: e.target.checked })} style={{ accentColor: 'var(--t-text)' }} />
         <span>
           <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Exam Mode</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>Timed practice exam drawn from this subject's question bank (Practice → Exam Mode).</span>
@@ -1219,7 +1172,7 @@ function FeatureSwitches({ features, saving, onChange }) {
       </div>
 
       <label style={row}>
-        <input type="checkbox" checked={!!features.essay_marker} onChange={e => onChange({ essay_marker: e.target.checked })} />
+        <input type="checkbox" checked={!!features.essay_marker} onChange={e => onChange({ essay_marker: e.target.checked })} style={{ accentColor: 'var(--t-text)' }} />
         <span>
           <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Essay Marker</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>AI marking of persuasive, narrative and GAMSAT-style essays (Learn → Essay Marker).</span>
@@ -1227,7 +1180,7 @@ function FeatureSwitches({ features, saving, onChange }) {
       </label>
 
       <label style={row}>
-        <input type="checkbox" checked={!!features.exam_grade_topups} onChange={e => onChange({ exam_grade_topups: e.target.checked || undefined })} />
+        <input type="checkbox" checked={!!features.exam_grade_topups} onChange={e => onChange({ exam_grade_topups: e.target.checked || undefined })} style={{ accentColor: 'var(--t-text)' }} />
         <span>
           <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Exam-grade top-ups</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>

@@ -115,7 +115,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
             <Route path="overview"  element={<AdminOverviewTab />} />
             <Route path="people"    element={<AdminPeopleTab profile={profile} pendingApps={pendingApps} onApplicationsChange={loadBadges} />} />
             <Route path="subjects"  element={<SubjectsRouter />} />
-            <Route path="questions" element={<AdminQuestionsScreen profile={profile} tab={tab} onReviewChange={loadBadges} />} />
+            <Route path="questions" element={<AdminQuestionsScreen profile={profile} tab={tab} onReviewChange={loadBadges} theme={theme} />} />
             <Route path="reports"   element={<AdminReportsScreen onChange={loadBadges} />} />
             <Route path="insights"  element={tab === 'assignments' ? <AdminAssignmentsTab /> : <AdminCohortTab />} />
             <Route path="settings"  element={<AdminSettingsTab />} />

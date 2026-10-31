@@ -3,27 +3,27 @@ import { listCurricula, createCurriculum, deleteCurriculum, setCurriculumArchive
 import { fetchSubjectBankCounts } from '../lib/db'
 import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
+import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 
-
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
+// Which subjects the list shows.
+const SHOW = [
+  ['all', 'All'],
+  ['live', 'Live'],
+  ['draft', 'Draft'],
+  ['archived', 'Archived'],
+]
 
 function StatusBadge({ status }) {
   const map = {
-    live:       { bg: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.3)',  color: 'var(--t-success)' },
-    generating: { bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)',  color: 'var(--t-blue)' },
-    draft:      { bg: 'rgba(241,190,67,0.1)',  border: 'rgba(241,190,67,0.3)',  color: 'var(--t-goldText)' },
-    archived:   { bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', color: 'var(--t-textMuted)' },
+    live:       ['Live', 'var(--t-success)'],
+    generating: ['Generating', 'var(--t-textSub)'],
+    draft:      ['Draft', 'var(--t-goldText)'],
+    archived:   ['Archived', 'var(--t-textMuted)'],
   }
-  const s = map[status] || map.draft
+  const [label, color] = map[status] || map.draft
   return (
-    <span style={{
-      padding: '2px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-      background: s.bg, border: `1px solid ${s.border}`, color: s.color,
-      textTransform: 'capitalize',
-      animation: status === 'generating' ? 'curricPulse 1.5s ease-in-out infinite' : 'none',
-    }}>
-      {status}
+    <span className={status === 'generating' ? 'cu-pulse' : undefined} style={{ fontSize: 12.5, fontWeight: 700, color, animation: status === 'generating' ? 'curricPulse 1.5s ease-in-out infinite' : 'none' }}>
+      {label}
     </span>
   )
 }
@@ -44,6 +44,8 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [flagTables, setFlagTables]     = useState(false)
 
   const [bankCounts, setBankCounts]     = useState({})
+  const [search, setSearch]             = useState('')
+  const [show, setShow]                 = useState('all')
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
@@ -137,228 +139,171 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 
+  const statusOf = (c) => (c.archived_at ? 'archived' : c.status)
+  const counts = Object.fromEntries(SHOW.map(([id]) => [id, curricula.filter(c => id === 'all' || statusOf(c) === id || (id === 'draft' && statusOf(c) === 'generating')).length]))
+  const shown = curricula
+    .filter(c => show === 'all' || statusOf(c) === show || (show === 'draft' && statusOf(c) === 'generating'))
+    .filter(c => !search.trim() || c.name.toLowerCase().includes(search.trim().toLowerCase()))
+  const createDisabled = !subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating
+  const modalInput = { ...ui.input, width: '100%', opacity: creating ? 0.6 : 1 }
+
   return (
-    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <style>{`
-        @keyframes curricPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.45; }
-        }
+        @keyframes curricPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+        @media (prefers-reduced-motion: reduce) { .cu-pulse { animation: none !important; } }
+        .cu-row:hover { background: var(--t-bgHover); }
+        .cu-row:focus-visible { outline: 2px solid var(--t-accent); outline-offset: -2px; }
       `}</style>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <button onClick={openModal} style={goldBtn}>
-          + New Curriculum
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search subjects" aria-label="Search subjects" style={{ ...ui.input, flex: '1 1 200px', maxWidth: 320 }} />
+        <div role="group" aria-label="Show" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {SHOW.map(([id, label]) => (
+            <button key={id} type="button" aria-pressed={show === id} onClick={() => setShow(id)} style={chip(show === id)}>{label} · {counts[id]}</button>
+          ))}
+        </div>
+        <button type="button" onClick={openModal} style={{ ...btn('primary'), marginLeft: 'auto' }}>New subject</button>
       </div>
 
-      {error && <div style={errorBox}>{error}</div>}
+      {error && <div role="alert" style={note('danger')}>{error}</div>}
 
       {loading ? (
-        <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading curricula…</div>
+        <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading subjects…</div>
       ) : curricula.length === 0 ? (
-        <div style={{
-          textAlign: 'center', padding: '64px 24px',
-          border: '1px dashed rgba(var(--ink-rgb),0.08)', borderRadius: 14,
-          color: 'var(--t-textMuted)', fontSize: 14,
-        }}>
-          <div style={{ marginBottom: 16 }}>No curricula yet.</div>
-          <button onClick={openModal} style={outlineBtn}>Add your first subject</button>
+        <div style={ui.empty}>
+          <div style={{ marginBottom: 12 }}>No subjects yet.</div>
+          <button type="button" onClick={openModal} style={btn('secondary')}>Add your first subject</button>
         </div>
+      ) : shown.length === 0 ? (
+        <div style={ui.empty}>No subjects match.</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-          {curricula.map(c => (
-            <div
-              key={c.id}
-              onClick={() => onSelectCurriculum(c.id)}
-              style={c.archived_at ? { ...card, opacity: 0.55 } : card}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.06)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)'}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)', lineHeight: 1.3, flex: 1 }}>{c.name}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <StatusBadge status={c.archived_at ? 'archived' : c.status} />
-                  <button
-                    onClick={e => handleArchive(e, c)}
-                    title={c.archived_at ? 'Unarchive — show to students again' : 'Archive — hide from students, keep everything'}
-                    style={{
-                      background: 'none', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 5,
-                      color: 'var(--t-textMuted)', fontSize: 11, fontWeight: 700, cursor: 'pointer', height: 22,
-                      padding: '0 7px', fontFamily: FONT_B,
-                    }}
-                  >
-                    {c.archived_at ? 'Unarchive' : 'Archive'}
-                  </button>
-                  <button
-                    onClick={e => handleDelete(e, c)}
-                    title="Delete curriculum"
-                    style={{
-                      background: 'none', border: '1px solid rgba(248,113,113,0.2)',
-                      borderRadius: 5, color: 'rgba(248,113,113,0.5)', fontSize: 13,
-                      cursor: 'pointer', width: 22, height: 22, display: 'flex',
-                      alignItems: 'center', justifyContent: 'center', padding: 0,
-                      flexShrink: 0,
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.5)' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(248,113,113,0.5)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.2)' }}
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 10 }}>
-                <span>{c.topic_count} topic{c.topic_count !== 1 ? 's' : ''}</span>
-                <span>{c.subtopic_count} subtopic{c.subtopic_count !== 1 ? 's' : ''}</span>
-                {(c.level_label || '').trim() ? (
-                  <span style={{ color: 'var(--t-goldText)' }}>{(c.level_label || '').trim()}</span>
-                ) : null}
-              </div>
-              {bankCounts[c.name] != null && (
-                <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 8 }}>
-                  {bankCounts[c.name]} question{bankCounts[c.name] !== 1 ? 's' : ''} in bank
-                </div>
-              )}
-              {c.status !== 'draft' && c.questions_total > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(var(--ink-rgb),0.06)', overflow: 'hidden', marginBottom: 4 }}>
-                    <div style={{
-                      height: '100%', borderRadius: 2, background: '#4ade80',
-                      width: `${Math.min(100, Math.round((c.questions_generated / c.questions_total) * 100))}%`,
-                      transition: 'width 0.4s',
-                    }} />
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>
-                    {c.questions_generated} / {c.questions_total} questions generated
-                  </div>
-                </div>
-              )}
-              <div style={{ fontSize: 11, color: 'var(--t-textFaint)' }}>{fmtDate(c.created_at)}</div>
-            </div>
-          ))}
+        <div style={{ ...ui.card, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+            <thead>
+              <tr>
+                <th style={ui.th}>Subject</th>
+                <th style={ui.th}>Status</th>
+                <th style={{ ...ui.th, textAlign: 'right' }}>Topics</th>
+                <th style={{ ...ui.th, textAlign: 'right' }}>In the bank</th>
+                <th style={ui.th}>Generated</th>
+                <th style={{ ...ui.th, textAlign: 'right' }}>Added</th>
+                <th style={ui.th}><span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(c => {
+                const status = statusOf(c)
+                const pct = c.questions_total > 0 ? Math.min(100, Math.round((c.questions_generated / c.questions_total) * 100)) : null
+                return (
+                  <tr key={c.id} className="cu-row" tabIndex={0} onClick={() => onSelectCurriculum(c.id)}
+                    onKeyDown={e => { if (e.key === 'Enter') onSelectCurriculum(c.id) }}
+                    style={{ cursor: 'pointer', opacity: c.archived_at ? 0.6 : 1 }}>
+                    <td style={ui.td}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--t-text)' }}>{c.name}</div>
+                      {(c.level_label || '').trim() && <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{c.level_label.trim()}</div>}
+                    </td>
+                    <td style={ui.td}><StatusBadge status={status} /></td>
+                    <td style={{ ...ui.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {c.topic_count}<span style={{ color: 'var(--t-textMuted)' }}> · {c.subtopic_count} sub</span>
+                    </td>
+                    <td style={{ ...ui.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: bankCounts[c.name] ? 'var(--t-text)' : 'var(--t-textFaint)' }}>
+                      {bankCounts[c.name] != null ? bankCounts[c.name].toLocaleString() : '—'}
+                    </td>
+                    <td style={ui.td}>
+                      {pct == null || status === 'draft' ? <span style={{ color: 'var(--t-textFaint)' }}>—</span> : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 80, height: 5, borderRadius: 3, background: 'var(--t-bgSubtle)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--t-success)' : 'var(--t-text)', opacity: pct === 100 ? 1 : 0.55 }} />
+                          </div>
+                          <span style={{ fontSize: 12, color: 'var(--t-textMuted)', fontVariantNumeric: 'tabular-nums' }}>{c.questions_generated} of {c.questions_total}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ ...ui.td, textAlign: 'right', color: 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{fmtDate(c.created_at)}</td>
+                    <td style={{ ...ui.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button type="button" onClick={e => handleArchive(e, c)}
+                        title={c.archived_at ? 'Show to students again' : 'Hide from students and keep everything'}
+                        style={rowBtn()}>{c.archived_at ? 'Unarchive' : 'Archive'}</button>
+                      <button type="button" onClick={e => handleDelete(e, c)} title="Delete this subject" style={rowBtn('var(--t-danger)')}>Delete</button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* New Curriculum Modal */}
+      {/* New subject */}
       {showModal && (
         <>
           <div onClick={closeModal} style={backdrop} />
-          <div style={modal}>
-            <h3 style={{ margin: '0 0 6px', color: 'var(--t-text)', fontSize: 16 }}>New Curriculum</h3>
-            <p style={{ margin: '0 0 14px', color: 'var(--t-textMuted)', fontSize: 13, lineHeight: 1.6 }}>
-              Name the subject, choose Stage 1 / Stage 2 or a year level (required), then describe the course or upload a syllabus. Claude will generate a topic and subtopic plan scoped to that cohort.
+          <div role="dialog" aria-modal="true" aria-labelledby="cu-new-title" style={modal}>
+            <h3 id="cu-new-title" style={{ margin: '0 0 4px', color: 'var(--t-text)', fontSize: 17, fontWeight: 800 }}>New subject</h3>
+            <p style={{ ...ui.hint, fontSize: 13, margin: '0 0 16px' }}>
+              Name it, pick the stage or year level, then describe the course or upload a syllabus. AI drafts a topic and subtopic plan for that level, which you can edit before generating questions.
             </p>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Subject name (short)
-            </label>
-            <input
-              type="text"
-              value={subjectTitle}
-              onChange={e => setSubjectTitle(e.target.value)}
-              placeholder="e.g. Mathematical Methods, Biology, Specialist Mathematics"
-              disabled={creating}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(var(--ink-rgb),0.12)',
-                background: 'var(--t-bgInput)', color: 'var(--t-text)',
-                fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                boxSizing: 'border-box', marginBottom: 10,
-                opacity: creating ? 0.6 : 1,
-              }}
-            />
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Stage / year level *
-            </label>
-            <select
-              value={cohortLevel}
-              onChange={e => setCohortLevel(e.target.value)}
-              disabled={creating}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(var(--ink-rgb),0.12)',
-                background: 'var(--t-bgInput)', color: 'var(--t-text)',
-                fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                boxSizing: 'border-box', marginBottom: 12,
-                opacity: creating ? 0.6 : 1,
-              }}
-            >
-              <option value="">Select…</option>
-              {COHORT_LEVEL_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Question features
-            </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, opacity: creating ? 0.6 : 1 }}>
-              {[
-                { key: 'latex',  val: flagLatex,  set: setFlagLatex,  label: 'LaTeX',  desc: 'Mathematical notation in questions and solutions' },
-                { key: 'graphs', val: flagGraphs, set: setFlagGraphs, label: 'Graphs', desc: 'AI generates function graphs when relevant' },
-                { key: 'tables', val: flagTables, set: setFlagTables, label: 'Tables', desc: 'AI generates data tables when relevant' },
-              ].map(({ key, val, set, label, desc }) => (
-                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: creating ? 'not-allowed' : 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={val}
-                    onChange={e => set(e.target.checked)}
-                    disabled={creating}
-                    style={{ width: 15, height: 15, accentColor: '#f1be43', cursor: 'inherit' }}
-                  />
-                  <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>{label}</span>
-                  <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{desc}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label htmlFor="cu-name" style={ui.label}>Subject name</label>
+                <input id="cu-name" type="text" value={subjectTitle} onChange={e => setSubjectTitle(e.target.value)}
+                  placeholder="e.g. Mathematical Methods, Biology" disabled={creating} style={modalInput} />
+              </div>
+              <div>
+                <label htmlFor="cu-level" style={ui.label}>Stage or year level</label>
+                <select id="cu-level" value={cohortLevel} onChange={e => setCohortLevel(e.target.value)} disabled={creating} style={modalInput}>
+                  <option value="">Choose…</option>
+                  {COHORT_LEVEL_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span style={ui.label}>Questions can include</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: creating ? 0.6 : 1 }}>
+                  {[
+                    { key: 'latex',  val: flagLatex,  set: setFlagLatex,  label: 'Maths notation', desc: 'LaTeX in questions and solutions' },
+                    { key: 'graphs', val: flagGraphs, set: setFlagGraphs, label: 'Graphs', desc: 'Function graphs where they help' },
+                    { key: 'tables', val: flagTables, set: setFlagTables, label: 'Tables', desc: 'Data tables where they help' },
+                  ].map(({ key, val, set, label, desc }) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: creating ? 'not-allowed' : 'pointer' }}>
+                      <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} disabled={creating}
+                        style={{ width: 15, height: 15, accentColor: 'var(--t-text)', cursor: 'inherit' }} />
+                      <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>{label}</span>
+                      <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{desc}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label htmlFor="cu-desc" style={ui.label}>Course description <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>(or upload a document below)</span></label>
+                <textarea id="cu-desc" value={description} onChange={e => setDescription(e.target.value)}
+                  placeholder="e.g. Calculus, logarithmic and exponential functions, discrete and continuous probability…"
+                  rows={3} disabled={creating} style={{ ...modalInput, resize: 'vertical' }} />
+              </div>
+              <div>
+                <span style={ui.label}>Curriculum document <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>(optional)</span></span>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '9px 12px', borderRadius: 9, cursor: creating ? 'not-allowed' : 'pointer',
+                  border: uploadedDoc ? '1px solid var(--t-border)' : '1.5px dashed var(--t-borderStrong)',
+                }}>
+                  <input type="file" accept=".pdf,.txt" disabled={creating} onChange={handleFileUpload} style={{ display: 'none' }} />
+                  <span style={{ fontSize: 13, color: uploadedDoc ? 'var(--t-text)' : 'var(--t-textMuted)', fontWeight: uploadedDoc ? 600 : 400 }}>
+                    {uploadedDoc ? uploadedDoc.name : 'Choose a PDF or text file'}
+                  </span>
+                  {uploadedDoc && (
+                    <button type="button" aria-label="Remove the document" onClick={e => { e.preventDefault(); setUploadedDoc(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                  )}
                 </label>
-              ))}
+              </div>
             </div>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Course description (optional if uploading a document)
-            </label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="e.g. SACE coverage: calculus, logarithmic/exponential functions, discrete and continuous probability…"
-              rows={3}
-              disabled={creating}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 9,
-                border: '1px solid rgba(var(--ink-rgb),0.12)',
-                background: 'var(--t-bgInput)', color: 'var(--t-text)',
-                fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                resize: 'vertical', boxSizing: 'border-box',
-                opacity: creating ? 0.6 : 1,
-              }}
-            />
-            <div style={{ marginTop: 10 }}>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--t-textMuted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Upload curriculum document (optional)
-              </label>
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 12px', borderRadius: 8, cursor: creating ? 'not-allowed' : 'pointer',
-                border: uploadedDoc ? '1px solid rgba(74,222,128,0.3)' : '1px dashed rgba(var(--ink-rgb),0.15)',
-                background: uploadedDoc ? 'rgba(74,222,128,0.05)' : 'transparent',
-              }}>
-                <input type="file" accept=".pdf,.txt" disabled={creating} onChange={handleFileUpload} style={{ display: 'none' }} />
-                <span style={{ fontSize: 13, color: uploadedDoc ? '#4ade80' : '#64748b' }}>
-                  {uploadedDoc ? `✓ ${uploadedDoc.name}` : 'Choose PDF or text file…'}
-                </span>
-                {uploadedDoc && (
-                  <button onClick={e => { e.preventDefault(); setUploadedDoc(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
-                )}
-              </label>
-            </div>
-            {createError && <div style={{ ...errorBox, marginTop: 10 }}>{createError}</div>}
-            <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button onClick={closeModal} disabled={creating} style={cancelBtn}>Cancel</button>
-              <button
-                onClick={handleGeneratePlan}
-                disabled={!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating}
-                style={{
-                  ...goldBtn,
-                  opacity: (!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating) ? 0.5 : 1,
-                  cursor: (!subjectTitle.trim() || !cohortLevel || (!description.trim() && !uploadedDoc) || creating) ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {creating ? 'Generating plan…' : 'Generate Plan'}
+            {createError && <div role="alert" style={{ ...note('danger'), marginTop: 12 }}>{createError}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={closeModal} disabled={creating} style={btn('secondary', creating)}>Cancel</button>
+              <button type="button" onClick={handleGeneratePlan} disabled={createDisabled} style={btn('primary', createDisabled)}>
+                {creating ? 'Drafting the plan…' : 'Draft topic plan'}
               </button>
             </div>
           </div>
@@ -369,48 +314,20 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const goldBtn = {
-  padding: '9px 18px', borderRadius: 9, border: 'none',
-  background: GOLD, color: '#0c1037', fontSize: 13, fontWeight: 800,
-  cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
-}
-
-const outlineBtn = {
-  padding: '10px 22px', borderRadius: 9,
-  border: `1px solid ${GOLD}55`, background: `${GOLD}15`,
-  color: 'var(--t-goldText)', fontSize: 13, fontWeight: 700,
-  cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
-}
-
-const cancelBtn = {
-  padding: '9px 18px', borderRadius: 8,
-  border: '1px solid rgba(var(--ink-rgb),0.12)', background: 'transparent',
-  color: 'var(--t-textMuted)', fontSize: 13, fontWeight: 600,
-  cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
-}
-
-const card = {
-  padding: 18, borderRadius: 12,
-  background: 'rgba(var(--ink-rgb),0.03)',
-  border: '1px solid rgba(var(--ink-rgb),0.07)',
-  cursor: 'pointer', transition: 'background 0.15s',
-}
+const rowBtn = (color = 'var(--t-textSub)') => ({
+  background: 'none', border: 'none', padding: '4px 6px', marginLeft: 4,
+  color, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
+})
 
 const backdrop = {
-  position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+  position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)',
 }
 
 const modal = {
   position: 'fixed', top: '50%', left: '50%',
   transform: 'translate(-50%, -50%)',
-  zIndex: 51, width: 480, maxWidth: '95vw',
-  background: 'var(--t-bgCard)', border: '1px solid rgba(var(--ink-rgb),0.1)',
-  borderRadius: 16, padding: 28,
-  fontFamily: "'Plus Jakarta Sans', sans-serif",
-}
-
-const errorBox = {
-  padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
-  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8,
-  fontSize: 13, color: 'var(--t-danger)',
+  zIndex: 1001, width: 500, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', boxSizing: 'border-box',
+  background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
+  borderRadius: 14, padding: 24, boxShadow: 'var(--t-shadowModal)',
+  fontFamily: FONT_B,
 }

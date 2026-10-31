@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react'
 import { adminListAssignments, adminListTutors, adminListStudents, adminListAssignmentSubjects } from '../lib/db'
 
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
+import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 
 function fmtDate(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function statusColor(s) {
-  if (s === 'completed') return '#4ade80'
-  if (s === 'overdue')   return '#f87171'
-  return GOLD
+const STATUS = {
+  pending:   ['Open', 'var(--t-textSub)'],
+  overdue:   ['Overdue', 'var(--t-danger)'],
+  completed: ['Done', 'var(--t-success)'],
 }
 
 const PAGE_SIZE = 100
@@ -79,12 +78,17 @@ export default function AdminAssignmentsTab() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
-    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{total.toLocaleString()} assignment{total === 1 ? '' : 's'}</span>
+    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div role="group" aria-label="Status" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[['', 'All'], ['pending', 'Open'], ['overdue', 'Overdue'], ['completed', 'Done']].map(([v, label]) => (
+            <button key={label} type="button" aria-pressed={filterStatus === v} onClick={() => setFilterStatus(v)} style={chip(filterStatus === v)}>{label}</button>
+          ))}
+        </div>
+        {!loading && <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)' }}>{total.toLocaleString()} assignment{total === 1 ? '' : 's'}</span>}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14, alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <select value={filterTutor} onChange={e => setFilterTutor(e.target.value)} style={selectStyle}>
           <option value="">All tutors</option>
           {tutors.map(t => <option key={t.id} value={t.id}>{t.display_name || t.email || t.id}</option>)}
@@ -93,43 +97,37 @@ export default function AdminAssignmentsTab() {
           <option value="">All students</option>
           {students.map(s => <option key={s.id} value={s.id}>{s.display_name || s.email || s.id}</option>)}
         </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selectStyle}>
-          <option value="">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="overdue">Overdue</option>
-          <option value="completed">Completed</option>
-        </select>
         <select value={filterSubject} onChange={e => setFilterSubject(e.target.value)} style={selectStyle}>
           <option value="">All subjects</option>
           {subjects.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sort} onChange={e => setSort(e.target.value)} style={selectStyle}>
-          <option value="created">Sort: Newest first</option>
-          <option value="due">Sort: Due date</option>
+          <option value="created">Newest first</option>
+          <option value="due">By due date</option>
         </select>
         {hasFilters && (
-          <button onClick={clearFilters} style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
-            Clear filters
+          <button type="button" onClick={clearFilters} style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+            Clear
           </button>
         )}
       </div>
 
-      {error && <div style={errorBox}>{error}</div>}
+      {error && <div role="alert" style={note('danger')}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--t-textMuted)', fontSize: 13, padding: '24px 0' }}>Loading assignments…</div>
       ) : assignments.length === 0 ? (
-        <div style={emptyBox}>{hasFilters ? 'No assignments match the current filters.' : 'No assignments have been issued yet.'}</div>
+        <div style={ui.empty}>{hasFilters ? 'No assignments match these filters.' : 'No tutor has set any work yet.'}</div>
       ) : (
         <>
-          <div style={{ border: '1px solid rgba(var(--ink-rgb),0.06)', borderRadius: 10, overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 980 }}>
-              <thead style={{ background: 'rgba(var(--ink-rgb),0.03)', textAlign: 'left' }}>
+          <div style={{ ...ui.card, overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+              <thead>
                 <tr>
                   <th style={th}>Type</th>
                   <th style={th}>Tutor</th>
                   <th style={th}>Student</th>
-                  <th style={th}>Subject / Topics</th>
+                  <th style={th}>Subject and topics</th>
                   <th style={th}>Created</th>
                   <th style={th}>Due</th>
                   <th style={th}>Status</th>
@@ -137,14 +135,14 @@ export default function AdminAssignmentsTab() {
               </thead>
               <tbody>
                 {assignments.map(a => (
-                  <tr key={a.id} style={{ borderTop: '1px solid rgba(var(--ink-rgb),0.04)' }}>
+                  <tr key={a.id}>
                     <td style={{ ...td, fontWeight: 700, color: 'var(--t-text)' }}>{a.type}</td>
                     <td style={td}>{a.tutor_name}</td>
                     <td style={td}>{a.student_name}</td>
                     <td style={td}>
                       <div style={{ color: 'var(--t-textSub)' }}>{a.subject}</div>
                       {a.topics?.length > 0 && (
-                        <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 1, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 1, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {a.topics.join(', ')}
                         </div>
                       )}
@@ -154,7 +152,7 @@ export default function AdminAssignmentsTab() {
                     <td style={td}>
                       <StatusBadge status={a.status} />
                       {a.completed_at && (
-                        <div style={{ fontSize: 10, color: 'var(--t-textMuted)', marginTop: 2 }}>{fmtDate(a.completed_at)}</div>
+                        <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 1 }}>{fmtDate(a.completed_at)}</div>
                       )}
                     </td>
                   </tr>
@@ -164,7 +162,7 @@ export default function AdminAssignmentsTab() {
           </div>
 
           {totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 12, fontSize: 12, color: 'var(--t-textMuted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, fontSize: 12.5, color: 'var(--t-textMuted)' }}>
               <button
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                 disabled={offset === 0}
@@ -189,19 +187,11 @@ export default function AdminAssignmentsTab() {
 }
 
 function StatusBadge({ status }) {
-  const c = statusColor(status)
-  return (
-    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, border: `1px solid ${c}40`, background: `${c}15`, color: c, fontWeight: 700, textTransform: 'capitalize' }}>{status}</span>
-  )
+  const [label, color] = STATUS[status] || [status, 'var(--t-textSub)']
+  return <span style={{ fontSize: 12.5, fontWeight: 700, color }}>{label}</span>
 }
 
-const th = { padding: '9px 10px', fontSize: 10, color: 'var(--t-textMuted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }
-const td = { padding: '9px 10px', verticalAlign: 'middle' }
-const selectStyle = { padding: '8px 12px', borderRadius: 8, background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.08)', color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B, outline: 'none', cursor: 'pointer' }
-const errorBox = { padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }
-const emptyBox = { padding: '32px 16px', textAlign: 'center', color: 'var(--t-textMuted)', fontSize: 13, border: '1px dashed rgba(var(--ink-rgb),0.08)', borderRadius: 10 }
-const pagerBtn = (disabled) => ({
-  padding: '6px 12px', borderRadius: 7, fontSize: 12, fontFamily: FONT_B, fontWeight: 700,
-  background: 'rgba(var(--ink-rgb),0.04)', border: '1px solid rgba(var(--ink-rgb),0.12)',
-  color: disabled ? '#475569' : '#e2e8f0', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-})
+const th = ui.th
+const td = ui.td
+const selectStyle = { ...ui.input, padding: '6px 9px', fontSize: 12.5 }
+const pagerBtn = (disabled) => btn('secondary', disabled)

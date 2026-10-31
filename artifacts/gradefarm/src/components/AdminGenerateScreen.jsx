@@ -2,10 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { getTopicsBySubject, refreshManagedTopicsCache, getManagedSubjectNames } from '../lib/adminTopics'
 import { adminApiPost } from '../lib/adminApi'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from '../lib/curriculaDb'
-import { SquareCheck, Square } from 'lucide-react'
-
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
+import { Check as CheckIcon, ChevronRight } from 'lucide-react'
+import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 
 const COUNTS = [5, 10, 20]
 const DIFFICULTIES = [
@@ -155,59 +153,37 @@ export default function AdminGenerateScreen() {
   )
 
   const totalQuestions = selectedCodes.size * count
-
-  const selectStyle = {
-    width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: '1px solid rgba(var(--ink-rgb),0.12)',
-    background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-  }
-
-  const chipBtn = (active) => ({
-    padding: '8px 16px', borderRadius: 8,
-    border: `1px solid ${active ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
-    background: active ? 'rgba(241,190,67,0.1)' : 'transparent',
-    color: active ? GOLD : 'rgba(var(--ink-rgb),0.5)',
-    fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-  })
+  const section = { display: 'flex', flexDirection: 'column', gap: 6 }
 
   return (
-    <div>
-      <p style={{ color: 'rgba(var(--ink-rgb),0.5)', fontSize: 13, marginTop: 0 }}>
-        Pick a subject and one or more subtopics, then let Claude generate MCQs. They land in the draft queue for your review.
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: FONT_B }}>
+      <p style={{ ...ui.hint, fontSize: 13, margin: 0 }}>AI writes questions for the subtopics you pick. They go to the review queue, and students see them once you approve them.</p>
 
       {/* Subject */}
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {filteredBuiltIn.map(s => (
-            <button key={s.id} onClick={() => handleSubjectChange(s.id)} style={chipBtn(subject === s.id)}>{s.label}</button>
+      <div style={section}>
+        <span style={ui.label}>Subject</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[...filteredBuiltIn.map(s => [s.id, s.label]), ...managedSubjects.map(s => [s, s])].map(([id, label]) => (
+            <button key={id} type="button" aria-pressed={subject === id} onClick={() => handleSubjectChange(id)} style={chip(subject === id)}>{label}</button>
           ))}
         </div>
-        {managedSubjects.length > 0 && (
-          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {managedSubjects.map(s => (
-              <button key={s} onClick={() => handleSubjectChange(s)} style={chipBtn(subject === s)}>{s}</button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Topic checkbox tree */}
       {groups.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <label style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Topics</label>
-            <button onClick={selectAll} style={{ background: 'none', border: 'none', color: 'var(--t-goldText)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, padding: 0 }}>Select all</button>
-            <button onClick={clearAll}  style={{ background: 'none', border: 'none', color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, padding: 0 }}>Clear</button>
+        <div style={section}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ ...ui.label, marginBottom: 0 }}>Topics</span>
+            <button type="button" onClick={selectAll} style={linkBtn}>Select all</button>
+            <button type="button" onClick={clearAll} style={{ ...linkBtn, color: 'var(--t-textMuted)' }}>Clear</button>
             {selectedCodes.size > 0 && (
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--t-goldText)', fontWeight: 700 }}>
-                {selectedCodes.size} subtopic{selectedCodes.size !== 1 ? 's' : ''} · {totalQuestions} questions total
+              <span style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--t-textSub)', fontWeight: 700 }}>
+                {selectedCodes.size} subtopic{selectedCodes.size !== 1 ? 's' : ''} · {totalQuestions} questions
               </span>
             )}
           </div>
 
-          <div style={{ border: '1px solid rgba(var(--ink-rgb),0.1)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ ...ui.card, overflow: 'hidden' }}>
             {groups.map((group, gi) => {
               const groupCodes = group.subtopics.map(t => t.code)
               const allSel  = groupCodes.every(c => selectedCodes.has(c))
@@ -215,58 +191,33 @@ export default function AdminGenerateScreen() {
               const expanded = expandedGroups.has(group.name)
 
               return (
-                <div key={group.name} style={{ borderBottom: gi < groups.length - 1 ? '1px solid rgba(var(--ink-rgb),0.07)' : 'none' }}>
-                  {/* Group header row */}
+                <div key={group.name} style={{ borderBottom: gi < groups.length - 1 ? '1px solid var(--t-border)' : 'none' }}>
                   <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(var(--ink-rgb),0.03)', cursor: 'pointer' }}
+                    role="button" tabIndex={0} aria-expanded={expanded}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => toggleExpanded(group.name)}
+                    onKeyDown={e => { if (e.key === 'Enter') toggleExpanded(group.name) }}
                   >
-                    {/* group checkbox */}
-                    <div
-                      onClick={e => { e.stopPropagation(); toggleGroup(group.name, group.subtopics) }}
-                      style={{
-                        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                        border: `2px solid ${allSel ? GOLD : someSel ? GOLD : 'rgba(var(--ink-rgb),0.25)'}`,
-                        background: allSel ? GOLD : someSel ? 'rgba(241,190,67,0.3)' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {(allSel || someSel) && <span style={{ color: allSel ? '#0c1037' : GOLD, fontSize: 10, fontWeight: 900, lineHeight: 1 }}>{allSel ? '✓' : '−'}</span>}
-                    </div>
-                    <span style={{ color: 'var(--t-text)', fontSize: 13, fontWeight: 700, flex: 1 }}>{group.name}</span>
-                    <span style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11 }}>
-                      {someSel ? `${groupCodes.filter(c => selectedCodes.has(c)).length}/${group.subtopics.length}` : group.subtopics.length} subtopics
+                    <Check on={allSel} partial={!allSel && someSel} label={`All of ${group.name}`}
+                      onClick={e => { e.stopPropagation(); toggleGroup(group.name, group.subtopics) }} />
+                    <span style={{ color: 'var(--t-text)', fontSize: 13.5, fontWeight: 700, flex: 1 }}>{group.name}</span>
+                    <span style={{ color: 'var(--t-textMuted)', fontSize: 12 }}>
+                      {someSel ? `${groupCodes.filter(c => selectedCodes.has(c)).length} of ${group.subtopics.length}` : group.subtopics.length} subtopics
                     </span>
-                    <span style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 11, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+                    <ChevronRight size={15} aria-hidden="true" style={{ color: 'var(--t-textMuted)', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
                   </div>
 
-                  {/* Subtopics */}
                   {expanded && (
-                    <div style={{ paddingBottom: 4 }}>
+                    <div style={{ paddingBottom: 6 }}>
                       {group.subtopics.map(t => {
                         const checked = selectedCodes.has(t.code)
                         return (
-                          <div
-                            key={t.code}
-                            onClick={() => toggleCode(t.code)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '8px 14px 8px 40px',
-                              cursor: 'pointer',
-                              background: checked ? 'rgba(241,190,67,0.04)' : 'transparent',
-                            }}
-                          >
-                            <div style={{
-                              width: 15, height: 15, borderRadius: 3, flexShrink: 0,
-                              border: `2px solid ${checked ? GOLD : 'rgba(var(--ink-rgb),0.2)'}`,
-                              background: checked ? GOLD : 'transparent',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              {checked && <span style={{ color: '#0c1037', fontSize: 9, fontWeight: 900 }}>✓</span>}
-                            </div>
-                            <span style={{ color: 'rgba(var(--ink-rgb),0.4)', fontSize: 12, fontWeight: 700, minWidth: 36 }}>{t.code}</span>
-                            <span style={{ color: checked ? '#fff' : 'rgba(var(--ink-rgb),0.65)', fontSize: 13 }}>{t.name}</span>
+                          <div key={t.code} role="checkbox" aria-checked={checked} tabIndex={0}
+                            onClick={() => toggleCode(t.code)} onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleCode(t.code) } }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px 7px 40px', cursor: 'pointer' }}>
+                            <Check on={checked} />
+                            <span style={{ color: 'var(--t-textMuted)', fontSize: 12, fontWeight: 700, minWidth: 36, fontVariantNumeric: 'tabular-nums' }}>{t.code}</span>
+                            <span style={{ color: checked ? 'var(--t-text)' : 'var(--t-textSub)', fontSize: 13 }}>{t.name}</span>
                           </div>
                         )
                       })}
@@ -279,38 +230,33 @@ export default function AdminGenerateScreen() {
         </div>
       )}
 
-      {/* Count */}
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Questions per Subtopic</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {COUNTS.map(c => (
-            <button key={c} onClick={() => setCount(c)} style={chipBtn(count === c)}>{c}</button>
-          ))}
-        </div>
-        {selectedCodes.size > 1 && (
-          <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(var(--ink-rgb),0.35)' }}>
-            {selectedCodes.size} subtopics × {count} = {totalQuestions} questions total
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        {/* Count */}
+        <div style={section}>
+          <span style={ui.label}>Questions per subtopic</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {COUNTS.map(c => (
+              <button key={c} type="button" aria-pressed={count === c} onClick={() => setCount(c)} style={chip(count === c)}>{c}</button>
+            ))}
           </div>
-        )}
+        </div>
+
+        {/* Difficulty */}
+        <div style={section}>
+          <label htmlFor="gen-difficulty" style={ui.label}>Difficulty</label>
+          <select id="gen-difficulty" value={difficulty} onChange={e => setDifficulty(e.target.value)} style={{ ...ui.input, minWidth: 180 }}>
+            {DIFFICULTIES.map(d => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Difficulty */}
-      <div style={{ marginBottom: 24 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Difficulty</label>
-        <select value={difficulty} onChange={e => setDifficulty(e.target.value)} style={selectStyle}>
-          {DIFFICULTIES.map(d => (
-            <option key={d.value} value={d.value}>{d.label}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Question formats — opt into types beyond plain multiple choice */}
-      <div style={{ marginBottom: 24 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'rgba(var(--ink-rgb),0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Question formats</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: 'rgba(241,190,67,0.16)', border: '1px solid rgba(241,190,67,0.4)', color: 'var(--t-goldText)' }}>
-            Multiple choice ✓
-          </span>
+      {/* Question formats: opt into types beyond plain multiple choice */}
+      <div style={section}>
+        <span style={ui.label}>Question formats</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <span style={{ ...chip(true), cursor: 'default' }} title="Always included">Multiple choice</span>
           {[
             { id: 'multi_select', label: 'Multiple select' },
             { id: 'numeric',      label: 'Numeric answer' },
@@ -321,110 +267,89 @@ export default function AdminGenerateScreen() {
             return (
               <button
                 key={tp.id}
+                type="button"
+                aria-pressed={on}
                 onClick={() => setExtraTypes(prev => {
                   const next = new Set(prev)
                   next.has(tp.id) ? next.delete(tp.id) : next.add(tp.id)
                   return next
                 })}
-                style={{
-                  padding: '7px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                  background: on ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
-                  border: `1px solid ${on ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
-                  color: on ? GOLD : 'rgba(var(--ink-rgb),0.6)',
-                }}
-              >{on ? `${tp.label} ✓` : tp.label}</button>
+                style={chip(on)}
+              >{tp.label}</button>
             )
           })}
         </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(var(--ink-rgb),0.35)', fontFamily: FONT_B }}>
+        <div style={ui.hint}>
           {extraTypes.size
-            ? 'Claude will mix these formats with multiple choice. (~half stay MCQ.)'
-            : 'Multiple choice only. Enable extra formats to generate a varied mix.'}
+            ? 'About half stay multiple choice; the rest use the formats you picked.'
+            : 'Multiple choice only. Pick more formats for a mix.'}
         </div>
-        <button
-          onClick={() => setIncludeDiagrams(v => !v)}
-          style={{
-            marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-            background: includeDiagrams ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
-            border: `1px solid ${includeDiagrams ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
-            color: includeDiagrams ? GOLD : 'rgba(var(--ink-rgb),0.6)',
-          }}
-        >
-          {includeDiagrams ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
-          Auto-draw diagrams (AI vector figures — no upload)
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Toggle on={includeDiagrams} onClick={() => setIncludeDiagrams(v => !v)}
+          title="Draw diagrams" hint="AI draws vector figures where a question needs one. No upload needed." />
+        <Toggle on={examGrade} onClick={() => setExamGrade(v => !v)}
+          title="Exam grade" hint={examGrade
+            ? 'Uses the strongest model: difficulty 4 to 5 multiple choice, graphs wherever the topic allows, up to 3 questions per subtopic and 4 subtopics per run. Questions that fail a strict answer check are dropped. Slower and costs more per question.'
+            : 'The hardest questions, with graphs. Slower and costs more.'} />
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <button type="button" onClick={handleSubmit} disabled={!selectedCodes.size || loading} style={btn('primary', !selectedCodes.size || loading)}>
+          {loading
+            ? `Generating… ${elapsed}s`
+            : selectedCodes.size === 0
+            ? 'Pick topics to generate'
+            : `Generate ${totalQuestions} question${totalQuestions === 1 ? '' : 's'}`}
         </button>
-        <button
-          type="button"
-          onClick={() => setExamGrade(v => !v)}
-          style={{
-            marginTop: 12, marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-            background: examGrade ? 'rgba(241,190,67,0.16)' : 'rgba(var(--ink-rgb),0.05)',
-            border: `1px solid ${examGrade ? 'rgba(241,190,67,0.4)' : 'rgba(var(--ink-rgb),0.12)'}`,
-            color: examGrade ? GOLD : 'rgba(var(--ink-rgb),0.6)',
-          }}
-        >
-          {examGrade ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
-          Exam-grade (hardest questions + graphs)
-        </button>
-        {examGrade && (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(var(--ink-rgb),0.5)', lineHeight: 1.5 }}>
-            Uses the strongest model with reasoning: difficulty 4–5 multiple choice, graphs wherever the topic allows, up to 3 questions
-            per subtopic and 4 subtopics per run. Questions that fail a strict answer check are dropped; the rest go to the review queue. Slower and costs more per question.
-          </div>
+        {loading && (
+          <span style={ui.hint}>
+            {elapsed < 10 ? 'Starting…' : elapsed < 30 ? 'Writing questions…' : elapsed < 60 ? 'Checking answers…' : `Still working. Large batches can take about 2 minutes.`}
+          </span>
         )}
       </div>
 
-      <button
-        onClick={handleSubmit}
-        disabled={!selectedCodes.size || loading}
-        style={{
-          padding: '12px 28px', borderRadius: 10, border: 'none',
-          background: (!selectedCodes.size || loading) ? 'rgba(var(--ink-rgb),0.08)' : GOLD,
-          color: (!selectedCodes.size || loading) ? 'rgba(var(--ink-rgb),0.3)' : '#0c1037',
-          fontSize: 14, fontWeight: 800,
-          cursor: (!selectedCodes.size || loading) ? 'not-allowed' : 'pointer',
-          fontFamily: FONT_B,
-        }}
-      >
-        {loading
-          ? `Generating… ${elapsed}s`
-          : selectedCodes.size === 0
-          ? 'Select topics to generate'
-          : selectedCodes.size === 1
-          ? `Generate ${count} Questions`
-          : `Generate ${totalQuestions} Questions (${selectedCodes.size} × ${count})`}
-      </button>
-
-      {loading && (
-        <div style={{ marginTop: 12, fontSize: 12, color: 'rgba(var(--ink-rgb),0.35)', fontFamily: FONT_B }}>
-          {elapsed < 10
-            ? 'Calling Claude API…'
-            : elapsed < 30
-            ? 'Claude is writing questions…'
-            : elapsed < 60
-            ? 'Almost there, parsing response…'
-            : `Still working… (${elapsed}s — large batches can take ~2 min)`}
-        </div>
-      )}
-
       {result && (
-        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
-          <div style={{ color: 'var(--t-success)', fontWeight: 700 }}>✓ {result.inserted} questions added to the draft queue</div>
-          {result.topicsProcessed > 1 && (
-            <div style={{ color: 'rgba(var(--ink-rgb),0.5)', fontSize: 12, marginTop: 2 }}>{result.topicsProcessed} subtopics processed</div>
-          )}
+        <div role="status" style={note('success')}>
+          <div style={{ fontWeight: 700 }}>{result.inserted} question{result.inserted === 1 ? '' : 's'} added to the review queue{result.topicsProcessed > 1 ? ` from ${result.topicsProcessed} subtopics` : ''}.</div>
           {result.errors?.length > 0 && (
-            <div style={{ color: 'var(--t-danger)', fontSize: 12, marginTop: 4 }}>{result.errors.length} subtopic(s) had errors: {result.errors.join(', ')}</div>
+            <div style={{ color: 'var(--t-danger)', marginTop: 4 }}>{result.errors.length} subtopic{result.errors.length === 1 ? '' : 's'} failed: {result.errors.join(', ')}</div>
           )}
-          <div style={{ color: 'rgba(var(--ink-rgb),0.4)', fontSize: 12, marginTop: 4 }}>Go to the Review Queue tab to approve them.</div>
+          <div style={{ color: 'var(--t-textSub)', marginTop: 4 }}>Approve them in Review queue before students see them.</div>
         </div>
       )}
 
-      {error && (
-        <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--t-danger)', fontSize: 13 }}>
-          {error}
-        </div>
-      )}
+      {error && <div role="alert" style={note('danger')}>{error}</div>}
     </div>
+  )
+}
+
+const linkBtn = { background: 'none', border: 'none', color: 'var(--t-text)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, padding: 0, textDecoration: 'underline', textDecorationColor: 'var(--t-accent)', textUnderlineOffset: 3 }
+
+/** A small checkbox mark: ink when on, a dash when partly on. */
+function Check({ on, partial = false, onClick, label }) {
+  return (
+    <span role={onClick ? 'checkbox' : undefined} aria-checked={onClick ? (partial ? 'mixed' : on) : undefined} aria-label={label}
+      onClick={onClick}
+      style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        border: `1.5px solid ${on || partial ? 'var(--t-text)' : 'var(--t-borderStrong)'}`, background: on ? 'var(--t-text)' : 'transparent', cursor: 'pointer' }}>
+      {on && <CheckIcon size={11} strokeWidth={3} style={{ color: 'var(--t-bg)' }} aria-hidden="true" />}
+      {partial && <span style={{ width: 8, height: 2, borderRadius: 1, background: 'var(--t-text)' }} />}
+    </span>
+  )
+}
+
+/** An on/off option with a title and a line of explanation. */
+function Toggle({ on, onClick, title, hint }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={onClick}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT_B, maxWidth: 640 }}>
+      <span style={{ marginTop: 2 }}><Check on={on} /></span>
+      <span>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--t-text)' }}>{title}</span>
+        <span style={{ display: 'block', ...ui.hint }}>{hint}</span>
+      </span>
+    </button>
   )
 }
