@@ -204,3 +204,27 @@ export async function editQuestion(id, fields) {
 export async function deleteQuestion(id) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+/** Questions that best match a student's rough copy (text or ID), best first. */
+export async function searchQuestions(q, { subject } = {}) {
+  const params = new URLSearchParams({ q })
+  if (subject) params.set('subject', subject)
+  const json = await adminAuthFetch(`/api/admin/questions/search?${params}`)
+  return json.questions || []
+}
+
+/** Read the question out of a photo or screenshot; resolves to its text. */
+export async function transcribeQuestionImage(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = () => reject(new Error("Couldn't read that file."))
+    r.readAsDataURL(file)
+  })
+  const [, mediaType, imageBase64] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl) || []
+  const json = await adminAuthFetch('/api/admin/questions/transcribe', {
+    method: 'POST',
+    body: JSON.stringify({ imageBase64, mediaType }),
+  })
+  return json.text || ''
+}
