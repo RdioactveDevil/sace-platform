@@ -81,12 +81,12 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
   }, [answers])
 
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14 }
-  const label = { fontSize: 10.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.textMuted }
+  const label = { fontSize: 11.5, fontWeight: 800, color: t.textMuted }
   const quietBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px', borderRadius: 9, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 12, fontWeight: 700, cursor: 'pointer' }
 
   let body
   if (error) {
-    body = <div style={{ padding: 20, color: t.danger || '#f87171', fontSize: 13 }}>{error}</div>
+    body = <div style={{ padding: 20, color: t.danger || 'var(--t-danger)', fontSize: 13 }}>{error}</div>
   } else if (!report) {
     body = <div style={{ padding: 20, color: t.textMuted, fontSize: 13 }}>Loading report…</div>
   } else {
@@ -94,10 +94,10 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
     const score = report.score
     const goal = a.question_count
     const done = !!a.completed_at
-    const result = a.passed === true ? { text: 'Passed', color: t.success || '#4ade80', Icon: CircleCheck }
-      : a.passed === false ? { text: 'Not passed', color: t.danger || '#f87171', Icon: CircleX }
-      : done ? { text: 'Completed', color: t.success || '#4ade80', Icon: CircleCheck }
-      : { text: 'In progress', color: GOLD, Icon: Clock }
+    const result = a.passed === true ? { text: 'Passed', color: t.success || 'var(--t-success)', Icon: CircleCheck }
+      : a.passed === false ? { text: 'Not passed', color: t.danger || 'var(--t-danger)', Icon: CircleX }
+      : done ? { text: 'Completed', color: t.success || 'var(--t-success)', Icon: CircleCheck }
+      : { text: 'In progress', color: 'var(--t-goldText)', Icon: Clock }
     const timed = answers.filter(r => r.time_taken_ms != null)
     const avgMs = timed.length ? timed.reduce((s, r) => s + r.time_taken_ms, 0) / timed.length : null
     const missing = Math.max(0, (a.progress_count || 0) - answers.length)
@@ -156,12 +156,12 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 13, color: t.textMuted, flex: '1 1 240px' }}>Get a write-up of how they went: strengths, what went wrong and why, what could have been better, and what to cover next.</div>
               <button type="button" onClick={() => writeSummary(false)} disabled={writing}
-                style={{ ...quietBtn, height: 36, border: 'none', background: GOLD, color: '#171724' }}>
+                style={{ ...quietBtn, height: 36, border: 'none', background: 'var(--t-accent)', color: '#171724' }}>
                 <Sparkles size={14} aria-hidden="true" />{writing ? 'Writing…' : 'Write report'}
               </button>
             </div>
           )}
-          {summaryError && <div style={{ fontSize: 12, color: t.danger || '#f87171' }}>{summaryError}</div>}
+          {summaryError && <div style={{ fontSize: 12, color: t.danger || 'var(--t-danger)' }}>{summaryError}</div>}
         </div>
 
         {/* Topic breakdown */}
@@ -170,7 +170,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
             <div style={{ ...label, marginBottom: 12 }}>By topic</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {topics.map(tp => {
-                const c = tp.pct >= 70 ? (t.success || '#4ade80') : tp.pct >= 40 ? GOLD : (t.danger || '#f87171')
+                const c = tp.pct >= 70 ? t.success : tp.pct >= 40 ? t.goldText : t.danger
                 return (
                   <div key={tp.name}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
@@ -193,7 +193,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
             <div style={{ ...label, flex: 1 }}>Questions</div>
             {[['all', `All (${answers.length})`], ['wrong', `Wrong (${wrongCount})`], ['right', `Right (${answers.length - wrongCount})`]].map(([id, text]) => (
               <button key={id} type="button" onClick={() => setFilter(id)} aria-pressed={filter === id}
-                style={{ ...quietBtn, height: 28, borderColor: filter === id ? GOLD : t.borderMid, color: filter === id ? t.goldText : t.textMuted }}>{text}</button>
+                style={{ ...quietBtn, height: 28, borderColor: filter === id ? 'var(--t-goldText)' : t.borderMid, color: filter === id ? t.goldText : t.textMuted }}>{text}</button>
             ))}
           </div>
           {missing > 0 && (
@@ -206,9 +206,9 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
             const opts = optionsOf(q)
             const ok = r.correct
             return (
-              <div key={r.n} style={{ ...card, padding: 14, borderColor: ok ? t.border : `${t.danger || '#f87171'}55` }}>
+              <div key={r.n} style={{ ...card, padding: 14, borderColor: ok ? t.border : `${t.danger || 'var(--t-danger)'}55` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                  {ok ? <CircleCheck size={16} color={t.success || '#4ade80'} aria-label="Correct" /> : <CircleX size={16} color={t.danger || '#f87171'} aria-label="Incorrect" />}
+                  {ok ? <CircleCheck size={16} color={t.success || 'var(--t-success)'} aria-label="Correct" /> : <CircleX size={16} color={t.danger || 'var(--t-danger)'} aria-label="Incorrect" />}
                   <span style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>Q{r.n}</span>
                   {q?.subtopic && <span style={{ fontSize: 11.5, color: t.textMuted }}>{q.subtopic}</span>}
                   {q?.difficulty && <span style={{ fontSize: 11, color: t.textMuted }}>{'★'.repeat(q.difficulty)}</span>}
@@ -222,7 +222,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
                         {opts.map((opt, i) => {
                           const isAnswer = i === q.answer_index
                           const isChosen = i === r.response
-                          const c = isAnswer ? (t.success || '#4ade80') : isChosen ? (t.danger || '#f87171') : null
+                          const c = isAnswer ? t.success : isChosen ? t.danger : null
                           return (
                             <div key={i} style={{ fontSize: 12.5, padding: '6px 10px', borderRadius: 8, border: `1px solid ${c ? `${c}66` : t.border}`, background: c ? `${c}14` : 'transparent', color: t.text, display: 'flex', gap: 8 }}>
                               <span style={{ fontWeight: 800, color: c || t.textMuted, flexShrink: 0 }}>{String.fromCharCode(65 + i)}</span>
@@ -259,7 +259,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
     <div role="dialog" aria-modal="true" aria-label="Assignment report" onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '4vh 16px', overflowY: 'auto', fontFamily: FONT_B }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 860, background: t.bg, border: `1px solid ${t.borderMid}`, borderRadius: 18, boxShadow: t.shadowModal, padding: '18px 20px 22px' }}>
+        style={{ width: '100%', maxWidth: 860, background: t.bg, border: `1px solid ${t.borderMid}`, borderRadius: 12, boxShadow: t.shadowModal, padding: '18px 20px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: '0.03em', color: t.text }}>{report ? `${report.student.name}` : 'Assignment report'}</div>

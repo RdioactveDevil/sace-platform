@@ -90,7 +90,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
   }[section] ?? meta.sub
 
   return (
-    <div className="td-root" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--t-bg)', fontFamily: FONT_B, color: 'var(--t-text)', colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
+    <div className="td-root" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--t-bg)', fontFamily: FONT_B, color: 'var(--t-text)', colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
       <header className="td-header" style={{ padding: tabs ? '18px 28px 0' : '18px 28px', borderBottom: '1px solid var(--t-border)', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--t-text)', lineHeight: 1.2 }}>{meta.label}</h1>
         <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 2 }}>{context}</div>

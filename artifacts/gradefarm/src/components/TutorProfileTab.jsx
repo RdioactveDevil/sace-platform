@@ -37,10 +37,8 @@ export default function TutorProfileTab({ profile, theme }) {
     } catch (err) { setState(err.message || 'Could not save.') }
   }
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20 }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
-  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, color: t.text, fontSize: 14, fontFamily: FONT_B, outline: 'none', resize: 'vertical' }
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bgInput, color: t.text, fontSize: 14, fontFamily: FONT_B, outline: 'none', resize: 'vertical' }
 
   if (!values) {
     return <div style={{ ...card, padding: 24, color: typeof state === 'string' && state !== 'saving' ? t.danger : t.textMuted, fontSize: 13.5 }}>{state || 'Loading…'}</div>
@@ -64,7 +62,7 @@ export default function TutorProfileTab({ profile, theme }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button type="submit" disabled={!dirty || state === 'saving'}
             style={{ padding: '10px 20px', borderRadius: 10, border: 'none', fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: !dirty || state === 'saving' ? 'default' : 'pointer',
-              background: !dirty || state === 'saving' ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: !dirty || state === 'saving' ? t.textMuted : '#0c1037' }}>
+              background: !dirty || state === 'saving' ? t.border : 'var(--t-accent)', color: !dirty || state === 'saving' ? t.textMuted : '#0c1037' }}>
             {state === 'saving' ? 'Saving…' : 'Save profile'}
           </button>
           {state === 'saved' && <span style={{ fontSize: 12.5, color: t.success, fontWeight: 600 }}>Saved</span>}
@@ -76,7 +74,7 @@ export default function TutorProfileTab({ profile, theme }) {
       <div style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '10px 18px', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: t.textMuted, borderBottom: `1px solid ${t.border}` }}>PREVIEW</div>
         <div style={{ padding: 20, display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 54, height: 54, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 22, color: '#0c1037', background: `linear-gradient(135deg,${GOLD},${GOLDL})` }}>
+          <div style={{ width: 54, height: 54, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 22, color: '#0c1037', background: 'var(--t-accent)' }}>
             {(profile.display_name || '?')[0].toUpperCase()}
           </div>
           <div style={{ minWidth: 0 }}>
@@ -85,9 +83,9 @@ export default function TutorProfileTab({ profile, theme }) {
           </div>
         </div>
         <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13.5, lineHeight: 1.6 }}>
-          <div><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: t.textMuted, marginBottom: 4 }}>ABOUT</div><div style={{ color: values.bio ? t.text : t.textMuted, whiteSpace: 'pre-wrap' }}>{values.bio || 'Your bio appears here.'}</div></div>
-          {values.subjects && <div><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: t.textMuted, marginBottom: 4 }}>TEACHES</div><div style={{ color: t.text }}>{values.subjects}</div></div>}
-          {values.qualifications && <div><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: t.textMuted, marginBottom: 4 }}>QUALIFICATIONS</div><div style={{ color: t.text, whiteSpace: 'pre-wrap' }}>{values.qualifications}</div></div>}
+          <div><div style={{ fontSize: 11, fontWeight: 800, color: t.textMuted, marginBottom: 4 }}>ABOUT</div><div style={{ color: values.bio ? t.text : t.textMuted, whiteSpace: 'pre-wrap' }}>{values.bio || 'Your bio appears here.'}</div></div>
+          {values.subjects && <div><div style={{ fontSize: 11, fontWeight: 800, color: t.textMuted, marginBottom: 4 }}>TEACHES</div><div style={{ color: t.text }}>{values.subjects}</div></div>}
+          {values.qualifications && <div><div style={{ fontSize: 11, fontWeight: 800, color: t.textMuted, marginBottom: 4 }}>QUALIFICATIONS</div><div style={{ color: t.text, whiteSpace: 'pre-wrap' }}>{values.qualifications}</div></div>}
         </div>
       </div>
     </div>

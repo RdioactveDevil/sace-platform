@@ -511,7 +511,7 @@ export default function StudentsTab({ profile, theme, allTutors = false, onNavig
         {confirmRemove === sel.id && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 9, background: t.dangerBg }}>
             <span style={{ fontSize: 13, color: t.text, flex: '1 1 160px' }}>Remove <strong>{sel.name}</strong> from your roster?</span>
-            <button type="button" onClick={() => handleRemove(sel.id)} style={{ ...btn(true), background: t.danger, color: '#fff' }}>Remove</button>
+            <button type="button" onClick={() => handleRemove(sel.id)} style={{ ...btn(true), background: t.danger, color: 'var(--t-text)' }}>Remove</button>
             <button type="button" onClick={() => setConfirmRemove(null)} style={btn(false)}>Cancel</button>
           </div>
         )}
@@ -666,7 +666,7 @@ export default function StudentsTab({ profile, theme, allTutors = false, onNavig
                 </div>
               </div>
               <button onClick={() => handleResend(inv)} disabled={inviteBusy === inv.id} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Resend</button>
-              <button onClick={() => handleCancelInvite(inv)} disabled={inviteBusy === inv.id} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+              <button onClick={() => handleCancelInvite(inv)} disabled={inviteBusy === inv.id} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--t-danger)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
             </div>
           ))}
         </div>
@@ -789,7 +789,7 @@ function StudentEditor({ student, theme, onChange, includable, parentReports }) 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 0 4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Year level</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: t.textMuted }}>Year level</span>
         <select value={year} onChange={e => saveYear(e.target.value)} style={ctrl}>
           <option value="">{student.profileYear != null ? `From onboarding: Year ${student.profileYear}` : '— not set —'}</option>
           {YEAR_LEVELS.map(y => <option key={y} value={y}>{y}{student.profileYear != null && `Year ${student.profileYear}` === y ? ' (onboarding)' : ''}</option>)}
@@ -801,7 +801,7 @@ function StudentEditor({ student, theme, onChange, includable, parentReports }) 
       {includable?.canInclude && <IncludedSubjectsPicker student={student} subjects={includable.subjects} theme={theme} onChange={onChange} />}
 
       <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>
           Subjects you tutor {firstName} in
         </div>
         {student.subscriptions.length === 0 ? (
@@ -816,7 +816,7 @@ function StudentEditor({ student, theme, onChange, includable, parentReports }) 
                 return (
                   <button key={key} onClick={() => toggleSubject(sub)} disabled={busyKey === key}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, padding: '7px 12px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B,
-                      border: `1px solid ${on ? GOLD : t.border}`, background: on ? 'rgba(241,190,67,0.14)' : 'transparent', color: on ? GOLD : t.textSub }}>
+                      border: `1px solid ${on ? 'var(--t-text)' : t.border}`, background: on ? 'var(--t-bgSubtle)' : 'transparent', color: on ? 'var(--t-text)' : t.textSub }}>
                     <span>{on ? '✓' : '+'}</span>
                     {sub.subject_name}{sub.stage ? ` · ${sub.stage}` : ''}
                   </button>
@@ -851,7 +851,7 @@ function ParentReportEditor({ student, theme, ctrl, available, onChange }) {
     } catch (e) { setState(e.message || 'Could not save.') }
   }
 
-  const label = <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Weekly parent report</div>
+  const label = <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Weekly parent report</div>
   if (available === false && !saved) {
     return (
       <div>
@@ -870,7 +870,7 @@ function ParentReportEditor({ student, theme, ctrl, available, onChange }) {
       <form onSubmit={e => { e.preventDefault(); save() }} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="email" value={email} onChange={e => { setEmail(e.target.value); setState(null) }} placeholder="Parent's email" aria-label="Parent's email" style={{ ...ctrl, flex: '1 1 200px' }} />
         <input value={name} onChange={e => { setName(e.target.value); setState(null) }} placeholder="Parent's name (optional)" aria-label="Parent's name" maxLength={80} style={{ ...ctrl, flex: '1 1 160px' }} />
-        <button type="submit" disabled={!dirty || !email.trim() || state === 'saving'} style={{ ...ctrl, cursor: 'pointer', fontWeight: 700, color: GOLD, borderColor: GOLD, opacity: !dirty || !email.trim() ? 0.5 : 1 }}>
+        <button type="submit" disabled={!dirty || !email.trim() || state === 'saving'} style={{ ...ctrl, cursor: 'pointer', fontWeight: 700, color: 'var(--t-goldText)', borderColor: GOLD, opacity: !dirty || !email.trim() ? 0.5 : 1 }}>
           {state === 'saving' ? 'Saving…' : 'Save'}
         </button>
         {saved && <button type="button" onClick={() => save('')} disabled={state === 'saving'} style={{ ...ctrl, cursor: 'pointer', fontSize: 12, color: t.textMuted }}>Stop reports</button>}
@@ -892,7 +892,7 @@ function SubjectChips({ subjects, selected, onToggle, busyId = null, theme }) {
         return (
           <button key={su.id} type="button" onClick={() => onToggle(su.id)} disabled={!!busyId} aria-pressed={on}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, padding: '7px 12px', borderRadius: 9, cursor: busyId ? 'default' : 'pointer', fontFamily: FONT_B, opacity: busyId && busyId !== su.id ? 0.6 : 1,
-              border: `1px solid ${on ? GOLD : t.border}`, background: on ? 'rgba(241,190,67,0.14)' : 'transparent', color: on ? GOLD : t.textSub }}>
+              border: `1px solid ${on ? 'var(--t-text)' : t.border}`, background: on ? 'var(--t-bgSubtle)' : 'transparent', color: on ? 'var(--t-text)' : t.textSub }}>
             <span>{busyId === su.id ? '…' : on ? '✓' : '+'}</span>
             {su.label}
           </button>
@@ -938,7 +938,7 @@ function IncludedSubjectsPicker({ student, subjects, theme, onChange }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>
         Included subjects
       </div>
       <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 8 }}>
@@ -1012,7 +1012,7 @@ function DiagnosticScopePicker({ subject, selected, onChange, theme }) {
         <span style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{subject.label}</span>
         <span style={{ fontSize: 12, color: t.textMuted }}>· Diagnostic covers: {summary}</span>
         <button type="button" onClick={() => setOpen(o => !o)}
-          style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 7, border: `1px solid ${open ? GOLD : t.border}`, background: 'transparent', color: open ? GOLD : t.textSub, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+          style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 7, border: `1px solid ${open ? 'var(--t-text)' : t.border}`, background: 'transparent', color: open ? 'var(--t-text)' : t.textSub, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
           {open ? 'Done' : 'Choose topics'}
         </button>
       </div>
@@ -1034,7 +1034,7 @@ function DiagnosticScopePicker({ subject, selected, onChange, theme }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="checkbox" disabled={!ids.length} checked={ids.length > 0 && count === ids.length}
                     ref={el => { if (el) el.indeterminate = count > 0 && count < ids.length }}
-                    onChange={e => setTopic(topic, e.target.checked)} aria-label={topic.name} style={{ accentColor: GOLD }} />
+                    onChange={e => setTopic(topic, e.target.checked)} aria-label={topic.name} style={{ accentColor: 'var(--t-text)' }} />
                   <button type="button" onClick={() => setExpanded(x => ({ ...x, [topic.id]: !x[topic.id] }))} disabled={!ids.length}
                     style={{ border: 'none', background: 'transparent', color: t.text, fontSize: 12, fontWeight: 600, cursor: ids.length ? 'pointer' : 'default', padding: 0, fontFamily: FONT_B, textAlign: 'left' }}>
                     {topic.name}{ids.length ? ` (${count ? `${count}/` : ''}${ids.length}) ${expanded[topic.id] ? '▾' : '▸'}` : ''}
@@ -1044,7 +1044,7 @@ function DiagnosticScopePicker({ subject, selected, onChange, theme }) {
                   <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
                     {topic.subtopics.map(st => (
                       <label key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: t.textSub, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={chosen.has(st.id)} onChange={() => toggleSub(st.id)} style={{ accentColor: GOLD }} />
+                        <input type="checkbox" checked={chosen.has(st.id)} onChange={() => toggleSub(st.id)} style={{ accentColor: 'var(--t-text)' }} />
                         {st.name}
                       </label>
                     ))}
