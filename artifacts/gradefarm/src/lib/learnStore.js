@@ -67,6 +67,17 @@ export async function fetchRecentChats(userId, subject, limit = 5) {
   return error ? null : (data || [])
 }
 
+/** One saved chat by id. */
+export async function fetchChat(id) {
+  if (!id) return null
+  const { data, error } = await supabase
+    .from('learn_sessions')
+    .select('id, topic, title, interests, messages, updated_at')
+    .eq('id', id)
+    .single()
+  return error ? null : data
+}
+
 /** Start a saved chat; resolves to its id. */
 export async function createChat(userId, { subject, topic, title, interests, messages }) {
   if (!userId) return null

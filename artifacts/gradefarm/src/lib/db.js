@@ -609,6 +609,18 @@ export async function getUserFlags(userId, questionIds) {
 }
 
 // â”€â”€â”€ ANSWER LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/** Every answer since `days` ago (paged, so heavy users don't lose the latest). */
+export async function getAnswerLogSince(userId, days) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  return fetchAllRows(() =>
+    supabase
+      .from('answer_log')
+      .select('answered_at, correct, question_id')
+      .eq('user_id', userId)
+      .gte('answered_at', since),
+    'answered_at')
+}
+
 export async function getAnswerLogLast30Days(userId) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   // Heavy users can log >1000 answers in 30 days; an unpaginated ascending

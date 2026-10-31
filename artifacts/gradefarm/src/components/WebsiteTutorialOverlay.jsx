@@ -125,13 +125,13 @@ function studentSteps(isTutor) {
       path: '/my-progress',
       target: 'nav-progress',
       title: 'Progress',
-      body: 'See strengths, gaps and streaks so you know where to focus next.',
+      body: 'See whether you\'re improving, what\'s coming up and what to do this week.',
     },
     {
       path: '/my-progress',
       target: 'tabs-progress',
       title: 'Plan, history and leaderboard',
-      body: 'Each section has tabs along the top. Under Progress you\'ll find your Study Plan, past sessions and the Leaderboard.',
+      body: 'Each section has tabs along the top. Progress shows how you\'re improving and this week\'s plan, with your past sessions and the Leaderboard in the other tabs.',
     },
   ]
   const tutorStep = isTutor

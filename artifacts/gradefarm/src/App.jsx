@@ -74,7 +74,6 @@ const LeaderboardScreen = lazyWithReload(() => import('./components/LeaderboardS
 const ProfileScreen     = lazyWithReload(() => import('./components/ProfileScreen'))
 const AccountScreen     = lazyWithReload(() => import('./components/AccountScreen'))
 const HistoryScreen     = lazyWithReload(() => import('./components/HistoryScreen'))
-const StudyPlanScreen   = lazyWithReload(() => import('./components/StudyPlanScreen'))
 
 let studyScreensPrefetched = false
 function prefetchStudyScreens() {
@@ -82,7 +81,7 @@ function prefetchStudyScreens() {
   studyScreensPrefetched = true
   // Most-used first.
   const run = () => [HomeScreen, QuizScreen, SubjectPicker, LearnScreen, ProfileScreen,
-    StudyPlanScreen, HistoryScreen, LeaderboardScreen, AccountScreen].forEach(s => s.preload())
+    HistoryScreen, LeaderboardScreen, AccountScreen].forEach(s => s.preload())
   if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 3000 })
   else setTimeout(run, 1500)
 }
@@ -124,7 +123,6 @@ const NAV_SECTIONS = [
   ]},
   { icon: 'profile', label: 'Progress', id: 'progress', pages: [
     { id: 'profile',     label: 'Overview',    path: '/my-progress' },
-    { id: 'study',       label: 'Study Plan',  path: '/study-plan' },
     { id: 'history',     label: 'History',     path: '/history' },
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ]},
@@ -716,12 +714,14 @@ function AppShellScreens({
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
   questionContext, setQuestionContext, onConsolidate,
+  learnRequest, setLearnRequest,
 }) {
   const navigate   = useNavigate()
   const location   = useLocation()
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
-  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate }
+  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate, learnRequest, setLearnRequest }
+  const openInLearn = (request) => { setLearnRequest({ ...request, at: Date.now() }); navigate('/learn') }
   const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, tutorialOverlay, onProfileUpdated }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -739,6 +739,8 @@ function AppShellScreens({
   const onWriting = screen === 'writing' || screen.startsWith('writing/')
   if (onWriting && !writingSubject) return <Navigate to="/question-bank" replace />
   if (screen === 'writing') return <Navigate to="/writing/essay" replace />
+  // The study plan is now "This week's plan" on the Progress overview.
+  if (screen === 'study-plan') return <Navigate to="/my-progress" replace />
 
   return (
     <AppShell {...shellProps}>
@@ -768,13 +770,7 @@ function AppShellScreens({
           profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
-          onOpenStudyPlan={() => navigate('/study-plan')} />
-      </div>}
-      {wasOpened('study-plan') && <div style={show('study-plan')}>
-        <StudyPlanScreen
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          theme={theme} onStartSession={onStartSession} subject={subject}
-          lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
+          onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
       <div style={onPortal ? show(screen) : { display: 'none' }}>
         <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} />
@@ -783,7 +779,9 @@ function AppShellScreens({
         <StudentLessonsScreen theme={theme} active={onLessons} />
       </div>
       {wasOpened('history') && <div style={show('history')}>
-        <HistoryScreen {...commonProps} profile={profile} embedded />
+        <HistoryScreen {...commonProps} profile={profile} subject={subject} questions={questions} embedded
+          onOpenChat={(id) => openInLearn({ type: 'chat', id })}
+          onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
       {wasOpened('my-account') && <div style={show('my-account')}>
         <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} onProfileUpdated={onProfileUpdated} />
@@ -1017,6 +1015,8 @@ function AppInner() {
 
   // Lifted Learn state — survives route changes
   const [learnPhase,      setLearnPhase]      = useState('setup')
+  // Open a saved chat or lesson in Learn from elsewhere: { type: 'chat', id } | { type: 'lesson', topic }.
+  const [learnRequest,    setLearnRequest]    = useState(null)
   const [learnTopic,      setLearnTopic]      = useState('')
   const [learnMessages,   setLearnMessages]   = useState([])
   const [learnInterests,  setLearnInterests]  = useState(null)
@@ -1374,6 +1374,7 @@ function AppInner() {
     docContext: learnDocContext, setDocContext: setLearnDocContext,
     docName: learnDocName,   setDocName: setLearnDocName,
     questionContext, setQuestionContext,
+    learnRequest, setLearnRequest,
     onConsolidate: (target) => {
       if (!target?.subtopics?.length) return
       // Keep the quiz they're in to come back to after the round, minus any
@@ -1758,7 +1759,7 @@ function AppInner() {
                   return fresh.length ? [...prev, ...fresh] : prev
                 })
               }}
-              onGoToStudyPlan={() => navigate('/study-plan')} />
+              onGoToStudyPlan={() => navigate('/my-progress')} />
             </AppShell>
       } />
 

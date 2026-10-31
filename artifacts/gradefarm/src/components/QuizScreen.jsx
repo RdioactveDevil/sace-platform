@@ -1764,7 +1764,7 @@ export default function QuizScreen({
                 {!consolidation && onGoToStudyPlan && (
                   <button type="button" onClick={onGoToStudyPlan}
                     style={{ padding: '11px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
-                    Open study plan
+                    See this week's plan
                   </button>
                 )}
               </div>

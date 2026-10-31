@@ -7,7 +7,7 @@ import MathText from './MathText'
 import { questionHelpSystemSection, questionHelpOpeningPrompt } from '../lib/questionHelp'
 import { resolveConsolidation } from '../lib/consolidation'
 import { awaitingParent } from '../lib/parentConsent'
-import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, createChat, updateChat } from '../lib/learnStore'
+import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
 
 const GOLD   = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -146,6 +146,8 @@ export default function LearnScreen({
   docContext,  setDocContext,
   docName,     setDocName,
   questionContext, setQuestionContext, onConsolidate,
+  // Open a saved chat or lesson picked elsewhere (Progress): { type: 'chat', id } | { type: 'lesson', topic }.
+  learnRequest, setLearnRequest,
 }) {
   const navigate = useNavigate()
   // Free-tier Titan AI allowance for today: { chat_used, chat_limit } (chat_limit null = unlimited).
@@ -514,11 +516,15 @@ export default function LearnScreen({
     try { return JSON.parse(localStorage.getItem(lessonStoreKey) || '{}') || {} } catch { return {} }
   }
   const [savedLessons, setSavedLessons] = useState(readLessons)
+  const [lessonsLoaded, setLessonsLoaded] = useState(false)
   useEffect(() => {
     setSavedLessons(readLessons())
+    setLessonsLoaded(false)
     let cancelled = false
     fetchLessons(profile?.id, subjectName).then(rows => {
-      if (cancelled || !rows) return
+      if (cancelled) return
+      setLessonsLoaded(true)
+      if (!rows) return
       setSavedLessons(rows)
       try { localStorage.setItem(lessonStoreKey, JSON.stringify(rows)) } catch {}
     })
@@ -567,6 +573,20 @@ export default function LearnScreen({
     fetchRecentChats(profile?.id, subjectName).then(rows => { if (!cancelled && rows) setRecentChats(rows) })
     return () => { cancelled = true }
   }, [phase, profile?.id, subjectName])
+
+  // A chat or lesson picked on another screen. Lessons wait for the saved ones
+  // to load so a lesson in progress resumes instead of being written again.
+  useEffect(() => {
+    if (!learnRequest) return
+    if (learnRequest.type === 'lesson') {
+      if (!lessonsLoaded) return
+      setLearnRequest?.(null)
+      openLesson(learnRequest.topic)
+    } else if (learnRequest.type === 'chat') {
+      setLearnRequest?.(null)
+      fetchChat(learnRequest.id).then(row => { if (row) openChat(row) })
+    }
+  }, [learnRequest, lessonsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openChat = (row) => {
     const msgs = Array.isArray(row.messages) ? row.messages : []

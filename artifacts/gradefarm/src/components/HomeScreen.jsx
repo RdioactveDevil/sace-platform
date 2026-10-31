@@ -334,9 +334,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       ) : (
         <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.5 }}>Answer a few questions and the topics you find hardest will show here.</div>
       )}
-      <button onClick={() => navigate('/study-plan')}
+      <button onClick={() => navigate('/my-progress')}
         style={{ display: 'block', width: '100%', marginTop: 10, padding: '12px 0 0', border: 'none', borderTop: `1px solid ${t.border}`, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 3 }}>
-        Open study plan
+        See this week's plan
       </button>
     </div>
   )
