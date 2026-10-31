@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import MathText from './MathText'
 import GraphView from './GraphView'
@@ -14,8 +14,8 @@ function parseJsonSilent(val) {
   try { return JSON.parse(val) } catch { return null }
 }
 
-export default function AdminQuestionPreviewTab() {
-  const [idInput,      setIdInput]      = useState('')
+export default function AdminQuestionPreviewTab({ initialId = null }) {
+  const [idInput,      setIdInput]      = useState(initialId || '')
   const [question,     setQuestion]     = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
@@ -29,8 +29,11 @@ export default function AdminQuestionPreviewTab() {
   const [saveMsg,        setSaveMsg]        = useState(null)
   const [uploading,      setUploading]      = useState(false)
 
-  async function lookup() {
-    const id = idInput.trim()
+  // Opened on a question (from the bank or a report): show it straight away.
+  useEffect(() => { if (initialId) { setIdInput(initialId); lookup(initialId) } }, [initialId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function lookup(idArg) {
+    const id = String(idArg ?? idInput).trim()
     if (!id) return
     setLoading(true)
     setError(null)
@@ -106,13 +109,17 @@ export default function AdminQuestionPreviewTab() {
     } catch { setSaving(false); setSaveMsg({ ok: false, text: 'Table JSON is invalid.' }); return }
 
     const table = question._source === 'draft' ? 'draft_questions' : 'questions'
-    const { error: err } = await supabase
+    const { data: saved, error: err } = await supabase
       .from(table)
       .update({ graph: newGraph, table_data: newTable, image_url: editImageUrl || null })
       .eq('id', question.id)
+      .select('id')
 
     if (err) {
       setSaveMsg({ ok: false, text: err.message })
+    } else if (!saved?.length) {
+      // The database allowed no change (no write permission on this table).
+      setSaveMsg({ ok: false, text: "Didn't save: the database doesn't allow changing this question from here." })
     } else {
       setQuestion(q => ({ ...q, graph: newGraph, table_data: newTable, image_url: editImageUrl || null }))
       setSaveMsg({ ok: true, text: 'Saved.' })
@@ -136,7 +143,7 @@ export default function AdminQuestionPreviewTab() {
           onKeyDown={e => e.key === 'Enter' && lookup()}
           spellCheck={false}
         />
-        <button style={s.btn} onClick={lookup} disabled={loading}>
+        <button style={s.btn} onClick={() => lookup()} disabled={loading}>
           {loading ? 'Loading…' : 'Preview'}
         </button>
       </div>

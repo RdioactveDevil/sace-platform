@@ -250,6 +250,65 @@ router.post("/retry-pending-reports", async (req, res) => {
   res.status(200).json({ ok: true, retried: stuck.length });
 });
 
+// ── POST /api/question-reports/:id/resolve (admin only) ──────────────────────
+// An admin settles a report by hand. Body: { action: "dismiss" } keeps the
+// question as it is; { action: "set_answer", answerIndex } changes its answer
+// key; { action: "recheck" } runs the AI check on it again.
+
+router.post("/question-reports/:id/resolve", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const { adminDb } = ctx;
+
+  const { data: report } = await adminDb
+    .from("question_reports").select("id, question_id").eq("id", req.params.id).maybeSingle();
+  if (!report) { res.status(404).json({ error: "Report not found" }); return; }
+
+  const { action, answerIndex } = (req.body || {}) as { action?: string; answerIndex?: number };
+
+  if (action === "recheck") {
+    await adminDb.from("question_reports").update({ ai_status: "pending", resolved_at: null }).eq("id", report.id);
+    await resolveReport(report.id, report.question_id);
+    const { data: after } = await adminDb.from("question_reports").select("*").eq("id", report.id).single();
+    res.status(200).json({ ok: true, report: after });
+    return;
+  }
+
+  if (action === "set_answer") {
+    const { data: q } = await adminDb.from("questions").select("options").eq("id", report.question_id).maybeSingle();
+    if (!q) { res.status(404).json({ error: "The question is no longer in the bank" }); return; }
+    const options: unknown[] = typeof q.options === "string" ? JSON.parse(q.options) : (q.options || []);
+    const idx = Number(answerIndex);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= options.length) {
+      res.status(400).json({ error: "answerIndex must be one of the question's options" });
+      return;
+    }
+    const { error: qErr } = await adminDb.from("questions").update({ answer_index: idx }).eq("id", report.question_id);
+    if (qErr) { res.status(500).json({ error: qErr.message }); return; }
+    const { error } = await adminDb.from("question_reports").update({
+      ai_status: "fixed_index",
+      resolved_at: new Date().toISOString(),
+      resolution_note: `Answer set to option ${String.fromCharCode(65 + idx)} by an admin`,
+    }).eq("id", report.id);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  if (action === "dismiss") {
+    const { error } = await adminDb.from("question_reports").update({
+      ai_status: "dismissed",
+      resolved_at: new Date().toISOString(),
+      resolution_note: "Dismissed by an admin",
+    }).eq("id", report.id);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  res.status(400).json({ error: "action must be dismiss, set_answer or recheck" });
+});
+
 // ── GET /api/question-reports (admin only) ────────────────────────────────────
 
 router.get("/question-reports", async (req, res) => {

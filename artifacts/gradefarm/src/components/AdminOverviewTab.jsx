@@ -1,269 +1,201 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   adminListStudents,
   adminListTutors,
   adminListTutorApplications,
+  adminAnswersBetween,
 } from '../lib/db'
-import { getDraftQuestions } from '../lib/adminDb'
+import { getDraftQuestions, fetchQuestionReports, isOpenReport } from '../lib/adminDb'
 import { listCurricula } from '../lib/curriculaDb'
+import { supabase } from '../lib/supabase'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
-
 const DAY_MS = 86_400_000
 
-function isWithin(iso, ms) {
-  if (!iso) return false
-  return Date.now() - new Date(iso).getTime() <= ms
+/** Monday 00:00, this week or weeks back. */
+function weekStart(offsetWeeks = 0) {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - offsetWeeks * 7)
+  return d
 }
+const shortDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+const daysAgo = (iso) => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / DAY_MS))
+const pct = (right, n) => (n ? Math.round((right / n) * 100) : null)
 
+/**
+ * Admin › Overview: this week in four true numbers, everything waiting on an
+ * admin (each with the button that settles it), the most used subjects this
+ * week, and how the AI handled students' question reports.
+ */
 export default function AdminOverviewTab() {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
-  const [data, setData]       = useState(null)
+  const [d, setD] = useState(null)
+  const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    // Each source is awaited independently so one failure doesn't blank the whole dashboard.
-    const safe = (p, fallback) => p.then(v => v).catch(() => fallback)
-    try {
-      const [studentsRes, tutors, apps, pendingDrafts, needsReviewDrafts, curricula] = await Promise.all([
-        safe(adminListStudents(), { students: [] }),
-        safe(adminListTutors(), []),
-        safe(adminListTutorApplications(), []),
-        safe(getDraftQuestions({ status: 'pending' }), []),
-        safe(getDraftQuestions({ status: 'needs_review' }), []),
-        safe(listCurricula(), []),
-      ])
-
-      const students = studentsRes.students || []
-      const activeToday   = students.filter(s => isWithin(s.last_active, DAY_MS)).length
-      const activeWeek    = students.filter(s => isWithin(s.last_active, 7 * DAY_MS)).length
-      const onboardingTodo = students.filter(s => !s.onboarding_completed).length
-
-      const overdueAssignments = tutors.reduce((sum, t) => sum + (t.assignments_overdue || 0), 0)
-      const pendingAssignments = tutors.reduce((sum, t) => sum + (t.assignments_pending || 0), 0)
-
-      const liveCurricula = curricula.filter(c => c.status === 'live').length
-      const generatingCurricula = curricula.filter(c => c.status === 'generating').length
-
-      setData({
-        studentCount: students.length,
-        activeToday,
-        activeWeek,
-        onboardingTodo,
-        tutorCount: tutors.length,
-        pendingApps: apps.length,
-        pendingDrafts: pendingDrafts.length,
-        needsReviewDrafts: needsReviewDrafts.length,
-        curriculaCount: curricula.length,
-        liveCurricula,
-        generatingCurricula,
-        overdueAssignments,
-        pendingAssignments,
-      })
-    } catch (e) {
-      setError(e.message || 'Could not load overview.')
-    }
-    setLoading(false)
+  useEffect(() => {
+    let cancelled = false
+    const safe = (p, fallback) => p.catch(() => fallback)
+    const thisWeek = weekStart(0).toISOString()
+    const lastWeek = weekStart(1).toISOString()
+    Promise.all([
+      safe(adminListStudents().then(j => j.students || []), []),
+      safe(adminListTutors(), []),
+      safe(adminListTutorApplications(), []),
+      safe(Promise.all([getDraftQuestions({ status: 'pending' }), getDraftQuestions({ status: 'needs_review' })]).then(([a, b]) => a.length + b.length), 0),
+      safe(fetchQuestionReports('all'), []),
+      safe(listCurricula(), []),
+      safe(supabase.from('questions').select('id', { count: 'exact', head: true }).then(r => r.count ?? null), null),
+      safe(adminAnswersBetween(thisWeek, null, { withSubject: true }), null),
+      safe(adminAnswersBetween(lastWeek, thisWeek), null),
+    ]).then(([people, tutors, apps, drafts, reports, curricula, questionCount, week, prevWeek]) => {
+      if (cancelled) return
+      setD({ people, tutors, apps, drafts, reports, curricula, questionCount, week, prevWeek })
+    }).catch(e => { if (!cancelled) setError(e.message || 'Could not load the overview.') })
+    return () => { cancelled = true }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const view = useMemo(() => {
+    if (!d) return null
+    const activeWeek = d.people.filter(p => p.last_active && Date.now() - Date.parse(p.last_active) <= 7 * DAY_MS).length
+    const right = (d.week || []).filter(a => a.correct).length
 
-  if (loading) {
-    return <div style={{ color: 'var(--t-textMuted)', fontFamily: FONT_B, fontSize: 13, padding: '40px 0' }}>Loading overview…</div>
-  }
+    // Most used subjects this week: answers and how many students.
+    const bySubject = {}
+    for (const a of d.week || []) {
+      if (!a.subject) continue
+      const e = (bySubject[a.subject] = bySubject[a.subject] || { subject: a.subject, answers: 0, right: 0, students: new Set() })
+      e.answers++; if (a.correct) e.right++; e.students.add(a.user_id)
+    }
+    const subjects = Object.values(bySubject).sort((a, b) => b.answers - a.answers).slice(0, 4)
 
-  if (error || !data) {
-    return (
-      <div style={{ fontFamily: FONT_B }}>
-        <div style={errorBox}>{error || 'No data available.'}</div>
-        <button onClick={load} style={ghostBtn}>Retry</button>
-      </div>
-    )
-  }
-
-  const attention = []
-  if (data.pendingApps > 0) {
-    attention.push({
-      key: 'apps',
-      color: 'var(--t-goldText)',
-      label: `${data.pendingApps} tutor application${data.pendingApps !== 1 ? 's' : ''} awaiting review`,
-      cta: 'Review applications',
-      path: '/admin/applications',
+    // Waiting on an admin.
+    const needs = []
+    const open = d.reports.filter(isOpenReport).sort((a, b) => Date.parse(a.reported_at) - Date.parse(b.reported_at))
+    open.slice(0, 3).forEach(r => needs.push({
+      key: `r-${r.id}`, kind: 'Report', title: r.questions?.subject || 'Question', what: r.questions?.subtopic || r.questions?.topic || '',
+      detail: r.ai_status === 'error' ? 'AI check failed. Needs a person.' : `AI still checking after ${daysAgo(r.reported_at)} day${daysAgo(r.reported_at) === 1 ? '' : 's'}`,
+      action: 'Open', to: '/admin/reports',
+    }))
+    if (open.length > 3) needs.push({ key: 'r-more', kind: 'Report', title: `${open.length - 3} more reports`, what: '', detail: 'Waiting on the AI or a person', action: 'View', to: '/admin/reports' })
+    d.apps.forEach(a => needs.push({
+      key: `a-${a.id}`, kind: 'Application', title: a.display_name || a.email || 'Someone', what: 'wants to tutor',
+      detail: a.applied_at ? `Applied ${shortDate(a.applied_at)}` : '', action: 'Review', to: '/admin/people?role=applications',
+    }))
+    if (d.drafts > 0) needs.push({ key: 'drafts', kind: 'Review', title: `${d.drafts} new question${d.drafts === 1 ? '' : 's'}`, what: 'waiting for review', detail: 'Students won’t see them until approved', action: 'Review', to: '/admin/questions?tab=review' })
+    const overdueTutors = d.tutors.filter(t => t.assignments_overdue > 0)
+    const overdue = overdueTutors.reduce((s, t) => s + t.assignments_overdue, 0)
+    if (overdue > 0) needs.push({
+      key: 'overdue', kind: 'Overdue', title: `${overdue} assignment${overdue === 1 ? '' : 's'}`, what: `across ${overdueTutors.length} tutor${overdueTutors.length === 1 ? '' : 's'}`,
+      detail: overdueTutors.map(t => t.display_name || 'Unnamed').join(', '), action: 'View', to: '/admin/insights?tab=assignments',
     })
-  }
-  const reviewTotal = data.pendingDrafts + data.needsReviewDrafts
-  if (reviewTotal > 0) {
-    attention.push({
-      key: 'drafts',
-      color: 'var(--t-blue)',
-      label: `${reviewTotal} draft question${reviewTotal !== 1 ? 's' : ''} in the review queue`,
-      cta: 'Open review queue',
-      path: '/admin/review',
+    const notSetUp = d.people.filter(p => !p.onboarding_completed && !p.is_tutor && !p.is_admin && !p.deactivated_at)
+    if (notSetUp.length) needs.push({
+      key: 'setup', kind: 'Set-up', title: `${notSetUp.length} student${notSetUp.length === 1 ? '' : 's'}`, what: 'haven’t finished setting up',
+      detail: notSetUp.slice(0, 3).map(p => p.display_name || p.email).join(', ') + (notSetUp.length > 3 ? ` and ${notSetUp.length - 3} more` : ''),
+      action: 'View', to: '/admin/people?role=students',
     })
-  }
-  if (data.overdueAssignments > 0) {
-    attention.push({
-      key: 'overdue',
-      color: 'var(--t-danger)',
-      label: `${data.overdueAssignments} assignment${data.overdueAssignments !== 1 ? 's' : ''} overdue across all tutors`,
-      cta: 'View assignments',
-      path: '/admin/assignments',
-    })
-  }
-  if (data.onboardingTodo > 0) {
-    attention.push({
-      key: 'onboarding',
-      color: 'var(--t-purple)',
-      label: `${data.onboardingTodo} student${data.onboardingTodo !== 1 ? 's have' : ' has'} not finished onboarding`,
-      cta: 'View students',
-      path: '/admin/students',
-    })
-  }
 
-  const kpis = [
-    { label: 'Students',        value: data.studentCount.toLocaleString(), color: 'var(--t-goldText)',      sub: `${data.activeWeek} active this week`, path: '/admin/students' },
-    { label: 'Active today',    value: data.activeToday.toLocaleString(),  color: 'var(--t-success)', sub: 'studied in last 24h',               path: '/admin/students' },
-    { label: 'Tutors',          value: data.tutorCount.toLocaleString(),   color: 'var(--t-blue)', sub: `${data.pendingAssignments} assignments pending`, path: '/admin/tutors' },
-    { label: 'Live curricula',  value: data.liveCurricula.toLocaleString(),color: '#c084fc', sub: data.generatingCurricula > 0 ? `${data.generatingCurricula} generating` : `${data.curriculaCount} total`, path: '/admin/curricula' },
-  ]
+    // How reports were settled.
+    const outcome = (s) => d.reports.filter(r => r.ai_status === s).length
+    return {
+      activeWeek,
+      answers: d.week?.length ?? null,
+      prevAnswers: d.prevWeek?.length ?? null,
+      accuracy: pct(right, d.week?.length || 0),
+      live: d.curricula.filter(c => c.status === 'live' && !c.archived_at).length,
+      subjects, needs,
+      handled: [
+        ['Question was right', outcome('dismissed')],
+        ['Answer key fixed', outcome('fixed_index')],
+        ['Question replaced or removed', outcome('regenerated') + outcome('deleted')],
+        ['Waiting or failed', open.length],
+      ],
+    }
+  }, [d])
 
-  const quickActions = [
-    { label: 'Generate questions', desc: 'Create MCQs with AI',        path: '/admin/generate',  icon: 'sparkles' },
-    { label: 'Upload PDF',         desc: 'Extract questions from a doc', path: '/admin/upload',    icon: 'upload'   },
-    { label: 'New curriculum',     desc: 'Plan a subject with AI',       path: '/admin/curricula', icon: 'book'     },
-    { label: 'Cohort analytics',   desc: 'Class-wide performance',       path: '/admin/cohort',    icon: 'chart'    },
-  ]
+  if (error) return <div style={{ fontFamily: FONT_B, fontSize: 13, color: 'var(--t-danger)' }}>{error}</div>
+  if (!view) return <div style={{ fontFamily: FONT_B, fontSize: 13, color: 'var(--t-textMuted)', padding: '24px 0' }}>Loading…</div>
+
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12, padding: '12px 16px' }
+  const cardHead = (title, link, to) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+      <span style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--t-text)' }}>{title}</span>
+      {link && <button type="button" onClick={() => navigate(to)} style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: 'var(--t-text)', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--t-accent)', textDecorationThickness: 2, textUnderlineOffset: 3 }}>{link}</button>}
+    </div>
+  )
+  const row = (first) => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: first ? 'none' : '1px solid var(--t-border)' })
+  const fact = (value, text) => (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)' }}>{text}</div>
+    </div>
+  )
+  const delta = view.answers != null && view.prevAnswers != null ? `answers this week, ${view.answers >= view.prevAnswers ? 'up' : 'down'} from ${view.prevAnswers.toLocaleString()}` : 'answers this week'
 
   return (
-    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
-      {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 26 }}>
-        {kpis.map(k => (
-          <button
-            key={k.label}
-            onClick={() => navigate(k.path)}
-            style={{
-              textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B,
-              padding: '18px 18px', borderRadius: 14,
-              background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.08)',
-              transition: 'background 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.06)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.25)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)'; e.currentTarget.style.borderColor = 'rgba(var(--ink-rgb),0.08)' }}
-          >
-            <div style={{ fontSize: 28, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
-            <div style={{ fontSize: 13, color: 'var(--t-textSub)', fontWeight: 700, marginTop: 6 }}>{k.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>{k.sub}</div>
-          </button>
-        ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontFamily: FONT_B, color: 'var(--t-text)' }}>
+      <style>{`
+        .ao-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+        @media (max-width: 1000px) { .ao-cols { grid-template-columns: 1fr; } }
+      `}</style>
+
+      <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+        {fact(`${view.activeWeek} of ${d.people.length}`, 'accounts active in the last 7 days')}
+        {fact(view.answers == null ? '—' : view.answers.toLocaleString(), delta)}
+        {fact(view.accuracy == null ? '—' : `${view.accuracy}%`, 'correct this week')}
+        {fact(view.live, `live subjects${d.questionCount != null ? ` · ${d.questionCount.toLocaleString()} questions` : ''}`)}
       </div>
 
-      {/* Needs attention */}
-      <div style={{ marginBottom: 26 }}>
-        <SectionTitle>Needs attention</SectionTitle>
-        {attention.length === 0 ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '16px 18px', borderRadius: 12,
-            background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)',
-            color: 'var(--t-success)', fontSize: 13, fontWeight: 600,
-          }}>
-            <span style={{ fontSize: 16 }}>✓</span> You're all caught up — nothing needs review right now.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {attention.map(a => (
-              <div key={a.key} style={{
-                display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-                padding: '14px 16px', borderRadius: 12,
-                background: `${a.color}10`, border: `1px solid ${a.color}33`,
-              }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.color, flexShrink: 0, boxShadow: `0 0 8px ${a.color}` }} />
-                <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>{a.label}</span>
-                <button
-                  onClick={() => navigate(a.path)}
-                  style={{
-                    padding: '7px 14px', borderRadius: 8, fontFamily: FONT_B,
-                    border: `1px solid ${a.color}66`, background: `${a.color}1f`,
-                    color: a.color, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {a.cta} →
-                </button>
+      <div className="ao-cols">
+        <div style={card}>
+          {cardHead('Needs you')}
+          {view.needs.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--t-textMuted)', padding: '10px 0 4px' }}>Nothing waiting on you. Reports the AI can’t settle, tutor applications, questions to review and overdue work show up here.</div>
+          ) : view.needs.map((n, i) => (
+            <div key={n.key} style={row(i === 0)}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--t-textSub)', padding: '1px 8px', border: '1px solid var(--t-border)', borderRadius: 999, marginRight: 8, whiteSpace: 'nowrap' }}>{n.kind}</span>
+                  <b>{n.title}</b>{n.what ? <span style={{ color: 'var(--t-textSub)' }}> · {n.what}</span> : null}
+                </div>
+                {n.detail && <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 2 }}>{n.detail}</div>}
+              </div>
+              <button type="button" onClick={() => navigate(n.to)} style={{ padding: '7px 13px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, border: '1px solid var(--t-border)', background: 'var(--t-bgCard)', color: 'var(--t-text)' }}>{n.action}</button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={card}>
+            {cardHead('Most used subjects this week', 'Insights', '/admin/insights')}
+            {view.subjects.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--t-textMuted)', padding: '10px 0 4px' }}>No answers yet this week.</div>
+            ) : view.subjects.map((s, i) => (
+              <div key={s.subject} style={row(i === 0)}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5 }}>{s.subject}</div>
+                  <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{s.students.size} student{s.students.size === 1 ? '' : 's'} · {pct(s.right, s.answers)}% correct</div>
+                </div>
+                <div style={{ fontSize: 13, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}><b>{s.answers.toLocaleString()}</b> <span style={{ color: 'var(--t-textMuted)' }}>answers</span></div>
               </div>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* Quick actions */}
-      <div>
-        <SectionTitle>Quick actions</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-          {quickActions.map(q => (
-            <button
-              key={q.label}
-              onClick={() => navigate(q.path)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B,
-                padding: '14px 16px', borderRadius: 12,
-                background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.08)',
-                transition: 'background 0.15s, border-color 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.08)'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.3)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--ink-rgb),0.03)'; e.currentTarget.style.borderColor = 'rgba(var(--ink-rgb),0.08)' }}
-            >
-              <span style={{
-                width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t-goldText)',
-              }}>
-                <ActionIcon name={q.icon} />
-              </span>
-              <span style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>{q.label}</div>
-                <div style={{ fontSize: 11, color: 'var(--t-textMuted)' }}>{q.desc}</div>
-              </span>
-            </button>
-          ))}
+          <div style={card}>
+            {cardHead('Question reports', 'Reports', '/admin/reports')}
+            {d.reports.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--t-textMuted)', padding: '10px 0 4px' }}>No student has reported a question yet.</div>
+            ) : view.handled.map(([label, n], i) => (
+              <div key={label} style={row(i === 0)}>
+                <span style={{ fontSize: 13.5 }}>{label}</span>
+                <b style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums', color: i === 3 && n > 0 ? 'var(--t-danger)' : 'var(--t-text)' }}>{n}</b>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   )
-}
-
-function SectionTitle({ children }) {
-  return (
-    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--t-textMuted)', textTransform: 'uppercase', marginBottom: 12 }}>
-      {children}
-    </div>
-  )
-}
-
-function ActionIcon({ name }) {
-  const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }
-  return (
-    <svg width={18} height={18} viewBox="0 0 18 18" aria-hidden="true">
-      {name === 'sparkles' && <><path d="M9 2.5 10.2 6.2 14 7.4l-3.8 1.2L9 12.3 7.8 8.6 4 7.4l3.8-1.2Z" {...S} /><path d="M13.5 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z" {...S} /></>}
-      {name === 'upload'   && <><path d="M9 11.5V3.5" {...S} /><path d="M6 6l3-3 3 3" {...S} /><path d="M3.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2" {...S} /></>}
-      {name === 'book'     && <><path d="M3 4.25A1.25 1.25 0 0 1 4.25 3H9v11H4.25A1.25 1.25 0 0 1 3 12.75Z" {...S} /><path d="M9 3h4.75A1.25 1.25 0 0 1 15 4.25v8.5A1.25 1.25 0 0 1 13.75 14H9Z" {...S} /></>}
-      {name === 'chart'    && <><rect x="2.5" y="10" width="3" height="5" rx="0.6" {...S} /><rect x="7.5" y="6" width="3" height="9" rx="0.6" {...S} /><rect x="12.5" y="3" width="3" height="12" rx="0.6" {...S} /></>}
-    </svg>
-  )
-}
-
-const errorBox = {
-  padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
-  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8,
-  fontSize: 13, color: 'var(--t-danger)', marginBottom: 12,
-}
-const ghostBtn = {
-  padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(var(--ink-rgb),0.15)',
-  background: 'transparent', color: 'var(--t-textSub)', fontSize: 13, fontWeight: 700,
-  cursor: 'pointer', fontFamily: FONT_B,
 }

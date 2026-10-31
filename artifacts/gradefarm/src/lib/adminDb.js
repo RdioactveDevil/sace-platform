@@ -159,3 +159,14 @@ export async function retryPendingReports({ limit = 20 } = {}) {
     body: JSON.stringify({ limit }),
   })
 }
+
+/** Settle a question report by hand: 'dismiss', 'set_answer' (with answerIndex) or 'recheck'. */
+export async function resolveQuestionReport(reportId, action, answerIndex) {
+  return adminAuthFetch(`/api/question-reports/${encodeURIComponent(reportId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ action, answerIndex }),
+  })
+}
+
+/** A report still waiting on someone: the AI hasn't finished, or it failed and needs a person. */
+export const isOpenReport = (r) => !r.resolved_at || r.ai_status === 'error'

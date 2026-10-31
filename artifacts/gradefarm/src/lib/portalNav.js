@@ -4,8 +4,7 @@
 // /tutor/<id> or /admin/<id>.
 import {
   LayoutDashboard, Users, School, ClipboardList, Video, MessageSquare, Folder, FlaskConical,
-  GraduationCap, UserCog, Inbox, UsersRound, BookOpen, Sparkles, ImageUp, Upload, ListChecks, Eye,
-  ChartColumn, Settings,
+  BookOpen, ListChecks, Flag, ChartColumn, Settings,
 } from 'lucide-react'
 
 export const TUTOR_NAV = [
@@ -25,30 +24,35 @@ export const TUTOR_NAV = [
 
 export const ADMIN_NAV = [
   { items: [
-    { id: 'overview',     label: 'Overview',           icon: LayoutDashboard, sub: 'Platform health and what needs attention.' },
-  ]},
-  { label: 'People', items: [
-    { id: 'students',     label: 'Students',           icon: GraduationCap,   sub: 'Every student, their progress and subject access.' },
-    { id: 'tutors',       label: 'Tutors',             icon: UserCog,         sub: 'Tutors, their rosters and the work they set.' },
-    { id: 'applications', label: 'Tutor applications', icon: Inbox,           sub: 'Approve or decline people applying to tutor.' },
-    { id: 'users',        label: 'All users',          icon: UsersRound,      sub: 'Every account, with roles and status.' },
+    { id: 'overview',  label: 'Overview',  icon: LayoutDashboard, sub: 'What needs you, and how the platform did this week.' },
+    { id: 'people',    label: 'People',    icon: Users,           sub: 'Every account: students, tutors and admins.' },
   ]},
   { label: 'Content', items: [
-    { id: 'curricula',    label: 'Curricula',          icon: BookOpen,        sub: 'Subjects, topics and what students can see.' },
-    { id: 'generate',     label: 'Generate',           icon: Sparkles,        sub: 'Create questions with AI.' },
-    { id: 'vision',       label: 'From image',         icon: ImageUp,         sub: 'Turn photos of questions into bank questions.' },
-    { id: 'upload',       label: 'Upload PDF',         icon: Upload,          sub: 'Extract questions from a document.' },
-    { id: 'review',       label: 'Review queue',       icon: ListChecks,      sub: 'Check drafted questions before they go live.' },
-    { id: 'preview',      label: 'Preview question',   icon: Eye,             sub: 'See a question exactly as students will.' },
-  ]},
-  { label: 'Insights', items: [
-    { id: 'cohort',       label: 'Cohort analytics',   icon: ChartColumn,     sub: 'How students are doing across the platform.' },
-    { id: 'assignments',  label: 'Assignments',        icon: ClipboardList,   sub: 'Work set by every tutor, and how it’s going.' },
+    { id: 'subjects',  label: 'Subjects',  icon: BookOpen,        sub: 'Subjects, their topics and what students can see.' },
+    { id: 'questions', label: 'Questions', icon: ListChecks,      sub: 'The question bank, adding questions and the review queue.' },
+    { id: 'reports',   label: 'Reports',   icon: Flag,            sub: 'Questions students have reported as wrong.' },
   ]},
   { label: 'Platform', items: [
-    { id: 'settings',     label: 'Settings',           icon: Settings,        sub: 'Student access and pricing.' },
+    { id: 'insights',  label: 'Insights',  icon: ChartColumn,     sub: 'How students do by topic, and the work tutors set.' },
+    { id: 'settings',  label: 'Settings',  icon: Settings,        sub: 'Student access and pricing.' },
   ]},
 ]
+
+// Old admin section URLs, and where each one lives now.
+export const ADMIN_LEGACY = {
+  students: 'people?role=students',
+  tutors: 'people?role=tutors',
+  users: 'people',
+  applications: 'people?role=applications',
+  curricula: 'subjects',
+  generate: 'questions?tab=add&method=generate',
+  vision: 'questions?tab=add&method=photo',
+  upload: 'questions?tab=add&method=pdf',
+  review: 'questions?tab=review',
+  preview: 'questions?tab=preview',
+  cohort: 'insights',
+  assignments: 'insights?tab=assignments',
+}
 
 /** Which workspace a path belongs to. */
 export function workspaceForPath(pathname) {

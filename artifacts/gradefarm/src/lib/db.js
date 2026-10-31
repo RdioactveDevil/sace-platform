@@ -1338,6 +1338,27 @@ export async function fetchRosterActivity(studentIds, days = 14) {
   return rows.map(r => ({ ...r, subtopic: topics[r.question_id] || null }))
 }
 
+/**
+ * Every answer on the platform between two times (admins can read them all):
+ * [{ user_id, correct, question_id, answered_at }], each with its question's
+ * subject when withSubject is set.
+ */
+export async function adminAnswersBetween(sinceIso, untilIso = null, { withSubject = false } = {}) {
+  const rows = await fetchAllRows(() => {
+    let q = supabase.from('answer_log').select('user_id, correct, question_id, answered_at').gte('answered_at', sinceIso)
+    if (untilIso) q = q.lt('answered_at', untilIso)
+    return q
+  }, 'answered_at')
+  if (!withSubject) return rows
+  const ids = [...new Set(rows.map(r => r.question_id).filter(Boolean))]
+  const subjects = {}
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabase.from('questions').select('id, subject').in('id', ids.slice(i, i + 200))
+    ;(data || []).forEach(q => { subjects[q.id] = q.subject })
+  }
+  return rows.map(r => ({ ...r, subject: subjects[r.question_id] || null }))
+}
+
 export async function fetchAssignmentsForTutor(tutorId, { allTutors = false } = {}) {
   let query = supabase
     .from('assignments')

@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion, fetchQuestionReports, bulkScanQuestions, retryPendingReports } from '../lib/adminDb'
+import { getDraftQuestions, upsertDraftQuestion, approveDraftQuestion, rejectDraftQuestion } from '../lib/adminDb'
 import { getVariantCountsByConceptTags } from '../lib/db'
 import { getTopicsBySubject } from '../lib/adminTopics'
 import MathText from './MathText'
-import { Zap } from 'lucide-react'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD   = '#f1be43'
@@ -27,8 +26,7 @@ function StatusBadge({ status }) {
   )
 }
 
-export default function AdminReviewScreen({ profile }) {
-  const [activeTab,      setActiveTab]      = useState('drafts')
+export default function AdminReviewScreen({ profile, onChange }) {
 
   // ── Drafts tab state ─────────────────────────────────────────────────────────
   const [drafts,         setDrafts]         = useState([])
@@ -41,16 +39,6 @@ export default function AdminReviewScreen({ profile }) {
   const [actionError,    setActionError]    = useState(null)
   const [actionOk,       setActionOk]       = useState(null)
 
-  // ── Reports tab state ────────────────────────────────────────────────────────
-  const [reports,        setReports]        = useState([])
-  const [loadingReports, setLoadingReports] = useState(false)
-  const [reportFilter,   setReportFilter]   = useState('all')
-  const [scanning,       setScanning]       = useState(false)
-  const [scanResult,     setScanResult]     = useState(null)
-  const [scanError,      setScanError]      = useState(null)
-  const [retrying,       setRetrying]       = useState(false)
-  const [retryResult,    setRetryResult]    = useState(null)
-  const [retryError,     setRetryError]     = useState(null)
   // null  = counts not yet loaded / unavailable (hide badge rather than show false 0)
   // {}    = loaded but no variants found for any draft
   // {...} = loaded with real per-conceptTag counts
@@ -103,51 +91,6 @@ export default function AdminReviewScreen({ profile }) {
 
   useEffect(() => { load() }, [load])
 
-  const loadReports = useCallback(async () => {
-    setLoadingReports(true)
-    try {
-      const data = await fetchQuestionReports(reportFilter)
-      setReports(data)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoadingReports(false)
-    }
-  }, [reportFilter])
-
-  useEffect(() => { if (activeTab === 'reports') loadReports() }, [activeTab, loadReports])
-
-  const handleBulkScan = async () => {
-    if (scanning) return
-    setScanning(true)
-    setScanResult(null)
-    setScanError(null)
-    try {
-      const result = await bulkScanQuestions({ limit: 100 })
-      setScanResult(result)
-      setTimeout(() => loadReports(), 1500)
-    } catch (e) {
-      setScanError(e.message || 'Scan failed')
-    } finally {
-      setScanning(false)
-    }
-  }
-
-  const handleRetryPending = async () => {
-    if (retrying) return
-    setRetrying(true)
-    setRetryResult(null)
-    setRetryError(null)
-    try {
-      const result = await retryPendingReports({ limit: 20 })
-      setRetryResult(result)
-      setTimeout(() => loadReports(), 1500)
-    } catch (e) {
-      setRetryError(e.message || 'Retry failed')
-    } finally {
-      setRetrying(false)
-    }
-  }
 
   useEffect(() => {
     setActionError(null)
@@ -217,6 +160,7 @@ export default function AdminReviewScreen({ profile }) {
       setActionOk('Question published to the live bank.')
       bumpDraftListAfterStatusChange(draftId, 'approved')
       await load({ skipLoading: true })
+      onChange?.()
     } catch (e) {
       console.error(e)
       setActionError(e.message || 'Could not approve — check console or Supabase RLS / questions table.')
@@ -240,6 +184,7 @@ export default function AdminReviewScreen({ profile }) {
       setActionOk('Draft marked as rejected (still in database for audit).')
       bumpDraftListAfterStatusChange(draftId, 'rejected')
       await load({ skipLoading: true })
+      onChange?.()
     } catch (e) {
       console.error(e)
       setActionError(e.message || 'Could not reject this draft.')
@@ -274,6 +219,7 @@ export default function AdminReviewScreen({ profile }) {
       setActionOk(`Published ${total} question(s) to the live bank.`)
     }
     await load({ skipLoading: true })
+    onChange?.()
   }
 
   const toggleCheck = (id, e) => {
@@ -307,154 +253,9 @@ export default function AdminReviewScreen({ profile }) {
     boxSizing: 'border-box',
   }
 
-  const AI_STATUS_COLORS = {
-    pending:     { bg: 'rgba(241,190,67,0.1)',   border: 'rgba(241,190,67,0.3)',   color: 'var(--t-goldText)' },
-    processing:  { bg: 'rgba(99,102,241,0.1)',   border: 'rgba(99,102,241,0.3)',   color: '#a5b4fc' },
-    dismissed:   { bg: 'rgba(var(--ink-rgb),0.05)', border: 'rgba(var(--ink-rgb),0.1)',  color: 'rgba(var(--ink-rgb),0.35)' },
-    fixed_index: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: 'var(--t-success)' },
-    regenerated: { bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.3)',   color: 'var(--t-success)' },
-    deleted:     { bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)',   color: 'var(--t-danger)' },
-    error:       { bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.3)',    color: 'var(--t-danger)' },
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Top-level tab switcher */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        {[['drafts', 'Review Queue'], ['reports', 'AI Reports']].map(([tab, label]) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-              fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.15s',
-              border: `1px solid ${activeTab === tab ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
-              background: activeTab === tab ? 'rgba(241,190,67,0.08)' : 'transparent',
-              color: activeTab === tab ? GOLD : 'rgba(var(--ink-rgb),0.4)',
-            }}
-          >{label}</button>
-        ))}
-      </div>
-
-      {activeTab === 'reports' && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{loadingReports ? '' : `${reports.length} report${reports.length === 1 ? '' : 's'}`}</span>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {['all', 'pending', 'processing', 'fixed_index', 'regenerated', 'dismissed', 'error'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => setReportFilter(s)}
-                  style={{
-                    padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
-                    fontFamily: FONT_B, cursor: 'pointer',
-                    border: `1px solid ${reportFilter === s ? GOLD : 'rgba(var(--ink-rgb),0.12)'}`,
-                    background: reportFilter === s ? 'rgba(241,190,67,0.08)' : 'transparent',
-                    color: reportFilter === s ? GOLD : 'rgba(var(--ink-rgb),0.35)',
-                  }}
-                >{s}</button>
-              ))}
-              <button
-                onClick={loadReports}
-                disabled={loadingReports}
-                style={{
-                  padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
-                  fontFamily: FONT_B, cursor: loadingReports ? 'default' : 'pointer',
-                  border: '1px solid rgba(var(--ink-rgb),0.12)', background: 'transparent',
-                  color: 'rgba(var(--ink-rgb),0.4)',
-                }}
-              >{loadingReports ? '…' : '↻ Refresh'}</button>
-              <button
-                onClick={handleBulkScan}
-                disabled={scanning}
-                style={{
-                  padding: '5px 14px', borderRadius: 8, fontSize: 12, fontWeight: 800,
-                  fontFamily: FONT_B, cursor: scanning ? 'not-allowed' : 'pointer',
-                  border: 'none', background: scanning ? 'rgba(239,68,68,0.4)' : '#f87171',
-                  color: '#0c1037',
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                }}
-              >{scanning ? 'Scanning…' : <><Zap size={13} aria-hidden="true" /> Bulk Scan</>}</button>
-              <button
-                onClick={handleRetryPending}
-                disabled={retrying}
-                style={{
-                  padding: '5px 14px', borderRadius: 8, fontSize: 12, fontWeight: 800,
-                  fontFamily: FONT_B, cursor: retrying ? 'not-allowed' : 'pointer',
-                  border: 'none', background: retrying ? 'rgba(241,190,67,0.3)' : 'rgba(241,190,67,0.15)',
-                  color: retrying ? 'rgba(241,190,67,0.5)' : GOLD,
-                }}
-              >{retrying ? 'Retrying…' : '↺ Retry Stuck'}</button>
-            </div>
-          </div>
-
-          {scanResult && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--t-success)', fontSize: 13, fontFamily: FONT_B }}>
-              Queued {scanResult.queued} question{scanResult.queued !== 1 ? 's' : ''} for AI review.
-              {scanResult.message ? ` ${scanResult.message}` : ''}
-            </div>
-          )}
-          {scanError && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: 'var(--t-danger)', fontSize: 13, fontFamily: FONT_B }}>
-              {scanError}
-            </div>
-          )}
-          {retryResult && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', color: 'var(--t-goldText)', fontSize: 13, fontFamily: FONT_B }}>
-              {retryResult.retried === 0 ? (retryResult.message || 'No stuck reports found.') : `Retried ${retryResult.retried} stuck report${retryResult.retried !== 1 ? 's' : ''}.`}
-            </div>
-          )}
-          {retryError && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: 'var(--t-danger)', fontSize: 13, fontFamily: FONT_B }}>
-              {retryError}
-            </div>
-          )}
-
-          {loadingReports ? (
-            <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13 }}>Loading…</div>
-          ) : reports.length === 0 ? (
-            <div style={{ color: 'rgba(var(--ink-rgb),0.3)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
-              No reports{reportFilter !== 'all' ? ` with status "${reportFilter}"` : ''}.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {reports.map(r => {
-                const q = r.questions
-                const sc = AI_STATUS_COLORS[r.ai_status] || AI_STATUS_COLORS.pending
-                return (
-                  <div key={r.id} style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(var(--ink-rgb),0.03)', border: '1px solid rgba(var(--ink-rgb),0.07)' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: q ? 6 : 0 }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}>
-                        {r.ai_status}
-                      </span>
-                      <span style={{ flex: 1, fontSize: 13, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {q?.question || r.question_id}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.3)', flexShrink: 0 }}>
-                        {new Date(r.reported_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    {r.resolution_note && (
-                      <div style={{ fontSize: 12, color: 'rgba(var(--ink-rgb),0.45)', marginTop: 4, paddingLeft: 4 }}>
-                        {r.resolution_note}
-                        {r.ai_verdict?.explanation ? ` — ${r.ai_verdict.explanation}` : ''}
-                      </div>
-                    )}
-                    {q && (
-                      <div style={{ fontSize: 11, color: 'rgba(var(--ink-rgb),0.25)', marginTop: 4 }}>
-                        {[q.subject, q.topic, q.subtopic].filter(Boolean).join(' · ')}
-                        {q.difficulty ? ` · D${q.difficulty}` : ''}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'drafts' && <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
       {/* Left: table */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
@@ -780,7 +581,7 @@ export default function AdminReviewScreen({ profile }) {
           </div>
         </div>
       )}
-      </div>}
+      </div>
     </div>
   )
 }

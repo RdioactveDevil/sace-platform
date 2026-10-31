@@ -3,7 +3,7 @@ import { adminListTutorApplications, adminApproveTutor, adminRejectTutor } from 
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-export default function AdminTutorApplicationsTab() {
+export default function AdminTutorApplicationsTab({ onChange }) {
   const [apps, setApps]       = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
@@ -27,6 +27,7 @@ export default function AdminTutorApplicationsTab() {
     try {
       await fn()
       await load()
+      onChange?.()
     } catch (e) {
       setError(e.message)
     }
@@ -35,12 +36,8 @@ export default function AdminTutorApplicationsTab() {
 
   return (
     <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <span style={{ fontSize: 12.5, color: 'var(--t-textMuted)', fontWeight: 600, flexShrink: 0 }}>{apps.length} pending application{apps.length === 1 ? '' : 's'}</span>
-      </div>
-
       {error && (
-        <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: 'var(--t-danger)', marginBottom: 12 }}>
           {error}
         </div>
       )}
@@ -48,19 +45,18 @@ export default function AdminTutorApplicationsTab() {
       {loading ? (
         <div style={{ color: 'var(--t-textMuted)', fontSize: 13 }}>Loading…</div>
       ) : apps.length === 0 ? (
-        <div style={{ padding: 24, border: '1px dashed rgba(var(--ink-rgb),0.1)', borderRadius: 10, color: 'var(--t-textMuted)', fontSize: 13, textAlign: 'center' }}>
-          No pending applications.
+        <div style={{ padding: 36, background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12, color: 'var(--t-textMuted)', fontSize: 13, textAlign: 'center' }}>
+          No one is waiting. People who apply to tutor show up here.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12, overflow: 'hidden' }}>
           {apps.map(a => {
             const busy = busyId === a.id
             return (
               <div key={a.id} style={{
                 display: 'flex', alignItems: 'center', gap: 16,
-                padding: '14px 16px', borderRadius: 10,
-                background: 'rgba(var(--ink-rgb),0.03)',
-                border: '1px solid rgba(var(--ink-rgb),0.06)',
+                padding: '13px 16px', flexWrap: 'wrap',
+                borderBottom: '1px solid var(--t-border)',
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, color: 'var(--t-text)' }}>
@@ -71,7 +67,7 @@ export default function AdminTutorApplicationsTab() {
                   </div>
                   {a.applied_at && (
                     <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>
-                      Applied {new Date(a.applied_at).toLocaleString()}
+                      Applied {new Date(a.applied_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </div>
                   )}
                 </div>
@@ -97,16 +93,16 @@ export default function AdminTutorApplicationsTab() {
 }
 
 const btn = (busy) => ({
-  padding: '8px 14px', borderRadius: 8,
-  border: '1px solid rgba(var(--ink-rgb),0.12)',
-  background: 'rgba(var(--ink-rgb),0.04)',
-  color: 'var(--t-textSub)', fontSize: 13, fontWeight: 700,
+  padding: '8px 14px', borderRadius: 9,
+  border: '1px solid var(--t-border)',
+  background: 'var(--t-bgCard)',
+  color: 'var(--t-text)', fontSize: 13, fontWeight: 800,
   cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
   fontFamily: FONT_B,
 })
 const btnPrimary = (busy) => ({
   ...btn(busy),
-  border: '1px solid #f1be4399',
-  background: '#f1be4322',
-  color: '#f1be43',
+  border: 'none',
+  background: 'var(--t-accent)',
+  color: '#0c1037',
 })
