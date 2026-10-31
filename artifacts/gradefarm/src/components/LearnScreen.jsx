@@ -7,6 +7,7 @@ import MathText from './MathText'
 import { questionHelpSystemSection, questionHelpOpeningPrompt } from '../lib/questionHelp'
 import { resolveConsolidation } from '../lib/consolidation'
 import { awaitingParent } from '../lib/parentConsent'
+import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, createChat, updateChat } from '../lib/learnStore'
 
 const GOLD   = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -275,13 +276,6 @@ export default function LearnScreen({
           content: (data.code === 'parent_consent_required' && data.error) || data.content?.[0]?.text || `Hey! Let me explain the concept behind that question on ${contextTopic}.`,
         }
         setMessages([firstMsg])
-        supabase
-          .from('learn_sessions')
-          .insert({ user_id: profile.id, topic: contextTopic, interests, messages: [firstMsg] })
-          .select('id')
-          .single()
-          .then(({ data: sess }) => { if (sess?.id) setSessionId(sess.id) })
-          .catch(() => {})
       })
       .catch(() => {
         setMessages([{ role: 'assistant', content: `Hey! Let me break down the concept from that question. What do you know about ${contextTopic}?` }])
@@ -413,16 +407,7 @@ export default function LearnScreen({
       })
       const data = await res.json()
       const reply = readChatReply(res, data)
-      setMessages(prev => {
-        const updated = [...prev, { role: 'assistant', content: reply || "Let me try a different approach..." }]
-        if (sessionId) {
-          supabase.from('learn_sessions')
-            .update({ messages: updated, updated_at: new Date().toISOString() })
-            .eq('id', sessionId)
-            .then(() => {})
-        }
-        return updated
-      })
+      setMessages(prev => [...prev, { role: 'assistant', content: reply || "Let me try a different approach..." }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: "Connection issue — try again?" }])
     }
@@ -458,16 +443,7 @@ export default function LearnScreen({
       })
       const data = await res.json()
       const reply = readChatReply(res, data)
-      setMessages(prev => {
-        const updated = [...prev, { role: 'assistant', content: reply || 'Let me try differently...' }]
-        if (sessionId) {
-          supabase.from('learn_sessions')
-            .update({ messages: updated, updated_at: new Date().toISOString() })
-            .eq('id', sessionId)
-            .then(() => {})
-        }
-        return updated
-      })
+      setMessages(prev => [...prev, { role: 'assistant', content: reply || 'Let me try differently...' }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Connection issue — try again?' }])
     }
@@ -531,13 +507,23 @@ export default function LearnScreen({
   // example (revealed a step at a time), check questions, then a wrap-up.
   // Progress is kept per subject in this browser so a lesson can be resumed.
   const LESSON_STEPS = ['Key ideas', 'Worked example', 'Check your understanding', 'Wrap-up']
+  // Saved in the database (learn_lessons) so they follow the student across
+  // devices; this browser keeps a copy to show straight away and to fall back on.
   const lessonStoreKey = `gf-lessons-${subject?.id || subjectName || 'none'}`
   const readLessons = () => {
     try { return JSON.parse(localStorage.getItem(lessonStoreKey) || '{}') || {} } catch { return {} }
   }
   const [savedLessons, setSavedLessons] = useState(readLessons)
-  useEffect(() => { setSavedLessons(readLessons()) }, [lessonStoreKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const lessonKey = (name) => String(name || '').trim().toLowerCase()
+  useEffect(() => {
+    setSavedLessons(readLessons())
+    let cancelled = false
+    fetchLessons(profile?.id, subjectName).then(rows => {
+      if (cancelled || !rows) return
+      setSavedLessons(rows)
+      try { localStorage.setItem(lessonStoreKey, JSON.stringify(rows)) } catch {}
+    })
+    return () => { cancelled = true }
+  }, [lessonStoreKey, profile?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const [lesson, setLesson] = useState(null)       // { topic, data, step, revealed, checkIndex, picked, answers, startedAt, updatedAt }
   const [lessonLoading, setLessonLoading] = useState('')  // topic being written, '' when idle
   const [lessonError, setLessonError] = useState('')
@@ -548,12 +534,66 @@ export default function LearnScreen({
   // Messages already in the conversation when the lesson started ("From your chat").
   const [lessonChatStart, setLessonChatStart] = useState(0)
 
+  // ── Saved chats (learn_sessions) ────────────────────────────────────────────
+  const [recentChats, setRecentChats] = useState([])
+  const chatIdRef = useRef(null)       // the saved row for this conversation
+  const chatSavingRef = useRef(null)   // the insert in flight, so a second reply waits for it
+  const savedCountRef = useRef(0)      // messages already saved, to skip no-op writes
+  useEffect(() => { chatIdRef.current = sessionId }, [sessionId])
+  const textOfMessage = (m) => typeof m?.content === 'string' ? m.content : (m?.content || []).filter(b => b?.type === 'text').map(b => b.text).join(' ')
+  const chatTitle = () => topic || textOfMessage(messages.find(m => m.role === 'user')).slice(0, 80) || 'Chat with Titan'
+
+  // Save the conversation after each reply from Titan.
+  useEffect(() => {
+    if (!messages.length || loading || messages[messages.length - 1].role !== 'assistant') return
+    if (messages.length === savedCountRef.current) return
+    savedCountRef.current = messages.length
+    const payload = { messages, title: chatTitle(), topic }
+    const save = async () => {
+      if (chatSavingRef.current) await chatSavingRef.current
+      if (chatIdRef.current) { updateChat(chatIdRef.current, payload); return }
+      chatSavingRef.current = createChat(profile?.id, { ...payload, subject: subjectName, interests })
+      const id = await chatSavingRef.current
+      chatSavingRef.current = null
+      if (id) { chatIdRef.current = id; setSessionId(id) }
+    }
+    save()
+  }, [messages, loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Recent chats for the start screen, refreshed whenever it shows.
+  useEffect(() => {
+    if (phase && phase !== 'setup') return
+    let cancelled = false
+    fetchRecentChats(profile?.id, subjectName).then(rows => { if (!cancelled && rows) setRecentChats(rows) })
+    return () => { cancelled = true }
+  }, [phase, profile?.id, subjectName])
+
+  const openChat = (row) => {
+    const msgs = Array.isArray(row.messages) ? row.messages : []
+    savedCountRef.current = msgs.length
+    chatIdRef.current = row.id
+    setSessionId(row.id)
+    setMessages(msgs)
+    setTopic(row.topic || '')
+    setInterests(row.interests ?? null)
+    setLesson(null)
+    setOfferDismissed(false)
+    setFromContext(false)
+    setContextSubtopic(null)
+    setQuestionFocus(null)
+    setPhase('chat')
+  }
+
   const saveLesson = (next) => {
     setLesson(next)
     if (!next) return
-    const all = { ...readLessons(), [lessonKey(next.topic)]: { ...next, updatedAt: Date.now() } }
-    try { localStorage.setItem(lessonStoreKey, JSON.stringify(all)) } catch {}
-    setSavedLessons(all)
+    const stamped = { ...next, updatedAt: Date.now() }
+    setSavedLessons(prev => {
+      const all = { ...prev, [lessonKey(next.topic)]: stamped }
+      try { localStorage.setItem(lessonStoreKey, JSON.stringify(all)) } catch {}
+      return all
+    })
+    saveLessonRow(profile?.id, subjectName, stamped)
   }
 
   const parseLesson = (raw) => {
@@ -575,7 +615,7 @@ export default function LearnScreen({
     const name = String(lessonTopic || '').trim()
     setTopicPickerOpen(false)
     setLessonError('')
-    const saved = name ? readLessons()[lessonKey(name)] : null
+    const saved = name ? savedLessons[lessonKey(name)] : null
     if (saved?.data) {
       setTopic(saved.topic)
       setLesson(saved)
@@ -672,6 +712,8 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
     setContextSubtopic(null)
     setQuestionFocus(null)
     setSessionId(null)
+    chatIdRef.current = null
+    savedCountRef.current = 0
     setPhase('setup')
   }
 
@@ -910,6 +952,26 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
   )
 
   // ── Start screen ────────────────────────────────────────────────────────────
+  // Saved chats and lessons in progress, newest first.
+  const whenLabel = (ms) => {
+    if (!ms) return ''
+    const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(ms).setHours(0, 0, 0, 0)) / 86400000)
+    return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? `${days} days ago` : new Date(ms).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+  }
+  const recentItems = [
+    ...(messages.length > 0 && !recentChats.some(r => r.id === sessionId)
+      ? [{ key: 'current', at: Date.now(), label: `Chat · ${chatTitle()}`, note: 'Now', open: () => setPhase('chat') }]
+      : []),
+    ...recentChats.map(r => ({
+      key: `chat-${r.id}`, at: Date.parse(r.updated_at), label: `Chat · ${r.title || r.topic || 'Chat with Titan'}`, note: whenLabel(Date.parse(r.updated_at)),
+      open: () => (r.id === sessionId && messages.length ? setPhase('chat') : openChat(r)),
+    })),
+    ...lessonsInProgress.map(l => ({
+      key: `lesson-${lessonKey(l.topic)}`, at: l.updatedAt || 0, label: `Lesson · ${l.topic}`, note: `Step ${Math.min(l.step + 1, 4)} of 4`,
+      open: () => openLesson(l.topic),
+    })),
+  ].sort((a, b) => b.at - a.at).slice(0, 6)
+
   if (!phase || phase === 'setup') return (
     <div style={{ color: t.text, fontFamily: FONT_B, height: '100%', minHeight: 0, overflowY: 'auto', background: t.bg }}>
       {styles}
@@ -945,22 +1007,15 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
           </div>
         )}
 
-        {(messages.length > 0 || lessonsInProgress.length > 0) && (
+        {recentItems.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: 15, fontWeight: 800 }}>Pick up where you left off</div>
             <div style={{ ...card, padding: '2px 14px' }}>
-              {messages.length > 0 && (
-                <button type="button" onClick={() => setPhase('chat')}
-                  style={{ display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%', padding: '10px 0', border: 'none', borderBottom: lessonsInProgress.length ? `1px solid ${t.border}` : 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', color: t.text, fontSize: 13 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Chat · {topic || (typeof messages.find(m => m.role === 'user')?.content === 'string' ? messages.find(m => m.role === 'user').content : 'Your conversation')}</span>
-                  <span style={{ color: t.textMuted, flexShrink: 0 }}>{messages.length} messages</span>
-                </button>
-              )}
-              {lessonsInProgress.slice(0, 3).map((l, i) => (
-                <button key={l.topic} type="button" onClick={() => openLesson(l.topic)}
+              {recentItems.map((item, i) => (
+                <button key={item.key} type="button" onClick={item.open}
                   style={{ display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%', padding: '10px 0', border: 'none', borderTop: i > 0 ? `1px solid ${t.border}` : 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', color: t.text, fontSize: 13 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Lesson · {l.topic}</span>
-                  <span style={{ color: t.textMuted, flexShrink: 0 }}>Step {Math.min(l.step + 1, 4)} of 4</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                  <span style={{ color: t.textMuted, flexShrink: 0 }}>{item.note}</span>
                 </button>
               ))}
             </div>
