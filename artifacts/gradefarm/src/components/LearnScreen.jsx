@@ -9,9 +9,7 @@ import { resolveConsolidation } from '../lib/consolidation'
 import { awaitingParent } from '../lib/parentConsent'
 
 const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 const MAX_IMAGES_PER_MESSAGE = 4
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -192,9 +190,6 @@ export default function LearnScreen({
   const [imageError, setImageError] = useState('')
   const [lightboxSrc, setLightboxSrc] = useState(null)
 
-  const [primer, setPrimer]               = useState(null)   // [{ concept, definition }]
-  const [primerLoading, setPrimerLoading] = useState(false)
-  const [primerTopic, setPrimerTopic]     = useState('')     // topic primer was fetched for
 
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
@@ -202,17 +197,6 @@ export default function LearnScreen({
   const photoRef  = useRef(null)
 
   const subjectTopicConfig = useCurriculumTopicConfig(subject)
-
-  // Example topics for the input, taken from this subject (one per strand),
-  // shortened to their name before any ":" / "," detail.
-  const topicPlaceholder = useMemo(() => {
-    const names = (subjectTopicConfig?.macroGroups || []).map(m => m.topics?.[0]).filter(Boolean)
-    const pool = names.length ? names : (subject?.topics || [])
-    const examples = pool.slice(0, 3)
-      .map(n => String(n).split(/[:,(]/)[0].trim())
-      .filter(Boolean)
-    return examples.length ? `e.g. ${examples.join(', ')}…` : 'e.g. a topic you’re stuck on…'
-  }, [subjectTopicConfig, subject])
 
   const struggleTopics = useMemo(() => {
     const bySubtopic = new Map()
@@ -252,52 +236,6 @@ export default function LearnScreen({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Fetch a concept primer when the topic input settles (500 ms debounce)
-  useEffect(() => {
-    if (!topic.trim() || topic.trim() === primerTopic) return
-    setPrimer(null)
-    const timer = setTimeout(async () => {
-      const t = topic.trim()
-      const cacheKey = `gf_primer_${subject?.name || 'unknown'}_${t}`
-      const cached = sessionStorage.getItem(cacheKey)
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setPrimer(parsed)
-            setPrimerTopic(t)
-            return
-          }
-        } catch {}
-      }
-      setPrimerLoading(true)
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            max_tokens: 300,
-            system: 'You are an educational primer generator. Given a subject and topic, return a JSON array of exactly 4 objects: [{ "concept": string, "definition": string }]. Each definition must be 10 words or fewer. No markdown, no commentary — only the raw JSON array.',
-            messages: [{ role: 'user', content: `Subject: ${subject?.name || 'General'}. Topic: ${t}` }],
-          }),
-        })
-        const data = await res.json()
-        const raw = data?.content?.[0]?.text || '[]'
-        const start = raw.indexOf('['), end = raw.lastIndexOf(']')
-        const parsed = JSON.parse(start !== -1 && end > start ? raw.slice(start, end + 1) : '[]')
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const filtered = parsed.filter(p => p.concept && p.definition)
-          sessionStorage.setItem(cacheKey, JSON.stringify(filtered))
-          setPrimer(filtered)
-          setPrimerTopic(t)
-        }
-      } catch {}
-      setPrimerLoading(false)
-    }, 500)
-    return () => clearTimeout(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, subject?.name])
 
   // Auto-start Titan AI from a question context sent from QuizScreen
   useEffect(() => {
@@ -441,39 +379,6 @@ export default function LearnScreen({
     return blocks
   }
 
-  const startLesson = async () => {
-    if (!topic.trim()) return
-    setFromContext(false)
-    setContextSubtopic(null)
-    setQuestionFocus(null)
-    setPhase('chat')
-    setLoading(true)
-    const systemPrompt = buildSystemPrompt(profile, subject, topic, docContext, struggleTopics, interests)
-    const openingPrompt = `Start the lesson on "${topic}". Warmly greet ${profile.display_name.split(' ')[0]} and open with a short engaging question to find out what they already know. Keep it brief and natural.`
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, subject: subjectName, topic: topic || '', system: systemPrompt, messages: [{ role: 'user', content: openingPrompt }] })
-      })
-      const data = await res.json()
-      const firstMsg = { role: 'assistant', content: (data.code === 'parent_consent_required' && data.error) || data.content?.[0]?.text || "Hey! Let's dive in. What do you already know about this topic?" }
-      setMessages([firstMsg])
-      try {
-        const { data: sess } = await supabase
-          .from('learn_sessions')
-          .insert({ user_id: profile.id, topic, interests, messages: [firstMsg] })
-          .select('id')
-          .single()
-        if (sess?.id) setSessionId(sess.id)
-      } catch {}
-    } catch {
-      setMessages([{ role: 'assistant', content: "Hey! I'm Titan AI, your tutor. What do you already know about this topic?" }])
-    }
-    setLoading(false)
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }
-
   const sendMessage = async () => {
     if (loading || processingImages || aiBlocked) return
     if (!input.trim() && attachedImages.length === 0) return
@@ -615,611 +520,729 @@ export default function LearnScreen({
   }
 
   const STYLE_OPTS = [
-    { id: null,     label: 'No analogies', desc: 'Plain & direct' },
-    { id: 'sport',  label: 'Sport',        desc: 'AFL, cricket, footy' },
-    { id: 'gaming', label: 'Gaming',       desc: 'RPGs, strategy' },
-    { id: 'music',  label: 'Music',        desc: 'Beats, harmony' },
+    { id: null,     label: 'Plain' },
+    { id: 'sport',  label: 'Sport' },
+    { id: 'gaming', label: 'Gaming' },
+    { id: 'music',  label: 'Music' },
   ]
 
-  if (!phase || phase === 'setup') return (
-    <div style={{ color: t.text, fontFamily: FONT_B, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <style>{`
-        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        .ls-wrap { display:grid; grid-template-columns:minmax(0, 1fr) 280px; gap:0; flex:1; min-height:0; overflow:hidden; align-items:stretch; }
-        .ls-main { min-width:0; padding:40px 48px 48px; background:${t.bg}; overflow-y:auto; display:flex; justify-content:center; }
-        .ls-main-inner { width:100%; max-width:720px; animation: fadeUp 0.35s ease; }
-        .ls-sidebar { width:280px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; padding:32px 24px; border-left:1px solid ${t.border}; display:flex; flex-direction:column; gap:24px; background:${t.bgSubtle}; overflow-y:auto; }
-        @media(max-width:1100px){
-          .ls-wrap { grid-template-columns:minmax(0, 1fr) 248px; }
-          .ls-sidebar { width:248px; padding:28px 20px; }
-          .ls-main { padding:32px 28px 36px; }
-          .ls-main-inner { max-width:660px; }
-        }
-        @media(max-width:860px){
-          .ls-wrap { display:flex; flex-direction:column; overflow:visible; }
-          .ls-main { padding:22px 18px 26px; overflow-y:visible; display:block; }
-          .ls-main-inner { max-width:none; }
-          .ls-sidebar { width:100%; justify-self:auto; align-self:auto; min-height:auto; border-left:none; border-top:1px solid ${t.border}; padding:22px 18px; gap:18px; overflow:visible; order:2; }
-        }
-        input::placeholder, textarea::placeholder { color:${t.textFaint}; }
-        .ls-topic-input:focus { border-color:${GOLD} !important; outline:none; box-shadow: 0 0 0 3px ${t.accentGlow}; }
-        .ls-style-chip:hover { border-color:${t.borderStrong}; }
-        .ls-strand-pill:hover { border-color:${t.borderStrong}; color:${t.text}; }
-        .ls-notes-card:hover { border-color:${t.borderStrong}; }
-      `}</style>
+  // ── Guided lessons ──────────────────────────────────────────────────────────
+  // A lesson is four steps Titan writes for one topic: key ideas, a worked
+  // example (revealed a step at a time), check questions, then a wrap-up.
+  // Progress is kept per subject in this browser so a lesson can be resumed.
+  const LESSON_STEPS = ['Key ideas', 'Worked example', 'Check your understanding', 'Wrap-up']
+  const lessonStoreKey = `gf-lessons-${subject?.id || subjectName || 'none'}`
+  const readLessons = () => {
+    try { return JSON.parse(localStorage.getItem(lessonStoreKey) || '{}') || {} } catch { return {} }
+  }
+  const [savedLessons, setSavedLessons] = useState(readLessons)
+  useEffect(() => { setSavedLessons(readLessons()) }, [lessonStoreKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const lessonKey = (name) => String(name || '').trim().toLowerCase()
+  const [lesson, setLesson] = useState(null)       // { topic, data, step, revealed, checkIndex, picked, answers, startedAt, updatedAt }
+  const [lessonLoading, setLessonLoading] = useState('')  // topic being written, '' when idle
+  const [lessonError, setLessonError] = useState('')
+  const [topicPickerOpen, setTopicPickerOpen] = useState(false)
+  const [topicSearch, setTopicSearch] = useState('')
+  const [offerDismissed, setOfferDismissed] = useState(false)
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  // Messages already in the conversation when the lesson started ("From your chat").
+  const [lessonChatStart, setLessonChatStart] = useState(0)
 
-      <div className="ls-wrap">
-        <div className="ls-main">
-          <div className="ls-main-inner">
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>
-                Lesson with Titan
-              </div>
-              <h1 style={{ fontFamily: FONT_D, fontWeight: 400, fontSize: 38, lineHeight: 1.1, letterSpacing: 0.5, margin: 0, color: t.text }}>
-                What do you want to <span style={{ color: GOLD }}>learn</span> today?
-              </h1>
-              <div style={{ fontSize: 14, color: t.textMuted, marginTop: 12, maxWidth: 540, lineHeight: 1.55 }}>
-                Pick a topic and Titan will start a one-on-one lesson tuned to {subject?.name || 'your subject'}. You can attach a photo of a textbook page or your working in the chat.
-              </div>
+  const saveLesson = (next) => {
+    setLesson(next)
+    if (!next) return
+    const all = { ...readLessons(), [lessonKey(next.topic)]: { ...next, updatedAt: Date.now() } }
+    try { localStorage.setItem(lessonStoreKey, JSON.stringify(all)) } catch {}
+    setSavedLessons(all)
+  }
+
+  const parseLesson = (raw) => {
+    const s = String(raw || '')
+    const start = s.indexOf('{'), end = s.lastIndexOf('}')
+    if (start === -1 || end <= start) return null
+    try {
+      const d = JSON.parse(s.slice(start, end + 1))
+      const ideas = (d.ideas || []).filter(i => i && i.title && i.text)
+      const steps = (d.example?.steps || []).filter(st => st && st.work)
+      const checks = (d.checks || []).filter(c => c && c.question && Array.isArray(c.options) && c.options.length >= 2 && Number.isInteger(c.answer_index) && c.answer_index >= 0 && c.answer_index < c.options.length)
+      if (!ideas.length || !steps.length || !checks.length) return null
+      return { title: d.title || '', ideas, example: { problem: d.example.problem || '', steps }, checks, summary: (d.summary || []).filter(Boolean) }
+    } catch { return null }
+  }
+
+  /** Open a lesson: resume the saved one for this topic, or have Titan write it. */
+  const openLesson = async (lessonTopic) => {
+    const name = String(lessonTopic || '').trim()
+    setTopicPickerOpen(false)
+    setLessonError('')
+    const saved = name ? readLessons()[lessonKey(name)] : null
+    if (saved?.data) {
+      setTopic(saved.topic)
+      setLesson(saved)
+      setLessonChatStart(messages.length)
+      setPhase('lesson')
+      return
+    }
+    if (aiBlocked) { setLessonError(blockedReason); return }
+    setPhase('lesson')
+    setLesson(null)
+    setLessonChatStart(messages.length)
+    setLessonLoading(name || 'this topic')
+    const textOf = (m) => typeof m.content === 'string' ? m.content : (m.content || []).filter(b => b?.type === 'text').map(b => b.text).join(' ')
+    const recent = messages.slice(-6).map(m => `${m.role === 'user' ? 'Student' : 'Titan'}: ${textOf(m)}`).join('\n')
+    const yearLevel = profile.year_level ? `Year ${profile.year_level}` : 'secondary school'
+    const style = interests ? `Use ${interests} analogies where they genuinely help.` : 'Use plain, direct language with concrete examples; no analogies.'
+    // Course topic names, so a lesson worked out from a chat is named like the
+    // question bank and its wrap-up can offer practice on it.
+    const courseTopics = (subjectTopicConfig?.macroGroups || []).flatMap(m => m.topics || [])
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession()
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {}) },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2500,
+          system: `You write short guided lessons for ${subjectName || 'school'} students at ${yearLevel} level. ${style}
+Return ONLY a JSON object, no markdown fences, in exactly this shape:
+{"title": "the topic, a few words",
+ "ideas": [{"title": "short rule", "text": "one or two plain sentences", "example": "a tiny worked example"}],
+ "example": {"problem": "one worked problem", "steps": [{"work": "the line of working", "note": "why, in a few words"}]},
+ "checks": [{"question": "...", "options": ["...", "...", "...", "..."], "answer_index": 0, "explanation": "why the answer is right and the likely slip behind the wrong ones"}],
+ "summary": ["what they learned, one line each"]}
+Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary which option is correct) and 3 summary lines. Write all maths in LaTeX inside $...$. Check every answer is correct before you reply.${courseTopics.length ? `\nIf the lesson is about one of these course topics, use its exact name as the title: ${courseTopics.slice(0, 80).join('; ')}` : ''}`,
+          messages: [{ role: 'user', content: `Topic: ${name || 'work out the topic the student is stuck on from the conversation below'}${recent ? `\n\nConversation so far:\n${recent}` : ''}${docContext ? `\n\nTeach from these class notes where relevant:\n${docContext.slice(0, 3000)}` : ''}` }],
+        }),
+      })
+      const data = await res.json()
+      const parsed = res.ok ? parseLesson(data?.content?.[0]?.text) : null
+      if (!parsed) throw new Error(data?.error || "Titan couldn't write that lesson. Try again in a moment.")
+      const lessonTopicName = name || parsed.title || 'Lesson'
+      setTopic(lessonTopicName)
+      saveLesson({ topic: lessonTopicName, data: parsed, step: 0, revealed: 1, checkIndex: 0, picked: null, answers: [], startedAt: Date.now() })
+    } catch (err) {
+      setLessonError(err?.message || "Titan couldn't write that lesson. Try again in a moment.")
+    }
+    setLessonLoading('')
+  }
+
+  const updateLesson = (patch) => saveLesson({ ...lesson, ...patch })
+  const finishLesson = () => {
+    updateLesson({ step: 3, finishedAt: Date.now() })
+  }
+
+  // Lessons in progress (newest first) for the start screen.
+  const lessonsInProgress = Object.values(savedLessons)
+    .filter(l => l?.data && !l.finishedAt)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+
+  // Start-screen lesson cards: a topic sent here from elsewhere, lessons in
+  // progress, then the weakest topics, then the next topics in the course.
+  const lessonCards = useMemo(() => {
+    const cards = []
+    const seen = new Set()
+    const add = (name, note, tone) => {
+      const k = lessonKey(name)
+      if (!name || seen.has(k) || cards.length >= 3) return
+      seen.add(k)
+      cards.push({ name, note, tone })
+    }
+    if (topic && phase !== 'chat') add(topic, 'Picked for you', null)
+    lessonsInProgress.forEach(l => add(l.topic, `Resume at step ${Math.min(l.step + 1, 4)} of 4`, null))
+    struggleTopics.forEach(s => add(s.subtopic, `${Math.round((1 - s.rate) * 100)}% in Practice`, 'danger'))
+    ;(subjectTopicConfig?.macroGroups || []).flatMap(m => m.topics || []).forEach(n => add(n, 'Not started', 'faint'))
+    return cards
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, savedLessons, struggleTopics, subjectTopicConfig, phase])
+
+  const allTopics = (subjectTopicConfig?.macroGroups || []).map(m => ({ label: m.label, topics: m.topics || [] }))
+  const topicMatches = (n) => !topicSearch.trim() || n.toLowerCase().includes(topicSearch.trim().toLowerCase())
+
+  // Titan offers a lesson once the student has said they're stuck twice.
+  const stuckCount = messages.filter(m => m.role === 'user' && typeof m.content === 'string' && /(don'?t|do not|still) (get|understand)|confused|lost|makes no sense/i.test(m.content)).length
+  const showLessonOffer = phase === 'chat' && stuckCount >= 2 && !offerDismissed && !loading
+
+  const startNew = () => {
+    setMessages([])
+    setTopic('')
+    setLesson(null)
+    setLessonError('')
+    setOfferDismissed(false)
+    setFromContext(false)
+    setContextSubtopic(null)
+    setQuestionFocus(null)
+    setSessionId(null)
+    setPhase('setup')
+  }
+
+  /** Send from the start screen: the chat opens with this first message. */
+  const sendFromStart = () => {
+    if (!input.trim() && attachedImages.length === 0) return
+    setPhase('chat')
+    sendMessage()
+  }
+
+  /** The Chat / Lesson switch. Lesson resumes or writes one for the current topic. */
+  const switchMode = (next) => {
+    if (next === 'chat') { setPhase('chat'); return }
+    if (lesson && lessonKey(lesson.topic) === lessonKey(topic)) { setPhase('lesson'); return }
+    if (topic || messages.length > 0) openLesson(topic)
+    else setTopicPickerOpen(true)
+  }
+
+  /** Ask Titan about a check question you got wrong, from the lesson. */
+  const askAboutCheck = (check, pickedIdx) => {
+    const text = `I got this wrong: ${check.question} I chose "${check.options[pickedIdx]}" but the answer is "${check.options[check.answer_index]}". Can you explain it a different way?`
+    sendPresetMessage(text)
+  }
+
+  // ── Shared pieces ───────────────────────────────────────────────────────────
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
+  const linkBtn = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }
+  const primaryBtn = (enabled = true) => ({ padding: '11px 16px', borderRadius: 10, border: 'none', background: enabled ? t.accent : t.bgHover, color: enabled ? '#0c1037' : t.textFaint, fontSize: 13.5, fontWeight: 800, cursor: enabled ? 'pointer' : 'default', fontFamily: FONT_B })
+  const secondaryBtn = { padding: '10px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }
+  const segOn = theme === 'dark' ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
+
+  const styleSelect = (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, border: `1px solid ${t.border}`, fontSize: 12, color: t.textMuted, background: t.bgCard }}>
+      Explain with
+      <select value={interests ?? ''} onChange={e => setInterests(e.target.value || null)} aria-label="Explain with"
+        style={{ border: 'none', background: 'transparent', color: t.text, fontWeight: 700, fontSize: 12, fontFamily: FONT_B, cursor: 'pointer', padding: 0 }}>
+        {STYLE_OPTS.map(o => <option key={o.label} value={o.id ?? ''}>{o.label}</option>)}
+      </select>
+    </label>
+  )
+
+  const modeSwitch = (current) => (
+    <div role="group" aria-label="Chat or lesson" style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+      {[['chat', 'Chat'], ['lesson', 'Lesson']].map(([id, label]) => (
+        <button key={id} type="button" aria-pressed={current === id} onClick={() => current !== id && switchMode(id)}
+          style={{ padding: '6px 13px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: current === id ? 'default' : 'pointer', ...(current === id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  const attachments = (
+    <>
+      {(attachedImages.length > 0 || processingImages) && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {attachedImages.map((img, i) => (
+            <div key={i} style={{ position: 'relative', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: `1px solid ${t.border}` }}>
+              <img src={img.dataUrl} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <button type="button" onClick={() => removeAttachedImage(i)} aria-label="Remove photo"
+                style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'rgba(12,16,55,0.78)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>×</button>
             </div>
+          ))}
+          {processingImages && <div style={{ width: 56, height: 56, borderRadius: 8, border: `1px dashed ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: t.textMuted }}>Adding…</div>}
+        </div>
+      )}
+      {imageError && <div style={{ fontSize: 12, color: t.danger }}>{imageError}</div>}
+    </>
+  )
 
-            <div style={{ marginBottom: 28 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-                Your topic
-              </label>
-              <input
-                className="ls-topic-input"
-                value={topic}
-                onChange={e => setTopic(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && startLesson()}
-                placeholder={topicPlaceholder}
-                style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: `1px solid ${t.borderMid}`, background: t.bgCard, color: t.text, fontSize: 15, fontFamily: FONT_B, boxSizing: 'border-box', transition: 'border 0.15s, box-shadow 0.15s' }}
-              />
-            </div>
+  const attachButton = (
+    <div style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setAttachMenuOpen(v => !v)} aria-label="Add a photo or class notes" aria-expanded={attachMenuOpen}
+        style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textSub, fontSize: 17, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+      {attachMenuOpen && (
+        <div style={{ position: 'absolute', bottom: 38, left: 0, zIndex: 20, minWidth: 200, padding: 6, borderRadius: 10, background: t.bgCard, border: `1px solid ${t.border}`, boxShadow: t.shadowModal }}>
+          {[
+            { label: 'Add a photo', hint: 'Textbook page or your working', onClick: () => photoRef.current?.click(), disabled: attachedImages.length >= MAX_IMAGES_PER_MESSAGE },
+            { label: docName ? 'Replace class notes' : 'Add class notes', hint: 'PDF, PPTX or DOCX', onClick: () => fileRef.current?.click() },
+          ].map(item => (
+            <button key={item.label} type="button" disabled={item.disabled} onClick={() => { setAttachMenuOpen(false); item.onClick() }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 7, border: 'none', background: 'transparent', cursor: item.disabled ? 'not-allowed' : 'pointer', fontFamily: FONT_B, color: t.text }}>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{item.label}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: t.textMuted }}>{item.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
-            <div style={{ marginBottom: 28 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', display: 'block', marginBottom: 10 }}>
-                How should Titan explain things?
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-                {STYLE_OPTS.map(opt => {
-                  const active = interests === opt.id
+  const notesChip = docName && (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, border: `1px solid ${t.border}`, fontSize: 11.5, color: t.textSub, maxWidth: 240 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{uploadingDoc ? 'Reading notes…' : `Notes: ${docName}`}</span>
+      {!uploadingDoc && <button type="button" aria-label="Remove class notes" onClick={() => { setDocName(''); setDocContext('') }} style={{ border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>}
+    </span>
+  )
+
+  const canSend = (input.trim() || attachedImages.length > 0) && !loading && !processingImages && !aiBlocked
+  const sendButton = (onSend) => (
+    <button type="button" onClick={onSend} disabled={!canSend} aria-label="Send message"
+      style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: canSend ? t.accent : t.bgHover, color: canSend ? '#0c1037' : t.textFaint, fontSize: 16, fontWeight: 800, cursor: canSend ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
+  )
+
+  const composer = ({ big = false, placeholder, onSend }) => (
+    <div style={{ ...card, borderRadius: 14, padding: big ? '12px 12px 10px' : '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {attachments}
+      <div style={{ display: 'flex', gap: 8, alignItems: big ? 'stretch' : 'flex-end', flexDirection: big ? 'column' : 'row' }}>
+        {!big && attachButton}
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend() } }}
+          disabled={aiBlocked}
+          placeholder={aiBlocked ? blockedReason : placeholder}
+          rows={big ? 2 : 1}
+          aria-label="Message Titan"
+          style={{ flex: 1, border: 'none', outline: 'none', resize: 'none', background: 'transparent', color: t.text, fontSize: 14.5, fontFamily: FONT_B, lineHeight: 1.5, padding: big ? '4px 4px' : '6px 2px', maxHeight: 160 }}
+        />
+        {big ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {attachButton}
+            {styleSelect}
+            {notesChip}
+            <span style={{ marginLeft: 'auto' }}>{sendButton(onSend)}</span>
+          </div>
+        ) : sendButton(onSend)}
+      </div>
+    </div>
+  )
+
+  const quotaLine = aiLeft != null && (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, fontSize: 12, color: outOfAi ? t.danger : t.textMuted }}>
+      <span>{outOfAi ? 'No free Titan AI messages left today. They reset tomorrow.' : `${aiLeft} of ${aiQuota.chat_limit} free Titan AI messages left today`}</span>
+      {subject && (
+        <button type="button" onClick={() => navigate('/get-access', { state: { subject } })}
+          style={{ border: 'none', background: 'none', padding: 0, color: t.goldText, fontFamily: FONT_B, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+          Go unlimited
+        </button>
+      )}
+    </div>
+  )
+
+  const messageList = (list, compact = false) => list.map((msg, i) => {
+    const isTitan = msg.role === 'assistant'
+    return (
+      <div key={i} className="msg-in" style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: compact ? '100%' : 700, alignSelf: isTitan ? 'flex-start' : 'flex-end' }}>
+        {isTitan && <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Titan</div>}
+        <div style={{
+          color: t.text, fontSize: compact ? 13.5 : 14.5, lineHeight: 1.7,
+          ...(isTitan ? {} : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '9px 13px' }),
+        }}>
+          {renderMessageBody(msg)}
+        </div>
+      </div>
+    )
+  })
+
+  const typing = loading && (
+    <div className="msg-in" style={{ display: 'flex', gap: 5, alignItems: 'center', height: 22 }} aria-label="Titan is typing">
+      {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: t.textMuted, animation: 'pulse 1.2s ease infinite', animationDelay: `${i * 0.2}s` }} />)}
+    </div>
+  )
+
+  const hiddenInputs = (
+    <>
+      <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple capture="environment" onChange={handlePhotoSelect} style={{ display: 'none' }} />
+      <input ref={fileRef} type="file" accept=".pdf,.pptx,.docx,.txt" onChange={handleDocUpload} style={{ display: 'none' }} />
+    </>
+  )
+
+  const topicPicker = topicPickerOpen && (
+    <div role="dialog" aria-modal="true" aria-label="Choose a topic" onClick={() => setTopicPickerOpen(false)}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.3)' }}>
+        <div style={{ padding: '16px 18px', borderBottom: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>Choose a topic for a lesson</div>
+            <button type="button" onClick={() => setTopicPickerOpen(false)} aria-label="Close" style={{ border: 'none', background: 'transparent', color: t.textMuted, fontSize: 18, cursor: 'pointer' }}>×</button>
+          </div>
+          <input id="learn-topic-search" autoFocus value={topicSearch} onChange={e => setTopicSearch(e.target.value)} placeholder="Search topics, or type your own"
+            onKeyDown={e => { if (e.key === 'Enter' && topicSearch.trim()) openLesson(topicSearch.trim()) }}
+            style={{ padding: '9px 12px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13.5, fontFamily: FONT_B, outline: 'none' }} />
+        </div>
+        <div style={{ overflowY: 'auto', padding: '6px 8px 12px' }}>
+          {allTopics.map(g => {
+            const shown = g.topics.filter(topicMatches)
+            if (!shown.length) return null
+            return (
+              <div key={g.label} style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, padding: '4px 10px' }}>{g.label}</div>
+                {shown.map(n => {
+                  const saved = savedLessons[lessonKey(n)]
                   return (
-                    <button
-                      key={opt.id ?? 'none'}
-                      className="ls-style-chip"
-                      onClick={() => setInterests(opt.id)}
-                      style={{
-                        padding: '14px 14px',
-                        borderRadius: 12,
-                        border: `1px solid ${active ? GOLD : t.border}`,
-                        background: active ? t.accentGlow : t.bgCard,
-                        color: active ? t.text : t.textSub,
-                        fontFamily: FONT_B,
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        transition: 'all 0.15s',
-                        boxShadow: active ? `0 0 0 1px ${GOLD} inset` : 'none',
-                      }}
-                    >
-                      <div style={{ fontSize: 14, fontWeight: 700, color: active ? GOLD : t.text, marginBottom: 4 }}>
-                        {opt.label}
-                      </div>
-                      <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 500 }}>{opt.desc}</div>
+                    <button key={n} type="button" onClick={() => openLesson(n)}
+                      style={{ display: 'flex', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13.5, color: t.text }}>
+                      <span>{n}</span>
+                      {saved?.data && <span style={{ fontSize: 12, color: t.textMuted, flexShrink: 0 }}>{saved.finishedAt ? 'Done' : `Step ${Math.min(saved.step + 1, 4)} of 4`}</span>}
                     </button>
                   )
                 })}
               </div>
-            </div>
-
-            {(primerLoading || (primer && primer.length > 0)) && (
-              <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 14, background: t.bgCard, border: `1px solid ${t.border}` }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
-                  Concept Primer · {topic}
-                </div>
-                {primerLoading ? (
-                  <div style={{ fontSize: 13, color: t.textFaint, fontStyle: 'italic' }}>Loading key concepts…</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {primer.map((p, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                        <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: GOLD, flexShrink: 0, marginTop: 1 }}>
-                          {i + 1}
-                        </div>
-                        <div>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{p.concept}</span>
-                          <span style={{ fontSize: 13, color: t.textMuted }}> — {p.definition}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={startLesson}
-              disabled={!topic.trim() || uploadingDoc}
-              style={{
-                width: '100%',
-                padding: '16px 18px',
-                borderRadius: 12,
-                border: 'none',
-                background: topic.trim() && !uploadingDoc ? GOLD : t.border,
-                color: topic.trim() && !uploadingDoc ? '#0c1037' : t.textFaint,
-                fontSize: 15, fontWeight: 800, letterSpacing: 0.2,
-                cursor: topic.trim() && !uploadingDoc ? 'pointer' : 'default',
-                fontFamily: FONT_B,
-                boxShadow: topic.trim() && !uploadingDoc ? t.shadowGold : 'none',
-                transition: 'all 0.15s',
-              }}
-            >
-              Start lesson with Titan →
+            )
+          })}
+          {topicSearch.trim() && (
+            <button type="button" onClick={() => openLesson(topicSearch.trim())}
+              style={{ ...secondaryBtn, margin: '12px 10px 0', display: 'block' }}>
+              Start a lesson on “{topicSearch.trim()}”
             </button>
-
-            {subjectTopicConfig && (
-              <div style={{ marginTop: 40 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 18 }}>
-                  Or browse by strand
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-                  {subjectTopicConfig.macroGroups.map(macro => (
-                    <div key={macro.id}>
-                      <div style={{ fontFamily: FONT_D, fontSize: 17, fontWeight: 400, letterSpacing: 0.6, color: t.text, marginBottom: 10 }}>{macro.label}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {macro.topics.map((topicName, ti) => {
-                          const active = topic === topicName
-                          const shortLabel = topicName || ''
-                          const prefix = `${macro.num}.${ti + 1}`
-                          return (
-                            <button
-                              key={topicName}
-                              className="ls-strand-pill"
-                              onClick={() => setTopic(topicName)}
-                              title={topicName}
-                              aria-label={topicName}
-                              style={{
-                                padding: '8px 14px',
-                                borderRadius: 999,
-                                border: `1px solid ${active ? GOLD : t.border}`,
-                                background: active ? t.accentGlow : 'transparent',
-                                color: active ? GOLD : t.textSub,
-                                fontSize: 12.5,
-                                fontWeight: active ? 700 : 500,
-                                cursor: 'pointer',
-                                fontFamily: FONT_B,
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              <span style={{ opacity: 0.6, fontWeight: 600, marginRight: 6 }}>{prefix}</span>
-                              {shortLabel}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="ls-sidebar">
-          <div>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>Titan suggests</div>
-            {struggleTopics.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {struggleTopics.slice(0, 4).map(s => (
-                  <button
-                    key={s.subtopic}
-                    onClick={() => setTopic(s.subtopic)}
-                    style={{
-                      textAlign: 'left',
-                      padding: '11px 13px',
-                      borderRadius: 10,
-                      border: `1px solid ${topic === s.subtopic ? GOLD : t.border}`,
-                      background: topic === s.subtopic ? t.accentGlow : 'transparent',
-                      cursor: 'pointer',
-                      fontFamily: FONT_B,
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 700, color: topic === s.subtopic ? GOLD : t.text, marginBottom: 3 }}>{s.subtopic}</div>
-                    <div style={{ fontSize: 10.5, color: t.danger, fontWeight: 600, letterSpacing: 0.2 }}>{Math.round(s.rate * 100)}% error rate</div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 12.5, color: t.textMuted, lineHeight: 1.6 }}>
-                Do some quiz sessions first — Titan will suggest your weakest topics here.
-              </div>
-            )}
-          </div>
-
-          <div>
-            <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>Class notes</div>
-            <div
-              className="ls-notes-card"
-              onClick={() => fileRef.current?.click()}
-              style={{
-                border: `1px solid ${docContext ? GOLD : t.border}`,
-                borderRadius: 10,
-                padding: '14px 14px',
-                cursor: 'pointer',
-                background: docContext ? t.accentGlow : 'transparent',
-                transition: 'all 0.2s',
-              }}
-            >
-              {uploadingDoc ? (
-                <div style={{ fontSize: 12.5, color: t.textMuted }}>Processing…</div>
-              ) : docContext ? (
-                <>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 4 }}>
-                    {docName?.slice(0, 28)}{docName && docName.length > 28 ? '…' : ''}
-                  </div>
-                  <div style={{ fontSize: 11, color: t.textMuted }}>Titan will teach from your notes</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>+ Add class notes</div>
-                  <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>PDF, PPTX or DOCX — optional context for the lesson</div>
-                </>
-              )}
-            </div>
-            <input ref={fileRef} type="file" accept=".pdf,.pptx,.docx,.txt" onChange={handleDocUpload} style={{ display: 'none' }} />
-          </div>
+          )}
         </div>
       </div>
     </div>
   )
 
-  const isAssistantBubble = (role) => role === 'assistant'
+  const styles = (
+    <style>{`
+      @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+      .msg-in { animation: fadeUp 0.2s ease; }
+      .ls-card-btn:hover { border-color: ${t.borderStrong} !important; }
+      .ls-lesson { display: grid; grid-template-columns: minmax(0, 1fr) 320px; flex: 1; min-height: 0; }
+      .ls-lesson-main { padding: 26px 32px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+      .ls-lesson-panel { border-left: 1px solid ${t.border}; display: flex; flex-direction: column; min-height: 0; }
+      .ls-ideas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .ls-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      @media (max-width: 860px) {
+        .ls-lesson { display: flex; flex-direction: column; }
+        .ls-lesson-main { padding: 18px 16px; overflow: visible; }
+        .ls-lesson-panel { border-left: none; border-top: 1px solid ${t.border}; min-height: 420px; }
+        .ls-ideas, .ls-picks { grid-template-columns: 1fr; }
+      }
+      textarea::placeholder, input::placeholder { color: ${t.textFaint}; }
+    `}</style>
+  )
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, overflow: 'hidden', background: t.bg }}>
-      <style>{`
-        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        .msg-in { animation: fadeUp 0.2s ease; }
-        .ls-chat-desktop { display:grid; grid-template-columns:minmax(0, 1fr) 268px; flex:1; min-height:0; }
-        .ls-chat-aside { width:268px; justify-self:end; align-self:stretch; min-height:100%; box-sizing:border-box; border-left:1px solid ${t.border}; padding:24px 20px; background:${t.bgSubtle}; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
-        .ls-chat-body { min-width:0; display:flex; flex-direction:column; min-height:0; }
-        .ls-quickreply:hover { border-color:${t.borderStrong}; color:${t.text}; background:${t.bgHover}; }
-        .ls-composer-btn:hover:not(:disabled) { background:${t.bgHover}; color:${t.text}; }
-        @media(max-width:1100px){
-          .ls-chat-desktop { grid-template-columns:minmax(0, 1fr) 240px; }
-          .ls-chat-aside { width:240px; padding:20px 16px; }
-        }
-        @media(max-width:860px){
-          .ls-chat-desktop { display:flex; flex-direction:column; }
-          .ls-chat-aside { display:none; }
-        }
-      `}</style>
-
-      <div style={{ borderBottom: `1px solid ${t.border}`, background: t.bgSubtle, padding: '14px 22px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 3 }}>
-              Titan AI · Lesson
-            </div>
-            <div style={{ fontFamily: FONT_D, fontSize: 19, fontWeight: 400, letterSpacing: 0.6, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {topic || 'Untitled topic'}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            {STYLE_OPTS.map(opt => {
-              const active = interests === opt.id
-              return (
-                <button
-                  key={opt.id ?? 'none'}
-                  onClick={() => setInterests(opt.id)}
-                  title={opt.desc}
-                  style={{
-                    padding: '6px 11px',
-                    borderRadius: 999,
-                    border: `1px solid ${active ? GOLD : t.border}`,
-                    background: active ? t.accentGlow : 'transparent',
-                    color: active ? GOLD : t.textMuted,
-                    fontSize: 11.5,
-                    fontWeight: active ? 700 : 500,
-                    cursor: 'pointer',
-                    fontFamily: FONT_B,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
-            <div style={{ width: 1, height: 18, background: t.border, margin: '0 4px' }} />
-            <button onClick={() => setPhase('setup')} style={{ padding: '6px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT_B }}>← Setup</button>
-            <button onClick={onBack} style={{ padding: '6px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT_B }}>Exit</button>
-          </div>
+  // ── Start screen ────────────────────────────────────────────────────────────
+  if (!phase || phase === 'setup') return (
+    <div style={{ color: t.text, fontFamily: FONT_B, height: '100%', minHeight: 0, overflowY: 'auto', background: t.bg }}>
+      {styles}
+      {hiddenInputs}
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 40px', display: 'flex', flexDirection: 'column', gap: 26 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>
+            Ask Titan about {subject?.name || 'your subject'}
+          </h1>
+          {composer({ big: true, placeholder: 'Ask a question, paste a problem, or add a photo of your working', onSend: sendFromStart })}
+          {quotaLine}
         </div>
-        {docName && (
-          <div style={{ marginTop: 10, fontSize: 10.5, color: GOLD, background: t.accentGlow2, border: `1px solid ${t.borderAccent}`, padding: '4px 10px', borderRadius: 6, display: 'inline-block', fontWeight: 600 }}>
-            Notes attached: {docName}
+
+        {lessonCards.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}>Guided lessons</div>
+                <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>About 10 minutes each: key ideas, a worked example and check questions.</div>
+              </div>
+              {allTopics.length > 0 && <button type="button" style={{ ...linkBtn, fontSize: 12.5, flexShrink: 0 }} onClick={() => { setTopicSearch(''); setTopicPickerOpen(true) }}>Browse all topics</button>}
+            </div>
+            <div className="ls-picks">
+              {lessonCards.map(c => (
+                <button key={c.name} type="button" className="ls-card-btn" onClick={() => openLesson(c.name)}
+                  style={{ ...card, padding: '13px 14px', textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{c.name}</span>
+                  <span style={{ fontSize: 12, color: c.tone === 'danger' ? t.danger : t.textMuted }}>{c.note}</span>
+                </button>
+              ))}
+            </div>
+            {lessonError && <div role="alert" style={{ fontSize: 12.5, color: t.danger }}>{lessonError}</div>}
+          </div>
+        )}
+
+        {(messages.length > 0 || lessonsInProgress.length > 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>Pick up where you left off</div>
+            <div style={{ ...card, padding: '2px 14px' }}>
+              {messages.length > 0 && (
+                <button type="button" onClick={() => setPhase('chat')}
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%', padding: '10px 0', border: 'none', borderBottom: lessonsInProgress.length ? `1px solid ${t.border}` : 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', color: t.text, fontSize: 13 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Chat · {topic || (typeof messages.find(m => m.role === 'user')?.content === 'string' ? messages.find(m => m.role === 'user').content : 'Your conversation')}</span>
+                  <span style={{ color: t.textMuted, flexShrink: 0 }}>{messages.length} messages</span>
+                </button>
+              )}
+              {lessonsInProgress.slice(0, 3).map((l, i) => (
+                <button key={l.topic} type="button" onClick={() => openLesson(l.topic)}
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%', padding: '10px 0', border: 'none', borderTop: i > 0 ? `1px solid ${t.border}` : 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', color: t.text, fontSize: 13 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Lesson · {l.topic}</span>
+                  <span style={{ color: t.textMuted, flexShrink: 0 }}>Step {Math.min(l.step + 1, 4)} of 4</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
+      {topicPicker}
+    </div>
+  )
 
-      <div className="ls-chat-desktop">
-        <div className="ls-chat-body">
-          <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 18px', display: 'flex', flexDirection: 'column', gap: 22 }}>
-            {messages.map((msg, i) => {
-              const isTitan = isAssistantBubble(msg.role)
-              return (
-                <div key={i} className="msg-in" style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 720 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: isTitan ? GOLD : t.textMuted }}>
-                    {isTitan ? 'Titan' : (profile.display_name?.split(' ')[0] || 'You')}
-                  </div>
-                  <div style={{
-                    color: t.text,
-                    fontSize: 14.5,
-                    lineHeight: 1.7,
-                    padding: isTitan ? 0 : '12px 14px',
-                    background: isTitan ? 'transparent' : t.bgCard,
-                    border: isTitan ? 'none' : `1px solid ${t.border}`,
-                    borderLeft: isTitan ? `2px solid ${t.borderAccent}` : `1px solid ${t.border}`,
-                    paddingLeft: isTitan ? 14 : 14,
-                    borderRadius: isTitan ? 0 : 10,
-                  }}>
-                    {renderMessageBody(msg)}
-                  </div>
-                </div>
-              )
-            })}
+  // ── Lesson ──────────────────────────────────────────────────────────────────
+  if (phase === 'lesson') {
+    const L = lesson?.data
+    const step = lesson?.step ?? 0
+    const check = L?.checks?.[lesson?.checkIndex ?? 0]
+    const answered = lesson?.picked != null && lesson?.answers?.length > (lesson?.checkIndex ?? 0)
+    const score = (lesson?.answers || []).filter(Boolean).length
+    const lessonTarget = lesson ? resolveConsolidation(questions, lesson.topic) : null
+    const panelMessages = messages.slice(Math.max(0, messages.length - 8))
+    const fromEarlier = lessonChatStart > 0 && messages.length - panelMessages.length < lessonChatStart
 
-            {loading && (
-              <div className="msg-in" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: GOLD }}>Titan</div>
-                <div style={{ paddingLeft: 14, borderLeft: `2px solid ${t.borderAccent}`, display: 'flex', gap: 5, alignItems: 'center', height: 24 }}>
-                  {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, animation: 'pulse 1.2s ease infinite', animationDelay: `${i*0.2}s` }} />)}
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, background: t.bg }}>
+        {styles}
+        {hiddenInputs}
+        <div className="ls-lesson">
+          <div className="ls-lesson-main">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {modeSwitch('lesson')}
+                {L && <span style={{ fontSize: 12.5, color: t.textMuted }}>Step {step + 1} of 4 · {LESSON_STEPS[step]}</span>}
+              </div>
+              <button type="button" style={linkBtn} onClick={startNew}>Change topic</button>
+            </div>
+
+            {lessonLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{lessonLoading === 'this topic' ? 'Writing your lesson…' : lessonLoading}</div>
+                <div style={{ fontSize: 13, color: t.textMuted }}>Titan is writing the key ideas, a worked example and check questions. This takes a few seconds.</div>
+                <div className="ls-ideas">{[0, 1, 2, 3].map(i => <div key={i} style={{ ...card, height: 110, opacity: 0.6, animation: 'pulse 1.4s ease infinite' }} />)}</div>
+              </div>
+            )}
+
+            {!lessonLoading && lessonError && (
+              <div style={{ ...card, padding: 18, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 15, fontWeight: 800 }}>Couldn't start the lesson</div>
+                <div role="alert" style={{ fontSize: 13, color: t.textMuted }}>{lessonError}</div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" style={primaryBtn()} onClick={() => openLesson(topic)}>Try again</button>
+                  <button type="button" style={secondaryBtn} onClick={() => setPhase(messages.length ? 'chat' : 'setup')}>Back</button>
                 </div>
               </div>
             )}
 
-            <div ref={bottomRef} />
+            {!lessonLoading && L && (
+              <>
+                <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>{lesson.topic}</div>
+                <div aria-hidden="true" style={{ display: 'flex', gap: 6 }}>
+                  {LESSON_STEPS.map((s, i) => <span key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: i < step ? t.success : i === step ? t.text : t.border }} />)}
+                </div>
+
+                {step === 0 && (
+                  <>
+                    <div className="ls-ideas">
+                      {L.ideas.map((idea, i) => (
+                        <div key={i} style={{ ...card, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ fontSize: 14, fontWeight: 800 }}><MathText text={idea.title} /></div>
+                          <div style={{ fontSize: 13.5, color: t.textSub, lineHeight: 1.6 }}><MathText text={idea.text} /></div>
+                          {idea.example && <div style={{ marginTop: 2, padding: '7px 10px', borderRadius: 8, background: t.bgSubtle, fontSize: 13 }}><MathText text={idea.example} /></div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div><button type="button" style={primaryBtn()} onClick={() => updateLesson({ step: 1, revealed: 1 })}>Next: worked example</button></div>
+                  </>
+                )}
+
+                {step === 1 && (
+                  <>
+                    <div style={{ fontSize: 15, fontWeight: 800 }}>Worked example: <MathText text={L.example.problem} /></div>
+                    <div style={{ ...card, padding: '4px 16px' }}>
+                      {L.example.steps.map((st, i) => (
+                        <div key={i} style={{ display: 'grid', gridTemplateColumns: '24px 1fr', gap: 10, padding: '11px 0', borderTop: i > 0 ? `1px solid ${t.border}` : 'none' }}>
+                          <span style={{ color: t.textFaint, fontWeight: 700 }}>{i + 1}</span>
+                          {i < lesson.revealed ? (
+                            <div>
+                              <div style={{ fontSize: 14.5 }}><MathText text={st.work} /></div>
+                              {st.note && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}><MathText text={st.note} /></div>}
+                            </div>
+                          ) : <span style={{ fontSize: 13, color: t.textFaint }}>Hidden until you're ready</span>}
+                        </div>
+                      ))}
+                    </div>
+                    {lesson.revealed < L.example.steps.length && (
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button type="button" style={secondaryBtn} onClick={() => updateLesson({ revealed: lesson.revealed + 1 })}>
+                          {lesson.revealed === L.example.steps.length - 1 ? 'Show final step' : 'Show next step'}
+                        </button>
+                        <span style={{ fontSize: 12.5, color: t.textMuted }}>Try the next line yourself first.</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button type="button" style={secondaryBtn} onClick={() => updateLesson({ step: 0 })}>Back</button>
+                      <button type="button" style={primaryBtn()} onClick={() => updateLesson({ step: 2, checkIndex: 0, picked: null, answers: [] })}>Next: check your understanding</button>
+                    </div>
+                  </>
+                )}
+
+                {step === 2 && check && (
+                  <>
+                    <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontSize: 12.5, color: t.textMuted }}>Question {lesson.checkIndex + 1} of {L.checks.length}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700 }}><MathText text={check.question} /></div>
+                      {check.options.map((opt, i) => {
+                        const isPicked = lesson.picked === i
+                        const isRight = i === check.answer_index
+                        const tone = answered ? (isRight ? 'right' : isPicked ? 'wrong' : null) : (isPicked ? 'picked' : null)
+                        return (
+                          <button key={i} type="button" disabled={answered} onClick={() => updateLesson({ picked: i })}
+                            style={{ display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', padding: '10px 14px', borderRadius: 10, fontFamily: FONT_B, fontSize: 14, cursor: answered ? 'default' : 'pointer', color: t.text,
+                              border: `1px solid ${tone === 'right' ? t.success : tone === 'wrong' ? t.danger : tone === 'picked' ? t.text : t.border}`,
+                              background: tone === 'right' ? t.successBg : tone === 'wrong' ? t.dangerBg : t.bgCard }}>
+                            <span style={{ fontWeight: 800, color: t.textFaint, width: 14 }}>{String.fromCharCode(65 + i)}</span>
+                            <span style={{ flex: 1, minWidth: 0 }}><MathText text={opt} /></span>
+                            {answered && isRight && <span style={{ fontSize: 12, fontWeight: 700, color: t.success }}>Correct</span>}
+                            {answered && isPicked && !isRight && <span style={{ fontSize: 12, fontWeight: 700, color: t.danger }}>Your answer</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {answered && (
+                      <div style={{ ...card, padding: '12px 16px', fontSize: 13.5, lineHeight: 1.6 }}>
+                        <strong>{lesson.answers[lesson.checkIndex] ? 'Correct.' : 'Not quite.'}</strong>{' '}
+                        <span style={{ color: t.textSub }}><MathText text={check.explanation || ''} /></span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {!answered && (
+                        <button type="button" style={primaryBtn(lesson.picked != null)} disabled={lesson.picked == null}
+                          onClick={() => updateLesson({ answers: [...lesson.answers.slice(0, lesson.checkIndex), lesson.picked === check.answer_index] })}>
+                          Check
+                        </button>
+                      )}
+                      {answered && !lesson.answers[lesson.checkIndex] && (
+                        <button type="button" style={secondaryBtn} disabled={aiBlocked || loading} onClick={() => askAboutCheck(check, lesson.picked)}>Explain it differently</button>
+                      )}
+                      {answered && (
+                        lesson.checkIndex < L.checks.length - 1
+                          ? <button type="button" style={primaryBtn()} onClick={() => updateLesson({ checkIndex: lesson.checkIndex + 1, picked: null })}>Next question</button>
+                          : <button type="button" style={primaryBtn()} onClick={finishLesson}>Finish lesson</button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {step === 3 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'start' }}>
+                    <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800 }}>What you covered</div>
+                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.7 }}>
+                        {(L.summary.length ? L.summary : L.ideas.map(i => i.title)).map((s, i) => <li key={i}><MathText text={s} /></li>)}
+                      </ul>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12, borderTop: `1px solid ${t.border}`, fontSize: 13 }}>
+                        <span style={{ color: t.textMuted }}>Check questions</span>
+                        <span style={{ display: 'flex', gap: 5 }}>
+                          {lesson.answers.map((ok, i) => (
+                            <span key={i} aria-label={ok ? 'Correct' : 'Wrong'} style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: ok ? t.successBg : t.dangerBg, color: ok ? t.success : t.danger }}>{ok ? '✓' : '✗'}</span>
+                          ))}
+                        </span>
+                        <strong>{score} of {L.checks.length}</strong>
+                      </div>
+                    </div>
+                    <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800 }}>Next step</div>
+                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
+                        {lessonTarget ? 'Lock it in with practice questions on this topic while it’s fresh.' : 'Ask Titan anything you’re still unsure about, or start another lesson.'}
+                      </div>
+                      {lessonTarget && onConsolidate && <button type="button" style={primaryBtn()} onClick={() => onConsolidate(lessonTarget)}>Practise this topic</button>}
+                      <button type="button" style={secondaryBtn} onClick={startNew}>Start another lesson</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {messages.length > 0 && messages.length < 5 && !loading && attachedImages.length === 0 && (
-            <div style={{ padding: '0 28px 10px', display: 'flex', gap: 6, overflowX: 'auto' }}>
-              {["I don't get it", 'Example?', 'Got it!', 'Different analogy'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => sendPresetMessage(s)}
-                  className="ls-quickreply"
-                  style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.15s' }}
-                >
+          {/* Ask Titan: the same conversation as Chat */}
+          <div className="ls-lesson-panel">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>Ask Titan</div>
+              <button type="button" style={{ ...linkBtn, fontSize: 12.5 }} onClick={() => setPhase('chat')}>Open as chat</button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {panelMessages.length === 0 && !loading && (
+                <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6 }}>Stuck on a step? Ask about it here and Titan will explain it another way.</div>
+              )}
+              {fromEarlier && <div style={{ fontSize: 12, color: t.textFaint }}>From your chat</div>}
+              {messageList(panelMessages, true)}
+              {typing}
+              <div ref={bottomRef} />
+            </div>
+            <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {composer({ placeholder: 'Ask about this step…', onSend: sendMessage })}
+            </div>
+          </div>
+        </div>
+        {topicPicker}
+      </div>
+    )
+  }
+
+  // ── Chat ────────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, overflow: 'hidden', background: t.bg }}>
+      {styles}
+      {hiddenInputs}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '12px 24px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          {modeSwitch('chat')}
+          <div style={{ fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic || 'Chat with Titan'}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {notesChip}
+          {styleSelect}
+          <button type="button" style={linkBtn} onClick={startNew}>New</button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div style={{ maxWidth: 820, margin: '0 auto', padding: '24px 24px 12px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {messageList(messages)}
+          {typing}
+
+          {showLessonOffer && (
+            <div className="msg-in" style={{ ...card, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', maxWidth: 700 }}>
+              <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>Want to go through it step by step?</div>
+                <div style={{ fontSize: 13, color: t.textMuted, marginTop: 2 }}>A 10-minute lesson{topic ? ` on ${topic}` : ''}: key ideas, a worked example, then 3 check questions.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" style={secondaryBtn} onClick={() => setOfferDismissed(true)}>Keep chatting</button>
+                <button type="button" style={primaryBtn()} onClick={() => openLesson(topic)}>Start lesson</button>
+              </div>
+            </div>
+          )}
+
+          {consolidateTarget && onConsolidate && messages.filter(m => m.role === 'assistant').length >= 2 && !loading && (
+            <div style={{ ...card, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', maxWidth: 700 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800 }}>Practise this topic</div>
+                <div style={{ fontSize: 12.5, color: t.textMuted }}>A short round of questions on {consolidateTarget.label}</div>
+              </div>
+              <button type="button" style={primaryBtn()} onClick={() => onConsolidate(consolidateTarget)}>Start</button>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      <div style={{ flexShrink: 0, padding: '8px 24px 16px' }}>
+        <div style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {messages.length > 0 && !loading && attachedImages.length === 0 && !aiBlocked && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+              {["I don't get it", 'Another example', 'Give me a harder one'].map(s => (
+                <button key={s} type="button" onClick={() => sendPresetMessage(s)}
+                  style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {s}
                 </button>
               ))}
             </div>
           )}
-
-          {consolidateTarget && messages.filter(m => m.role === 'assistant').length >= 1 && onConsolidate && (
-            <div style={{
-              padding: '10px 28px',
-              background: t.purpleBg,
-              borderTop: `1px solid ${t.border}`,
-              flexShrink: 0,
-            }}>
-              <button
-                onClick={() => onConsolidate(consolidateTarget)}
-                style={{
-                  width: '100%',
-                  padding: '11px 16px',
-                  borderRadius: 10,
-                  border: `1px solid ${t.purple}`,
-                  background: 'transparent',
-                  color: t.purple,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  fontFamily: FONT_B,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
-              >
-                <span>Consolidate — practice this topic</span>
-                <span style={{ opacity: 0.7, fontSize: 11, fontWeight: 500 }}>({consolidateTarget.label})</span>
-              </button>
-            </div>
-          )}
-
-          <div style={{ borderTop: `1px solid ${t.border}`, background: t.bgSubtle, padding: '14px 22px 18px', flexShrink: 0 }}>
-            {processingImages && attachedImages.length === 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12, color: t.textMuted }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: GOLD, animation: 'pulse 1.2s ease-in-out infinite' }} />
-                Processing photo…
-              </div>
-            )}
-
-            {attachedImages.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                {attachedImages.map((img, i) => (
-                  <div key={i} style={{ position: 'relative', width: 64, height: 64, borderRadius: 8, overflow: 'hidden', border: `1px solid ${t.borderMid}`, background: t.bgCard }}>
-                    <img src={img.dataUrl} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    <button
-                      type="button"
-                      onClick={() => removeAttachedImage(i)}
-                      aria-label="Remove photo"
-                      style={{
-                        position: 'absolute', top: 2, right: 2,
-                        width: 20, height: 20, borderRadius: '50%',
-                        border: 'none',
-                        background: 'rgba(12,16,55,0.78)',
-                        color: '#fff',
-                        fontSize: 12, fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        lineHeight: 1,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                {processingImages && (
-                  <div style={{ width: 64, height: 64, borderRadius: 8, border: `1px dashed ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: t.textMuted }}>
-                    Processing…
-                  </div>
-                )}
-              </div>
-            )}
-            {imageError && (
-              <div style={{ marginBottom: 8, fontSize: 11.5, color: t.danger, background: t.dangerBg, border: `1px solid ${t.danger}`, padding: '6px 10px', borderRadius: 8 }}>
-                {imageError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => photoRef.current?.click()}
-                disabled={attachedImages.length >= MAX_IMAGES_PER_MESSAGE || processingImages}
-                aria-label="Add photo"
-                title="Add photo"
-                className="ls-composer-btn"
-                style={{
-                  height: 42, padding: '0 12px', borderRadius: 11, gap: 6,
-                  border: `1px solid ${t.borderMid}`,
-                  background: t.bgCard,
-                  color: t.textSub,
-                  cursor: attachedImages.length >= MAX_IMAGES_PER_MESSAGE || processingImages ? 'default' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'all 0.15s',
-                  opacity: attachedImages.length >= MAX_IMAGES_PER_MESSAGE ? 0.5 : 1,
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                </svg>
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>Add photo</span>
-              </button>
-              <input
-                ref={photoRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                multiple
-                capture="environment"
-                onChange={handlePhotoSelect}
-                style={{ display: 'none' }}
-              />
-
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                disabled={aiBlocked}
-                placeholder={aiBlocked ? blockedReason : attachedImages.length > 0 ? 'Add a note for Titan (optional)…' : 'Type your answer or question…'}
-                rows={1}
-                style={{
-                  flex: 1,
-                  padding: '11px 14px',
-                  borderRadius: 11,
-                  border: `1px solid ${input.trim() || attachedImages.length > 0 ? t.borderAccent : t.borderMid}`,
-                  background: t.bgCard,
-                  color: t.text,
-                  fontSize: 14, fontFamily: FONT_B,
-                  outline: 'none', resize: 'none', maxHeight: 120, lineHeight: 1.5,
-                  boxShadow: input.trim() || attachedImages.length > 0 ? `0 0 0 3px ${t.accentGlow2}` : 'none',
-                  transition: 'border 0.15s, box-shadow 0.15s',
-                }}
-              />
-
-              <button
-                onClick={sendMessage}
-                disabled={(!input.trim() && attachedImages.length === 0) || loading || processingImages || aiBlocked}
-                aria-label="Send message"
-                style={{
-                  width: 42, height: 42, borderRadius: 11, border: 'none',
-                  background: (input.trim() || attachedImages.length > 0) && !loading && !processingImages ? GOLD : t.border,
-                  color: (input.trim() || attachedImages.length > 0) && !loading && !processingImages ? '#0c1037' : t.textFaint,
-                  fontSize: 18, fontWeight: 800,
-                  cursor: (input.trim() || attachedImages.length > 0) && !loading && !processingImages ? 'pointer' : 'default',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'all 0.15s',
-                  boxShadow: (input.trim() || attachedImages.length > 0) && !loading && !processingImages ? t.shadowGold : 'none',
-                }}
-              >
-                ↑
-              </button>
-            </div>
-            {aiLeft != null && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8, fontSize: 12, color: outOfAi ? t.danger : t.textMuted }}>
-                <span>
-                  {outOfAi
-                    ? 'No free Titan AI messages left today — they reset tomorrow.'
-                    : `${aiLeft} of ${aiQuota.chat_limit} free Titan AI messages left today`}
-                </span>
-                {subject && (
-                  <button type="button" onClick={() => navigate('/get-access', { state: { subject } })}
-                    style={{ border: 'none', background: 'none', padding: 0, color: t.goldText, fontFamily: FONT_B, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                    Go unlimited →
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="ls-chat-aside">
-          <div>
-            <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>Quick replies</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {["I don't get it", 'Give me an example', 'I think I get it!', 'Different analogy'].map(s => {
-                const blocked = attachedImages.length > 0 || aiBlocked
-                return (
-                  <button
-                    key={s}
-                    onClick={() => sendPresetMessage(s)}
-                    disabled={blocked}
-                    title={aiBlocked ? blockedReason : blocked ? 'Send your photo first, or remove it to use a quick reply' : undefined}
-                    className="ls-quickreply"
-                    style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12.5, cursor: blocked ? 'not-allowed' : 'pointer', fontFamily: FONT_B, transition: 'all 0.15s', width: '100%', opacity: blocked ? 0.45 : 1 }}
-                  >
-                    {s}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {struggleTopics.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, color: t.danger, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12 }}>Your weak spots</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {struggleTopics.slice(0, 3).map(s => (
-                  <div key={s.subtopic} style={{ padding: '9px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.dangerBg }}>
-                    <div style={{ color: t.text, fontSize: 12.5, fontWeight: 700 }}>{s.subtopic}</div>
-                    <div style={{ color: t.danger, fontSize: 10.5, marginTop: 3, fontWeight: 600, letterSpacing: 0.2 }}>{Math.round(s.rate * 100)}% error rate</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {composer({ placeholder: attachedImages.length > 0 ? 'Add a note for Titan (optional)…' : 'Reply to Titan…', onSend: sendMessage })}
+          {quotaLine}
         </div>
       </div>
 
       {lightboxSrc && (
-        <div
-          onClick={() => setLightboxSrc(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Photo viewer"
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, cursor: 'zoom-out' }}
-        >
-          <img src={lightboxSrc} alt="Full size" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }} />
+        <div onClick={() => setLightboxSrc(null)} role="dialog" aria-modal="true" aria-label="Photo viewer"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, cursor: 'zoom-out' }}>
+          <img src={lightboxSrc} alt="Full size" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
         </div>
       )}
+      {topicPicker}
     </div>
   )
 }
