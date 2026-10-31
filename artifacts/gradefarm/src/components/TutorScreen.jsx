@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard, CreditCard, Repeat, Pause, Play } from 'lucide-react'
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
-import OverviewTab from './OverviewTab'
+import TutorToday from './TutorToday'
+import { reportPortalBadges } from '../lib/portalNav'
 import MessagesView from './MessagesView'
 import TutorProfileTab from './TutorProfileTab'
 import { TutorPlanTab } from './TutorPlan'
@@ -285,7 +286,7 @@ function _LegacyStudentsTab({ profile, theme }) {
 const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed', 'Not passed']
 
 // ── Assignments Tab ───────────────────────────────────────────────────────────
-function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenReport }) {
+function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenReport, newForStudent = null }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
@@ -319,6 +320,12 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     notify_each: true,
   })
   const [form, setForm]               = useState(blankForm)
+  // /tutor/assignments?student=<id> (Assign work on a student) opens the form set to them.
+  useEffect(() => {
+    if (!newForStudent) return
+    setForm({ ...blankForm(), target_mode: 'single', student_ids: [newForStudent] })
+    setShowForm(true)
+  }, [newForStudent]) // eslint-disable-line react-hooks/exhaustive-deps
   const [schedules, setSchedules]     = useState([])
   const [scheduleBusy, setScheduleBusy] = useState(null)
   const [curriculumMacroGroups, setCurriculumMacroGroups] = useState([])
@@ -1077,10 +1084,10 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 }
 
 // ── Progress Tab ──────────────────────────────────────────────────────────────
-function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
+function ProgressTab({ profile, theme, allTutors = false, onOpenReport, initialStudentId = null }) {
   const t = THEMES[theme]
   const [roster, setRoster]           = useState([])
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [selectedStudentId, setSelectedStudentId] = useState(initialStudentId || '')
   const [progress, setProgress]       = useState(null)
   const [loading, setLoading]         = useState(false)
   const [rosterLoading, setRosterLoading] = useState(true)
@@ -2526,53 +2533,39 @@ function asMath(answer) {
   return !answer.includes('$') && /\\|\^|_\{/.test(answer) ? `$${answer}$` : answer
 }
 
-// ── Main TutorScreen — sidebar shell ───────────────────────────────────────────
-const NAV_GROUPS = [
-  { label: 'Main', items: [
-    { id: 'overview',    label: 'Overview',    icon: LayoutDashboard },
-    { id: 'students',    label: 'Students',    icon: Users },
-    { id: 'classes',     label: 'Classes',     icon: School },
-    { id: 'messages',    label: 'Messages',    icon: MessageSquare },
-  ]},
-  { label: 'Teaching', items: [
-    { id: 'assignments', label: 'Assignments', icon: ClipboardList },
-    { id: 'sessions',    label: 'Sessions',    icon: Video },
-    { id: 'resources',   label: 'Resources',   icon: Folder },
-  ]},
-  { label: 'Insights', items: [
-    { id: 'progress',    label: 'Progress',    icon: ChartColumn },
-    { id: 'diagnostic',  label: 'Diagnostic',  icon: FlaskConical },
-  ]},
-  { label: 'You', items: [
-    { id: 'profile',     label: 'My Profile',  icon: IdCard },
-    { id: 'plan',        label: 'Plan & billing', icon: CreditCard },
-  ]},
-]
+// ── Main TutorScreen ───────────────────────────────────────────────────────────
+// The sections are in the app sidebar (lib/portalNav TUTOR_NAV) and live at
+// /tutor/<section>. Progress reports sit inside Students; profile and billing
+// open from the account menu.
 const SECTION_META = {
-  overview:    { title: 'Overview',    sub: "Welcome back — here's what needs you today." },
-  students:    { title: 'Students',    sub: 'Your roster, performance & open tasks at a glance.' },
-  classes:     { title: 'Classes',     sub: 'Group students for assignments & sessions.' },
-  assignments: { title: 'Assignments', sub: 'Create, batch-assign and track work.' },
-  sessions:    { title: 'Sessions',    sub: 'Live video lessons — one-off & recurring.' },
-  resources:   { title: 'Resources',   sub: 'Notes, files & class recordings.' },
-  progress:    { title: 'Progress',    sub: 'Per-student analytics & reports.' },
-  diagnostic:  { title: 'Diagnostic',  sub: 'AI-built diagnostic assessments.' },
-  messages:    { title: 'Messages',    sub: 'Conversations with your students.' },
-  profile:     { title: 'My Profile',  sub: 'What your students see about you.' },
-  plan:        { title: 'Plan & billing', sub: 'Your tutor plan, student limit and payments.' },
+  overview:    { title: 'Today' },
+  students:    { title: 'Students' },
+  classes:     { title: 'Classes' },
+  assignments: { title: 'Assignments' },
+  sessions:    { title: 'Lessons' },
+  resources:   { title: 'Resources' },
+  diagnostic:  { title: 'Diagnostics' },
+  messages:    { title: 'Messages' },
+  profile:     { title: 'Tutor profile' },
+  plan:        { title: 'Plan and billing' },
 }
 
 export default function TutorScreen({ profile, theme, subject }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  // ?tab=messages (from message emails) opens a tab directly.
-  const [activeTab, setActiveTab] = useState(() => {
-    const tab = new URLSearchParams(window.location.search).get('tab')
-    return tab && SECTION_META[tab] ? tab : 'overview'
-  })
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileSearch, setMobileSearch] = useState(false)
-  const activeMobileTab = useRef(null)
+  const location = useLocation()
+  const section = location.pathname.split('/')[2] || 'overview'
+  // Old links: /tutor?tab=messages (message emails) and the Progress section.
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get('tab')
+    if (tab && SECTION_META[tab]) navigate(`/tutor/${tab}${location.search.replace(/[?&]tab=[^&]*/, '').replace(/^&/, '?')}`, { replace: true })
+    else if (section === 'progress') navigate('/tutor/students?view=progress', { replace: true })
+    else if (!SECTION_META[section]) navigate('/tutor', { replace: true })
+  }, [location.pathname, location.search]) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeTab = SECTION_META[section] ? section : 'overview'
+  const params = new URLSearchParams(location.search)
+  const studentsView = params.get('view') === 'progress' ? 'progress' : 'roster'
+
   // An assignment report open over the portal. ?report=<id> (from the
   // "assignment finished" email) opens one directly.
   const [reportId, setReportId] = useState(() => new URLSearchParams(window.location.search).get('report'))
@@ -2588,7 +2581,7 @@ export default function TutorScreen({ profile, theme, subject }) {
     try { localStorage.setItem('gf-tutor-scope', v ? 'all' : 'mine') } catch {}
   }
 
-  // Shell-level data — powers Overview, the global search and sidebar badges.
+  // Shell-level data — powers Today, the search and the sidebar badges.
   const [roster, setRoster] = useState([])
   const [classes, setClasses] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -2610,224 +2603,73 @@ export default function TutorScreen({ profile, theme, subject }) {
     return () => { cancelled = true }
   }, [profile.id, allTutors])
 
+  // Overdue work, shown as a badge on Assignments in the app sidebar.
   const overdueCount = useMemo(
     () => assignments.filter(a => !a.completed_at && a.due_date && new Date(a.due_date).setHours(23,59,59,999) < Date.now()).length,
     [assignments],
   )
-  // Unread student messages, refreshed every minute and when a conversation changes.
-  const [unreadMessages, setUnreadMessages] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    const refresh = () => { fetchUnreadMessageCount().then(n => { if (!cancelled) setUnreadMessages(n) }).catch(() => {}) }
-    refresh()
-    const id = setInterval(refresh, 60_000)
-    window.addEventListener('gf-messages-changed', refresh)
-    return () => { cancelled = true; clearInterval(id); window.removeEventListener('gf-messages-changed', refresh) }
-  }, [])
+  useEffect(() => { reportPortalBadges('tutor', { assignments: overdueCount }) }, [overdueCount])
 
-  const badges = { students: roster.length || null, assignments: overdueCount || null, messages: unreadMessages || null }
+  const go = (id) => navigate(id === 'overview' ? '/tutor' : `/tutor/${id}`)
+  const meta = SECTION_META[activeTab]
+  const isDark = theme === 'dark'
 
-  const go = (id) => { setActiveTab(id); setMobileSearch(false) }
+  // A short, true line under each title.
+  const context = {
+    overview: new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }),
+    students: `${roster.length} student${roster.length !== 1 ? 's' : ''} · ${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
+    classes: `${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
+    assignments: overdueCount ? `${overdueCount} overdue` : `${assignments.filter(a => !a.completed_at).length} open`,
+  }[activeTab]
 
-  // Phones: keep the selected tab visible in the swipeable tab strip.
-  useEffect(() => {
-    activeMobileTab.current?.scrollIntoView({ inline: 'center', block: 'nearest' })
-  }, [activeTab])
-
-  const SIDEBAR_W = collapsed ? 74 : 224
-  const meta = SECTION_META[activeTab] || { title: '', sub: '' }
-
-  const isDark      = theme === 'dark'
-  // Portal colours come straight from the theme, so light and dark both work.
-  const sidebarBg   = t.bg
-  const sidebarBdr  = t.border
-  const headerBg    = t.bg
-  const headerBdr   = t.border
-  const navGroupLbl = t.textFaint
-  const navItemDflt = t.textMuted
-  const navAccent   = t.text
-  const goldText    = t.goldText
-
-  const sidebar = (
-    <aside className={isDark ? '' : 'td-sidebar-light'} style={{
-      width: SIDEBAR_W, flexShrink: 0,
-      background: sidebarBg,
-      borderRight: `1px solid ${sidebarBdr}`,
-      display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
-    }}>
-      {/* Portal label. The app sidebar beside this one already shows the
-          gradefarm logo, so it isn't repeated here. */}
-      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0 12px' : '0 20px', borderBottom: `1px solid ${sidebarBdr}` }}>
-        <div title={collapsed ? 'Tutor Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'transparent', border: `1px solid ${sidebarBdr}`, borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0 }} />
-          {!collapsed && <span style={{ fontSize: 12, fontWeight: 700, color: t.text, whiteSpace: 'nowrap' }}>Tutor Portal</span>}
-        </div>
-      </div>
-
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
-        {NAV_GROUPS.map(group => (
-          <div key={group.label} style={{ marginTop: 14 }}>
-            {!collapsed && (
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: navGroupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
-            )}
-            {group.items.map(item => {
-              const active = activeTab === item.id
-              const badge = badges[item.id]
-              return (
-                <button key={item.id} onClick={() => go(item.id)} title={collapsed ? item.label : undefined}
-                  className={`td-nav-item${active ? ' active' : ''}`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left',
-                    padding: collapsed ? '11px 0' : '10px 14px',
-                    justifyContent: collapsed ? 'center' : undefined,
-                    margin: '1px 0', cursor: 'pointer',
-                    fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
-                    color: active ? navAccent : navItemDflt,
-                    background: 'transparent',
-                  }}
-                >
-                  <span style={{ display: 'flex', flexShrink: 0, opacity: active ? 1 : 0.75 }}><item.icon size={17} aria-hidden="true" /></span>
-                  {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
-                  {!collapsed && badge != null && (
-                    <span style={{
-                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.18)' : item.id === 'messages' ? GOLD : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
-                      color: item.id === 'assignments' ? '#f87171' : item.id === 'messages' ? '#0c1037' : (isDark ? t.textSub : '#64748b'),
-                      fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '2px 7px',
-                      border: item.id === 'assignments' ? '1px solid rgba(248,113,113,0.30)' : (isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #cbd5e1'),
-                    }}>{badge}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {/* User profile footer */}
-      <div style={{ padding: '10px 10px 12px', borderTop: `1px solid ${sidebarBdr}` }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '9px 10px', borderRadius: 12,
-          background: t.bgCard,
-          border: `1px solid ${t.border}`,
-          cursor: 'default',
-        }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%',
-            background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, color: '#0c1037', flexShrink: 0, fontSize: 14,
-          }}>
-            {(profile.display_name || '?')[0].toUpperCase()}
-          </div>
-          {!collapsed && (
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
-              <div style={{ fontSize: 11, color: goldText, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tutor</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </aside>
+  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const segOn = isDark ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
+  const segment = (options, value, onChange, label) => (
+    <div role="group" aria-label={label} style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+      {options.map(([v, l]) => (
+        <button key={String(v)} type="button" aria-pressed={value === v} onClick={() => onChange(v)}
+          style={{ padding: '6px 12px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', ...(value === v ? segOn : { background: 'transparent', color: t.textMuted }) }}>
+          {l}
+        </button>
+      ))}
+    </div>
   )
 
   return (
-    <div
-      className="td-root"
-      style={{
-        flex: 1, display: 'flex',
-        background: t.bg,
-        fontFamily: FONT_B, color: t.text, minHeight: 0,
-      }}
-    >
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
-
-      {/* Desktop sidebar */}
-      <div className="tutor-desktop-sidebar" style={{ display: 'flex', height: '100vh', position: 'sticky', top: 0 }}>{sidebar}</div>
-
-      {/* Main column. On phones the sidebar is replaced by a tab strip in the header. */}
-      <div className="td-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100vh' }}>
-        {/* Top bar */}
-        <header className="td-header" style={{
-          position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14,
-          padding: '0 24px',
-          background: headerBg, backdropFilter: 'blur(16px)',
-          borderBottom: `1px solid ${headerBdr}`,
-          minHeight: 64, height: 64,
-        }}>
-          <span className="td-header-sep" />
-          <button className="td-collapse-btn" onClick={() => setCollapsed(v => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em', color: t.text, lineHeight: 1.1 }}>{meta.title}</div>
-            <div className="td-header-sub" style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {isAdmin && (
-              <div role="group" aria-label="Whose students" style={{ display: 'flex', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`, overflow: 'hidden', flexShrink: 0 }}>
-                {[{ v: false, label: 'My students' }, { v: true, label: 'All tutors' }].map(opt => (
-                  <button key={opt.label} onClick={() => setAllTutors(opt.v)} aria-pressed={allTutors === opt.v}
-                    style={{ padding: '0 12px', height: 32, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                      background: allTutors === opt.v ? (isDark ? 'rgba(241,190,67,0.16)' : '#0f172a') : 'transparent',
-                      color: allTutors === opt.v ? (isDark ? GOLD : '#fff') : (isDark ? 'rgba(255,255,255,0.55)' : '#64748b') }}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="td-search-desktop">
-              <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
-            </div>
-            <button type="button" className="tutor-mobile-only" onClick={() => setMobileSearch(v => !v)} aria-label="Search" aria-pressed={mobileSearch}
-              style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9, cursor: 'pointer', display: 'flex',
-                border: `1px solid ${mobileSearch ? GOLD : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`, background: 'transparent', color: mobileSearch ? GOLD : (isDark ? 'rgba(255,255,255,0.6)' : '#64748b') }}>
-              <Search size={16} aria-hidden="true" />
-            </button>
-          </div>
-          {mobileSearch && (
-            <div className="tutor-mobile-only" style={{ width: '100%' }}>
-              <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} width="100%" autoFocus />
-            </div>
+    <div className="td-root" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: t.bg, fontFamily: FONT_B, color: t.text }}>
+      <header className="td-header" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '18px 28px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+        <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, lineHeight: 1.2 }}>{meta.title}</h1>
+          {context && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>{context}</div>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {isAdmin && segment([[false, 'My students'], [true, 'All tutors']], allTutors, setAllTutors, 'Whose students')}
+          <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} width="min(280px, 70vw)" />
+          {activeTab === 'overview' && (
+            <>
+              <button type="button" style={btn(false)} onClick={() => go('sessions')}>Schedule lesson</button>
+              <button type="button" style={btn(true)} onClick={() => go('assignments')}>New assignment</button>
+            </>
           )}
-          {/* Phones: every section as a swipeable strip of tabs */}
-          <nav className="tutor-mobile-only td-mobile-tabs" aria-label="Tutor portal sections">
-            {NAV_GROUPS.flatMap(g => g.items).map(item => {
-              const active = activeTab === item.id
-              const badge = badges[item.id]
-              return (
-                <button key={item.id} type="button" ref={active ? activeMobileTab : undefined} onClick={() => go(item.id)} aria-current={active ? 'page' : undefined}
-                  style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: active ? 800 : 600, whiteSpace: 'nowrap',
-                    border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : (isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0')}`,
-                    background: active ? (isDark ? 'rgba(241,190,67,0.16)' : '#0f172a') : 'transparent',
-                    color: active ? (isDark ? GOLD : '#fff') : navItemDflt }}>
-                  <item.icon size={14} aria-hidden="true" />
-                  {item.label}
-                  {badge != null && (
-                    <span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, fontSize: 10, fontWeight: 800, lineHeight: '17px', textAlign: 'center',
-                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.2)' : item.id === 'messages' ? GOLD : (isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'),
-                      color: item.id === 'assignments' ? '#f87171' : item.id === 'messages' ? '#0c1037' : (isDark ? t.textSub : '#64748b') }}>{badge}</span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
-        </header>
+          {activeTab === 'students' && segment([['roster', 'Roster'], ['progress', 'Progress reports']], studentsView, (v) => navigate(v === 'progress' ? '/tutor/students?view=progress' : '/tutor/students'), 'Students view')}
+        </div>
+      </header>
 
-        {/* Section content */}
-        <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
-          <div key={`${activeTab}-${allTutors ? 'all' : 'mine'}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
-            {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
-            {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} allTutors={allTutors} />}
-            {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} allTutors={allTutors} />}
-            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} onOpenReport={setReportId} />}
-            {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
-            {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
-            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} allTutors={allTutors} onOpenReport={setReportId} />}
-            {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
-            {activeTab === 'messages'    && <MessagesView   theme={theme} emptyHint="Invite a student from the Students tab to start a conversation." />}
-            {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
-            {activeTab === 'plan'        && <TutorPlanTab theme={theme} />}
-          </div>
+      {/* Section content */}
+      <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 56px' }}>
+        <div key={`${activeTab}-${studentsView}-${allTutors ? 'all' : 'mine'}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+          {activeTab === 'overview'    && <TutorToday     theme={theme} roster={roster} assignments={assignments} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} onOpenReport={setReportId} />}
+          {activeTab === 'students'    && (studentsView === 'progress'
+            ? <ProgressTab profile={profile} theme={theme} allTutors={allTutors} onOpenReport={setReportId} initialStudentId={params.get('student')} />
+            : <StudentsTab profile={profile} theme={theme} allTutors={allTutors} onNavigate={(to) => navigate(to)} />)}
+          {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} allTutors={allTutors} />}
+          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} onOpenReport={setReportId} newForStudent={params.get('student')} />}
+          {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
+          {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
+          {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
+          {activeTab === 'messages'    && <MessagesView   theme={theme} initialOtherId={params.get('with')} emptyHint="Invite a student from Students to start a conversation." />}
+          {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
+          {activeTab === 'plan'        && <TutorPlanTab theme={theme} />}
         </div>
       </div>
       {reportId && <AssignmentReport assignmentId={reportId} theme={theme} onClose={() => setReportId(null)} />}

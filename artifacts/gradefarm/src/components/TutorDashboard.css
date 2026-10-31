@@ -114,7 +114,7 @@
   .td-root { min-height: calc(100dvh - 55px) !important; }
   .td-main { height: auto !important; }
   .td-content { overflow: visible !important; padding: 16px 14px 48px !important; }
-  .td-header { position: static !important; height: auto !important; min-height: 0 !important; flex-wrap: wrap; row-gap: 10px !important; padding: 14px 14px 0 !important; backdrop-filter: none !important; }
+  .td-header { padding: 14px 14px !important; }
   .td-header-sep, .td-collapse-btn, .td-search-desktop { display: none !important; }
   .td-header-sub { white-space: normal !important; }
   .td-mobile-tabs { display: flex !important; gap: 6px; width: 100%; overflow-x: auto; padding: 0 0 12px; scrollbar-width: none; }

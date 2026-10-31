@@ -141,7 +141,7 @@ function studentSteps(isTutor) {
           target: 'nav-tutor',
           title: 'Tutor Portal',
           body:
-            'Your Tutor Portal sits under Manage. Manage your roster, classes, lessons, assignments and messages from here.',
+            'Switch to the Tutor Portal from the menu at the top of the sidebar. Your students, classes, lessons, assignments and messages are all here.',
         },
       ]
     : []

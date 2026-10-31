@@ -1313,6 +1313,31 @@ export async function createAssignment(tutorId, studentId, { type, subject, topi
 }
 
 /** Fetch all assignments created by a tutor (every tutor's with `allTutors`), with student profile data. */
+/**
+ * Rostered students' answers over the last `days` days, with each question's
+ * subtopic, for the tutor's Today page. Tutors can read their own students'
+ * answers (RLS); admins can read everyone's.
+ */
+export async function fetchRosterActivity(studentIds, days = 14) {
+  const ids = [...new Set(studentIds)].filter(Boolean)
+  if (!ids.length) return []
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  const rows = []
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100)
+    rows.push(...await fetchAllRows(() =>
+      supabase.from('answer_log').select('user_id, answered_at, correct, question_id').in('user_id', chunk).gte('answered_at', since),
+      'answered_at'))
+  }
+  const qIds = [...new Set(rows.map(r => r.question_id).filter(Boolean))]
+  const topics = {}
+  for (let i = 0; i < qIds.length; i += 200) {
+    const { data } = await supabase.from('questions').select('id, topic, subtopic').in('id', qIds.slice(i, i + 200))
+    ;(data || []).forEach(q => { topics[q.id] = q.subtopic || q.topic || null })
+  }
+  return rows.map(r => ({ ...r, subtopic: topics[r.question_id] || null }))
+}
+
 export async function fetchAssignmentsForTutor(tutorId, { allTutors = false } = {}) {
   let query = supabase
     .from('assignments')

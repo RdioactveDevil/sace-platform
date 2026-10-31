@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
-import { Flame, Mail, Search, TriangleAlert } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Mail, Search, X } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import {
   fetchRoster,
@@ -11,6 +11,7 @@ import {
   notifyStudent,
   fetchTutorClasses,
   fetchAssignmentsForTutor,
+  fetchRosterActivity,
   fetchRosterDetails,
   setStudentYearLevel,
   addStudentSubject,
@@ -27,7 +28,6 @@ import {
 import { parseEmailList, gettingStartedStatus } from '../lib/rosterOnboarding'
 
 const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const YEAR_LEVELS = ['Year 7', 'Year 8', 'Year 9', 'Year 10', 'Year 11', 'Year 12']
@@ -37,6 +37,24 @@ function fmtDate(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 }
+const DAY_MS = 86400000
+const QUIET_DAYS = 7
+/** Monday 00:00 of this week (or weeks back), as ms. */
+function weekStartMs(offsetWeeks = 0) {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - offsetWeeks * 7)
+  return d.getTime()
+}
+function relDay(ms) {
+  if (!ms) return 'Never'
+  const today = new Date().setHours(0, 0, 0, 0)
+  const days = Math.round((today - new Date(ms).setHours(0, 0, 0, 0)) / DAY_MS)
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 31) return `${days} days ago`
+  return new Date(ms).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
 function yearSortVal(y) {
   if (!y) return 999
   const m = /(\d+)/.exec(y)
@@ -44,11 +62,12 @@ function yearSortVal(y) {
 }
 
 const SORTS = [
-  { id: 'name',   label: 'Name' },
-  { id: 'year',   label: 'Year level' },
-  { id: 'xp',     label: 'XP' },
-  { id: 'streak', label: 'Streak' },
-  { id: 'open',   label: 'Open tasks' },
+  { id: 'name',     label: 'Name' },
+  { id: 'week',     label: 'This week' },
+  { id: 'accuracy', label: 'Accuracy' },
+  { id: 'open',     label: 'Open work' },
+  { id: 'active',   label: 'Last active' },
+  { id: 'year',     label: 'Year level' },
 ]
 const GROUPS = [
   { id: 'none',  label: 'No grouping' },
@@ -57,7 +76,7 @@ const GROUPS = [
   { id: 'class', label: 'Class' },
 ]
 
-export default function StudentsTab({ profile, theme, allTutors = false }) {
+export default function StudentsTab({ profile, theme, allTutors = false, onNavigate }) {
   const t = THEMES[theme]
 
   const [roster, setRoster] = useState([])
@@ -66,6 +85,10 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
   const [classes, setClasses] = useState([])
   const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(true)
+  // The roster's answers over the last 14 days (null while loading).
+  const [activity, setActivity] = useState(null)
+  // The student open in the side panel.
+  const [selectedId, setSelectedId] = useState(null)
 
   // toolbar state
   const [search, setSearch] = useState('')
@@ -111,6 +134,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         fetchAssignmentsForTutor(profile.id, { allTutors }).catch(() => []),
       ])
       setRoster(r); setClasses(cls); setAssignments(asg)
+      fetchRosterActivity(r.map(x => x.student_id), 14).then(setActivity).catch(() => setActivity([]))
       if (r.length) {
         fetchStudentEmails(r.map(x => x.student_id)).then(setEmails).catch(() => {})
       } else setEmails({})
@@ -144,6 +168,35 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     return m
   }, [assignments])
 
+  // This week, last week and per-topic numbers from the answers.
+  const statsByStudent = useMemo(() => {
+    const m = {}
+    const thisWeek = weekStartMs(0), lastWeek = weekStartMs(1)
+    for (const row of activity || []) {
+      const e = (m[row.user_id] = m[row.user_id] || { n: 0, right: 0, week: 0, weekRight: 0, prev: 0, prevRight: 0, last: 0, topics: {} })
+      const at = Date.parse(row.answered_at)
+      if (at > e.last) e.last = at
+      e.n++; if (row.correct) e.right++
+      if (at >= thisWeek) { e.week++; if (row.correct) e.weekRight++ }
+      else if (at >= lastWeek) { e.prev++; if (row.correct) e.prevRight++ }
+      if (row.subtopic) {
+        const tp = (e.topics[row.subtopic] = e.topics[row.subtopic] || { n: 0, right: 0 })
+        tp.n++; if (row.correct) tp.right++
+      }
+    }
+    return m
+  }, [activity])
+
+  const openStudent = (id) => {
+    setSelectedId(id); setEditId(null); setConfirmRemove(null); setNotifyId(null)
+  }
+  useEffect(() => {
+    if (!selectedId) return
+    const onKey = (e) => { if (e.key === 'Escape') openStudent(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Enriched per-student model
   const students = useMemo(() => roster.map(r => {
     const d = details[r.student_id] || {}
@@ -175,8 +228,10 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       classNames: cls.map(c => c.name),
       pending: tasks.pending,
       overdue: tasks.overdue,
+      ...activityFields(statsByStudent[r.student_id], r.profiles?.last_active, tasks.overdue,
+        gettingStartedStatus({ diagnostics: d.diagnostics || [], xp: r.profiles?.xp ?? 0 }), !!activity),
     }
-  }), [roster, details, emails, classesByStudent, tasksByStudent])
+  }), [roster, details, emails, classesByStudent, tasksByStudent, statsByStudent, activity])
 
   // Distinct filter options
   const yearOptions = useMemo(() => [...new Set(students.map(s => s.year_level).filter(Boolean))].sort((a, b) => yearSortVal(a) - yearSortVal(b)), [students])
@@ -190,11 +245,12 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       if (fYear && s.year_level !== fYear) return false
       if (fStage && !s.stages.includes(fStage)) return false
       if (fClass && !s.classNames.includes(fClass)) return false
-      if (attentionOnly && s.overdue === 0) return false
+      if (attentionOnly && !s.reasons.length) return false
       if (startingOnly && s.start === 'practising') return false
       return true
     })
   }, [students, search, fYear, fStage, fClass, attentionOnly, startingOnly])
+  const attentionCount = useMemo(() => students.filter(s => s.reasons.length).length, [students])
   const startCounts = useMemo(() => ({
     diagnostic: students.filter(s => s.start === 'diagnostic').length,
     notStarted: students.filter(s => s.start === 'not_started').length,
@@ -206,9 +262,10 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
       let av, bv
       switch (sortKey) {
         case 'year': av = yearSortVal(a.year_level); bv = yearSortVal(b.year_level); break
-        case 'xp': av = a.xp; bv = b.xp; break
-        case 'streak': av = a.streak; bv = b.streak; break
-        case 'open': av = a.pending; bv = b.pending; break
+        case 'week': av = a.week; bv = b.week; break
+        case 'accuracy': av = a.acc ?? -1; bv = b.acc ?? -1; break
+        case 'open': av = a.overdue * 1000 + a.pending; bv = b.overdue * 1000 + b.pending; break
+        case 'active': av = a.lastActive || 0; bv = b.lastActive || 0; break
         default: av = a.name.toLowerCase(); bv = b.name.toLowerCase()
       }
       if (av < bv) return -1 * dir
@@ -304,129 +361,228 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
     if (res.ok) setTimeout(() => { setNotifyId(null); setNotifyMsg(''); setNotifyState(null) }, 1500)
   }
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
-  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
-  const ctrl = { padding: '8px 11px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
-  const chipStyle = (active) => ({ padding: '7px 13px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.14)' : t.bgCard, color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 600, cursor: 'pointer', fontFamily: FONT_B })
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
+  const divider = t.border
+  const ctrl = { padding: '8px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
+  const chipStyle = (active) => ({ padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? t.text : t.border}`, background: active ? t.text : t.bgCard, color: active ? t.bg : t.textMuted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' })
+  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const linkBtn = (color = t.textSub) => ({ padding: 0, border: 'none', background: 'none', color, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B })
   const tag = (text, color, key) => (
     <span key={key} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${color}1f`, color, whiteSpace: 'nowrap' }}>{text}</span>
   )
+  const accColor = (pct) => pct == null ? t.textFaint : pct >= 70 ? t.success : pct >= 50 ? t.goldText : t.danger
+  const th = (label, right, title) => (
+    <th title={title} style={{ textAlign: right ? 'right' : 'left', fontSize: 11.5, color: t.textMuted, fontWeight: 700, padding: '10px 16px', borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{label}</th>
+  )
+  const td = { padding: '11px 16px', fontSize: 13, borderBottom: `1px solid ${divider}`, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }
+  const colCount = 6
 
-  const colCount = 7
-
-  const renderRow = (s) => (
-    <Fragment key={s.id}>
-      <tr style={{ borderBottom: `1px solid ${divider}` }}
-        onMouseEnter={e => e.currentTarget.style.background = t.bgHover}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-        <td style={{ padding: '12px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#0c1037', flexShrink: 0, fontSize: 13 }}>{s.name[0].toUpperCase()}</div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{s.name}</span>
-                {s.start === 'diagnostic' && tag('Diagnostic to do', GOLD)}
-                {s.start === 'not_started' && tag("Hasn't practised yet", t.textMuted)}
-              </div>
-              {s.email && <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{s.email}</div>}
-              {allTutors && s.tutors.length > 0 && (
-                <div style={{ fontSize: 11, color: t.textSub, marginTop: 2 }}>Tutor{s.tutors.length > 1 ? 's' : ''}: {s.tutors.map(tu => tu.display_name || 'Unnamed').join(', ')}</div>
-              )}
-            </div>
+  const renderRow = (s) => {
+    const on = selectedId === s.id
+    return (
+      <tr key={s.id} tabIndex={0} aria-selected={on} onClick={() => openStudent(on ? null : s.id)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openStudent(on ? null : s.id) } }}
+        className="st-row" style={{ cursor: 'pointer', background: on ? t.bgSubtle : 'transparent' }}>
+        <td style={{ ...td, whiteSpace: 'normal' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{s.name}</span>
+            {s.start === 'diagnostic' && tag('Diagnostic to do', t.goldText)}
+            {s.start === 'not_started' && tag("Hasn't practised yet", t.textMuted)}
+          </div>
+          <div style={{ fontSize: 11.5, color: t.textMuted, marginTop: 1 }}>
+            {[s.year_level, allTutors && s.tutors.length ? `Tutor${s.tutors.length > 1 ? 's' : ''}: ${s.tutors.map(tu => tu.display_name || 'Unnamed').join(', ')}` : ''].filter(Boolean).join(' · ') || s.email}
           </div>
         </td>
-        <td style={{ padding: '12px 16px', fontSize: 13, color: s.year_level ? t.text : t.textFaint, whiteSpace: 'nowrap' }}>{s.year_level || '—'}</td>
-        <td style={{ padding: '12px 16px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {s.subjects.length ? s.subjects.map(su => {
-              const free = s.included.some(inc => inc.subject_name === su.subject_name && (inc.stage || '') === (su.stage || ''))
-              return tag(`${su.subject_name}${su.stage ? ` · ${su.stage}` : ''}${free ? ' · included' : ''}`, free ? t.success : GOLD, su.id)
-            }) : <span style={{ color: t.textFaint, fontSize: 13 }}>—</span>}
-          </div>
+        <td style={{ ...td, color: s.classNames.length ? t.textSub : t.textFaint, whiteSpace: 'normal' }}>{s.classNames.join(', ') || '—'}</td>
+        <td style={{ ...td, textAlign: 'right', color: s.week ? t.text : t.textFaint }}>{activity ? s.week : '…'}</td>
+        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: accColor(s.acc) }}>
+          {s.acc == null ? '—' : `${s.acc}%`}
+          {s.trend != null && s.trend !== 0 && <span style={{ marginLeft: 4, color: s.trend > 0 ? t.success : t.danger }} aria-label={s.trend > 0 ? 'up' : 'down'}>{s.trend > 0 ? '↑' : '↓'}</span>}
         </td>
-        <td style={{ padding: '12px 16px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {s.classes.length ? s.classes.map(c => tag(c.name, c.color || t.blue, c.id)) : <span style={{ color: t.textFaint, fontSize: 13 }}>—</span>}
-          </div>
+        <td style={{ ...td, color: s.overdue ? t.danger : s.pending ? t.textSub : t.textFaint, fontWeight: s.overdue ? 700 : 500 }}>
+          {s.overdue ? `${s.overdue} overdue` : s.pending ? `${s.pending} open` : '—'}
         </td>
-        <td style={{ padding: '12px 16px', fontSize: 13, color: t.textSub, whiteSpace: 'nowrap' }}>{s.xp.toLocaleString()} · <Flame size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />{s.streak}</td>
-        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-          {s.overdue > 0 ? tag(`${s.overdue} overdue`, t.danger) : s.pending > 0 ? tag(`${s.pending} open`, GOLD) : tag('Up to date', t.success)}
-        </td>
-        <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-          {/* Year level, subjects and removal are per-tutor roster settings. */}
-          {!allTutors && <button onClick={() => { setEditId(editId === s.id ? null : s.id) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${editId === s.id ? GOLD : t.border}`, background: editId === s.id ? 'rgba(241,190,67,0.12)' : 'transparent', color: editId === s.id ? GOLD : t.textSub, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }}>Edit</button>}
-          <button onClick={() => { setNotifyId(notifyId === s.id ? null : s.id); setNotifyMsg(''); setNotifyState(null) }} style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B, marginRight: 6 }} aria-label="Notify student"><Mail size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} /></button>
-          {!allTutors && <button onClick={() => setConfirmRemove(s.id)} style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: t.danger, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>✕</button>}
-        </td>
+        <td style={{ ...td, textAlign: 'right', color: s.quiet ? t.danger : t.textMuted }}>{relDay(s.lastActive)}</td>
       </tr>
+    )
+  }
 
-      {editId === s.id && (
-        <tr><td colSpan={colCount} style={{ padding: '0 16px 16px', background: t.bgSubtle }}>
-          <StudentEditor student={s} theme={theme} onChange={load} includable={includable} parentReports={parentReports} />
-        </td></tr>
-      )}
-      {confirmRemove === s.id && (
-        <tr><td colSpan={colCount} style={{ padding: '12px 16px', background: t.dangerBg }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: t.text }}>Remove <strong>{s.name}</strong> from your roster?</span>
-            <button onClick={() => handleRemove(s.id)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
-            <button onClick={() => setConfirmRemove(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
+  const sel = selectedId ? students.find(s => s.id === selectedId) : null
+  const selWork = sel ? assignments.filter(a => a.student_id === sel.id && !a.completed_at)
+    .sort((a, b) => (a.due_date ? Date.parse(a.due_date) : Infinity) - (b.due_date ? Date.parse(b.due_date) : Infinity)) : []
+  const panelSection = { fontSize: 12, fontWeight: 800, color: t.textMuted, marginBottom: 4 }
+  const panelRow = (first) => ({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: first ? 'none' : `1px solid ${t.border}`, fontSize: 13 })
+
+  const panel = sel && (
+    <>
+      <div className="st-backdrop" onClick={() => openStudent(null)} />
+      <aside className="st-panel" aria-label={`${sel.name}`} style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16, background: t.bgCard }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: t.text, letterSpacing: '-0.01em' }}>{sel.name}</span>
+            <button type="button" onClick={() => openStudent(null)} aria-label="Close" style={{ border: 'none', background: 'none', color: t.textMuted, cursor: 'pointer', padding: 2, display: 'flex' }}><X size={16} aria-hidden="true" /></button>
           </div>
-        </td></tr>
-      )}
-      {notifyId === s.id && (
-        <tr><td colSpan={colCount} style={{ padding: '12px 16px', background: t.bgSubtle }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <textarea value={notifyMsg} onChange={e => setNotifyMsg(e.target.value)} rows={2} placeholder={`Message to ${s.name} (blank = default reminder)…`} style={{ ...ctrl, width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button onClick={() => handleNotify(s.id)} disabled={notifyState === 'sending'} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>{notifyState === 'sending' ? 'Sending…' : 'Send email'}</button>
-              {notifyState === 'sent' && <span style={{ fontSize: 12, color: t.success, fontWeight: 600 }}>Sent!</span>}
-              {notifyState === 'fail' && <span style={{ fontSize: 12, color: t.danger, fontWeight: 600 }}>Failed.</span>}
+          <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2, overflowWrap: 'anywhere' }}>
+            {[sel.year_level, sel.classNames.length ? sel.classNames.join(', ') : '', sel.email].filter(Boolean).join(' · ')}
+          </div>
+          {sel.reasons.length > 0 && <div style={{ fontSize: 12.5, color: t.danger, fontWeight: 600, marginTop: 6 }}>{sel.reasons.join(' · ')}</div>}
+        </div>
+
+        <div style={{ display: 'flex', gap: 24 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: t.text, fontVariantNumeric: 'tabular-nums' }}>{activity ? sel.week : '…'}</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>answered this week</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: sel.weekAcc == null ? t.textFaint : t.text, fontVariantNumeric: 'tabular-nums' }}>{sel.weekAcc == null ? '—' : `${sel.weekAcc}%`}</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>
+              {sel.weekAcc == null ? 'correct this week' : sel.trend == null || sel.trend === 0 ? 'correct this week' : `correct, ${sel.trend > 0 ? 'up' : 'down'} ${Math.abs(sel.trend)} pts`}
             </div>
           </div>
-        </td></tr>
-      )}
-    </Fragment>
+        </div>
+
+        <div>
+          <div style={panelSection}>Weakest topics <span style={{ fontWeight: 500, color: t.textFaint }}>· last 14 days</span></div>
+          {sel.weak.length === 0
+            ? <div style={{ fontSize: 13, color: t.textMuted, padding: '4px 0' }}>Not enough answers yet.</div>
+            : sel.weak.map((w, i) => (
+              <div key={w.topic} style={panelRow(i === 0)}>
+                <span style={{ color: t.text, minWidth: 0 }}>{w.topic}</span>
+                <span style={{ fontWeight: 700, color: accColor(w.pct), fontVariantNumeric: 'tabular-nums' }}>{w.pct}%</span>
+              </div>
+            ))}
+        </div>
+
+        <div>
+          <div style={panelSection}>Open work</div>
+          {selWork.length === 0
+            ? <div style={{ fontSize: 13, color: t.textMuted, padding: '4px 0' }}>Nothing open.</div>
+            : selWork.slice(0, 6).map((a, i) => {
+              const late = a.due_date && new Date(a.due_date).setHours(23, 59, 59, 999) < Date.now()
+              return (
+                <div key={a.id} style={panelRow(i === 0)}>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ color: t.text }}>{a.type}{a.topics?.length ? ` · ${a.topics.slice(0, 2).join(', ')}` : ''}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: late ? t.danger : t.textMuted }}>
+                      {[late ? 'Overdue' : a.due_date ? `Due ${fmtDate(a.due_date)}` : 'No due date', a.question_count ? `${a.progress_count || 0} of ${a.question_count}` : ''].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                </div>
+              )
+            })}
+        </div>
+
+        {sel.subjects.length > 0 && (
+          <div>
+            <div style={panelSection}>Subjects you tutor</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
+              {sel.subjects.map(su => {
+                const free = sel.included.some(inc => inc.subject_name === su.subject_name && (inc.stage || '') === (su.stage || ''))
+                return tag(`${su.subject_name}${su.stage ? ` · ${su.stage}` : ''}${free ? ' · included' : ''}`, free ? t.success : t.textSub, su.id)
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {!allTutors && <button type="button" style={btn(true)} onClick={() => onNavigate?.(`/tutor/assignments?student=${sel.id}`)}>Assign work</button>}
+          {!allTutors && <button type="button" style={btn(false)} onClick={() => onNavigate?.(`/tutor/messages?with=${sel.id}`)}>Message</button>}
+          <button type="button" style={btn(false)} onClick={() => onNavigate?.(`/tutor/students?view=progress&student=${sel.id}`)}>Full report</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', borderTop: `1px solid ${t.border}`, paddingTop: 12 }}>
+          {!allTutors && <button type="button" style={linkBtn(editId === sel.id ? t.text : t.textSub)} onClick={() => setEditId(editId === sel.id ? null : sel.id)}>Edit details</button>}
+          <button type="button" style={linkBtn(notifyId === sel.id ? t.text : t.textSub)} onClick={() => { setNotifyId(notifyId === sel.id ? null : sel.id); setNotifyMsg(''); setNotifyState(null) }}>
+            <Mail size={13} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 4 }} />Email a reminder
+          </button>
+          {!allTutors && <button type="button" style={linkBtn(t.danger)} onClick={() => setConfirmRemove(sel.id)}>Remove</button>}
+        </div>
+
+        {notifyId === sel.id && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <textarea value={notifyMsg} onChange={e => setNotifyMsg(e.target.value)} rows={3} placeholder={`Email to ${sel.name}. Leave blank for the standard reminder.`} style={{ ...ctrl, width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button type="button" onClick={() => handleNotify(sel.id)} disabled={notifyState === 'sending'} style={btn(true)}>{notifyState === 'sending' ? 'Sending…' : 'Send email'}</button>
+              {notifyState === 'sent' && <span style={{ fontSize: 12, color: t.success, fontWeight: 600 }}>Sent.</span>}
+              {notifyState === 'fail' && <span style={{ fontSize: 12, color: t.danger, fontWeight: 600 }}>Didn't send. Try again.</span>}
+            </div>
+          </div>
+        )}
+        {confirmRemove === sel.id && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 9, background: t.dangerBg }}>
+            <span style={{ fontSize: 13, color: t.text, flex: '1 1 160px' }}>Remove <strong>{sel.name}</strong> from your roster?</span>
+            <button type="button" onClick={() => handleRemove(sel.id)} style={{ ...btn(true), background: t.danger, color: '#fff' }}>Remove</button>
+            <button type="button" onClick={() => setConfirmRemove(null)} style={btn(false)}>Cancel</button>
+          </div>
+        )}
+        {editId === sel.id && (
+          <StudentEditor key={sel.id} student={sel} theme={theme} onChange={load} includable={includable} parentReports={parentReports} />
+        )}
+      </aside>
+    </>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <style>{`
+        .st-row:hover { background: ${t.bgHover} !important; }
+        .st-row:focus-visible { outline: 2px solid ${t.accent}; outline-offset: -2px; }
+        .st-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+        .st-layout.has-panel { grid-template-columns: minmax(0, 1fr) 340px; }
+        .st-panel { position: sticky; top: 0; max-height: calc(100vh - 170px); overflow-y: auto; box-sizing: border-box; }
+        .st-backdrop { display: none; }
+        @media (max-width: 1100px) {
+          .st-layout.has-panel { grid-template-columns: minmax(0, 1fr); }
+          .st-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(400px, 100vw); max-height: none; z-index: 1001; border-radius: 0 !important; box-shadow: ${t.shadowModal}; }
+          .st-backdrop { display: block; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.35); }
+        }
+      `}</style>
+
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, ...ctrl, padding: '8px 12px', flex: '1 1 220px', minWidth: 180 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, ...ctrl, padding: '7px 12px', flex: '1 1 220px', minWidth: 180, maxWidth: 360 }}>
           <Search size={14} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search this roster…" style={{ border: 'none', background: 'transparent', outline: 'none', color: t.text, fontFamily: FONT_B, fontSize: 13, width: '100%' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students" aria-label="Search students" style={{ border: 'none', background: 'transparent', outline: 'none', color: t.text, fontFamily: FONT_B, fontSize: 13, width: '100%' }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>Sort</span>
-          <select className="td-input-gold" value={sortKey} onChange={e => setSortKey(e.target.value)} style={ctrl}>{SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
-          <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} title="Toggle direction" style={{ ...ctrl, cursor: 'pointer', width: 36 }}>{sortDir === 'asc' ? '↑' : '↓'}</button>
+        <div role="group" aria-label="Show" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button type="button" aria-pressed={!attentionOnly && !startingOnly} onClick={() => { setAttentionOnly(false); setStartingOnly(false) }} style={chipStyle(!attentionOnly && !startingOnly)}>All</button>
+          <button type="button" aria-pressed={attentionOnly} onClick={() => { setAttentionOnly(v => !v); setStartingOnly(false) }} style={chipStyle(attentionOnly)}>Needs attention{attentionCount ? ` · ${attentionCount}` : ''}</button>
+          {(startCounts.diagnostic + startCounts.notStarted) > 0 && (
+            <button type="button" aria-pressed={startingOnly} onClick={() => { setStartingOnly(v => !v); setAttentionOnly(false) }} style={chipStyle(startingOnly)}>Getting started · {startCounts.diagnostic + startCounts.notStarted}</button>
+          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>Group</span>
-          <select className="td-input-gold" value={groupBy} onChange={e => setGroupBy(e.target.value)} style={ctrl}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}</select>
-        </div>
-        <button onClick={() => { setShowAdd(v => !v); setAddError(''); setAddNotice('') }} style={{ marginLeft: 'auto', padding: '9px 16px', borderRadius: 9, border: 'none', background: showAdd ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showAdd ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>{showAdd ? '✕ Cancel' : '+ Invite student'}</button>
+        {!allTutors && (
+          <button type="button" onClick={() => { setShowAdd(v => !v); setAddError(''); setAddNotice('') }} style={{ ...btn(!showAdd), marginLeft: 'auto' }}>{showAdd ? 'Close' : 'Invite students'}</button>
+        )}
       </div>
 
-      {/* Filters */}
+      {/* Filters, sort and grouping */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={fYear} onChange={e => setFYear(e.target.value)} style={{ ...ctrl, color: fYear ? GOLD : t.textMuted, borderColor: fYear ? GOLD : t.border }}>
-          <option value="">All years</option>{yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select value={fStage} onChange={e => setFStage(e.target.value)} style={{ ...ctrl, color: fStage ? GOLD : t.textMuted, borderColor: fStage ? GOLD : t.border }}>
-          <option value="">All stages</option>{stageOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={fClass} onChange={e => setFClass(e.target.value)} style={{ ...ctrl, color: fClass ? GOLD : t.textMuted, borderColor: fClass ? GOLD : t.border }}>
-          <option value="">All classes</option>{classOptions.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <button onClick={() => setAttentionOnly(v => !v)} style={{ ...chipStyle(attentionOnly), display: 'inline-flex', alignItems: 'center', gap: 5 }}><TriangleAlert size={13} aria-hidden="true" />Needs attention</button>
-        <button onClick={() => setStartingOnly(v => !v)} style={chipStyle(startingOnly)}>Getting started</button>
+        {yearOptions.length > 1 && (
+          <select aria-label="Year level" value={fYear} onChange={e => setFYear(e.target.value)} style={{ ...ctrl, padding: '6px 9px', fontSize: 12.5, color: fYear ? t.text : t.textMuted }}>
+            <option value="">All years</option>{yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+        {stageOptions.length > 1 && (
+          <select aria-label="Stage" value={fStage} onChange={e => setFStage(e.target.value)} style={{ ...ctrl, padding: '6px 9px', fontSize: 12.5, color: fStage ? t.text : t.textMuted }}>
+            <option value="">All stages</option>{stageOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        {classOptions.length > 0 && (
+          <select aria-label="Class" value={fClass} onChange={e => setFClass(e.target.value)} style={{ ...ctrl, padding: '6px 9px', fontSize: 12.5, color: fClass ? t.text : t.textMuted }}>
+            <option value="">All classes</option>{classOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <select aria-label="Sort by" value={sortKey} onChange={e => setSortKey(e.target.value)} style={{ ...ctrl, padding: '6px 9px', fontSize: 12.5, color: t.textMuted }}>{SORTS.map(s => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}</select>
+          <button type="button" onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'} title="Change direction" style={{ ...ctrl, padding: '6px 9px', fontSize: 12.5, cursor: 'pointer', color: t.textMuted }}>{sortDir === 'asc' ? '↑' : '↓'}</button>
+        </span>
+        <select aria-label="Group by" value={groupBy} onChange={e => setGroupBy(e.target.value)} style={{ ...ctrl, padding: '6px 9px', fontSize: 12.5, color: groupBy === 'none' ? t.textMuted : t.text }}>{GROUPS.map(g => <option key={g.id} value={g.id}>{g.id === 'none' ? 'No grouping' : `Group: ${g.label}`}</option>)}</select>
         {(fYear || fStage || fClass || attentionOnly || startingOnly || search) && (
-          <button onClick={() => { setFYear(''); setFStage(''); setFClass(''); setAttentionOnly(false); setStartingOnly(false); setSearch('') }} style={{ ...chipStyle(false), color: t.textFaint }}>Clear</button>
+          <>
+            <span style={{ fontSize: 12.5, color: t.textMuted }}>Showing {filtered.length} of {students.length}</span>
+            <button type="button" onClick={() => { setFYear(''); setFStage(''); setFClass(''); setAttentionOnly(false); setStartingOnly(false); setSearch('') }} style={linkBtn(t.textMuted)}>Clear</button>
+          </>
         )}
       </div>
 
@@ -462,7 +618,7 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
                 rows={Math.min(5, Math.max(1, email.split('\n').length))} autoCapitalize="none" spellCheck={false}
                 style={{ ...ctrl, flex: 1, minWidth: 220, resize: 'vertical', lineHeight: 1.5 }} />
             )}
-            <button type="submit" disabled={addLoading || !addresses.length} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>{addLoading ? 'Sending…' : addresses.length > 1 ? `Send ${addresses.length} invites` : 'Send invite'}</button>
+            <button type="submit" disabled={addLoading || !addresses.length} style={{ ...btn(true), ...(addLoading || !email.trim() ? { background: t.border, color: t.textMuted, cursor: 'not-allowed' } : {}) }}>{addLoading ? 'Sending…' : addresses.length > 1 ? `Send ${addresses.length} invites` : 'Send invite'}</button>
           </form>
           {includable.canInclude && (
             <div style={{ marginTop: 12 }}>
@@ -516,52 +672,74 @@ export default function StudentsTab({ profile, theme, allTutors = false }) {
         </div>
       )}
 
-      {/* Table */}
-      <div style={{ ...card, overflow: 'hidden' }}>
-        <div style={{ padding: '13px 16px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>My Students</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>
-            {filtered.length}{filtered.length !== students.length ? ` of ${students.length}` : ''} student{students.length !== 1 ? 's' : ''}
-            {[
-              invites.length && `${invites.length} invite${invites.length === 1 ? '' : 's'} waiting`,
-              startCounts.diagnostic && `${startCounts.diagnostic} diagnostic${startCounts.diagnostic === 1 ? '' : 's'} to do`,
-              startCounts.notStarted && `${startCounts.notStarted} not practising yet`,
-            ].filter(Boolean).map(text => ` · ${text}`).join('')}
-          </div>
+      {/* Table, and the selected student's panel */}
+      <div className={`st-layout${sel ? ' has-panel' : ''}`}>
+        <div style={{ ...card, overflow: 'hidden', minWidth: 0 }}>
+          {loading ? (
+            <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
+          ) : students.length === 0 ? (
+            <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students yet. Invite one to get started.</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>
+              {attentionOnly ? 'No one needs attention right now.' : 'No students match these filters.'}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+                <thead>
+                  <tr>
+                    {th('Student')}
+                    {th('Class')}
+                    {th('This week', true, 'Questions answered since Monday')}
+                    {th('Accuracy', true, 'Correct answers over the last 14 days; the arrow compares this week with last week')}
+                    {th('Open work')}
+                    {th('Last active', true)}
+                  </tr>
+                </thead>
+                {groups.map((g, gi) => (
+                  <tbody key={gi}>
+                    {g.key != null && (
+                      <tr><td colSpan={colCount} style={{ padding: '9px 16px', background: t.bgSubtle, borderBottom: `1px solid ${t.border}` }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: t.text }}>{g.key}</span>
+                        <span style={{ fontSize: 12, color: t.textMuted, marginLeft: 8 }}>{g.rows.length}</span>
+                      </td></tr>
+                    )}
+                    {g.rows.map(renderRow)}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          )}
         </div>
-        {loading ? (
-          <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
-        ) : students.length === 0 ? (
-          <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students yet. Invite one above to get started.</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 36, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students match the current filters.</div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
-              <thead>
-                <tr>
-                  {['Student', 'Year', 'Subject · Stage', 'Class', 'XP · Streak', 'Tasks', ''].map((h, i) => (
-                    <th key={i} style={{ textAlign: i === colCount - 1 ? 'right' : 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: t.textMuted, fontWeight: 700, padding: '11px 16px', borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              {groups.map((g, gi) => (
-                <tbody key={gi}>
-                  {g.key != null && (
-                    <tr><td colSpan={colCount} style={{ padding: '10px 16px', background: t.bgSubtle, borderBottom: `1px solid ${t.border}` }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: GOLD, letterSpacing: '0.02em' }}>{g.key}</span>
-                      <span style={{ fontSize: 12, color: t.textMuted, marginLeft: 8 }}>{g.rows.length}</span>
-                    </td></tr>
-                  )}
-                  {g.rows.map(renderRow)}
-                </tbody>
-              ))}
-            </table>
-          </div>
-        )}
+        {panel}
       </div>
     </div>
   )
+}
+
+/**
+ * A student's numbers from their answers: this week's count and accuracy, the
+ * last 14 days' accuracy and its trend, when they were last active, their
+ * weakest topics, and why they need attention (if they do).
+ */
+function activityFields(e, lastActiveDate, overdue, start, loaded) {
+  const pct = (right, n) => (n ? Math.round((right / n) * 100) : null)
+  const weekAcc = pct(e?.weekRight, e?.week)
+  const prevAcc = pct(e?.prevRight, e?.prev)
+  const acc = pct(e?.right, e?.n)
+  const trend = e && e.week >= 5 && e.prev >= 5 ? weekAcc - prevAcc : null
+  const lastActive = Math.max(e?.last || 0, lastActiveDate ? Date.parse(lastActiveDate) : 0) || null
+  const weak = Object.entries(e?.topics || {})
+    .filter(([, tp]) => tp.n >= 3)
+    .map(([topic, tp]) => ({ topic, pct: pct(tp.right, tp.n) }))
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 3)
+  const quiet = loaded && start === 'practising' && (!lastActive || Date.now() - lastActive > QUIET_DAYS * DAY_MS)
+  const reasons = []
+  if (overdue) reasons.push(`${overdue} overdue`)
+  if (quiet) reasons.push(lastActive ? `No practice for ${Math.floor((Date.now() - lastActive) / DAY_MS)} days` : 'No practice yet')
+  if (acc != null && e.n >= 10 && acc < 50) reasons.push(`${acc}% correct over 14 days`)
+  return { week: e?.week || 0, weekAcc, acc, trend, lastActive, weak, quiet, reasons }
 }
 
 // ── Inline editor: year-level override + pick which subjects you tutor ──────────

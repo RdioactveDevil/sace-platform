@@ -13,7 +13,7 @@ import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
@@ -24,6 +24,7 @@ import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
 import ParentConsentBanner from './components/ParentConsentBanner'
 import FamilySwitcher from './components/FamilySwitcher'
 import { appZoom } from './lib/appZoom'
+import { TUTOR_NAV, ADMIN_NAV, workspaceForPath, sectionForPortalPath, PORTAL_BADGES_EVENT } from './lib/portalNav'
 import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
@@ -226,7 +227,7 @@ function useDismiss(open, ref, onDismiss) {
 let subjectTilesCache = null
 
 /** One sidebar link: the study pages, and the portals under Manage. */
-function SidebarLink({ sb, icon, label, active, badge = 0, target, onClick }) {
+function SidebarLink({ sb, icon, Icon, label, active, badge = 0, target, onClick }) {
   return (
     <button
       type="button"
@@ -243,7 +244,7 @@ function SidebarLink({ sb, icon, label, active, badge = 0, target, onClick }) {
       }}
     >
       <span className="gf-nav-icon" style={{ display: 'flex', color: active ? sb.icon : 'inherit' }}>
-        <NavIcon name={icon} size={17} color="currentColor" />
+        {Icon ? <Icon size={17} aria-hidden="true" /> : <NavIcon name={icon} size={17} color="currentColor" />}
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
       <UnreadBadge count={badge} />
@@ -270,13 +271,13 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
 
   // The student's subjects, fetched the first time the switcher opens.
   useEffect(() => {
-    if (!subjectsOpen || subjectTilesCache) return
+    if (!subjectsOpen || subjectTilesCache || workspace !== 'study') return
     let cancelled = false
     fetchLiveCurricula()
       .then(cs => { subjectTilesCache = cs.map(curriculumToSubjectTile); if (!cancelled) setSubjectTiles(subjectTilesCache) })
       .catch(() => { if (!cancelled) setSubjectTiles([]) })
     return () => { cancelled = true }
-  }, [subjectsOpen])
+  }, [subjectsOpen, workspace])
   const mySubjects = (subjectTiles || []).filter(s => s.available && subjectAccess(subscriptions, s, fullAccess) !== 'none')
 
   const switchTo = (tile) => {
@@ -289,12 +290,33 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
   const hasTutoring = useHasTutoring(profile?.id)
   const isTutor = !!profile?.is_tutor
   const isAdmin = !!profile?.is_admin
-  // Tutors see unread student messages on the Tutor Portal link, students on the Student Portal one.
+  // Tutors see unread student messages on Messages, students on the Student Portal.
   const unreadMessages = useUnreadMessages(hasTutoring || isTutor)
   const portalActive = sectionForPath(location.pathname)?.id === 'portal'
-  const tutorActive = location.pathname.startsWith('/tutor')
-  const adminActive = location.pathname.startsWith('/admin')
-  // Study navigation only; the portals (student, tutor, admin) sit under Manage.
+
+  // Workspaces: Studying for everyone, plus Tutor Portal and Admin for those
+  // roles. The sidebar shows the current workspace's sections; with more than
+  // one, the top row switches between them.
+  const workspace = workspaceForPath(location.pathname)
+  const workspaces = [
+    { id: 'study', label: 'Studying', sub: formatSubjectLabel(subject || {}) || 'Practice, Learn and Progress', path: '/question-bank' },
+    ...(isTutor ? [{ id: 'tutor', label: 'Tutor Portal', sub: 'Students, lessons and work', path: '/tutor' }] : []),
+    ...(isAdmin ? [{ id: 'admin', label: 'Admin', sub: 'Manage gradefarm', path: '/admin' }] : []),
+  ]
+  const multiWorkspace = workspaces.length > 1
+  const currentWorkspace = workspaces.find(w => w.id === workspace) || workspaces[0]
+  const portalSection = sectionForPortalPath(location.pathname)
+  const portalGroups = workspace === 'tutor' ? TUTOR_NAV : workspace === 'admin' ? ADMIN_NAV : null
+  // Counts the portals report for their sections (overdue work, review queue…).
+  const [portalBadges, setPortalBadges] = useState({})
+  useEffect(() => {
+    const onBadges = (e) => setPortalBadges(prev => ({ ...prev, [e.detail.workspace]: e.detail.badges }))
+    window.addEventListener(PORTAL_BADGES_EVENT, onBadges)
+    return () => window.removeEventListener(PORTAL_BADGES_EVENT, onBadges)
+  }, [])
+  const badgeFor = (id) => (workspace === 'tutor' && id === 'messages' ? unreadMessages : portalBadges[workspace]?.[id] || 0)
+
+  // Study navigation; the portals' sections replace it in their workspaces.
   const navItems = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const isActivePath = (p) =>
     sectionForPath(location.pathname)?.pages[0].path === p ||
@@ -338,23 +360,44 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           type="button"
           className="gf-side-btn"
           data-tutorial-target="subject-chip"
-          onClick={() => (onSwitchSubject ? setSubjectsOpen(v => !v) : onChangeSubject())}
-          aria-expanded={onSwitchSubject ? subjectsOpen : undefined}
-          aria-controls={onSwitchSubject ? 'gf-subject-menu' : undefined}
-          title="Switch subject"
+          onClick={() => (onSwitchSubject || multiWorkspace ? setSubjectsOpen(v => !v) : onChangeSubject())}
+          aria-expanded={onSwitchSubject || multiWorkspace ? subjectsOpen : undefined}
+          aria-controls={onSwitchSubject || multiWorkspace ? 'gf-subject-menu' : undefined}
+          title={multiWorkspace ? 'Switch workspace or subject' : 'Switch subject'}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', padding: '9px 10px', borderRadius: 9, border: `1px solid ${SB.line}`, background: SB.raise, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
         >
           <span style={{ minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 11, color: SB.dim, fontWeight: 500 }}>Subject</span>
+            <span style={{ display: 'block', fontSize: 11, color: SB.dim, fontWeight: 500 }}>
+              {!multiWorkspace ? 'Subject' : workspace === 'study' ? 'Studying' : 'Workspace'}
+            </span>
             <span style={{ display: 'block', fontSize: 12.5, color: SB.fg, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {formatSubjectLabel(subject || {}) || 'Choose a subject'}
+              {workspace === 'study' ? (formatSubjectLabel(subject || {}) || 'Choose a subject') : currentWorkspace.label}
             </span>
           </span>
           <ChevronsUpDown size={15} color={SB.dim} aria-hidden="true" style={{ flexShrink: 0 }} />
         </button>
         {subjectsOpen && (
-          <div id="gf-subject-menu" role="listbox" aria-label="Your subjects"
-            style={{ marginTop: 6, padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, boxShadow: SB.menuShadow, display: 'flex', flexDirection: 'column', maxHeight: 320, overflowY: 'auto' }}>
+          <div id="gf-subject-menu"
+            style={{ marginTop: 6, padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, boxShadow: SB.menuShadow, display: 'flex', flexDirection: 'column', maxHeight: 420, overflowY: 'auto' }}>
+            {multiWorkspace && (
+              <>
+                <div style={{ fontSize: 11, color: SB.dim, fontWeight: 600, padding: '4px 10px 2px' }}>Workspace</div>
+                {workspaces.map(w => (
+                  <button key={w.id} type="button" className="gf-side-btn" aria-current={w.id === workspace ? 'true' : undefined}
+                    onClick={() => { setSubjectsOpen(false); if (w.id !== workspace) go(w.path) }}
+                    style={{ ...menuItem, fontWeight: w.id === workspace ? 700 : 500 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block' }}>{w.label}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: SB.dim, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.sub}</span>
+                    </span>
+                    {w.id === workspace && <Check size={15} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                  </button>
+                ))}
+              </>
+            )}
+            {workspace === 'study' && onSwitchSubject && (<>
+            {multiWorkspace && <div style={{ fontSize: 11, color: SB.dim, fontWeight: 600, padding: '10px 10px 2px', borderTop: `1px solid ${SB.line}`, marginTop: 4 }}>Subject</div>}
+            <div role="listbox" aria-label="Your subjects" style={{ display: 'flex', flexDirection: 'column' }}>
             {subjectTiles === null
               ? <div style={{ padding: '8px 10px', fontSize: 12.5, color: SB.dim }}>Loading subjects…</div>
               : mySubjects.map(tile => {
@@ -372,30 +415,35 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
               style={{ ...menuItem, color: SB.sub, fontSize: 12.5, borderTop: subjectTiles === null || mySubjects.length === 0 ? 'none' : `1px solid ${SB.line}`, borderRadius: 0, marginTop: 4, paddingTop: 10 }}>
               Browse all subjects
             </button>
+            </div>
+            </>)}
           </div>
         )}
       </div>
 
       {/* Study navigation */}
-      <nav aria-label="Main" style={{ flex: '1 0 auto', padding: '14px 12px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {navItems.map(item => (
-          <SidebarLink sb={SB} key={item.id} icon={item.icon} label={item.label} active={isActivePath(item.path)}
-            target={`nav-${item.id}`} onClick={() => go(item.path)} />
-        ))}
-
-        {(hasTutoring || isTutor || isAdmin) && (
+      <nav aria-label={workspace === 'study' ? 'Main' : currentWorkspace.label} style={{ flex: '1 0 auto', padding: '14px 12px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {portalGroups ? portalGroups.map((group, gi) => (
+          <div key={gi} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {group.label && <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>{group.label}</div>}
+            {group.items.map(item => (
+              <SidebarLink sb={SB} key={item.id} Icon={item.icon} label={item.label} active={portalSection === item.id}
+                target={workspace === 'tutor' && item.id === 'overview' ? 'nav-tutor' : `nav-${workspace}-${item.id}`}
+                badge={badgeFor(item.id)} onClick={() => go(`/${workspace}/${item.id}`)} />
+            ))}
+          </div>
+        )) : (
           <>
-            <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>Manage</div>
+            {navItems.map(item => (
+              <SidebarLink sb={SB} key={item.id} icon={item.icon} label={item.label} active={isActivePath(item.path)}
+                target={`nav-${item.id}`} onClick={() => go(item.path)} />
+            ))}
             {hasTutoring && (
-              <SidebarLink sb={SB} icon="portal" label="Student Portal" active={portalActive} target="nav-portal"
-                badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
-            )}
-            {isTutor && (
-              <SidebarLink sb={SB} icon="tutor" label="Tutor Portal" active={tutorActive} target="nav-tutor"
-                badge={unreadMessages} onClick={() => go('/tutor')} />
-            )}
-            {isAdmin && (
-              <SidebarLink sb={SB} icon="admin" label="Admin" active={adminActive} target="nav-admin" onClick={() => go('/admin')} />
+              <>
+                <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>Your tutor</div>
+                <SidebarLink sb={SB} icon="portal" label="Student Portal" active={portalActive} target="nav-portal"
+                  badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
+              </>
             )}
           </>
         )}
@@ -409,6 +457,16 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
             <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/my-account') }}>
               <UserRound size={16} color={SB.sub} aria-hidden="true" />My account
             </button>
+            {isTutor && (
+              <>
+                <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/tutor/profile') }}>
+                  <IdCard size={16} color={SB.sub} aria-hidden="true" />Tutor profile
+                </button>
+                <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/tutor/plan') }}>
+                  <CreditCard size={16} color={SB.sub} aria-hidden="true" />Plan and billing
+                </button>
+              </>
+            )}
             <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
               <Moon size={16} color={SB.sub} aria-hidden="true" />
               <span style={{ flex: 1 }}>Dark mode</span>
@@ -1777,7 +1835,7 @@ function AppInner() {
       } />
 
       {/* Tutor — is_tutor only. Wrapped in AppShell so the redesigned sidebar (incl. active Tutor Dashboard state) is present here too. */}
-      <Route path="/tutor" element={
+      <Route path="/tutor/*" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
