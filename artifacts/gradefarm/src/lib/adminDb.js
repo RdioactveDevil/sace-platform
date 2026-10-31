@@ -170,3 +170,12 @@ export async function resolveQuestionReport(reportId, action, answerIndex) {
 
 /** A report still waiting on someone: the AI hasn't finished, or it failed and needs a person. */
 export const isOpenReport = (r) => !r.resolved_at || r.ai_status === 'error'
+
+/** Save a question's graph, table and image from Preview (live questions need the server). */
+export async function saveQuestionVisuals(id, { source, graph, table_data, image_url }) {
+  const json = await adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/visuals`, {
+    method: 'PATCH',
+    body: JSON.stringify({ source, graph, table_data, image_url }),
+  })
+  return json.question
+}

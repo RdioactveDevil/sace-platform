@@ -1216,4 +1216,44 @@ router.get("/admin/cohort-stats", async (req, res) => {
   }
 });
 
+// PATCH /admin/questions/:id/visuals — an admin changes a question's graph,
+// table or image from Preview. Body: { source: "live" | "draft", graph,
+// table_data, image_url }; null clears a field. Live questions have no update
+// policy for signed-in users, so this goes through the service key.
+router.patch("/admin/questions/:id/visuals", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const { source, graph, table_data, image_url } = (req.body || {}) as {
+      source?: string; graph?: unknown; table_data?: unknown; image_url?: unknown;
+    };
+    const table = source === "draft" ? "draft_questions" : "questions";
+    const isJson = (v: unknown) => v === null || (typeof v === "object" && !Array.isArray(v));
+    if (!isJson(graph) || !isJson(table_data)) {
+      return res.status(400).json({ error: "graph and table_data must each be a JSON object or null" });
+    }
+    if (image_url !== null && typeof image_url !== "string") {
+      return res.status(400).json({ error: "image_url must be a link or null" });
+    }
+    const url = typeof image_url === "string" ? image_url.trim() : "";
+    if (url && !/^https:\/\//i.test(url)) {
+      return res.status(400).json({ error: "The image link must start with https://" });
+    }
+
+    const { data, error } = await admin
+      .from(table)
+      .update({ graph, table_data, image_url: url || null })
+      .eq("id", req.params.id)
+      .select("id, graph, table_data, image_url");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No question with that ID" });
+    return res.json({ question: data[0] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 export default router;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { saveQuestionVisuals } from '../lib/adminDb'
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
@@ -107,21 +108,15 @@ export default function AdminQuestionPreviewTab({ initialId = null, theme = 'lig
       if (editTableJson.trim()) newTable = JSON.parse(editTableJson)
     } catch { setSaving(false); setSaveMsg({ ok: false, text: 'Table JSON is invalid.' }); return }
 
-    const table = question._source === 'draft' ? 'draft_questions' : 'questions'
-    const { data: saved, error: err } = await supabase
-      .from(table)
-      .update({ graph: newGraph, table_data: newTable, image_url: editImageUrl || null })
-      .eq('id', question.id)
-      .select('id')
-
-    if (err) {
-      setSaveMsg({ ok: false, text: err.message })
-    } else if (!saved?.length) {
-      // The database allowed no change (no write permission on this table).
-      setSaveMsg({ ok: false, text: "Didn't save: the database doesn't allow changing this question from here." })
-    } else {
-      setQuestion(q => ({ ...q, graph: newGraph, table_data: newTable, image_url: editImageUrl || null }))
+    try {
+      const saved = await saveQuestionVisuals(question.id, {
+        source: question._source, graph: newGraph, table_data: newTable, image_url: editImageUrl.trim() || null,
+      })
+      setQuestion(q => ({ ...q, graph: saved.graph, table_data: saved.table_data, image_url: saved.image_url }))
+      setEditImageUrl(saved.image_url ?? '')
       setSaveMsg({ ok: true, text: 'Saved.' })
+    } catch (err) {
+      setSaveMsg({ ok: false, text: `Didn't save: ${err.message}` })
     }
     setSaving(false)
   }
