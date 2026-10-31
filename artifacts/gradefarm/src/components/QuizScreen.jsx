@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight } from 'lucide-react'
+import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag } from 'lucide-react'
 import {
   selectNextQuestion,
   calcXP,
@@ -47,9 +47,9 @@ import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
 import PassageView from './PassageView'
-import QuizToolsDock from './QuizToolsDock'
+import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
-import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
+import { getQuestionType, describeCorrectAnswer, gradeResponse, responseIsComplete } from '../lib/questionTypes'
 import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 
@@ -60,9 +60,6 @@ const GOLDL = '#f9d87a'
 // 125% zoom only have ~890px here, and stacking the passage inside the 600px
 // question card there left wide empty margins.
 const SIDE_PASSAGE_MIN_WIDTH = 760
-// The explanation panel only opens once a question is answered (before that
-// it was a mostly empty column taking a third of the screen).
-const EXPLAIN_PANEL_W = 340
 // Start generating more questions in the background once this few questions
 // new to the student are left in the session.
 const PREFETCH_LOW_WATER = 8
@@ -181,170 +178,40 @@ async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
   }
 }
 
-function RemediationChip({ remediationMode, remediationStreak, remediationTarget, remediationStatus, remediationSource, theme = 'dark' }) {
-  if (!remediationMode) return null
+/**
+ * One line above the card while a student practises a question they missed:
+ * what's happening, and their run of right answers as dots. Its status
+ * changes the message (done, struggling, added to the study plan).
+ */
+function ExtraPracticeStrip({ streak, target, status, topic, onReturnToQuiz, theme = 'dark' }) {
   const t = THEMES[theme]
-
-  const statusText = remediationStatus === 'generating'
-    ? 'Generating more similar questions for this same concept.'
-    : remediationStatus === 'complete'
-      ? 'Mastery confirmed. Returning to the main quiz.'
-      : remediationStatus === 'struggling'
-        ? "You're finding this one tricky. You can keep going with an easier question, or return to the quiz."
-        : remediationStatus === 'needs_review'
-          ? 'This topic has been added to your study plan for focused practice later.'
-          : `You are in targeted reinforcement. Get ${remediationTarget} correct in a row to continue.`
-
-  const streakBg = remediationStatus === 'complete' ? t.successBg
-    : remediationStatus === 'struggling' ? t.accentGlow
-    : remediationStatus === 'needs_review' ? t.purpleBg
-    : t.bgHover
-  const streakBorder = remediationStatus === 'complete' ? `${t.success}55`
-    : remediationStatus === 'struggling' ? t.borderAccent
-    : remediationStatus === 'needs_review' ? `${t.purple}55`
-    : t.border
-  const streakColor = remediationStatus === 'complete' ? t.success
-    : remediationStatus === 'struggling' ? GOLD
-    : remediationStatus === 'needs_review' ? t.purple
-    : t.text
-
+  const done = Math.min(streak, target)
+  const message = status === 'generating'
+    ? 'Getting practice questions like this one ready…'
+    : status === 'complete'
+      ? `${target} in a row. Back to your session next.`
+      : status === 'struggling'
+        ? "This one's tricky. Keep going with an easier question, or go back to your session."
+        : status === 'needs_review'
+          ? 'Added to your study plan to come back to. Continue to go back to your session.'
+          : `${target} in a row${topic ? ` on ${topic}` : ''}, then back to your session`
   return (
-    <div style={{
-      marginBottom: 14,
-      padding: '14px 16px',
-      borderRadius: 16,
-      background: t.bgCard,
-      border: `1px solid ${t.borderAccent}`,
-      boxShadow: t.shadowCard,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 12px',
-            borderRadius: 999,
-            background: t.accentGlow,
-            border: `1px solid ${t.borderAccent}`,
-            color: GOLD,
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-          }}>
-            <Zap size={13} aria-hidden="true" />
-            Remediation Mode
-          </span>
-          <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>
-            {remediationSource === 'generated' ? 'Generated reinforcement' : 'From question bank'}
-          </span>
-        </div>
-        <span style={{
-          padding: '5px 11px',
-          borderRadius: 999,
-          background: streakBg,
-          border: `1px solid ${streakBorder}`,
-          color: streakColor,
-          fontSize: 12,
-          fontWeight: 700,
-        }}>
-          Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
-        </span>
-      </div>
-      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10, lineHeight: 1.6 }}>{statusText}</div>
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 14px', borderRadius: 10, background: t.bgCard, border: `1px solid ${status === 'complete' ? t.success : t.border}`, fontSize: 12.5 }}>
+      <strong style={{ color: t.text }}>Extra practice</strong>
+      <span style={{ color: t.textMuted, flex: 1, minWidth: 0 }}>{message}</span>
+      {status === 'struggling' && onReturnToQuiz && (
+        <button type="button" onClick={onReturnToQuiz} style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>
+          Back to my session
+        </button>
+      )}
+      <span aria-label={`${done} of ${target} right in a row`} style={{ display: 'inline-flex', gap: 4 }}>
+        {Array.from({ length: target }, (_, i) => (
+          <span key={i} style={{ width: 9, height: 9, borderRadius: '50%', border: `1.5px solid ${i < done ? t.success : t.textMuted}`, background: i < done ? t.success : 'transparent' }} />
+        ))}
+      </span>
     </div>
   )
 }
-
-function StatusToast({ status, onReturnToQuiz, theme = 'dark' }) {
-  if (!status || status === 'idle' || status === 'activated') return null
-  const t = THEMES[theme]
-
-  const isComplete = status === 'complete'
-  const isStruggling = status === 'struggling'
-  const isNeedsReview = status === 'needs_review'
-
-  const borderColor = isComplete ? `${t.success}66`
-    : isStruggling ? t.borderAccent
-    : isNeedsReview ? `${t.purple}66`
-    : t.borderAccent
-  const iconBg = isComplete ? t.successBg
-    : isStruggling ? t.accentGlow
-    : isNeedsReview ? t.purpleBg
-    : t.accentGlow
-  const iconBorder = isComplete ? `${t.success}44`
-    : isStruggling ? t.borderAccent
-    : isNeedsReview ? `${t.purple}44`
-    : t.borderAccent
-  const icon = isComplete ? '\u2705' : isStruggling ? '\uD83D\uDCA1' : isNeedsReview ? '\uD83D\uDCDA' : '\uD83E\uDDE0'
-  const title = isComplete ? 'Reinforcement Complete'
-    : isStruggling ? 'Need a Break?'
-    : isNeedsReview ? 'Topic Added to Study Plan'
-    : 'Generating Similar Questions'
-  const subtitle = isComplete
-    ? 'Concept mastered! Returning to the main quiz.'
-    : isStruggling
-      ? "You've missed a few in a row. Keep going for an easier question, or return to the quiz and revisit this concept in your study plan."
-      : isNeedsReview
-        ? 'This concept will appear in your study plan for focused practice. Press Continue to return to the quiz.'
-        : 'Preparing more same-concept reinforcement.'
-
-  return (
-    <div style={{
-      marginTop: 12,
-      borderRadius: 14,
-      background: t.bgCard,
-      border: `1px solid ${borderColor}`,
-      boxShadow: t.shadowCard,
-      padding: '14px 16px',
-      animation: 'popIn 0.18s ease',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{
-          width: 38,
-          height: 38,
-          borderRadius: 12,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 18,
-          background: iconBg,
-          border: `1px solid ${iconBorder}`,
-          flexShrink: 0,
-          marginTop: 1,
-        }}>
-          {icon}
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{title}</div>
-          <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5, marginTop: 2 }}>{subtitle}</div>
-          {isStruggling && onReturnToQuiz && (
-            <button
-              onClick={onReturnToQuiz}
-              style={{
-                marginTop: 10,
-                padding: '6px 14px',
-                borderRadius: 8,
-                border: `1px solid ${t.borderAccent}`,
-                background: t.accentGlow,
-                color: GOLD,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontFamily: FONT_B,
-                display: 'block',
-              }}
-            >
-              Return to Quiz
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 
 export default function QuizScreen({
   profile, setProfile, questions, struggleMap, setStruggleMap, onHome, theme = 'dark',
@@ -411,6 +278,19 @@ export default function QuizScreen({
       .catch(() => {})
 
   const [floatXP, setFloatXP] = useState(null)
+  // Exam mode picks its questions up front so students can move between them,
+  // change answers and flag ones to come back to. Everything is graded at the end.
+  const [examSet, setExamSet] = useState([])             // the exam's questions, in order
+  const [examIndex, setExamIndex] = useState(0)
+  const [examResponses, setExamResponses] = useState({}) // question id → response
+  const [examFlags, setExamFlags] = useState(() => new Set())
+  const [examTimes, setExamTimes] = useState({})         // question id → ms spent on it
+  const [showFinishExam, setShowFinishExam] = useState(false)
+  const examGradedRef = useRef(false)
+  const finishExamRef = useRef(null)
+  // "Something wrong with this question?" menu, and what was sent from it.
+  const [reportMenuOpen, setReportMenuOpen] = useState(false)
+  const [reportThanks, setReportThanks] = useState(false)
   const [showExit, setShowExit] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   // Width of the question area, to decide whether a passage fits beside the question.
@@ -485,7 +365,7 @@ export default function QuizScreen({
   // Uses _finished (prop) not finished (const declared later) to avoid TDZ
   useEffect(() => {
     if (!examRun || timerSeconds <= 0 || _finished) return
-    if (timeLeft <= 0) { setEndedForExam(true); setFinished(true); return }
+    if (timeLeft <= 0) { finishExamRef.current?.(); return }
     const id = setInterval(() => setTimeLeft(s => Math.max(0, s - 1)), 1000)
     return () => clearInterval(id)
   }, [examRun, timerSeconds, _finished, timeLeft])
@@ -747,7 +627,8 @@ export default function QuizScreen({
     }
     if (!_currentQ) {
       init()
-      loadNext([], struggleMap, quizMode, effectiveSubtopics)
+      if (examRun) startExam()
+      else loadNext([], struggleMap, quizMode, effectiveSubtopics)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidation])
@@ -757,12 +638,12 @@ export default function QuizScreen({
   // survives this screen remounting; the RPC decides completion.
   // The question, response and time go into the tutor's assignment report.
   // Reviewing wrong answers is practice: redoing a miss mustn't count.
-  const countAssignmentAnswer = (isCorrect, response, timeMs) => {
+  const countAssignmentAnswer = (isCorrect, response, timeMs, questionId = currentQ?.id) => {
     if (!activeAssignment?.question_count || quizMode === 'review') return
     const next = applyAssignmentAnswer(activeAssignment, isCorrect)
     onAssignmentProgress?.({ progress_count: next.progress_count, recent_results: next.recent_results })
     const id = activeAssignment.id
-    recordAssignmentAnswer(id, isCorrect, { questionId: currentQ?.id, response, timeMs })
+    recordAssignmentAnswer(id, isCorrect, { questionId, response, timeMs })
       .then(row => {
         if (!row?.completed_at) return
         setCompletedGoal(assignmentStanding({ ...next, ...row }))
@@ -1570,6 +1451,146 @@ export default function QuizScreen({
     setStruggleMap(prev => { loadNext(newAnswered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
   }
 
+  // ── Exam mode ────────────────────────────────────────────────────────────
+  const EXAM_DEFAULT_COUNT = 20
+  function startExam() {
+    const n = questionLimit > 0 ? questionLimit : EXAM_DEFAULT_COUNT
+    const target = assignmentBand ? assignmentBand.target : getTargetDifficulty([], questions)
+    const picked = []
+    for (let i = 0; i < n; i++) {
+      const q = selectNextQuestion(questions, struggleMap, picked.map(x => x.id), quizMode, effectiveSubtopics, target, assignmentBand)
+      if (!q || picked.some(x => x.id === q.id)) break
+      picked.push(q)
+    }
+    if (!picked.length) { setFinished(true); return }
+    examGradedRef.current = false
+    setExamSet(picked)
+    setExamIndex(0)
+    setExamResponses({})
+    setExamFlags(new Set())
+    setExamTimes({})
+    setDisplayQuestion(picked[0])
+  }
+
+  const goToExamQuestion = (i) => {
+    if (i < 0 || i >= examSet.length || i === examIndex) return
+    const leaving = examSet[examIndex]
+    const spent = startTime.current ? Date.now() - startTime.current : 0
+    if (leaving) setExamTimes(prev => ({ ...prev, [leaving.id]: (prev[leaving.id] || 0) + spent }))
+    const next = examSet[i]
+    setExamIndex(i)
+    setDisplayQuestion(next)
+    setSelected(examResponses[next.id] ?? null)
+  }
+
+  const chooseExamResponse = (response) => {
+    if (!currentQ) return
+    setSelected(response)
+    const next = { ...examResponses, [currentQ.id]: response }
+    setExamResponses(next)
+    // Answered questions make leaving the page ask first (App's navigation blocker).
+    setSessionAnswered(Object.keys(next).filter(id => next[id] != null))
+  }
+
+  const toggleExamFlag = () => {
+    if (!currentQ) return
+    setExamFlags(prev => {
+      const next = new Set(prev)
+      if (next.has(currentQ.id)) next.delete(currentQ.id)
+      else next.add(currentQ.id)
+      return next
+    })
+  }
+
+  // Grade every question, then record the answers and XP in exam order (so the
+  // run of right answers the server works out matches) and show the summary.
+  const finishExam = async () => {
+    if (examGradedRef.current || !examSet.length) return
+    examGradedRef.current = true
+    setShowFinishExam(false)
+    const cur = examSet[examIndex]
+    const times = cur && startTime.current
+      ? { ...examTimes, [cur.id]: (examTimes[cur.id] || 0) + (Date.now() - startTime.current) }
+      : examTimes
+    const graded = examSet.map(q => {
+      const r = examResponses[q.id]
+      const answered = r != null && responseIsComplete(q, r)
+      return { q, r: answered ? r : null, answered, ok: answered && gradeResponse(q, r) }
+    })
+    let run = streak
+    let xpTotal = 0
+    const results = graded.map(g => {
+      const xp = g.answered ? calcXP(g.ok, g.q.difficulty, run) : 0
+      if (g.answered) run = g.ok ? run + 1 : 0
+      xpTotal += xp
+      g.xp = xp
+      g.streakAfter = run
+      return { id: g.q.id, correct: g.ok, topic: g.q.topic, subtopic: g.q.subtopic, remediation: false, response: g.r, timeMs: times[g.q.id] || null, skipped: !g.answered }
+    })
+    setSessionResults(results)
+    setSessionXP(s => s + xpTotal)
+    setStreak(run)
+    setSessionAnswered(examSet.map(q => q.id))
+    setStruggleMap(prev => {
+      const next = { ...prev }
+      for (const g of graded) {
+        if (!g.answered) continue
+        const old = next[g.q.id] ?? { attempts: 0, wrong: 0 }
+        next[g.q.id] = { ...old, attempts: old.attempts + 1, wrong: old.wrong + (g.ok ? 0 : 1), last_seen: new Date().toISOString() }
+      }
+      return next
+    })
+    setEndedForExam(true)
+    setFinished(true)
+    for (const g of graded) {
+      if (!g.answered) continue
+      const t = times[g.q.id] || null
+      await recordAnswerCounted(profile.id, g.q.id, g.ok, getQuestionType(g.q) === 'mcq' ? g.r : null, null, t)
+        .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
+      await awardAnswerXP(g.xp, g.streakAfter, g.ok)
+      countAssignmentAnswer(g.ok, g.r, t, g.q.id)
+    }
+  }
+  finishExamRef.current = finishExam
+
+  // Keys: 1–9 pick an option, Enter checks the answer or moves on. Not while
+  // typing in a field, and not while a dialog is open.
+  useEffect(() => {
+    if (finished || !currentQ) return
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
+      if (showExit || showFinishExam || reportMenuOpen) return
+      const isMcq = getQuestionType(currentQ) === 'mcq'
+      const n = Number(e.key)
+      if (isMcq && !showAns && n >= 1 && n <= (currentQ.options?.length || 0)) {
+        e.preventDefault()
+        if (examRun) chooseExamResponse(n - 1)
+        else setSelected(n - 1)
+        return
+      }
+      // Enter on a focused button presses it, except on an option, where it checks.
+      if (e.key !== 'Enter' || (tag === 'button' && !e.target.classList?.contains('qopt'))) return
+      if (examRun) {
+        e.preventDefault()
+        if (examIndex < examSet.length - 1) goToExamQuestion(examIndex + 1)
+        else setShowFinishExam(true)
+      } else if (!showAns && isMcq && selected != null) {
+        e.preventDefault()
+        handleAnswer(selected)
+      } else if (showAns && remediationStatus !== 'generating') {
+        e.preventDefault()
+        nextQ()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  // A new question closes the report menu and its thank-you.
+  useEffect(() => { setReportMenuOpen(false); setReportThanks(false) }, [currentQ?.id])
+
   if (finished || (!currentQ && sessionResults.length > 0)) {
     const startMode = (mode, ids = []) => {
       generatingMoreRef.current = false
@@ -1868,511 +1889,387 @@ export default function QuizScreen({
   const remediationPendingEntry = remediationMode && !currentQ?.is_variant && remediationOriginalQ?.id === currentQ?.id
 
   const nextButtonLabel = goalReached
-    ? 'Finish assignment →'
+    ? 'Finish assignment'
     : remediationPendingEntry
-    ? 'Start Remediation →'
+    ? `Practise ${remediationTarget} like this`
     : inRemediationQuestion && remediationStatus === 'complete'
-      ? 'Return to Quiz →'
+      ? 'Back to my session'
     : inRemediationQuestion && remediationStatus === 'struggling'
-      ? 'Keep Going →'
+      ? 'Keep going'
     : inRemediationQuestion && remediationStatus === 'needs_review'
-      ? 'Continue →'
-    : inRemediationQuestion
-      ? 'Next Similar Question →'
-      : 'Next Question →'
+      ? 'Continue'
+      : 'Next question'
 
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: t.textSub, background: t.bgSubtle, border: `1px solid ${t.border}`, padding: '2px 9px', borderRadius: 999 }
-  const explainOpen = !isMobile && showAns
-  // Decide the passage layout on the width left once the explanation panel is
-  // open, so answering doesn't flip the passage from beside to above the question.
-  const layoutWidth = explainOpen ? questionAreaWidth : questionAreaWidth - EXPLAIN_PANEL_W
-  const sidePassage = !isMobile && layoutWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
+  const sidePassage = !isMobile && questionAreaWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
+  const isMcq = getQuestionType(currentQ) === 'mcq'
+  const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
+  const btn = (kind, disabled = false) => ({
+    padding: '9px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap',
+    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
+    ...(kind === 'primary'
+      ? { border: 'none', background: t.accent, color: NAVY }
+      : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
+  })
+  const linkBtn = { border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, color: t.textMuted, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.border, textUnderlineOffset: 3 }
+
+  // The question's id as stored (practice variants report their parent).
+  const reportQid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
+  const myFlags = flaggedMap[reportQid] || new Set()
+  const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
+  const REPORT_OPTIONS = [
+    ['wrong', 'The answer is wrong'],
+    ['Typo', "There's a typo"],
+    ['Confusing', "It's confusing"],
+    ['Too hard', 'Too hard for my level'],
+    ['Too easy', 'Too easy'],
+  ]
+  const sendReport = async (kind) => {
+    if (kind === 'wrong') await handleReport()
+    else await handleFlag(kind)
+    setReportThanks(true)
+  }
+
+  // Exam progress for the squares and the finish dialog.
+  const examAnswered = examSet.filter(q => examResponses[q.id] != null && responseIsComplete(q, examResponses[q.id])).length
+  const examFlagged = examSet.filter(q => examFlags.has(q.id)).length
+  const isLastExamQ = examIndex >= examSet.length - 1
+
+  const optionStyle = (i) => {
+    const isKey = i === currentQ.answer_index
+    const isPicked = i === selected
+    if (showAns && isKey) return { box: { borderColor: t.success, background: t.successBg }, key: { background: t.success, color: '#fff', borderColor: t.success }, text: t.text, tag: ['Answer', t.success] }
+    if (showAns && isPicked) return { box: { borderColor: t.danger, background: t.dangerBg }, key: { background: t.danger, color: '#fff', borderColor: t.danger }, text: t.text, tag: ['Your answer', t.danger] }
+    if (showAns) return { box: {}, key: {}, text: t.textFaint, tag: null }
+    if (isPicked) return { box: { borderColor: t.text, boxShadow: `0 0 0 1px ${t.text}` }, key: { background: t.text, color: t.bg, borderColor: t.text }, text: t.text, tag: null }
+    return { box: {}, key: {}, text: t.text, tag: null }
+  }
+
+  const timer = examRun && timerSeconds > 0 && (() => {
+    const m = Math.floor(timeLeft / 60)
+    const s = timeLeft % 60
+    const urgent = timeLeft < 300
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: urgent ? t.danger : t.textMuted }}>
+        <Timer size={14} aria-hidden="true" /><strong style={{ color: urgent ? t.danger : t.text, fontVariantNumeric: 'tabular-nums' }}>{m}:{String(s).padStart(2, '0')}</strong>{!isMobile && ' left'}
+      </span>
+    )
+  })()
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, overflow: isMobile ? 'visible' : 'hidden' }}>
       <style>{`
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeUp  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
-        @keyframes popIn   { 0%{transform:scale(0.95);opacity:0} 100%{transform:scale(1);opacity:1} }
-        @keyframes explainIn { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
-        .qopt { transition: all 0.13s ease; cursor: pointer; }
-        .qopt:hover { border-color: ${GOLD} !important; background: rgba(241,190,67,0.05) !important; }
+        @keyframes popIn   { 0%{transform:scale(0.97);opacity:0} 100%{transform:scale(1);opacity:1} }
+        @media (prefers-reduced-motion: reduce) { .qz-anim { animation: none !important; } }
+        .qopt { transition: border-color 0.12s ease, background 0.12s ease; }
+        .qopt:not(:disabled):hover { border-color: ${t.textMuted} !important; }
+        .qopt:focus-visible, .qz-sq:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 2px; }
       `}</style>
       {freeQuota && (
-        <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '7px 16px', fontSize: 12.5, color: t.textMuted, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.06)' : '#fffbeb' }}>
+        <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '7px 16px', fontSize: 12.5, color: t.textMuted, borderBottom: `1px solid ${t.border}`, background: t.bgSubtle }}>
           <span><strong style={{ color: t.text }}>{Math.max(0, freeQuota.limit - freeQuota.used)}</strong> of {freeQuota.limit} free questions left today</span>
-          <button type="button" onClick={freeQuota.onUpgrade} style={{ border: 'none', background: 'none', padding: 0, color: t.goldText, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Go unlimited →</button>
+          <button type="button" onClick={freeQuota.onUpgrade} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>Go unlimited</button>
         </div>
       )}
 
       {floatXP && (
-        <div style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', fontSize: 30, fontWeight: 800, color: GOLD, animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999 }}>
+        <div className="qz-anim" style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', fontSize: 30, fontWeight: 800, color: t.goldText, animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999 }}>
           +{floatXP} XP
         </div>
       )}
 
       {showExit && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="gf-end-title" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '24px', maxWidth: 380, width: '90%', animation: 'popIn 0.2s ease', boxShadow: t.shadowModal }}>
-            <div id="gf-end-title" style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 6 }}>End this session?</div>
-            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 22, lineHeight: 1.6 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="gf-end-title" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '22px', maxWidth: 380, width: '90%', animation: 'popIn 0.2s ease' }}>
+            <div id="gf-end-title" style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 6 }}>End this session?</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
               {sessionResults.some(r => !r.remediation)
-                ? examRun
-                  ? "The exam ends here and you'll see your answers so far."
-                  : <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>. You'll see a summary of this session next.</>
+                ? <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>. You'll see a summary of this session next.</>
                 : "You haven't answered any questions yet."}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowExit(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Keep going</button>
-              <button onClick={endSession} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: t.danger, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End session</button>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setShowExit(false)} style={btn('secondary')}>Keep going</button>
+              <button type="button" onClick={endSession} style={{ ...btn('primary'), background: t.danger, color: '#fff' }}>End session</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Status bar on the page colour: where you are on the left, how the
-          session is going on the right. Score signals are hidden in an exam. */}
-      <div style={{ background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8, fontSize: 12.5, color: t.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>Q{qNumber}{examRun && questionLimit > 0 ? ` of ${questionLimit}` : ''}</span>
-          <span style={{ color: t.text, fontWeight: 600 }}>{currentQ.subtopic}</span>
-          <span aria-label={`Difficulty ${currentQ.difficulty} of 5`} style={{ color: t.textFaint, letterSpacing: 1 }}>{'★'.repeat(currentQ.difficulty)}{'☆'.repeat(5 - currentQ.difficulty)}</span>
-          {goalDisplay && (
-            <span title="Questions answered toward your tutor's assignment" style={chip}>
-              Assignment {goalDisplay.progress}/{goalDisplay.goal}
-              {goalDisplay.minAccuracy && goalDisplay.accuracy !== null && ` · ${goalDisplay.accuracy}% (pass ${goalDisplay.minAccuracy}%)`}
-            </span>
-          )}
-          {isStruggle && <span style={{ ...chip, color: t.danger }}><Zap size={12} aria-hidden="true" />Priority</span>}
-          {remediationMode && (
-            <span style={chip}>Extra practice · {Math.min(remediationStreak, remediationTarget)}/{remediationTarget} in a row</span>
+      {showFinishExam && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="gf-finish-title" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '22px', maxWidth: 400, width: '90%', animation: 'popIn 0.2s ease' }}>
+            <div id="gf-finish-title" style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 6 }}>Finish the exam?</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
+              You've answered <strong style={{ color: t.text }}>{examAnswered} of {examSet.length}</strong>.
+              {examSet.length - examAnswered > 0 && ' Unanswered questions count as wrong.'}
+              {examFlagged > 0 && ` ${examFlagged} ${examFlagged === 1 ? 'is' : 'are'} flagged for review.`}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setShowFinishExam(false)} style={btn('secondary')}>Keep going</button>
+              <button type="button" onClick={finishExam} style={btn('primary')}>Finish exam</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top bar: where you are on the left; how it's going, tools and the way out on the right. */}
+      <div style={{ background: t.bg, borderBottom: `1px solid ${t.border}`, padding: isMobile ? '10px 16px' : '11px 24px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: 12.5, color: t.textMuted }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+          {examRun ? (
+            <span style={{ fontSize: 13, fontWeight: 800, color: t.text, whiteSpace: 'nowrap' }}>{isMobile ? `Q${examIndex + 1} of ${examSet.length}` : `Exam · Question ${examIndex + 1} of ${examSet.length}`}</span>
+          ) : (
+            <>
+              <span style={{ fontSize: 13, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentQ.subtopic || currentQ.topic}</span>
+              {!isMobile && currentQ.difficulty != null && <span style={{ whiteSpace: 'nowrap' }} title="How hard this question is, from 1 to 5">Level {currentQ.difficulty}</span>}
+              {!isMobile && goalDisplay && (
+                <span title="Questions answered toward your tutor's assignment" style={chip}>
+                  Assignment {goalDisplay.progress}/{goalDisplay.goal}
+                  {goalDisplay.minAccuracy && goalDisplay.accuracy !== null && ` · ${goalDisplay.accuracy}% (pass ${goalDisplay.minAccuracy}%)`}
+                </span>
+              )}
+              {!isMobile && isStruggle && <span style={chip} title="You've missed this one before">Missed before</span>}
+            </>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
           {!examRun && sessionTotal > 0 && (
-            <span><strong style={{ color: t.success }}>{sessionCorrect}</strong> right · <strong style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</strong> wrong</span>
+            <span style={{ whiteSpace: 'nowrap' }}><strong style={{ color: t.success }}>{sessionCorrect}</strong>{isMobile ? ' · ' : ' right · '}<strong style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</strong>{isMobile ? '' : ' wrong'}</span>
           )}
-          {!examRun && streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: t.text, fontWeight: 700 }}><Flame size={14} color={t.goldText} aria-hidden="true" />{streak}</span>}
-          {!examRun && <span>{signedXP(sessionXP)} XP</span>}
-          {examRun && timerSeconds > 0 && (() => {
-            const m = Math.floor(timeLeft / 60)
-            const s = timeLeft % 60
-            const urgent = timeLeft < 300
-            return (
-              <span style={{ fontWeight: 800, color: urgent ? t.danger : t.text, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Timer size={14} aria-hidden="true" />{m}:{String(s).padStart(2, '0')}
-              </span>
-            )
-          })()}
-          <button onClick={() => setShowExit(true)} style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>End session</button>
+          {!examRun && !isMobile && streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: t.text, fontWeight: 700 }} title="Right in a row"><Flame size={14} color={t.goldText} aria-hidden="true" />{streak}</span>}
+          {!examRun && !isMobile && <span style={{ whiteSpace: 'nowrap' }}>{signedXP(sessionXP)} XP</span>}
+          {timer}
+          <QuizToolsDock theme={theme} tools={tools} inline />
+          <button type="button" onClick={() => (examRun ? setShowFinishExam(true) : setShowExit(true))}
+            style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>
+            {examRun ? (isMobile ? 'Finish' : 'Finish exam') : isMobile ? 'End' : 'End session'}
+          </button>
         </div>
       </div>
 
-      {/* Level progress */}
-      {!examRun && <div style={{ height: 2, background: t.border, flexShrink: 0 }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: t.accent, transition: 'width 0.8s' }} />
-      </div>}
-
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
-        <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '16px' : '32px 28px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : 600, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+        <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '14px' : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : 640, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {sidePassage && (
             // The passage is what students read closely, so it gets ~60% of the row.
             <div style={{ flex: '3 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
               <PassageView passage={currentQ.passage} theme={theme} fill />
             </div>
           )}
-          <div style={{ flex: sidePassage ? '2 1 0' : '0 1 600px', minWidth: sidePassage ? 340 : 0, width: '100%', maxWidth: 600, animation: 'fadeUp 0.3s ease' }}>
-            {consolidation && (
-              <div style={{
-                marginBottom: 14,
-                padding: '10px 14px',
-                borderRadius: 12,
-                background: t.purpleBg,
-                border: `1px solid ${t.purple}55`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 10,
-                flexWrap: 'wrap',
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.purple }}>
-                    <Pin size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} aria-hidden="true" />Consolidating: <span style={{ color: t.text }}>{consolidation.label}</span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: t.textMuted, marginTop: 3 }}>
-                    {Math.min(round.inARow, CONSOLIDATION_STREAK)}/{CONSOLIDATION_STREAK} right in a row · question {Math.min(round.answered + (!currentQ?.is_variant && !showAns ? 1 : 0), CONSOLIDATION_MAX_QUESTIONS)} of {CONSOLIDATION_MAX_QUESTIONS}
-                  </div>
+          <div key={currentQ.id} className="qz-anim" style={{ flex: sidePassage ? '2 1 0' : '0 1 640px', minWidth: sidePassage ? 340 : 0, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12, animation: 'fadeUp 0.25s ease' }}>
+
+            {/* Exam: every question as a square, to move between them. */}
+            {examRun && examSet.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div role="group" aria-label="Questions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0, paddingTop: 4 }}>
+                  {examSet.map((q, i) => {
+                    const answered = examResponses[q.id] != null && responseIsComplete(q, examResponses[q.id])
+                    const flagged = examFlags.has(q.id)
+                    const cur = i === examIndex
+                    return (
+                      <button key={q.id} type="button" className="qz-sq" onClick={() => goToExamQuestion(i)}
+                        aria-label={`Question ${i + 1}${answered ? ', answered' : ''}${flagged ? ', flagged' : ''}`} aria-current={cur ? 'step' : undefined}
+                        style={{ position: 'relative', width: 30, height: 30, borderRadius: 7, fontFamily: FONT_B, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontVariantNumeric: 'tabular-nums',
+                          border: `1px solid ${cur ? t.text : flagged ? t.goldText : t.border}`, boxShadow: cur ? `0 0 0 1px ${t.text}` : 'none',
+                          background: answered ? t.bgSubtle : t.bgCard, color: answered || cur ? t.text : t.textMuted }}>
+                        {i + 1}
+                        {flagged && (
+                          <span aria-hidden="true" style={{ position: 'absolute', top: -6, right: -6, width: 15, height: 15, borderRadius: '50%', background: t.bgCard, border: `1px solid ${t.goldText}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Flag size={8} style={{ color: t.goldText }} />
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
-                <button
-                  onClick={leaveConsolidation}
-                  style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${t.purple}`, background: 'transparent', color: t.purple, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
-                >
-                  {consolidation.canReturn ? 'Back to my quiz' : 'Practise everything'}
+                <button type="button" onClick={toggleExamFlag} aria-pressed={examFlags.has(currentQ.id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                    border: `1px solid ${examFlags.has(currentQ.id) ? t.goldText : t.border}`, background: t.bgCard, color: examFlags.has(currentQ.id) ? t.goldText : t.textMuted }}>
+                  <Flag size={13} aria-hidden="true" />{examFlags.has(currentQ.id) ? 'Flagged for review' : 'Flag for review'}
                 </button>
               </div>
             )}
-            <RemediationChip
-              remediationMode={remediationMode}
-              remediationStreak={remediationStreak}
-              remediationTarget={remediationTarget}
-              remediationStatus={remediationStatus}
-              remediationSource={remediationSource}
-              theme={theme}
-            />
 
-            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: isMobile ? '20px' : '28px', boxShadow: t.shadowCard, marginBottom: showAns ? 14 : 0 }}>
+            {consolidation && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 14px', borderRadius: 10, background: t.bgCard, border: `1px solid ${t.border}`, fontSize: 12.5 }}>
+                <Pin size={14} aria-hidden="true" style={{ color: t.textMuted, flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, color: t.textMuted }}>
+                  <strong style={{ color: t.text }}>Practising {consolidation.label}</strong> · {Math.min(round.inARow, CONSOLIDATION_STREAK)} of {CONSOLIDATION_STREAK} right in a row · question {Math.min(round.answered + (!currentQ?.is_variant && !showAns ? 1 : 0), CONSOLIDATION_MAX_QUESTIONS)} of {CONSOLIDATION_MAX_QUESTIONS}
+                </span>
+                <button type="button" onClick={leaveConsolidation} style={linkBtn}>{consolidation.canReturn ? 'Back to my quiz' : 'Practise everything'}</button>
+              </div>
+            )}
+
+            {remediationMode && !remediationPendingEntry && (
+              <ExtraPracticeStrip
+                streak={remediationStreak}
+                target={remediationTarget}
+                status={remediationStatus}
+                topic={remediationOriginalQ?.subtopic || remediationOriginalQ?.topic || currentQ.subtopic}
+                onReturnToQuiz={handleReturnToQuiz}
+                theme={theme}
+              />
+            )}
+
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
               {currentQ.passage && !sidePassage && <PassageView passage={currentQ.passage} theme={theme} />}
-              {currentQ.graph && (
-                <GraphView graph={currentQ.graph} theme={theme} />
-              )}
-              {currentQ.table_data && (
-                <TableView table={currentQ.table_data} theme={theme} />
-              )}
-              {currentQ.diagram && (
-                <DiagramView diagram={currentQ.diagram} theme={theme} />
-              )}
+              {currentQ.graph && <GraphView graph={currentQ.graph} theme={theme} />}
+              {currentQ.table_data && <TableView table={currentQ.table_data} theme={theme} />}
+              {currentQ.diagram && <DiagramView diagram={currentQ.diagram} theme={theme} />}
               {currentQ.image_url && getQuestionType(currentQ) !== 'hotspot' && getQuestionType(currentQ) !== 'image_label' && (
-                <img
-                  src={currentQ.image_url}
-                  alt="Question diagram"
-                  style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }}
-                />
+                <img src={currentQ.image_url} alt="Question diagram" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }} />
               )}
-              <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: t.text, lineHeight: 1.7, marginBottom: 22 }}>
+              <div style={{ fontSize: isMobile ? 15.5 : 17, fontWeight: 700, color: t.text, lineHeight: 1.6, marginBottom: 18 }}>
                 <MathText text={currentQ.question} />
               </div>
-              {getQuestionType(currentQ) === 'mcq' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {currentQ.options.map((opt, i) => {
-                  const isCorrectOpt = i === currentQ.answer_index
-                  const isSelectedOpt = i === selected
-                  let bg = t.bgSubtle
-                  let border = `1px solid ${t.border}`
-                  let color = t.textSub
-                  let lBg = t.borderMid
-                  let lCol = t.text
 
-                  if (!showAns && isSelectedOpt) {
-                    bg = 'rgba(241,190,67,0.10)'
-                    border = `1px solid ${GOLD}`
-                    color = t.text
-                    lBg = GOLD
-                    lCol = NAVY
-                  }
-
-                  if (showAns) {
-                    if (isCorrectOpt) {
-                      bg = t.successBg
-                      border = `1px solid ${t.success}55`
-                      color = t.success
-                      lBg = `${t.success}33`
-                      lCol = t.success
-                    } else if (isSelectedOpt && !correct) {
-                      bg = t.dangerBg
-                      border = `1px solid ${t.danger}55`
-                      color = t.danger
-                      lBg = `${t.danger}33`
-                      lCol = t.danger
-                    } else {
-                      bg = 'transparent'
-                      border = `1px solid ${t.border}`
-                      color = t.textFaint
-                      lBg = t.borderMid
-                      lCol = t.textFaint
-                    }
-                  }
-
-                  return (
-                    <button
-                      key={i}
-                      // Choosing only selects: a misclick can be changed before Check answer.
-                      onClick={() => { if (!showAns) setSelected(i) }}
-                      aria-pressed={!showAns ? isSelectedOpt : undefined}
-                      className={showAns ? '' : 'qopt'}
-                      style={{
-                        background: bg,
-                        border,
-                        color,
-                        padding: '12px 16px',
-                        borderRadius: 11,
-                        fontSize: 14,
-                        fontWeight: 600,
-                        textAlign: 'left',
-                        cursor: showAns ? 'default' : 'pointer',
-                        fontFamily: FONT_B,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        transition: 'all 0.13s',
-                      }}
-                    >
-                      <span style={{ width: 28, height: 28, borderRadius: '50%', background: lBg, color: lCol, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                        {showAns && isCorrectOpt ? '✓' : showAns && isSelectedOpt ? '✗' : String.fromCharCode(65 + i)}
-                      </span>
-                      <span style={{ minWidth: 0, flex: 1, overflowX: 'auto' }}>
-                        <MathText text={opt} />
-                      </span>
-                    </button>
-                  )
-                })}
-                {!showAns && (
-                  <button
-                    onClick={() => { if (selected != null) handleAnswer(selected) }}
-                    disabled={selected == null}
-                    style={{
-                      marginTop: 8, width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-                      background: selected != null ? t.accent : t.bgHover,
-                      color: selected != null ? NAVY : t.textFaint, fontSize: 14, fontWeight: 800,
-                      cursor: selected != null ? 'pointer' : 'default', fontFamily: FONT_B,
-                    }}
-                  >
-                    {examRun ? 'Submit answer' : 'Check answer'}
-                  </button>
-                )}
-              </div>
+              {isMcq ? (
+                <div role={showAns ? undefined : 'radiogroup'} aria-label="Answer options" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {currentQ.options.map((opt, i) => {
+                    const s = optionStyle(i)
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        className="qopt"
+                        role={showAns ? undefined : 'radio'}
+                        aria-checked={showAns ? undefined : i === selected}
+                        disabled={showAns}
+                        // Choosing only selects: a misclick can be changed before Check answer.
+                        onClick={() => { if (showAns) return; if (examRun) chooseExamResponse(i); else setSelected(i) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, textAlign: 'left', fontFamily: FONT_B, fontSize: 14.5, fontWeight: 500,
+                          border: `1px solid ${t.border}`, background: t.bgCard, color: s.text, cursor: showAns ? 'default' : 'pointer', ...s.box }}
+                      >
+                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, flexShrink: 0, color: t.textMuted, ...s.key }}>
+                          {String.fromCharCode(65 + i)}
+                        </span>
+                        <span style={{ minWidth: 0, flex: 1, overflowX: 'auto' }}><MathText text={opt} /></span>
+                        {s.tag && <span style={{ fontSize: 12, fontWeight: 700, color: s.tag[1], whiteSpace: 'nowrap' }}>{s.tag[0]}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
               ) : (
                 <QuestionRenderer
                   question={currentQ}
                   response={selected}
-                  onChange={setSelected}
+                  onChange={examRun ? chooseExamResponse : setSelected}
                   showAns={showAns}
                   onSubmit={handleSubmitResponse}
                   theme={theme}
-                  checkLabel={examRun ? 'Submit answer' : 'Check answer'}
+                  hideCheck={examRun}
+                  checkLabel="Check answer"
                 />
               )}
-            </div>
 
-              {showAns && (
-                <div style={{ animation: 'popIn 0.2s ease' }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 0 }}>
-                    <button
-                      onClick={nextQ}
-                      disabled={remediationStatus === 'generating'}
-                      style={{
-                        flex: 1,
-                        padding: '14px',
-                        borderRadius: 12,
-                        border: 'none',
-                        background: t.accent,
-                        color: NAVY,
-                        fontSize: 15,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        fontFamily: FONT_B,
-                        opacity: remediationStatus === 'generating' ? 0.7 : 1,
-                        pointerEvents: remediationStatus === 'generating' ? 'none' : 'auto',
-                      }}
-                    >
+              {/* Exam: move between questions; answers are kept until Finish. */}
+              {examRun && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
+                  <button type="button" onClick={() => goToExamQuestion(examIndex - 1)} disabled={examIndex === 0} style={btn('secondary', examIndex === 0)}>Previous</button>
+                  {!isMobile && <span style={{ fontSize: 12, color: t.textFaint, marginLeft: 6 }}>{isMcq ? 'Press 1–4 to choose, Enter for the next question' : ''}</span>}
+                  <button type="button" onClick={() => (isLastExamQ ? setShowFinishExam(true) : goToExamQuestion(examIndex + 1))} style={{ ...btn('primary'), marginLeft: 'auto' }}>
+                    {isLastExamQ ? 'Finish exam' : 'Next question'}
+                  </button>
+                </div>
+              )}
+
+              {/* Practice, before answering: check the chosen option. */}
+              {!examRun && !showAns && isMcq && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+                  <button type="button" onClick={() => { if (selected != null) handleAnswer(selected) }} disabled={selected == null} style={btn('primary', selected == null)}>Check answer</button>
+                  {!isMobile && <span style={{ fontSize: 12, color: t.textFaint, marginLeft: 'auto' }}>Press 1–{currentQ.options.length} to choose, Enter to check</span>}
+                </div>
+              )}
+
+              {/* Practice, after answering: the result, why, and what's next. */}
+              {!examRun && showAns && (
+                <div className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease' }}>
+                  <div role="status" style={{ fontSize: 15, fontWeight: 800, color: correct ? t.success : t.text }}>
+                    {correct ? 'Right.' : 'Not quite.'}
+                    {inRemediationQuestion && remediationStatus !== 'complete' && (
+                      <span style={{ fontWeight: 600, color: t.textMuted }}> {Math.min(remediationStreak, remediationTarget)} of {remediationTarget} in a row.</span>
+                    )}
+                  </div>
+                  {currentQ.solution && (
+                    <div style={{ fontSize: 14, color: t.textSub, lineHeight: 1.7 }}><MathText text={currentQ.solution} /></div>
+                  )}
+                  {currentQ.tip && (
+                    <div style={{ display: 'flex', gap: 8, fontSize: 13, color: t.textSub, lineHeight: 1.6, paddingLeft: 10, borderLeft: `2px solid ${t.accent}` }}>
+                      <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 3, color: t.goldText }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={currentQ.tip} /></div>
+                    </div>
+                  )}
+                  {(aiTip || loadingTip) && (
+                    <div style={{ display: 'flex', gap: 8, fontSize: 13, color: t.textSub, lineHeight: 1.6, paddingLeft: 10, borderLeft: `2px solid ${t.accent}` }}>
+                      <Bot size={14} style={{ flexShrink: 0, marginTop: 3, color: t.textMuted }} aria-hidden="true" />
+                      <div style={{ flex: 1, minWidth: 0 }}>{loadingTip ? <span style={{ color: t.textFaint }}>Titan is looking at your answer…</span> : <><strong style={{ color: t.text }}>Titan: </strong><MathText text={aiTip} /></>}</div>
+                    </div>
+                  )}
+                  {remediationPendingEntry && remediationStatus === 'generating' && (
+                    <div style={{ fontSize: 12.5, color: t.textMuted }}>Getting practice questions like this one ready…</div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, position: 'relative' }}>
+                    <button type="button" onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), ...(isMobile ? { flex: 1 } : {}) }}>
                       {nextButtonLabel}
                     </button>
                     {onOpenLearn && !examMode && (
-                      <button
-                        onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))}
-                        title="Explain this concept with Titan AI"
-                        style={{
-                          flexShrink: 0,
-                          padding: '14px 16px',
-                          borderRadius: 12,
-                          border: `1px solid rgba(241,190,67,0.35)`,
-                          background: 'rgba(241,190,67,0.08)',
-                          color: GOLD,
-                          fontSize: 13,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          fontFamily: FONT_B,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        Get Titan's Help
+                      <button type="button" onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                        {isMobile ? 'Ask Titan' : correct ? 'Ask Titan about this' : 'Ask Titan why'}
                       </button>
                     )}
+                    {!isMobile && <ReportLink />}
                   </div>
-
-                  <StatusToast
-                    status={['complete', 'struggling', 'needs_review', 'generating'].includes(remediationStatus) ? remediationStatus : null}
-                    onReturnToQuiz={handleReturnToQuiz}
-                    theme={theme}
-                  />
-
-                  {remediationMode && (
-                    <div style={{
-                      marginTop: 12,
-                      padding: '12px 14px',
-                      background: t.accentGlow2,
-                      borderRadius: 12,
-                      border: `1px solid ${t.borderAccent}`,
-                      animation: 'popIn 0.18s ease',
-                    }}>
-                      <div style={{
-                        fontSize: 11,
-                        color: GOLD,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.08em',
-                        marginBottom: 4,
-                      }}>
-                        Remediation State
-                      </div>
-                      <div style={{ fontSize: 13, color: t.text, fontWeight: 700, marginBottom: 4 }}>
-                        Mastery Streak: {Math.min(remediationStreak, remediationTarget)}/{remediationTarget}
-                      </div>
-                      <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>
-                        {remediationStatus === 'complete'
-                          ? 'Mastery confirmed. Return to the main quiz when you are ready.'
-                          : remediationStatus === 'struggling'
-                            ? `Keep going with an easier question, or return to the quiz. You only need 1 correct answer to continue.`
-                            : remediationStatus === 'needs_review'
-                              ? 'This concept has been added to your study plan. Press Continue to return to the quiz.'
-                              : `This concept is temporarily locked. Get ${remediationTarget} correct in a row to continue.`}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {isMobile && showAns && (
-                <div style={{ marginTop: 14, background: t.bgCard, borderRadius: 14, padding: '18px', border: `1px solid ${t.border}`, animation: 'popIn 0.25s ease' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px', borderRadius: 20, marginBottom: 14, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 12, fontWeight: 700, color: correct ? t.success : t.danger }}>
-                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · ${earnedXP >= 0 ? '+' : ''}${earnedXP} XP`}
-                  </div>
-                  <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.75, marginBottom: currentQ.tip ? 10 : 0 }}>
-                    <MathText text={currentQ.solution} />
-                  </div>
-                  {currentQ.tip && (
-                    <div style={{ marginTop: 10, padding: '9px 12px', background: t.accentGlow2, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${GOLD}`, fontSize: 12, color: GOLD, lineHeight: 1.65, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 3 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={currentQ.tip} /></div>
-                    </div>
-                  )}
-                  {loadingTip && <div style={{ fontSize: 12, color: t.textFaint, fontStyle: 'italic', marginTop: 8 }}>Getting AI tip…</div>}
-                  {aiTip && (
-                    <div style={{ marginTop: 8, padding: '9px 12px', background: t.purpleBg, borderRadius: '0 8px 8px 0', borderLeft: `2px solid ${t.purple}`, fontSize: 12, color: t.purple, lineHeight: 1.65, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <Bot size={14} style={{ flexShrink: 0, marginTop: 3 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={aiTip} /></div>
-                    </div>
-                  )}
-                  {(() => {
-                    const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
-                    const myFlags = flaggedMap[qid] || new Set()
-                    const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
-                    return (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Flag this question</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                          {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => {
-                            const active = myFlags.has(tag)
-                            const saving = flagging === tag
-                            return (
-                              <button key={tag} onClick={() => handleFlag(tag)} disabled={!!flagging}
-                                style={{
-                                  padding: '4px 9px', borderRadius: 6, fontSize: 11, cursor: flagging ? 'default' : 'pointer',
-                                  fontFamily: FONT_B, transition: 'all 0.15s',
-                                  border: `1px solid ${active ? t.borderAccent : t.border}`,
-                                  background: active ? t.accentGlow2 : 'transparent',
-                                  color: active ? GOLD : saving ? t.textMuted : t.textFaint,
-                                  opacity: flagging && !saving ? 0.5 : 1,
-                                }}
-                              >{saving ? '…' : active ? `✓ ${tag}` : tag}</button>
-                            )
-                          })}
-                          <button
-                            onClick={handleReport}
-                            disabled={reporting || alreadyReported}
-                            style={{
-                              padding: '4px 9px', borderRadius: 6, fontSize: 11,
-                              cursor: reporting || alreadyReported ? 'default' : 'pointer',
-                              fontFamily: FONT_B, transition: 'all 0.15s',
-                              border: `1px solid ${alreadyReported ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.25)'}`,
-                              background: alreadyReported ? 'rgba(239,68,68,0.1)' : 'transparent',
-                              color: alreadyReported ? '#f87171' : reporting ? t.textMuted : 'rgba(239,68,68,0.7)',
-                            }}
-                          >{reporting ? '…' : alreadyReported ? '✓ Reported' : 'Wrong answer'}</button>
-                        </div>
-                      </div>
-                    )
-                  })()}
+                  {isMobile && <ReportLink />}
                 </div>
               )}
             </div>
+
+            {!examRun && showAns && (
+              <div style={{ fontSize: 12.5, color: t.textFaint, textAlign: 'center' }}>
+                {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
+                {!correct && remediationPendingEntry ? '. The practice questions earn XP back.' : ''}
+              </div>
+            )}
           </div>
           </div>
-
-          {explainOpen && (
-            <div style={{ width: EXPLAIN_PANEL_W, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, overflowY: 'auto', padding: '32px 28px', display: 'flex', flexDirection: 'column', animation: 'explainIn 0.25s ease' }}>
-                <div style={{ maxWidth: 500 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, marginBottom: 20, background: correct ? t.successBg : t.dangerBg, border: `1px solid ${correct ? t.success + '55' : t.danger + '55'}`, fontSize: 13, fontWeight: 700, color: correct ? t.success : t.danger }}>
-                    {correct ? `✓ Correct · +${earnedXP} XP` : `✗ Incorrect · ${earnedXP >= 0 ? '+' : ''}${earnedXP} XP`}
-                  </div>
-
-                  <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Explanation</div>
-                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.8, marginBottom: 16 }}><MathText text={currentQ.solution} /></div>
-
-                  {currentQ.tip && (
-                    <div style={{ padding: '12px 14px', background: t.accentGlow2, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${GOLD}`, fontSize: 13, color: GOLD, lineHeight: 1.65, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 4 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={currentQ.tip} /></div>
-                    </div>
-                  )}
-
-                  {loadingTip && <div style={{ fontSize: 12, color: t.textFaint, fontStyle: 'italic', marginBottom: 12 }}>Getting AI tip…</div>}
-                  {aiTip && (
-                    <div style={{ padding: '12px 14px', background: t.purpleBg, borderRadius: '0 10px 10px 0', borderLeft: `3px solid ${t.purple}`, fontSize: 13, color: t.purple, lineHeight: 1.65, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <Bot size={14} style={{ flexShrink: 0, marginTop: 4 }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={aiTip} /></div>
-                    </div>
-                  )}
-
-                  {(() => {
-                    const qid = currentQ?.is_variant ? (currentQ?.parent_question_id || currentQ?.id) : currentQ?.id
-                    const myFlags = flaggedMap[qid] || new Set()
-                    const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
-                    return (
-                      <div>
-                        <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Flag this question</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {['Too easy', 'Too hard', 'Confusing', 'Typo'].map(tag => {
-                            const active = myFlags.has(tag)
-                            const saving = flagging === tag
-                            return (
-                              <button
-                                key={tag}
-                                onClick={() => handleFlag(tag)}
-                                disabled={!!flagging}
-                                style={{
-                                  padding: '5px 10px', borderRadius: 7, fontSize: 12, cursor: flagging ? 'default' : 'pointer',
-                                  fontFamily: FONT_B, transition: 'all 0.15s',
-                                  border: `1px solid ${active ? t.borderAccent : t.border}`,
-                                  background: active ? t.accentGlow2 : saving ? t.bgHover : 'transparent',
-                                  color: active ? GOLD : saving ? t.textMuted : t.textFaint,
-                                  opacity: flagging && !saving ? 0.5 : 1,
-                                }}
-                              >
-                                {saving ? '…' : active ? `✓ ${tag}` : tag}
-                              </button>
-                            )
-                          })}
-                          <button
-                            onClick={handleReport}
-                            disabled={reporting || alreadyReported}
-                            style={{
-                              padding: '5px 10px', borderRadius: 7, fontSize: 12,
-                              cursor: reporting || alreadyReported ? 'default' : 'pointer',
-                              fontFamily: FONT_B, transition: 'all 0.15s',
-                              border: `1px solid ${alreadyReported ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.25)'}`,
-                              background: alreadyReported ? 'rgba(239,68,68,0.1)' : 'transparent',
-                              color: alreadyReported ? '#f87171' : reporting ? t.textMuted : 'rgba(239,68,68,0.7)',
-                            }}
-                          >
-                            {reporting ? '…' : alreadyReported ? '✓ Reported' : 'Wrong answer'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-            </div>
-          )}
         </div>
-      <QuizToolsDock theme={theme} />
       </div>
+    </div>
   )
+
+  // "Something wrong with this question?" and its menu. The thank-you stays
+  // until the next question.
+  function ReportLink() {
+    return (
+      <span style={{ position: 'relative', marginLeft: isMobile ? 0 : 'auto' }}>
+        {reportThanks ? (
+          <span role="status" style={{ fontSize: 12.5, color: t.textMuted }}>Thanks. We check every report.</span>
+        ) : (
+          <button type="button" onClick={() => setReportMenuOpen(o => !o)} aria-expanded={reportMenuOpen} aria-haspopup="menu" style={linkBtn}>
+            Something wrong with this question?
+          </button>
+        )}
+        {reportMenuOpen && !reportThanks && (
+          <>
+            <div onClick={() => setReportMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} aria-hidden="true" />
+            <div role="menu" aria-label="What's wrong with it?" style={{ position: 'absolute', right: isMobile ? 'auto' : 0, left: isMobile ? 0 : 'auto', bottom: 'calc(100% + 6px)', zIndex: 51, width: 240, padding: 6, borderRadius: 10, background: t.bgCard, border: `1px solid ${t.border}`, boxShadow: t.shadowModal, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '6px 9px 4px', fontSize: 13, fontWeight: 800, color: t.text }}>What's wrong?</div>
+              {REPORT_OPTIONS.map(([kind, label]) => {
+                const done = kind === 'wrong' ? alreadyReported : myFlags.has(kind)
+                return (
+                  <button key={kind} type="button" role="menuitem" disabled={done || reporting || !!flagging}
+                    onClick={async () => { setReportMenuOpen(false); await sendReport(kind) }}
+                    style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '8px 9px', borderRadius: 7, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: FONT_B, fontSize: 13, color: done ? t.textFaint : t.text, cursor: done ? 'default' : 'pointer' }}
+                    onMouseEnter={e => { if (!done) e.currentTarget.style.background = t.bgHover }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+                    {label}{done && <span style={{ fontSize: 11.5 }}>Sent</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </span>
+    )
+  }
 }
