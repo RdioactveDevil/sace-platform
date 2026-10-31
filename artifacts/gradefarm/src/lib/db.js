@@ -583,9 +583,14 @@ export async function flagQuestion(userId, questionId, flagType) {
 }
 
 export async function reportQuestion(questionId) {
+  // The API needs to know who's reporting (it rejects anonymous reports).
+  const session = await getSession()
   const res = await fetch('/api/report-question', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
     body: JSON.stringify({ questionId }),
   })
   if (!res.ok) throw new Error(`Report failed (${res.status})`)

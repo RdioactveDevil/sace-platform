@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripe, removePaidSubject } from "./billing";
 import { currentStreak } from "../lib/streak";
 import { planIsLive, type TutorBillingRow } from "../lib/tutor-plan";
+import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -1210,6 +1211,43 @@ router.get("/admin/cohort-stats", async (req, res) => {
     }));
 
     return res.json({ rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/questions/:id/content — an admin rewrites a live question
+// (Student flags). Body: any of question, options, answerIndex, solution,
+// difficulty. Reports use /question-reports/:id/resolve, which also settles them.
+router.patch("/admin/questions/:id/content", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { data: q } = await admin.from("questions").select("id, options").eq("id", req.params.id).maybeSingle();
+    if (!q) return res.status(404).json({ error: "No question with that ID" });
+    const built = buildQuestionUpdate(parseOptions(q.options), req.body || {});
+    if ("error" in built) return res.status(400).json({ error: built.error });
+    const { error } = await admin.from("questions").update(built.update).eq("id", req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /admin/questions/:id — take a live question out of the bank. Its
+// variants, flags and students' review history for it go with it (cascade).
+router.delete("/admin/questions/:id", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { data, error } = await ctx.admin.from("questions").delete().eq("id", req.params.id).select("id");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No question with that ID" });
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

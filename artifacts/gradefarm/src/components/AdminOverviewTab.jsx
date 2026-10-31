@@ -6,7 +6,7 @@ import {
   adminListTutorApplications,
   adminAnswersBetween,
 } from '../lib/db'
-import { getDraftQuestions, fetchQuestionReports, isOpenReport } from '../lib/adminDb'
+import { getDraftQuestions, fetchQuestionReports, fetchQuestionFlags, isOpenReport } from '../lib/adminDb'
 import { listCurricula } from '../lib/curriculaDb'
 import { supabase } from '../lib/supabase'
 
@@ -49,9 +49,10 @@ export default function AdminOverviewTab() {
       safe(supabase.from('questions').select('id', { count: 'exact', head: true }).then(r => r.count ?? null), null),
       safe(adminAnswersBetween(thisWeek, null, { withSubject: true }), null),
       safe(adminAnswersBetween(lastWeek, thisWeek), null),
-    ]).then(([people, tutors, apps, drafts, reports, curricula, questionCount, week, prevWeek]) => {
+      safe(fetchQuestionFlags(), []),
+    ]).then(([people, tutors, apps, drafts, reports, curricula, questionCount, week, prevWeek, flags]) => {
       if (cancelled) return
-      setD({ people, tutors, apps, drafts, reports, curricula, questionCount, week, prevWeek })
+      setD({ people, tutors, apps, drafts, reports, curricula, questionCount, week, prevWeek, flags })
     }).catch(e => { if (!cancelled) setError(e.message || 'Could not load the overview.') })
     return () => { cancelled = true }
   }, [])
@@ -79,6 +80,13 @@ export default function AdminOverviewTab() {
       action: 'Open', to: '/admin/reports',
     }))
     if (open.length > 3) needs.push({ key: 'r-more', kind: 'Report', title: `${open.length - 3} more reports`, what: '', detail: 'Waiting on the AI or a person', action: 'View', to: '/admin/reports' })
+    // Questions students say have a typo or are confusing: usually worth editing.
+    const needsEdit = d.flags.filter(f => f.questions && (f.counts.Typo || f.counts.Confusing))
+    if (needsEdit.length) needs.push({
+      key: 'flags', kind: 'Flags', title: `${needsEdit.length} question${needsEdit.length === 1 ? '' : 's'}`, what: 'flagged as a typo or confusing',
+      detail: needsEdit.slice(0, 2).map(f => f.questions.subtopic || f.questions.topic).filter(Boolean).join(', '),
+      action: 'Review', to: '/admin/reports?view=flags',
+    })
     d.apps.forEach(a => needs.push({
       key: `a-${a.id}`, kind: 'Application', title: a.display_name || a.email || 'Someone', what: 'wants to tutor',
       detail: a.applied_at ? `Applied ${shortDate(a.applied_at)}` : '', action: 'Review', to: '/admin/people?role=applications',

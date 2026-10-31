@@ -4,6 +4,7 @@ import { studentSolution, verifyQuestionPayload, withStimulus, type Verdict } fr
 import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
 import { generateForTopic } from "./generate-questions";
+import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -168,7 +169,7 @@ router.post("/report-question", async (req, res) => {
   const adminDb = getAdmin();
   const { data: report, error } = await adminDb
     .from("question_reports")
-    .insert({ question_id: questionId, ai_status: "pending" })
+    .insert({ question_id: questionId, ai_status: "pending", reported_by: caller.userId === "service" ? null : caller.userId })
     .select("id")
     .single();
 
@@ -251,9 +252,14 @@ router.post("/retry-pending-reports", async (req, res) => {
 });
 
 // ── POST /api/question-reports/:id/resolve (admin only) ──────────────────────
-// An admin settles a report by hand. Body: { action: "dismiss" } keeps the
-// question as it is; { action: "set_answer", answerIndex } changes its answer
-// key; { action: "recheck" } runs the AI check on it again.
+// An admin settles a report by hand. Body:
+//   { action: "dismiss" }                      the question is right as it is
+//   { action: "set_answer", answerIndex }      change its answer key
+//   { action: "edit", question, options, answerIndex, solution, difficulty }
+//                                              rewrite it (any of those fields)
+//   { action: "delete" }                       take it out of the bank
+//   { action: "recheck" }                      run the AI check on it again
+// Every open report on the same question is settled together.
 
 router.post("/question-reports/:id/resolve", async (req, res) => {
   const ctx = await requireAdmin(req, res);
@@ -264,7 +270,20 @@ router.post("/question-reports/:id/resolve", async (req, res) => {
     .from("question_reports").select("id, question_id").eq("id", req.params.id).maybeSingle();
   if (!report) { res.status(404).json({ error: "Report not found" }); return; }
 
-  const { action, answerIndex } = (req.body || {}) as { action?: string; answerIndex?: number };
+  const body = (req.body || {}) as {
+    action?: string; answerIndex?: number; question?: string; options?: unknown;
+    solution?: string; difficulty?: number;
+  };
+  const { action } = body;
+
+  // Close this report and any other open report on the same question.
+  const settle = async (ai_status: string, resolution_note: string) => {
+    const { error } = await adminDb.from("question_reports")
+      .update({ ai_status, resolution_note, resolved_at: new Date().toISOString() })
+      .eq("question_id", report.question_id)
+      .or(`id.eq.${report.id},resolved_at.is.null,ai_status.eq.error`);
+    return error;
+  };
 
   if (action === "recheck") {
     await adminDb.from("question_reports").update({ ai_status: "pending", resolved_at: null }).eq("id", report.id);
@@ -274,39 +293,92 @@ router.post("/question-reports/:id/resolve", async (req, res) => {
     return;
   }
 
-  if (action === "set_answer") {
-    const { data: q } = await adminDb.from("questions").select("options").eq("id", report.question_id).maybeSingle();
-    if (!q) { res.status(404).json({ error: "The question is no longer in the bank" }); return; }
-    const options: unknown[] = typeof q.options === "string" ? JSON.parse(q.options) : (q.options || []);
-    const idx = Number(answerIndex);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= options.length) {
-      res.status(400).json({ error: "answerIndex must be one of the question's options" });
-      return;
-    }
-    const { error: qErr } = await adminDb.from("questions").update({ answer_index: idx }).eq("id", report.question_id);
-    if (qErr) { res.status(500).json({ error: qErr.message }); return; }
-    const { error } = await adminDb.from("question_reports").update({
-      ai_status: "fixed_index",
-      resolved_at: new Date().toISOString(),
-      resolution_note: `Answer set to option ${String.fromCharCode(65 + idx)} by an admin`,
-    }).eq("id", report.id);
-    if (error) { res.status(500).json({ error: error.message }); return; }
-    res.status(200).json({ ok: true });
-    return;
-  }
-
   if (action === "dismiss") {
-    const { error } = await adminDb.from("question_reports").update({
-      ai_status: "dismissed",
-      resolved_at: new Date().toISOString(),
-      resolution_note: "Dismissed by an admin",
-    }).eq("id", report.id);
+    const error = await settle("dismissed", "Dismissed by an admin");
     if (error) { res.status(500).json({ error: error.message }); return; }
     res.status(200).json({ ok: true });
     return;
   }
 
-  res.status(400).json({ error: "action must be dismiss, set_answer or recheck" });
+  const { data: q } = await adminDb.from("questions").select("id, options").eq("id", report.question_id).maybeSingle();
+  if (!q) { res.status(404).json({ error: "The question is no longer in the bank" }); return; }
+  const current = parseOptions(q.options);
+
+  if (action === "delete") {
+    const { error: dErr } = await adminDb.from("questions").delete().eq("id", report.question_id);
+    if (dErr) { res.status(500).json({ error: dErr.message }); return; }
+    const error = await settle("deleted", "Removed from the bank by an admin");
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  if (action === "set_answer" || action === "edit") {
+    if (action === "set_answer" && body.answerIndex === undefined) { res.status(400).json({ error: "answerIndex required" }); return; }
+    const built = buildQuestionUpdate(current, action === "set_answer" ? { answerIndex: body.answerIndex } : body);
+    if ("error" in built) { res.status(400).json({ error: built.error }); return; }
+    const { update } = built;
+
+    const { error: qErr } = await adminDb.from("questions").update(update).eq("id", report.question_id);
+    if (qErr) { res.status(500).json({ error: qErr.message }); return; }
+    const error = action === "set_answer"
+      ? await settle("fixed_index", `Answer set to option ${String.fromCharCode(65 + (update.answer_index as number))} by an admin`)
+      : await settle("edited", "Question edited by an admin");
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  res.status(400).json({ error: "action must be dismiss, set_answer, edit, delete or recheck" });
+});
+
+// ── GET /api/question-flags (admin only) ──────────────────────────────────────
+// Students' flags (Too easy, Too hard, Confusing, Typo), one row per question
+// with a count for each flag, most recent first.
+
+router.get("/question-flags", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const { adminDb } = ctx;
+
+  const { data: flags, error } = await adminDb
+    .from("question_flags").select("question_id, flag_type, created_at")
+    .order("created_at", { ascending: false }).limit(2000);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const byQuestion = new Map<string, { question_id: string; counts: Record<string, number>; total: number; last_at: string }>();
+  for (const f of (flags || []) as { question_id: string; flag_type: string; created_at: string }[]) {
+    const e = byQuestion.get(f.question_id) || { question_id: f.question_id, counts: {}, total: 0, last_at: f.created_at };
+    e.counts[f.flag_type] = (e.counts[f.flag_type] || 0) + 1;
+    e.total++;
+    if (f.created_at > e.last_at) e.last_at = f.created_at;
+    byQuestion.set(f.question_id, e);
+  }
+  const ids = [...byQuestion.keys()];
+  const questions: Record<string, any> = {};
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: qs } = await adminDb.from("questions")
+      .select("id, subject, topic, subtopic, question, options, answer_index, solution, difficulty")
+      .in("id", ids.slice(i, i + 200));
+    (qs || []).forEach((q: any) => { questions[q.id] = q; });
+  }
+  const rows = [...byQuestion.values()]
+    .map(e => ({ ...e, questions: questions[e.question_id] ?? null }))
+    .sort((a, b) => (a.last_at < b.last_at ? 1 : -1));
+  res.status(200).json({ flags: rows });
+});
+
+// ── POST /api/question-flags/clear (admin only) ───────────────────────────────
+// Clears every flag on a question once an admin has dealt with it.
+
+router.post("/question-flags/clear", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const { questionId } = (req.body || {}) as { questionId?: string };
+  if (!questionId) { res.status(400).json({ error: "questionId required" }); return; }
+  const { error } = await ctx.adminDb.from("question_flags").delete().eq("question_id", questionId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(200).json({ ok: true });
 });
 
 // ── GET /api/question-reports (admin only) ────────────────────────────────────
@@ -339,9 +411,19 @@ router.get("/question-reports", async (req, res) => {
     (qs || []).forEach((q: any) => { questionsMap[q.id] = q; });
   }
 
+  // Who reported each one: a student from the quiz, or an admin's AI check.
+  const reporterIds = [...new Set((reports || []).map((r: any) => r.reported_by).filter(Boolean))];
+  const reporters: Record<string, { name: string | null; is_admin: boolean }> = {};
+  if (reporterIds.length) {
+    const { data: ps } = await adminDb.from("profiles").select("id, display_name, is_admin").in("id", reporterIds);
+    (ps || []).forEach((p: any) => { reporters[p.id] = { name: p.display_name, is_admin: !!p.is_admin }; });
+  }
+
   const enriched = (reports || []).map((r: any) => ({
     ...r,
     questions: questionsMap[r.question_id] ?? null,
+    reporter: r.reported_by ? reporters[r.reported_by] ?? null : null,
+    source: r.reported_by && reporters[r.reported_by]?.is_admin ? "check" : "student",
   }));
 
   res.status(200).json({ reports: enriched });

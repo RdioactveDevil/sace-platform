@@ -160,12 +160,27 @@ export async function retryPendingReports({ limit = 20 } = {}) {
   })
 }
 
-/** Settle a question report by hand: 'dismiss', 'set_answer' (with answerIndex) or 'recheck'. */
-export async function resolveQuestionReport(reportId, action, answerIndex) {
+/**
+ * Settle a question report by hand: 'dismiss', 'set_answer' ({ answerIndex }),
+ * 'edit' ({ question, options, answerIndex, solution, difficulty }), 'delete'
+ * or 'recheck'. Settles every open report on the same question.
+ */
+export async function resolveQuestionReport(reportId, action, fields = {}) {
   return adminAuthFetch(`/api/question-reports/${encodeURIComponent(reportId)}/resolve`, {
     method: 'POST',
-    body: JSON.stringify({ action, answerIndex }),
+    body: JSON.stringify({ action, ...fields }),
   })
+}
+
+/** Students' flags, one row per question: { question_id, counts, total, last_at, questions }. */
+export async function fetchQuestionFlags() {
+  const json = await adminAuthFetch('/api/question-flags')
+  return json.flags || []
+}
+
+/** Clear every flag on a question once it's been dealt with. */
+export async function clearQuestionFlags(questionId) {
+  return adminAuthFetch('/api/question-flags/clear', { method: 'POST', body: JSON.stringify({ questionId }) })
 }
 
 /** A report still waiting on someone: the AI hasn't finished, or it failed and needs a person. */
@@ -178,4 +193,14 @@ export async function saveQuestionVisuals(id, { source, graph, table_data, image
     body: JSON.stringify({ source, graph, table_data, image_url }),
   })
   return json.question
+}
+
+/** Rewrite a live question: any of { question, options, answerIndex, solution, difficulty }. */
+export async function editQuestion(id, fields) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/content`, { method: 'PATCH', body: JSON.stringify(fields) })
+}
+
+/** Take a live question out of the bank (its variants, flags and review history go too). */
+export async function deleteQuestion(id) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
