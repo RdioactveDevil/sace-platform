@@ -269,6 +269,10 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
   useDismiss(accountOpen, accountRef, () => setAccountOpen(false))
   useDismiss(subjectsOpen, subjectsRef, () => setSubjectsOpen(false))
 
+  // Studying, Tutor Portal or Admin, from the URL. Declared before the effects
+  // below, which list it as a dependency (read during render).
+  const workspace = workspaceForPath(location.pathname)
+
   // The student's subjects, fetched the first time the switcher opens.
   useEffect(() => {
     if (!subjectsOpen || subjectTilesCache || workspace !== 'study') return
@@ -297,7 +301,6 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
   // Workspaces: Studying for everyone, plus Tutor Portal and Admin for those
   // roles. The sidebar shows the current workspace's sections; with more than
   // one, the top row switches between them.
-  const workspace = workspaceForPath(location.pathname)
   const workspaces = [
     { id: 'study', label: 'Studying', sub: formatSubjectLabel(subject || {}) || 'Practice, Learn and Progress', path: '/question-bank' },
     ...(isTutor ? [{ id: 'tutor', label: 'Tutor Portal', sub: 'Students, lessons and work', path: '/tutor' }] : []),
