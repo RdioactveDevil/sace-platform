@@ -1,32 +1,24 @@
 import { useState, useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { getBillingConfig, addPaidSubject, chooseFreeSubject } from '../lib/db'
 import { notify } from '../lib/notify'
 import { formatSubjectLabel, subjectAccess } from '../lib/subjects'
 import { DEFAULT_STUDENT_TIERS, studentTiers, extraLadder, monthlySaving, money } from '../lib/pricing'
-import { SubjectIcon } from './SubjectIcons'
+import { Check } from 'lucide-react'
+import { SubjectIconByName } from './SubjectIcons'
+import { THEMES } from '../lib/theme'
+import { AuthLayout, Note, authBtn, linkStyle } from './AuthLayout'
 
 const shortDate = (d) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
-
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
-
-function hex(color, alpha) {
-  const c = color.replace('#', '')
-  const r = parseInt(c.slice(0, 2), 16)
-  const g = parseInt(c.slice(2, 4), 16)
-  const b = parseInt(c.slice(4, 6), 16)
-  return `rgba(${r},${g},${b},${alpha})`
-}
 
 /**
  * A locked subject: make it the student's free subject (limited questions a
  * day) or pay for it — Stripe Checkout for the first paid subject (billed
  * weekly or monthly, their choice), otherwise added straight onto their plan.
+ * Without a free subject yet, the free option comes first.
  */
-export default function GetAccessScreen({ subscriptions = [], onAccessChanged }) {
+export default function GetAccessScreen({ subscriptions = [], onAccessChanged, theme = 'dark', onToggleTheme }) {
+  const t = THEMES[theme]
   const { state } = useLocation()
   const navigate  = useNavigate()
   const subj      = state?.subject
@@ -39,12 +31,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
     getBillingConfig().then(setBilling).catch(() => setBilling({ enabled: false, tiers: DEFAULT_STUDENT_TIERS, nextPrice: DEFAULT_STUDENT_TIERS[0], total: 0, hasPlan: false, freeDailyQuestions: 20 }))
   }, [])
 
-  if (!subj) {
-    navigate('/subject-picker', { replace: true })
-    return null
-  }
-
-  const color = subj.color ?? GOLD
+  if (!subj) return <Navigate to="/subject-picker" replace />
 
   const curriculumId = String(subj.id || '').replace(/^curriculum_/, '')
   // An existing plan keeps its own billing period; a new one bills as chosen here.
@@ -72,7 +59,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
       notify.success(`${formatSubjectLabel(subj)} is now your free subject.`)
       navigate('/subject-picker', { replace: true })
     } catch (e) {
-      setError(e.message || 'Something went wrong. Please try again.')
+      setError(e.message || "That didn't go through. Try again.")
       setBusy(null)
     }
   }
@@ -83,235 +70,119 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged })
       const result = await addPaidSubject(curriculumId, interval, { endTrial: endsTrial })
       if (result.url) { window.location.assign(result.url); return }
       await onAccessChanged?.()
-      notify.success(`${formatSubjectLabel(subj)} added — your plan is now $${money(result.total)}/${result.interval ?? interval}.`)
+      notify.success(`${formatSubjectLabel(subj)} added. Your plan is now $${money(result.total)}/${result.interval ?? interval}.`)
       navigate('/subject-picker', { replace: true })
     } catch (e) {
-      setError(e.message || 'Something went wrong. Please try again.')
+      setError(e.message || "That didn't go through. Try again.")
       setBusy(null)
     }
   }
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#06071a',
-      backgroundImage: `
-        radial-gradient(ellipse 700px 500px at 70% -5%, ${hex(color, 0.12)} 0%, transparent 60%),
-        radial-gradient(ellipse 400px 300px at -5% 90%, rgba(99,102,241,0.07) 0%, transparent 55%)
-      `,
-      fontFamily: FONT_B,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      padding: '40px 20px', boxSizing: 'border-box',
-      color: '#f1f5f9',
-    }}>
-      <style>{`
-        @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
-        *, *::before, *::after { box-sizing: border-box; }
-        @keyframes gaFadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
-        .ga-fadein { animation: gaFadeUp 0.32s ease both; }
-        .ga-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
-        .ga-btn:active:not(:disabled) { transform: translateY(0); }
-        .ga-back:hover { color: rgba(255,255,255,0.7) !important; }
-      `}</style>
+  const freeFirst = !currentFree && !isFreeSubject
+  const payDisabled = !!busy || !billing || billing.enabled === false
+  const subjectLabel = formatSubjectLabel(subj)
+  const topics = subj.topics || []
 
-      <div className="ga-fadein" style={{ width: '100%', maxWidth: 440 }}>
+  const payLabel = busy === 'paid' ? (billing?.hasPlan ? 'Adding…' : 'Opening secure checkout…')
+    : billing?.enabled === false ? 'Payments are coming soon'
+    : endsTrial ? `End trial and add ($${money(billing.total + nextPrice)}/${interval})`
+    : billing?.hasPlan ? `Add to my plan (+$${money(nextPrice)}/${interval})`
+    : trialDays > 0 ? `Start ${trialDays}-day free trial`
+    : `Subscribe for $${money(nextPrice)} a ${interval}`
+  const payNote = endsTrial
+    ? `Your free trial covers one subject. Adding ${subjectLabel} ends it today: you'll be charged $${money(billing.total + nextPrice)}/${interval} from now.`
+    : billing?.hasPlan
+      ? `Added to your plan: $${money(billing.total)} → $${money(billing.total + nextPrice)}/${interval}, prorated from today.`
+      : trialDays > 0
+        ? `Free for ${trialDays} days, then $${money(nextPrice)}/${interval} from ${firstBill}. Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`
+        : `Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`
 
-        {/* Back */}
-        <button
-          className="ga-back"
-          onClick={() => navigate('/subject-picker')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 13, color: 'rgba(255,255,255,0.35)',
-            fontFamily: FONT_B, fontWeight: 600,
-            marginBottom: 28, display: 'flex', alignItems: 'center', gap: 6, padding: 0,
-            transition: 'color 0.15s',
-          }}
-        >
-          ← Back to subjects
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 'clamp(18px, 4vw, 24px)', display: 'flex', flexDirection: 'column', gap: 12 }
+  const h2 = { margin: 0, fontSize: 16, fontWeight: 800, color: t.text }
+  const p = { margin: 0, fontSize: 13.5, color: t.textMuted, lineHeight: 1.55 }
+
+  const freeCard = !isFreeSubject && (
+    <section style={card} aria-labelledby="ga-free">
+      <h2 id="ga-free" style={h2}>{freeFirst ? 'Start free' : 'Make it your free subject'}</h2>
+      <p style={p}>
+        {freeDaily} questions a day in {subjectLabel}, free. No card needed.
+        {currentFreeLabel ? ` It replaces ${currentFreeLabel} as your free subject.` : ''}
+      </p>
+      <div>
+        <button type="button" className="af-btn" onClick={handleFree} disabled={!!busy} style={authBtn(t, freeFirst ? 'primary' : 'secondary', { disabled: !!busy && busy !== 'free' })}>
+          {busy === 'free' ? 'Setting it up…' : currentFreeLabel ? 'Switch free subject' : 'Start free'}
         </button>
+      </div>
+    </section>
+  )
 
-        {/* Hero card */}
-        <div style={{
-          borderRadius: 24,
-          background: `linear-gradient(145deg, ${hex(color, 0.22)} 0%, ${hex(color, 0.08)} 45%, rgba(15,18,50,0.98) 100%)`,
-          border: `1.5px solid ${hex(color, 0.38)}`,
-          padding: '28px 32px',
-          marginBottom: 14,
-          position: 'relative',
-          overflow: 'hidden',
-          boxShadow: `0 20px 72px ${hex(color, 0.16)}, inset 0 1px 0 rgba(255,255,255,0.06)`,
-        }}>
-          {/* glow blob */}
-          <div style={{
-            position: 'absolute', bottom: -40, right: -40,
-            width: 240, height: 240, borderRadius: '50%', pointerEvents: 'none',
-            background: `radial-gradient(circle, ${hex(color, 0.28)} 0%, transparent 65%)`,
-          }} />
-
-          {/* top row */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, position: 'relative' }}>
-            <div>
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10,
-                background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
-                borderRadius: 99, padding: '4px 12px',
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px rgba(255,255,255,0.7)' }} />
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.08em' }}>
-                  {subj.stage}
-                </span>
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-                {subj.name}
-              </div>
-            </div>
-
-            <div style={{
-              width: 60, height: 60, borderRadius: 16, flexShrink: 0,
-              background: 'rgba(255,255,255,0.12)',
-              border: '1.5px solid rgba(255,255,255,0.28)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-            }}>
-              <SubjectIcon subj={subj} color="#fff" size={28} />
-            </div>
-          </div>
-
-          {/* topics */}
-          {subj.topics?.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, position: 'relative' }}>
-              {subj.topics.map(t => (
-                <span key={t} style={{
-                  fontSize: 11, fontWeight: 600, padding: '4px 11px', borderRadius: 99,
-                  background: hex(color, 0.14), border: `1px solid ${hex(color, 0.30)}`,
-                  color: color,
-                }}>{t}</span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Paid option */}
-        <div style={{
-          background: 'rgba(255,255,255,0.04)',
-          border: `1px solid ${hex(GOLD, 0.35)}`,
-          borderRadius: 20, padding: '22px 24px', marginBottom: 12,
-        }}>
-          {!billing?.hasPlan && (
-            <div role="radiogroup" aria-label="Billing period" style={{ display: 'flex', gap: 6, marginBottom: 16, padding: 4, borderRadius: 12, background: 'rgba(255,255,255,0.05)' }}>
-              {[['week', 'Weekly'], ['month', saving ? `Monthly · save ${saving}%` : 'Monthly']].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={chosenInterval === value}
-                  onClick={() => setChosenInterval(value)}
-                  disabled={!!busy}
-                  style={{
-                    flex: 1, padding: '8px 10px', borderRadius: 9, border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
-                    cursor: busy ? 'default' : 'pointer',
-                    background: chosenInterval === value ? '#ffffff' : 'transparent',
-                    color: chosenInterval === value ? '#06071a' : 'rgba(255,255,255,0.6)',
-                  }}
-                >{label}</button>
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 40, color: '#fff', lineHeight: 1 }}>${money(nextPrice)}</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>/ {interval} · AUD</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginBottom: 16, lineHeight: 1.5 }}>
-            {endsTrial
-              ? `Your free trial covers one subject. Adding ${formatSubjectLabel(subj)} ends it today: you'll be charged $${money(billing.total + nextPrice)}/${interval} from now.`
-              : billing?.hasPlan
-              ? `Added to your plan: $${money(billing.total)} → $${money(billing.total + nextPrice)}/${interval}, prorated from today.`
-              : trialDays > 0
-              ? `Free for ${trialDays} days, then $${money(nextPrice)}/${interval} from ${firstBill}. Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`
-              : `Unlimited ${formatSubjectLabel(subj)}. Extra subjects cost less: $${extraLadder(tiers)}/${interval} each.`}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
-            {[
-              'Unlimited practice questions',
-              'Unlimited Titan AI tutoring',
-              'Exam Mode and full topic coverage',
-              'Instant feedback and spaced repetition',
-            ].map(item => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                  background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.35)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <span style={{ fontSize: 9, color: '#34d399', fontWeight: 900 }}>✓</span>
-                </div>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{item}</span>
-              </div>
+  const paidCard = (
+    <section style={card} aria-labelledby="ga-paid">
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <h2 id="ga-paid" style={h2}>{freeFirst ? 'Or go unlimited' : 'Unlimited'}</h2>
+        {!billing?.hasPlan && (
+          <div role="radiogroup" aria-label="Billing period" style={{ display: 'flex', padding: 3, gap: 3, borderRadius: 9, background: t.bgSubtle }}>
+            {[['week', 'Weekly'], ['month', saving ? `Monthly (save ${saving}%)` : 'Monthly']].map(([value, label]) => (
+              <button key={value} type="button" role="radio" aria-checked={chosenInterval === value} className="af-btn" onClick={() => setChosenInterval(value)} disabled={!!busy}
+                style={{ padding: '5px 10px', borderRadius: 7, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: busy ? 'default' : 'pointer',
+                  background: chosenInterval === value ? t.bgCard : 'transparent', color: chosenInterval === value ? t.text : t.textMuted, boxShadow: chosenInterval === value ? `0 0 0 1px ${t.border}` : 'none' }}>
+                {label}
+              </button>
             ))}
-          </div>
-          <button
-            className="ga-btn"
-            onClick={handlePaid}
-            disabled={!!busy || !billing || billing.enabled === false}
-            style={{
-              width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-              background: busy ? 'rgba(255,255,255,0.06)' : '#ffffff',
-              color: busy ? 'rgba(255,255,255,0.3)' : '#06071a',
-              fontSize: 15, fontWeight: 800, cursor: busy ? 'default' : 'pointer',
-              fontFamily: FONT_B, boxShadow: busy ? 'none' : '0 8px 28px rgba(0,0,0,0.3)', transition: 'all 0.2s ease',
-            }}
-          >
-            {busy === 'paid' ? (billing?.hasPlan ? 'Adding…' : 'Opening secure checkout…')
-              : billing?.enabled === false ? 'Payments are coming soon'
-              : endsTrial ? `End trial and add — $${money(billing.total + nextPrice)}/${interval}`
-              : billing?.hasPlan ? `Add to my plan — +$${money(nextPrice)}/${interval}`
-              : trialDays > 0 ? `Start ${trialDays}-day free trial →`
-              : `Subscribe — $${money(nextPrice)}/${interval} →`}
-          </button>
-          <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '10px 0 0' }}>
-            {trialDays > 0
-              ? `Card required · nothing charged until ${firstBill} · cancel before then in My Account · secure payment by Stripe`
-              : `Billed ${interval}ly · cancel any time from My Account · secure payment by Stripe`}
-          </p>
-        </div>
-
-        {/* Free option */}
-        {!isFreeSubject && <div style={{
-          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 20, padding: '18px 24px', marginBottom: 12,
-          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        }}>
-          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#fff', marginBottom: 3 }}>Or use it as your free subject</div>
-            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
-              {freeDaily} questions a day, free.{currentFreeLabel ? ` Replaces ${currentFreeLabel} as your free subject.` : ''}
-            </div>
-          </div>
-          <button
-            onClick={handleFree}
-            disabled={!!busy}
-            style={{
-              padding: '10px 18px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)',
-              background: 'transparent', color: '#f1f5f9', fontSize: 13, fontWeight: 700,
-              cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', opacity: busy && busy !== 'free' ? 0.5 : 1,
-            }}
-          >
-            {busy === 'free' ? 'Switching…' : currentFreeLabel ? 'Switch free subject' : 'Use for free'}
-          </button>
-        </div>}
-
-        {/* Error */}
-        {error && (
-          <div style={{
-            background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.35)',
-            borderRadius: 10, padding: '10px 14px', marginBottom: 12,
-            fontSize: 13, color: '#f87171',
-          }}>
-            {error}
           </div>
         )}
       </div>
-    </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, fontVariantNumeric: 'tabular-nums' }}>${money(nextPrice)}</span>
+        <span style={{ fontSize: 13.5, color: t.textMuted }}>a {interval} · AUD</span>
+      </div>
+      <p style={p}>{payNote}</p>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {['Unlimited practice questions', 'Unlimited Titan AI tutoring', 'Exam mode and every topic', 'Instant feedback and spaced repetition'].map(item => (
+          <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: t.textSub }}>
+            <Check size={15} color={t.success} strokeWidth={2.5} aria-hidden="true" style={{ flexShrink: 0 }} />{item}
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="af-btn" onClick={handlePaid} disabled={payDisabled} style={authBtn(t, freeFirst ? 'secondary' : 'primary', { disabled: payDisabled, full: true })}>
+        {payLabel}
+      </button>
+      <p style={{ ...p, fontSize: 12, textAlign: 'center' }}>
+        {trialDays > 0
+          ? `Card required. Nothing is charged until ${firstBill}; cancel before then in Account. Payments by Stripe.`
+          : `Billed ${interval}ly. Cancel any time in Account. Payments by Stripe.`}
+      </p>
+    </section>
+  )
+
+  return (
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top"
+      right={<button type="button" className="af-link" onClick={() => navigate('/subject-picker')} style={{ ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back to subjects</button>}>
+      <div className="af-in" style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 'clamp(8px, 5vh, 48px)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 12, background: t.bgCard, border: `1px solid ${t.border}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <SubjectIconByName name={subj.name} color={t.textMuted} size={24} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: 'clamp(22px, 5vw, 26px)', fontWeight: 800, letterSpacing: '-0.02em', color: t.text, lineHeight: 1.2 }}>{subj.name}</h1>
+            <div style={{ fontSize: 13, color: t.textMuted, marginTop: 2 }}>
+              {[subj.stage, topics.length ? `${topics.length} topic${topics.length === 1 ? '' : 's'}` : null, subj.questionCount > 0 ? `${Number(subj.questionCount).toLocaleString()} questions` : null].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+        </div>
+        {topics.length > 0 && (
+          <p style={{ ...p, fontSize: 13 }}>
+            {topics.slice(0, 6).join(', ')}{topics.length > 6 ? `, and ${topics.length - 6} more` : ''}.
+          </p>
+        )}
+
+        {isFreeSubject && (
+          <Note theme={theme}>{subjectLabel} is your free subject, with {freeDaily} questions a day. Go unlimited for as many as you like.</Note>
+        )}
+        {error && <Note tone="danger" theme={theme}>{error}</Note>}
+
+        {freeFirst ? <>{freeCard}{paidCard}</> : <>{paidCard}{freeCard}</>}
+      </div>
+    </AuthLayout>
   )
 }
