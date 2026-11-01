@@ -1665,10 +1665,10 @@ function AppInner() {
       } />
 
       {/* Diagnostic assessment — public, no auth required */}
-      <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
+      <Route path="/diagnostic/:token" element={<DiagnosticScreen {...commonProps} />} />
 
       {/* Tutor invite — public; accepting needs the invited account signed in */}
-      <Route path="/invite/:token" element={<InviteScreen signedIn={!!(user && profile)} />} />
+      <Route path="/invite/:token" element={<InviteScreen {...commonProps} signedIn={!!(user && profile)} />} />
 
       {/* Landing page — public */}
       <Route path="/home" element={

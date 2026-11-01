@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { GraduationCap, Check, TriangleAlert, BookOpen } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { fetchInvite, respondToInvite, switchToChild } from '../lib/db'
 import { clearPendingInvite, inviteAcceptPath, pendingInvite, rememberPendingInvite } from '../lib/pendingInvite'
-
-const GOLD  = '#f1be43'
-const GOLDL = '#f9d87a'
-const NAVYD = '#080d28'
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
+import { THEMES } from '../lib/theme'
+import { AuthLayout, Note, authBtn } from './AuthLayout'
 
 const STATUS_TEXT = {
   accepted:  'This invite has already been accepted.',
@@ -26,7 +23,8 @@ const STATUS_TEXT = {
  * this page with it remembered, or arrive from the sign-up confirmation
  * link (?accept=1).
  */
-export default function InviteScreen({ signedIn }) {
+export default function InviteScreen({ signedIn, theme = 'dark', onToggleTheme }) {
+  const t = THEMES[theme]
   const { token } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -97,134 +95,95 @@ export default function InviteScreen({ signedIn }) {
   // Reload so the sidebar picks up the new tutor and the portal welcome shows.
   const openPortal = () => window.location.assign('/portal')
 
-  const btn = (primary, disabled) => ({
-    padding: '12px 22px', borderRadius: 10, fontSize: 14, fontWeight: 800, fontFamily: FONT_B,
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
-    border: primary ? 'none' : '1px solid rgba(255,255,255,0.14)',
-    background: primary ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent',
-    color: primary ? NAVYD : '#cbd5e1',
-  })
-
   const tutor = invite?.tutor_name || 'Your tutor'
   const subjects = invite?.subjects || []
+  const firstName = (invite?.tutor_name || '').trim().split(' ')[0] || tutor
+  const childFirst = (accepted?.student?.name || child)
+
+  const h1 = (text) => <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.25, color: t.text, textWrap: 'balance' }}>{text}</h1>
+  const p = (children, extra) => <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: t.textSub, ...extra }}>{children}</p>
+  const ok = (text) => <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 700, color: t.success }}><Check size={16} strokeWidth={2.5} aria-hidden="true" />{text}</div>
+  const homeBtn = <button type="button" className="af-btn" onClick={() => navigate('/home')} style={authBtn(t, 'secondary', { full: true })}>Go to gradefarm</button>
+
   let body
   if (!invite && !error) {
-    body = <p style={{ color: '#94a3b8', fontSize: 14 }}>Loading invite…</p>
+    body = p('Loading your invite…', { color: t.textMuted })
   } else if (!invite) {
-    body = <Notice icon={TriangleAlert} color="#f87171" text={error} />
+    body = <>{h1("This invite link isn't working")}{p(error, { color: t.textMuted })}{homeBtn}</>
   } else if (done === 'accepted') {
     body = (
       <>
-        <Notice icon={Check} color="#4ade80" text={forParent ? `You're in. ${tutor} is now ${accepted?.student?.name || child}'s tutor.` : `You're in. ${tutor} is now your tutor.`} />
-        {accepted?.subjects?.length > 0 && (
-          <div style={{ marginTop: 10 }}><Notice icon={BookOpen} color={GOLD} text={`${listSubjects(accepted.subjects)} ${accepted.subjects.length > 1 ? 'are' : 'is'} unlocked, included with ${forParent ? 'the' : 'your'} tutoring.`} /></div>
-        )}
-        {accepted?.subjectError && (
-          <div style={{ marginTop: 10 }}><Notice icon={TriangleAlert} color={GOLD} text={accepted.subjectError} /></div>
-        )}
+        {ok("You're in")}
+        {h1(forParent ? `${tutor} is now ${childFirst}'s tutor` : `${tutor} is now your tutor`)}
+        {accepted?.subjects?.length > 0 && p(`${listSubjects(accepted.subjects)} ${accepted.subjects.length > 1 ? 'are' : 'is'} unlocked, included with ${forParent ? 'the' : 'your'} tutoring.`, { color: t.textMuted })}
+        {accepted?.subjectError && <Note theme={theme}>{accepted.subjectError}</Note>}
+        {error && <Note tone="danger" theme={theme}>{error}</Note>}
         {accepted?.student ? (
-          <button onClick={() => switchToChild(accepted.student.id, '/portal').catch(e => setError(e.message))} style={{ ...btn(true), marginTop: 20 }}>Switch to {accepted.student.name} →</button>
+          <button type="button" className="af-btn" onClick={() => switchToChild(accepted.student.id, '/portal').catch(e => setError(e.message))} style={authBtn(t, 'primary', { full: true })}>Switch to {accepted.student.name}</button>
         ) : (
-          <button onClick={openPortal} style={{ ...btn(true), marginTop: 20 }}>Continue →</button>
+          <button type="button" className="af-btn" onClick={openPortal} style={authBtn(t, 'primary', { full: true })}>Open the Student Portal</button>
         )}
       </>
     )
   } else if (done === 'declined') {
-    body = (
-      <>
-        <Notice icon={Check} color="#94a3b8" text={forParent ? `Invite declined. ${tutor} won't be added as ${child}'s tutor.` : `Invite declined. ${tutor} won't be added as your tutor.`} />
-        <button onClick={() => navigate('/home')} style={{ ...btn(false), marginTop: 20 }}>Go to gradefarm.</button>
-      </>
-    )
+    body = <>{h1('Invite declined')}{p(forParent ? `${tutor} won't be added as ${child}'s tutor.` : `${tutor} won't be added as your tutor.`, { color: t.textMuted })}{homeBtn}</>
   } else if (invite.status !== 'pending') {
-    body = <Notice icon={TriangleAlert} color={GOLD} text={STATUS_TEXT[invite.status] || 'This invite can no longer be used.'} />
+    body = <>{h1("This invite can't be used")}{p(STATUS_TEXT[invite.status] || 'This invite can no longer be used.', { color: t.textMuted })}{homeBtn}</>
   } else if (choice) {
     body = (
       <>
-        <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 15, lineHeight: 1.6 }}>
-          Which of your children is this invite for? {tutor} named <strong>{choice.childName || 'your child'}</strong>.
-        </p>
+        {h1('Which of your children is this for?')}
+        {p(<>{tutor} named <strong style={{ color: t.text }}>{choice.childName || 'your child'}</strong>.</>, { color: t.textMuted })}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {choice.children.map(c => (
-            <button key={c.id} onClick={() => respond(true, { childId: c.id })} disabled={!!busy} style={{ ...btn(false, !!busy), textAlign: 'left' }}>{c.name}</button>
+            <button key={c.id} type="button" className="af-btn" onClick={() => respond(true, { childId: c.id })} disabled={!!busy} style={{ ...authBtn(t, 'secondary', { disabled: !!busy, full: true }), justifyContent: 'flex-start' }}>{c.name}</button>
           ))}
-          <button onClick={() => respond(true, { newChild: true })} disabled={!!busy} style={{ ...btn(true, !!busy), textAlign: 'left' }}>
+          <button type="button" className="af-btn" onClick={() => respond(true, { newChild: true })} disabled={!!busy} style={{ ...authBtn(t, 'primary', { disabled: !!busy, full: true }), justifyContent: 'flex-start' }}>
             Add {choice.childName || 'them'} as a new child
           </button>
         </div>
-        <p style={{ margin: '12px 0 0', color: '#94a3b8', fontSize: 12.5, lineHeight: 1.5 }}>A new child gets their own account under your email, with their own progress and subjects. You switch between your children from the menu.</p>
-        {error && <div style={{ marginTop: 16 }}><Notice icon={TriangleAlert} color="#f87171" text={error} /></div>}
+        {p('A new child gets their own account under your email, with their own progress and subjects. You switch between your children from the menu.', { fontSize: 12.5, color: t.textMuted })}
+        {error && <Note tone="danger" theme={theme}>{error}</Note>}
       </>
     )
   } else if (busy === 'accept' && !error) {
-    body = <p style={{ color: '#94a3b8', fontSize: 14 }}>Accepting your invite…</p>
+    body = p('Accepting your invite…', { color: t.textMuted })
   } else {
     body = (
       <>
-        {subjects.length > 0 && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '0 0 16px', padding: '12px 14px', borderRadius: 12, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.3)' }}>
-            <BookOpen size={18} color={GOLD} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
-            <div style={{ fontSize: 14, lineHeight: 1.5, color: '#f1f5f9' }}>
-              <strong>{listSubjects(subjects)}</strong> {subjects.length > 1 ? 'are' : 'is'} included with {forParent ? 'the' : 'your'} tutoring. There's nothing to pay for {subjects.length > 1 ? 'them' : 'it'}.
-            </div>
-          </div>
-        )}
-        <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 15, lineHeight: 1.6 }}>
-          {forParent ? (
-            <>The account sits under your email: you sign in and set it up for {child}. Accepting opens the Student Portal for {child}'s lessons and the work {tutor} sets, and {tutor} will be able to see {child}'s practice progress. You'll get a short progress email every Sunday.</>
-          ) : (
-            <>Accept to open the Student Portal: your lessons, class resources and recordings, and the work {tutor} sets you.
-            {' '}{tutor} will also be able to see your practice progress.</>
-          )}
-        </p>
-        <p style={{ margin: '0 0 22px', color: '#94a3b8', fontSize: 13 }}>Sent to {invite.email}</p>
+        {h1(forParent ? `${tutor} wants to tutor ${child}` : `${tutor} wants to be your tutor`)}
+        {subjects.length > 0 && p(`${listSubjects(subjects)} ${subjects.length > 1 ? 'are' : 'is'} included with ${forParent ? `${child}'s` : 'your'} tutoring, at no cost.`, { color: t.textMuted, marginTop: -4 })}
+        {p(forParent
+          ? `You sign in with your email and set the account up for ${child}. Accepting opens the Student Portal for ${child}'s lessons and the work ${firstName} sets. ${firstName} will see ${child}'s practice progress, and you'll get a short progress email every Sunday.`
+          : `Accepting opens the Student Portal: your lessons, recordings and the work ${firstName} sets. ${firstName} will see your practice progress.`)}
         {signedIn ? (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => respond(true)} disabled={!!busy} style={btn(true, !!busy)}>{busy === 'accept' ? 'Accepting…' : 'Accept invite'}</button>
-            <button onClick={() => respond(false)} disabled={!!busy} style={btn(false, !!busy)}>{busy === 'decline' ? 'Declining…' : 'Decline'}</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button type="button" className="af-btn" onClick={() => respond(true)} disabled={!!busy} style={authBtn(t, 'primary', { disabled: !!busy, full: true })}>{busy === 'accept' ? 'Accepting…' : 'Accept invite'}</button>
+            <button type="button" className="af-btn" onClick={() => respond(false)} disabled={!!busy} style={authBtn(t, 'secondary', { disabled: !!busy, full: true })}>{busy === 'decline' ? 'Declining…' : 'Decline'}</button>
           </div>
         ) : (
-          <>
-            <p style={{ margin: '0 0 14px', color: '#cbd5e1', fontSize: 14 }}>
-              {forParent ? `Set up ${child}'s account with that email address (or sign in if you already have one).` : 'Create your account with that email address (or sign in if you have one).'} We'll accept the invite for you as soon as you're in.
-            </p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={() => toAuth('signup')} style={btn(true)}>{forParent ? `Set up ${invite.child_name ? `${invite.child_name}'s` : 'the'} account` : 'Create account'}</button>
-              <button onClick={() => toAuth('signin')} style={btn(false)}>I have an account</button>
-            </div>
-          </>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button type="button" className="af-btn" onClick={() => toAuth('signup')} style={authBtn(t, 'primary', { full: true })}>{forParent ? `Set up ${invite.child_name ? `${invite.child_name}'s` : 'the'} account` : 'Create account'}</button>
+            <button type="button" className="af-btn" onClick={() => toAuth('signin')} style={authBtn(t, 'secondary', { full: true })}>I have an account</button>
+          </div>
         )}
-        {error && <div style={{ marginTop: 16 }}><Notice icon={TriangleAlert} color="#f87171" text={error} /></div>}
+        {!signedIn && invite.email && p(<>Use <strong style={{ color: t.text }}>{invite.email}</strong>, the address the invite went to. We accept it as soon as you're in.</>, { fontSize: 12.5, color: t.textMuted, textAlign: 'center' })}
+        {signedIn && invite.email && p(`Sent to ${invite.email}`, { fontSize: 12.5, color: t.textMuted, textAlign: 'center' })}
+        {error && <Note tone="danger" theme={theme}>{error}</Note>}
       </>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0c18', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', fontFamily: FONT_B, boxSizing: 'border-box' }}>
-      <div style={{ width: '100%', maxWidth: 480, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: '32px 28px', boxSizing: 'border-box' }}>
-        <div style={{ fontSize: 22, fontWeight: 900, color: GOLD, letterSpacing: '-0.5px', marginBottom: 22 }}>gradefarm.</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <GraduationCap size={22} color={GOLD} aria-hidden="true" />
-          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: '#f1f5f9' }}>
-            {!invite ? 'Tutor invite' : forParent ? `${tutor} wants to tutor ${child}` : `${tutor} wants to be your tutor`}
-          </h1>
-        </div>
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')}>
+      <div className="af-in" style={{ width: '100%', maxWidth: 440, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {body}
       </div>
-    </div>
+    </AuthLayout>
   )
 }
 
 /** "Chemistry", "Chemistry and Physics", "Chemistry, Physics and Biology". */
 function listSubjects(labels) {
   return labels.length <= 1 ? (labels[0] || '') : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
-}
-
-function Notice({ icon: Icon, color, text }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color, fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}>
-      <Icon size={16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
-      <span>{text}</span>
-    </div>
-  )
 }
