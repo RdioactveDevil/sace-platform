@@ -107,13 +107,10 @@ const NAV_SECTIONS = [
     { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
   ]},
   { icon: 'portal', label: 'Student Portal', id: 'portal', tutoring: true, separate: true, pages: [
-    { id: 'portal',     label: 'Overview',   path: '/portal' },
-    { id: 'my-tutor',   label: 'My Tutor',   path: '/portal/tutor' },
-    { id: 'messages',   label: 'Messages',   path: '/portal/messages' },
-    { id: 'my-class',   label: 'My Class',   path: '/portal/class' },
-    { id: 'lessons',    label: 'Lessons',    path: '/lessons' },
-    { id: 'recordings', label: 'Recordings', path: '/recordings' },
-    { id: 'class-res',  label: 'Resources',  path: '/class-resources' },
+    { id: 'portal',     label: 'Overview',        path: '/portal' },
+    { id: 'messages',   label: 'Messages',        path: '/portal/messages' },
+    { id: 'lessons',    label: 'Lessons',         path: '/lessons' },
+    { id: 'my-tutor',   label: 'Tutor and class', path: '/portal/tutor' },
   ]},
   { icon: 'pen', label: 'Writing', id: 'writing', feature: 'writing', pages: [
     { id: 'w-essay',   label: 'Write an Essay', path: '/writing/essay' },
@@ -165,8 +162,12 @@ function visiblePages(section, subject) {
   return section.pages.filter(page => !page.feature || subjectHasFeature(subject, page.feature))
 }
 
+// Older addresses that now open inside another tab.
+const PATH_ALIASES = { '/': '/question-bank', '/quiz': '/question-bank', '/portal/class': '/portal/tutor', '/recordings': '/lessons', '/class-resources': '/lessons' }
+const tabPath = (pathname) => PATH_ALIASES[pathname] || pathname
+
 function sectionForPath(pathname) {
-  const p = pathname === '/' || pathname === '/quiz' ? '/question-bank' : pathname
+  const p = tabPath(pathname)
   return NAV_SECTIONS.find(sec => sec.pages.some(page => page.path === p)) || null
 }
 
@@ -567,7 +568,7 @@ function SectionTabs({ theme, subject }) {
   const activeRef = useRef(null)
   const section = sectionForPath(location.pathname)
   const pages = section ? visiblePages(section, subject) : []
-  const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
+  const current = tabPath(location.pathname)
   // On narrow screens the strip scrolls sideways; keep the current tab in view.
   useEffect(() => {
     const el = activeRef.current
@@ -833,7 +834,7 @@ function AppShellScreens({
           onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
       <div style={onPortal ? show(screen) : { display: 'none' }}>
-        <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} />
+        <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} onStartSession={onStartSession} />
       </div>
       <div style={onLessons ? show(screen) : { display: 'none' }}>
         <StudentLessonsScreen theme={theme} active={onLessons} />

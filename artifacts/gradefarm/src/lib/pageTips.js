@@ -49,9 +49,9 @@ export const PAGE_TIPS = {
   portal: {
     path: (p) => p === '/portal',
     steps: [
-      { target: 'portal-next-lesson', title: 'Your next lesson', body: 'When your next lesson is. A Join button appears here when it starts.' },
-      { target: 'portal-tutor-card', title: 'Your tutor', body: "Message them any time: they get an email and reply here. View profile shows what they cover with you." },
-      { target: 'tabs-portal', title: 'Everything from your tutor', body: 'My Tutor, Messages, My Class, Lessons, Recordings and Resources, along the top.' },
+      { target: 'portal-next-lesson', title: 'Your next lesson', body: 'When your next lesson is. A Join button appears here 15 minutes before it starts.' },
+      { target: 'portal-work', title: 'Work from your tutor', body: 'What your tutor has set you, with when it\'s due. Start or Continue goes straight into it.' },
+      { target: 'tabs-portal', title: 'Everything else', body: 'Messages, Lessons (with recordings and files) and your tutor and class, along the top.' },
     ],
   },
   tutor: {

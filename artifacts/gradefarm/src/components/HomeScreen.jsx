@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, GraduationCap, PenLine, FileText, Video, ChartColumn, Folder, Link as LinkIcon, Target, Calendar } from 'lucide-react'
+import { ClipboardList, GraduationCap, Target, Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getQuestionCounts, assignmentGoalLabel } from '../lib/engine'
+import { getQuestionCounts } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
 import { supabase } from '../lib/supabase'
-import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsForStudent, fetchStudentResources, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
+import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsForStudent, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
@@ -34,7 +34,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [assignments, setAssignments] = useState([])
   // Finished assignments the student got something wrong in, to redo those questions.
   const [finishedAssignments, setFinishedAssignments] = useState([])
-  const [resources, setResources] = useState([])
   const [invites, setInvites] = useState([])
   const [diagnostics, setDiagnostics] = useState([])
   const [dismissedDiagnostic, setDismissedDiagnostic] = useState(null)
@@ -48,7 +47,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     fetchCompletedAssignmentsForStudent()
       .then(rows => { if (!cancelled) setFinishedAssignments(rows.filter(a => a.wrong_question_ids?.length > 0)) })
       .catch(() => {})
-    fetchStudentResources().then(rows => { if (!cancelled) setResources(rows) }).catch(() => {})
     fetchMyInvites().then(rows => { if (!cancelled) setInvites(rows) }).catch(() => {})
     fetchMyDiagnostics().then(rows => { if (!cancelled) setDiagnostics(rows) }).catch(() => {})
     return () => { cancelled = true }
@@ -419,119 +417,43 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     )
   }
 
-  const AssignedTasksCard = () => {
+  // Work from the tutor, in one line: the most urgent task and a button that
+  // goes straight into it. The full list is in the Student Portal.
+  const TutorWorkStrip = () => {
     if (assignments.length === 0 && finishedAssignments.length === 0) return null
+    const a = assignments[0]
+    const f = !a ? finishedAssignments[0] : null
+    const name = (x) => (x.topics?.length ? `${x.type}: ${x.topics.slice(0, 2).join(', ')}` : `${x.type} · ${x.subject}`)
+    let note = ''
+    if (a) {
+      const due = a.due_date ? new Date(a.due_date) : null
+      due?.setHours(23, 59, 59, 999)
+      const overdue = due && due < new Date()
+      const done = a.progress_count > 0 && a.question_count > 0 ? `, ${a.progress_count} of ${a.question_count} done` : ''
+      note = `${name(a)} ${overdue ? 'is overdue' : due ? `is due ${due.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}` : 'has no due date'}${done}`
+    } else {
+      note = `${name(f)}: ${f.wrong_question_ids.length} to go over`
+    }
+    const count = assignments.length
     return (
-      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><ClipboardList size={16} aria-hidden="true" />Assigned Tasks</div>
-        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>From your tutor</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {assignments.slice(0, 5).map(a => {
-            const due = a.due_date ? new Date(a.due_date) : null
-            due?.setHours(23, 59, 59, 999)
-            const overdue = due && due < new Date()
-            const daysLeft = due ? Math.ceil((due - new Date()) / 86400000) : null
-            const color = overdue ? '#f87171' : daysLeft !== null && daysLeft <= 3 ? GOLD : '#4ade80'
-            return (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} · {a.subject}</div>
-                  {a.topics?.length > 0 && (
-                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.topics.join(', ')}</div>
-                  )}
-                  {a.question_count > 0 && (
-                    <div style={{ fontSize: 11, color: t.textSub, fontWeight: 600, marginTop: 3 }}>
-                      {assignmentGoalLabel(a)}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color }}>
-                    {overdue ? 'Overdue' : daysLeft === 0 ? 'Due today' : daysLeft !== null ? `${daysLeft}d left` : 'No due date'}
-                  </div>
-                  <button
-                    onClick={() => onStartSession({ mode: 'new', subtopics: a.topics || [], assignment: a })}
-                    style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
-                  >
-                    {a.progress_count > 0 ? 'Continue' : 'Start'}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{count ? `${count} ${count === 1 ? 'task' : 'tasks'} from your tutor` : 'Finished work to go over'}</div>
+          <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</div>
         </div>
-        {assignments.length > 5 && (
-          <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{assignments.length - 5} more tasks</div>
-        )}
-        {finishedAssignments.length > 0 && (
-          <>
-            <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', margin: assignments.length > 0 ? '14px 0 8px' : '0 0 8px' }}>Finished</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {finishedAssignments.slice(0, 3).map(a => {
-                const wrong = a.wrong_question_ids.length
-                return (
-                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} · {a.subject}</div>
-                      {a.score?.total > 0 && (
-                        <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>
-                          Scored {a.score.correct}/{a.score.total}{a.passed != null ? (a.passed ? ' · Passed' : ' · Not passed') : ''}
-                        </div>
-                      )}
-                    </div>
-                    {/* Practice only: a finished assignment doesn't change. */}
-                    <button
-                      onClick={() => onStartSession({ mode: 'review', subtopics: [], subject: a.subject, reviewIds: a.wrong_question_ids })}
-                      style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: 'linear-gradient(135deg,#ef4444,#f87171)', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
-                    >
-                      Redo {wrong} wrong
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </>
-        )}
+        <button type="button"
+          onClick={() => (a ? onStartSession({ mode: 'new', subtopics: a.topics || [], assignment: a }) : onStartSession({ mode: 'review', subtopics: [], subject: f.subject, reviewIds: f.wrong_question_ids }))}
+          style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {a ? (a.progress_count > 0 ? 'Continue' : 'Start') : `Redo ${f.wrong_question_ids.length} wrong`}
+        </button>
+        <button type="button" onClick={() => navigate('/portal')}
+          style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textDecorationThickness: 2, textUnderlineOffset: 3, whiteSpace: 'nowrap' }}>
+          All work
+        </button>
       </div>
     )
   }
 
-  const RESOURCE_ICONS = { notes: PenLine, worksheet: FileText, recording: Video, slides: ChartColumn, resource: Folder, link: LinkIcon }
-  const ClassResourcesCard = () => {
-    if (resources.length === 0) return null
-    return (
-      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.25)`, background: theme === 'dark' ? 'rgba(241,190,67,0.04)' : t.bgCard }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><Folder size={16} aria-hidden="true" />Class Resources</div>
-        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Notes, files & recordings from your tutor</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {resources.slice(0, 6).map(r => {
-            const ResIcon = RESOURCE_ICONS[r.type] || Folder
-            return (
-            <a
-              key={r.id}
-              href={r.download_url || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}`, textDecoration: 'none' }}
-            >
-              <div style={{ flexShrink: 0, display: 'flex', color: GOLD }}><ResIcon size={18} aria-hidden="true" /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
-                <div style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.tutor_name}{r.kind === 'link' ? ' · link' : ''}
-                </div>
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, flexShrink: 0 }}>{r.kind === 'link' ? 'Open' : 'Download'}</div>
-            </a>
-            )
-          })}
-        </div>
-        {resources.length > 6 && (
-          <div style={{ marginTop: 8, fontSize: 11, color: t.textMuted, textAlign: 'center' }}>+{resources.length - 6} more</div>
-        )}
-      </div>
-    )
-  }
 
 
   // ── Exam Countdown ────────────────────────────────────────────────────────
@@ -705,6 +627,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             </div>
           </div>
 
+          <TutorWorkStrip />
+
           <div className="hs-mobile-cards" style={{ marginBottom: 14 }}>
             {renderBuilder()}
           </div>
@@ -767,8 +691,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div className="hs-mobile-cards">
             <TutorInvitesCard />
             <DiagnosticResultsCard />
-            <AssignedTasksCard />
-            <ClassResourcesCard />
             <ExamCountdownCard />
             <WeakestTopicsCard />
           </div>
@@ -778,8 +700,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           {renderBuilder()}
           <TutorInvitesCard />
           <DiagnosticResultsCard />
-          <AssignedTasksCard />
-          <ClassResourcesCard />
           <ExamCountdownCard />
           <WeakestTopicsCard />
         </div>
