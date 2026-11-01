@@ -10,6 +10,8 @@ import { Logo } from './AuthLayout'
 //
 // 1. "And?": what gradefarm. is, said one clause at a time. Each click adds a
 //    part of the product to the sentence and shows it working beside it.
+//    The hero fills the first screen, and nothing below it shows until the
+//    sentence is finished (remembered for the session), or a nav link asks.
 // 2. "What's inside": a phone stays put while six short chapters scroll past,
 //    and its screen changes to match. On phones each chapter shows its own
 //    screen instead.
@@ -81,17 +83,15 @@ const CSS = `
 .lp-menu button:last-child { border-bottom: none; }
 
 /* 1 · And? */
-.lp-and { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); grid-template-areas: 'txt vis' 'facts vis'; grid-template-rows: auto auto; column-gap: 48px; align-items: center; align-content: center; padding-top: 40px; padding-bottom: 72px; min-height: min(660px, calc(100vh - 62px)); }
-.lp-and-txt { grid-area: txt; align-self: end; }
+/* The hero is the whole first screen; nothing below it shows until the sentence is finished. */
+.lp-and { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); grid-template-areas: 'txt vis'; column-gap: 48px; align-items: center; align-content: center; padding-top: 32px; padding-bottom: 48px; min-height: calc(100vh - 63px); min-height: calc(100svh - 63px); }
+.lp-and-txt { grid-area: txt; }
 .lp-and-vis { grid-area: vis; }
-.lp-and-facts { grid-area: facts; align-self: start; }
 .lp-and-s { font-size: var(--lp-and-size, clamp(32px, 4.3vw, 54px)); font-weight: 800; line-height: 1.12; letter-spacing: -0.035em; }
 .lp-and-s span { transition: color 0.35s; }
 .lp-and-s span.old { color: var(--lp-faded); }
 .lp-and-ctl { display: flex; gap: 16px; align-items: center; margin-top: 28px; flex-wrap: wrap; }
 .lp-and-ctl .n { font-size: 13px; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
-.lp-and-facts { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--lp-line); font-size: 13px; color: var(--lp-muted); }
-.lp-and-facts b { color: var(--lp-ink); }
 .lp-and-vis { min-height: 380px; display: flex; flex-direction: column; justify-content: center; gap: 10px; animation: lpIn 0.3s ease; }
 .lp-and-vis .cap { font-size: 12.5px; font-weight: 700; color: var(--lp-gold-text); }
 @keyframes lpIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
@@ -148,7 +148,7 @@ const CSS = `
 .lp-ok { color: var(--lp-ok); font-weight: 700; } .lp-lo { color: var(--lp-bad); font-weight: 700; }
 
 /* 2 · What's inside: the scrolling phone */
-.lp-sec { padding-top: 72px; padding-bottom: 72px; border-top: 1px solid var(--lp-line); }
+.lp-sec { padding-top: 72px; padding-bottom: 72px; border-top: 1px solid var(--lp-line); scroll-margin-top: 62px; }
 .lp-sec-head h2 { font-size: clamp(27px, 3.3vw, 38px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
 .lp-sec-head p { color: var(--lp-muted); margin-top: 8px; max-width: 58ch; font-size: 16px; }
 .lp-stk { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 64px; margin-top: 24px; }
@@ -211,7 +211,7 @@ const CSS = `
 .lp-copy { margin-left: auto; }
 
 @media (max-width: 960px) {
-  .lp-and { grid-template-columns: 1fr; grid-template-areas: 'txt' 'vis' 'facts'; row-gap: 24px; min-height: 0; padding-top: 28px; }
+  .lp-and { grid-template-columns: 1fr; grid-template-areas: 'txt' 'vis'; row-gap: 24px; align-content: start; padding-top: 28px; }
   .lp-and-vis { min-height: 0; }
   .lp-stk { grid-template-columns: 1fr; gap: 0; }
   .lp-ph-col { display: none; }
@@ -327,10 +327,12 @@ const CAPTIONS = [
   'Titan, the AI tutor',
 ]
 
-function AndHero({ onStart }) {
-  const [n, setN] = useState(1)
+function AndHero({ onStart, onDone, onSeeInside, done }) {
+  // Someone who finished it earlier this session starts at the end.
+  const [n, setN] = useState(done ? CLAUSES.length : 1)
   const [picked, setPicked] = useState(null)
   const last = n >= CLAUSES.length
+  useEffect(() => { if (last) onDone() }, [last]) // eslint-disable-line react-hooks/exhaustive-deps
   const planted = picked === null
     ? 'Say you answered $65. It\'s planted, and comes back in an hour.'
     : picked === JACKET.answer
@@ -346,17 +348,12 @@ function AndHero({ onStart }) {
         </div>
         <div className="lp-and-ctl">
           {last
-            ? <button type="button" className="lp-btn gold lg" onClick={onStart}>Start free</button>
+            ? <><button type="button" className="lp-btn gold lg" onClick={onStart}>Start free</button><button type="button" className="lp-btn lg" onClick={onSeeInside}>See what's inside ↓</button></>
             : <button type="button" className="lp-btn gold lg" onClick={() => setN(n + 1)} aria-label="And? Show the next part">And?</button>}
           <span className="n" aria-live="polite">{n} of {CLAUSES.length}</span>
           {last && <button type="button" className="lp-link" onClick={() => setN(1)}>Start again</button>}
           {!last && n > 1 && <button type="button" className="lp-link" onClick={() => setN(CLAUSES.length)}>Show it all</button>}
         </div>
-      </div>
-      <div className="lp-and-facts">
-        <span><b>One subject free</b>, 20 questions a day</span>
-        <span>Primary school to Year 12</span>
-        <span>Australian Curriculum, SACE and VCE</span>
       </div>
       <div className="lp-and-vis" key={n} aria-live="polite">
         <span className="cap">{CAPTIONS[n - 1]}</span>
@@ -489,6 +486,9 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [pricing, setPricing] = useState(null)
+  // The rest of the page appears once the hero's sentence is finished (or a nav link asks for it).
+  const [done, setDone] = useState(() => { try { return sessionStorage.getItem('gf-home-seen') === '1' } catch { return false } })
+  const finish = () => { setDone(true); try { sessionStorage.setItem('gf-home-seen', '1') } catch {} }
   useEffect(() => { getPlatformSettings('pricing').then(setPricing).catch(() => {}) }, [])
   const tiers = studentTiers(pricing?.student_tiers)
   const freeDaily = pricing?.free_daily_questions ?? 20
@@ -516,7 +516,9 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
     if (id === 'pricing') return navigate('/pricing')
     if (id === 'tutors') return navigate('/auth/tutor')
     if (id === 'year6') return navigate('/year-6')
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+    finish()
+    // Wait a frame so the sections exist before scrolling to them.
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })))
   }
   const NAV = [['how', 'How it works'], ['questions', 'Questions'], ['year6', 'Year 6'], ['tutors', 'Tutors'], ['pricing', 'Pricing']]
 
@@ -556,7 +558,8 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
       </nav>
 
       <main>
-        <AndHero onStart={start} />
+        <AndHero onStart={start} onDone={finish} onSeeInside={() => go('how')} done={done} />
+        {done && <>
         <Inside />
 
         <section id="questions" className="lp-in lp-sec" aria-labelledby="lp-faq">
@@ -595,9 +598,10 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
             </div>
           </div>
         </section>
+        </>}
       </main>
 
-      <footer className="lp-foot">
+      {done && <footer className="lp-foot">
         <div className="lp-in">
           <Logo />
           <div className="lp-foot-links">
@@ -610,7 +614,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
           </div>
           <span className="lp-copy">© 2026 Titanium Tutoring · Adelaide, SA</span>
         </div>
-      </footer>
+      </footer>}
     </div>
   )
 }
