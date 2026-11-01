@@ -8,22 +8,23 @@ import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import { takePendingCheckout, startCheckout, subjectTileFor } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList } from 'lucide-react'
+import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
-import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
-import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
-import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
+import PageTips from './components/PageTips'
+import { PAGE_TIPS, tipPageFor, seenTips, markTipsSeen, resetTips } from './lib/pageTips'
 import ParentConsentBanner from './components/ParentConsentBanner'
 import FamilySwitcher from './components/FamilySwitcher'
-import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
+import { appZoom } from './lib/appZoom'
+import { TUTOR_NAV, ADMIN_NAV, workspaceForPath, sectionForPortalPath, PORTAL_BADGES_EVENT } from './lib/portalNav'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
 
@@ -73,7 +74,6 @@ const LeaderboardScreen = lazyWithReload(() => import('./components/LeaderboardS
 const ProfileScreen     = lazyWithReload(() => import('./components/ProfileScreen'))
 const AccountScreen     = lazyWithReload(() => import('./components/AccountScreen'))
 const HistoryScreen     = lazyWithReload(() => import('./components/HistoryScreen'))
-const StudyPlanScreen   = lazyWithReload(() => import('./components/StudyPlanScreen'))
 
 let studyScreensPrefetched = false
 function prefetchStudyScreens() {
@@ -81,7 +81,7 @@ function prefetchStudyScreens() {
   studyScreensPrefetched = true
   // Most-used first.
   const run = () => [HomeScreen, QuizScreen, SubjectPicker, LearnScreen, ProfileScreen,
-    StudyPlanScreen, HistoryScreen, LeaderboardScreen, AccountScreen].forEach(s => s.preload())
+    HistoryScreen, LeaderboardScreen, AccountScreen].forEach(s => s.preload())
   if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 3000 })
   else setTimeout(run, 1500)
 }
@@ -93,27 +93,24 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 // Student navigation: three sections in the sidebar, each with tabs across the
 // top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
-// appear for subjects that switch it on (Admin → Curricula → Features); Exam
-// Mode and Essay Marker are full-screen, so their tabs open those screens.
+// appear for subjects that switch it on (Admin → Curricula → Features); Essay
+// Marker is full-screen, so its tab opens that screen. Exam mode is a switch in
+// the Practice session builder rather than a page of its own.
 // Sections marked `tutoring` only show for students with a tutor or a lesson.
 // The Student Portal (`separate`) sits apart from the rest, above Change Subject.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
-    { id: 'exam',  label: 'Exam Mode',     path: '/exam', feature: 'exam_mode' },
   ]},
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
     { id: 'essay', label: 'Essay Marker',  path: '/essay-lab', feature: 'essay_marker' },
   ]},
   { icon: 'portal', label: 'Student Portal', id: 'portal', tutoring: true, separate: true, pages: [
-    { id: 'portal',     label: 'Overview',   path: '/portal' },
-    { id: 'my-tutor',   label: 'My Tutor',   path: '/portal/tutor' },
-    { id: 'messages',   label: 'Messages',   path: '/portal/messages' },
-    { id: 'my-class',   label: 'My Class',   path: '/portal/class' },
-    { id: 'lessons',    label: 'Lessons',    path: '/lessons' },
-    { id: 'recordings', label: 'Recordings', path: '/recordings' },
-    { id: 'class-res',  label: 'Resources',  path: '/class-resources' },
+    { id: 'portal',     label: 'Overview',        path: '/portal' },
+    { id: 'messages',   label: 'Messages',        path: '/portal/messages' },
+    { id: 'lessons',    label: 'Lessons',         path: '/lessons' },
+    { id: 'my-tutor',   label: 'Tutor and class', path: '/portal/tutor' },
   ]},
   { icon: 'pen', label: 'Writing', id: 'writing', feature: 'writing', pages: [
     { id: 'w-essay',   label: 'Write an Essay', path: '/writing/essay' },
@@ -123,7 +120,6 @@ const NAV_SECTIONS = [
   ]},
   { icon: 'profile', label: 'Progress', id: 'progress', pages: [
     { id: 'profile',     label: 'Overview',    path: '/my-progress' },
-    { id: 'study',       label: 'Study Plan',  path: '/study-plan' },
     { id: 'history',     label: 'History',     path: '/history' },
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ]},
@@ -166,8 +162,12 @@ function visiblePages(section, subject) {
   return section.pages.filter(page => !page.feature || subjectHasFeature(subject, page.feature))
 }
 
+// Older addresses that now open inside another tab.
+const PATH_ALIASES = { '/': '/question-bank', '/quiz': '/question-bank', '/portal/class': '/portal/tutor', '/recordings': '/lessons', '/class-resources': '/lessons' }
+const tabPath = (pathname) => PATH_ALIASES[pathname] || pathname
+
 function sectionForPath(pathname) {
-  const p = pathname === '/' || pathname === '/quiz' ? '/question-bank' : pathname
+  const p = tabPath(pathname)
   return NAV_SECTIONS.find(sec => sec.pages.some(page => page.path === p)) || null
 }
 
@@ -193,59 +193,133 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-/** A portal entry above Change Subject (Student Portal, Tutor Portal, Admin), set apart from the study navigation. */
-function PortalLink({ icon, title, subtitle, active, badge = 0, target, onClick }) {
+// The window colour: the sidebar sits on it and the page is an inset sheet on
+// top (the page sheet itself is the theme's bg). One raised shade marks the
+// active row and the menus; gold only on the logo, the active icon and badges.
+function shellColors(theme) {
+  return theme === 'dark'
+    ? { bg: '#111113', raise: '#1f1f23', hover: 'rgba(255,255,255,0.04)', line: '#2a2a30', fg: '#ececef', sub: '#a1a1aa', dim: '#8a8a94', icon: '#e2b54c', menuShadow: '0 12px 32px rgba(0,0,0,0.5)' }
+    : { bg: '#eef0f7', raise: '#ffffff', hover: '#e5e8f2', line: '#e2e6f0', fg: '#0c1037', sub: '#4d5578', dim: '#6b7393', icon: '#b07d0c', menuShadow: '0 12px 32px rgba(12,16,55,0.12)' }
+}
+
+function UnreadBadge({ count }) {
+  if (count <= 0) return null
+  return (
+    <span aria-label={`${count} unread message${count === 1 ? '' : 's'}`} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: '#06091f', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>
+      {count > 9 ? '9+' : count}
+    </span>
+  )
+}
+
+/** Close a popover on a click outside `ref` or on Escape. */
+function useDismiss(open, ref, onDismiss) {
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => { if (!ref.current?.contains(e.target)) onDismiss() }
+    const onKey = (e) => { if (e.key === 'Escape') onDismiss() }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+// Live subjects for the sidebar's switcher; loaded once per page.
+let subjectTilesCache = null
+
+/** One sidebar link: the study pages, and the portals under Manage. */
+function SidebarLink({ sb, icon, Icon, label, active, badge = 0, target, onClick }) {
   return (
     <button
       type="button"
+      className="gf-nav-btn"
+      data-active={active}
       data-tutorial-target={target}
-      className="gf-footer-btn"
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
       style={{
-        width: '100%', padding: '10px 11px', borderRadius: 12, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left',
-        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-        border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : 'rgba(255,255,255,0.09)'}`,
-        background: active ? 'linear-gradient(135deg, rgba(241,190,67,0.22), rgba(241,190,67,0.07))' : 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', transition: 'background 0.15s, border-color 0.15s',
+        display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 12px', borderRadius: 8, border: 'none',
+        background: active ? sb.raise : 'transparent', color: active ? sb.fg : sb.sub,
+        boxShadow: active ? `0 0 0 1px ${sb.line}` : 'none',
+        fontFamily: FONT_B, fontSize: 13.5, fontWeight: active ? 700 : 500, textAlign: 'left', cursor: 'pointer',
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)' }}
-      onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
     >
-      <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#06091f' }}>
-        <NavIcon name={icon} size={18} color="currentColor" />
+      <span className="gf-nav-icon" style={{ display: 'flex', color: active ? sb.icon : 'inherit' }}>
+        {Icon ? <Icon size={17} aria-hidden="true" /> : <NavIcon name={icon} size={17} color="currentColor" />}
       </span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: active ? GOLD : '#f1f5f9' }}>{title}</span>
-        <span style={{ display: 'block', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</span>
-      </span>
-      {badge > 0 && (
-        <span aria-label={`${badge} unread message${badge === 1 ? '' : 's'}`} style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: GOLD, color: '#06091f', fontSize: 11, fontWeight: 800, lineHeight: '20px', textAlign: 'center', flexShrink: 0 }}>
-          {badge > 9 ? '9+' : badge}
-        </span>
-      )}
+      <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
+      <UnreadBadge count={badge} />
     </button>
   )
 }
 
-function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, onClose }) {
+function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, subscriptions = [], fullAccess = false, onSignOut, theme, onToggleTheme, onClose }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { level, pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
   const rank = RANKS[level]
+  const SB = shellColors(theme)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef(null)
+  const [subjectsOpen, setSubjectsOpen] = useState(false)
+  const subjectsRef = useRef(null)
+  const [subjectTiles, setSubjectTiles] = useState(subjectTilesCache)
 
   const go = (path) => { navigate(path); onClose?.() }
+
+  useDismiss(accountOpen, accountRef, () => setAccountOpen(false))
+  useDismiss(subjectsOpen, subjectsRef, () => setSubjectsOpen(false))
+
+  // Studying, Tutor Portal or Admin, from the URL. Declared before the effects
+  // below, which list it as a dependency (read during render).
+  const workspace = workspaceForPath(location.pathname)
+
+  // The student's subjects, fetched the first time the switcher opens.
+  useEffect(() => {
+    if (!subjectsOpen || subjectTilesCache || workspace !== 'study') return
+    let cancelled = false
+    fetchLiveCurricula()
+      .then(cs => { subjectTilesCache = cs.map(curriculumToSubjectTile); if (!cancelled) setSubjectTiles(subjectTilesCache) })
+      .catch(() => { if (!cancelled) setSubjectTiles([]) })
+    return () => { cancelled = true }
+  }, [subjectsOpen, workspace])
+  const mySubjects = (subjectTiles || []).filter(s => s.available && subjectAccess(subscriptions, s, fullAccess) !== 'none')
+
+  const switchTo = (tile) => {
+    setSubjectsOpen(false)
+    onSwitchSubject(tile)
+    onClose?.()
+  }
 
   // Single source of truth for nav items (incl. role-gated entries) so the active-state logic stays consistent.
   const hasTutoring = useHasTutoring(profile?.id)
   const isTutor = !!profile?.is_tutor
   const isAdmin = !!profile?.is_admin
-  // Tutors see unread student messages on the Tutor Portal button, students on the Student Portal one.
+  // Tutors see unread student messages on Messages, students on the Student Portal.
   const unreadMessages = useUnreadMessages(hasTutoring || isTutor)
   const portalActive = sectionForPath(location.pathname)?.id === 'portal'
-  const tutorActive = location.pathname.startsWith('/tutor')
-  const adminActive = location.pathname.startsWith('/admin')
-  // Study navigation only; the portals (student, tutor, admin) sit above Change Subject.
+
+  // Workspaces: Studying for everyone, plus Tutor Portal and Admin for those
+  // roles. The sidebar shows the current workspace's sections; with more than
+  // one, the top row switches between them.
+  const workspaces = [
+    { id: 'study', label: 'Studying', sub: formatSubjectLabel(subject || {}) || 'Practice, Learn and Progress', path: '/question-bank' },
+    ...(isTutor ? [{ id: 'tutor', label: 'Tutor Portal', sub: 'Students, lessons and work', path: '/tutor' }] : []),
+    ...(isAdmin ? [{ id: 'admin', label: 'Admin', sub: 'Manage gradefarm', path: '/admin' }] : []),
+  ]
+  const multiWorkspace = workspaces.length > 1
+  const currentWorkspace = workspaces.find(w => w.id === workspace) || workspaces[0]
+  const portalSection = sectionForPortalPath(location.pathname)
+  const portalGroups = workspace === 'tutor' ? TUTOR_NAV : workspace === 'admin' ? ADMIN_NAV : null
+  // Counts the portals report for their sections (overdue work, review queue…).
+  const [portalBadges, setPortalBadges] = useState({})
+  useEffect(() => {
+    const onBadges = (e) => setPortalBadges(prev => ({ ...prev, [e.detail.workspace]: e.detail.badges }))
+    window.addEventListener(PORTAL_BADGES_EVENT, onBadges)
+    return () => window.removeEventListener(PORTAL_BADGES_EVENT, onBadges)
+  }, [])
+  const badgeFor = (id) => (workspace === 'tutor' && id === 'messages' ? unreadMessages : portalBadges[workspace]?.[id] || 0)
+
+  // Study navigation; the portals' sections replace it in their workspaces.
   const navItems = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
   const isActivePath = (p) =>
     sectionForPath(location.pathname)?.pages[0].path === p ||
@@ -255,174 +329,181 @@ function SidebarContent({ profile, subject, onChangeSubject, onSignOut, theme, o
     // Writing module uses /writing/* routes
     (p.startsWith('/writing/') && location.pathname === p)
 
+  const menuItem = {
+    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', borderRadius: 7, border: 'none',
+    background: 'transparent', color: SB.fg, fontFamily: FONT_B, fontSize: 13, fontWeight: 500, textAlign: 'left', cursor: 'pointer',
+  }
+
   return (
     <div className="gf-sidebar" style={{
-      display: 'flex', flexDirection: 'column', height: '100%', fontFamily: FONT_B,
-      // Layered premium-dark surface: deeper base + radial highlight + top inner highlight + soft outer shadow.
-      background: `radial-gradient(120% 60% at 0% 0%, rgba(241,190,67,0.06) 0%, rgba(241,190,67,0) 55%), linear-gradient(180deg, #07091f 0%, #05071a 100%)`,
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), inset -1px 0 0 rgba(255,255,255,0.04), 4px 0 24px rgba(0,0,0,0.35)',
+      display: 'flex', flexDirection: 'column', height: '100%', fontFamily: FONT_B, background: SB.bg,
       // The whole panel scrolls (short screens, phone drawer); the nav list grows
-      // to keep the portal buttons and Change Subject at the bottom when there's room.
+      // to keep the account row at the bottom when there's room.
       position: 'relative', overflowX: 'hidden', overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'thin',
     }}>
       <style>{`
-        .gf-nav-btn { position: relative; isolation: isolate; }
-        .gf-nav-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
-        .gf-nav-btn[data-active="true"] { background: linear-gradient(135deg, rgba(241,190,67,0.16), rgba(241,190,67,0.06)) !important; border-color: rgba(241,190,67,0.28) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.2) !important; }
-        /* Preserve a visible focus ring even when the focused nav item is the active one */
-        .gf-nav-btn[data-active="true"]:focus-visible { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.65), 0 0 0 4px rgba(241,190,67,0.18) !important; }
-        .gf-nav-btn[data-active="false"]:hover { background: rgba(255,255,255,0.04) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.06) !important; }
-        .gf-nav-btn[data-active="false"]:hover .gf-nav-icon { color: #f1f5f9 !important; }
-        .gf-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(241,190,67,0.5) !important; }
-        .gf-footer-btn:focus-visible { outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 2px rgba(241,190,67,0.55), 0 0 0 4px rgba(241,190,67,0.15) !important; }
+        .gf-nav-btn:focus-visible, .gf-side-btn:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
+        .gf-logo:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+        .gf-nav-btn[data-active="false"]:hover { background: ${SB.hover} !important; color: ${SB.fg} !important; }
+        .gf-side-btn:hover { background: ${SB.hover} !important; }
       `}</style>
 
-      {/* Header — logo + theme toggle, with extra breathing room */}
-      <div style={{ padding: '20px 18px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, position: 'relative' }}>
-        <div onClick={() => go('/home')} style={{ cursor: 'pointer', lineHeight: 1 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5 }}>
-            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-          </span>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', fontFamily: FONT_B, letterSpacing: '0.08em', marginTop: 5, textTransform: 'uppercase' }}>by Titanium Tutoring</div>
-        </div>
-        <button
-          className="gf-icon-btn"
-          onClick={onToggleTheme}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'border-color 0.2s, background 0.2s' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(241,190,67,0.35)'; e.currentTarget.style.background = 'rgba(241,190,67,0.06)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-        >
-          <span style={{ display: 'flex', color: GOLD }}>{theme === 'dark' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}</span>
-          <div style={{ width: 26, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.08)', position: 'relative', flexShrink: 0 }}>
-            <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 12, width: 10, height: 10, borderRadius: '50%', background: GOLD, transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)', boxShadow: `0 0 6px ${GOLD}80` }} />
-          </div>
+      {/* Logo: the brand's own colours (as in the app icon), in a navy box the
+          same shape as the subject row below it */}
+      <div style={{ padding: '14px 12px 10px', flexShrink: 0 }}>
+        <button type="button" className="gf-logo" onClick={() => go('/home')} aria-label="gradefarm home"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : '#0c1037'}`, background: theme === 'dark' ? SB.raise : '#0c1037', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
+          <span style={{ color: '#ffffff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
 
-      {/* Hairline divider */}
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.07) 20%, rgba(255,255,255,0.07) 80%, transparent)', flexShrink: 0 }} />
-
-      {/* Subject context chip */}
-      <div style={{ padding: '14px 18px 10px', flexShrink: 0 }}>
-        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.30)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Studying</div>
-        <div
+      {/* Subject: shows it and switches it in place */}
+      <div ref={subjectsRef} style={{ padding: '0 12px', flexShrink: 0 }}>
+        <button
+          type="button"
+          className="gf-side-btn"
           data-tutorial-target="subject-chip"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 8px', borderRadius: 999, background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', border: '1px solid rgba(241,190,67,0.22)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, flexShrink: 0, boxShadow: `0 0 6px ${GOLD}` }} />
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.78)', fontWeight: 600, letterSpacing: '0.02em' }}>{[subject?.name, subject?.stage].filter(Boolean).join(' · ') || 'No subject selected'}</div>
-        </div>
-      </div>
-
-      {/* Profile / XP card */}
-      <div style={{ padding: '0 14px 14px', flexShrink: 0 }}>
-        <div
-          onClick={() => go('/my-account')}
-          style={{ padding: '12px 12px 14px', borderRadius: 14, cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s', background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.18)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
+          onClick={() => (onSwitchSubject || multiWorkspace ? setSubjectsOpen(v => !v) : onChangeSubject())}
+          aria-expanded={onSwitchSubject || multiWorkspace ? subjectsOpen : undefined}
+          aria-controls={onSwitchSubject || multiWorkspace ? 'gf-subject-menu' : undefined}
+          title={multiWorkspace ? 'Switch workspace or subject' : 'Switch subject'}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', padding: '9px 10px', borderRadius: 9, border: `1px solid ${SB.line}`, background: SB.raise, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12 }}>
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900, color: '#06091f', boxShadow: `0 4px 14px ${GOLD}55, inset 0 1px 0 rgba(255,255,255,0.4)` }}>
-                {profile.display_name[0].toUpperCase()}
-              </div>
-              <div style={{ position: 'absolute', right: -2, bottom: -2, width: 12, height: 12, borderRadius: '50%', background: '#0b1030', border: '2px solid #07091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: GOLD, fontWeight: 800 }}>{level}</div>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{profile.display_name}</div>
-              <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 2, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={12} /> {rank}</div>
-            </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', flexShrink: 0 }}>›</div>
-          </div>
-          <div style={{ position: 'relative', background: 'rgba(255,255,255,0.06)', borderRadius: 999, height: 4, overflow: 'hidden', marginBottom: 6, boxShadow: 'inset 0 1px 0 rgba(0,0,0,0.25)' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, transition: 'width 0.8s ease', borderRadius: 999, boxShadow: `0 0 8px ${GOLD}80` }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.36)', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase' }}>Level {level}</span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{profile.xp.toLocaleString()} XP</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Hairline divider */}
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent)', flexShrink: 0 }} />
-
-      {/* Nav items */}
-      <div style={{ padding: '14px 14px 6px', flexShrink: 0 }}>
-        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', paddingLeft: 4 }}>Navigate</div>
-      </div>
-      <nav style={{ flex: '1 0 auto', padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {navItems.map(item => {
-          const active = isActivePath(item.path)
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className="gf-nav-btn"
-              data-active={active}
-              data-tutorial-target={`nav-${item.id}`}
-              onClick={() => go(item.path)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 11,
-                padding: '10px 12px', borderRadius: 10,
-                border: '1px solid transparent', background: 'transparent',
-                color: active ? GOLD : 'rgba(255,255,255,0.62)',
-                fontSize: 13.5, fontWeight: active ? 700 : 500,
-                cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', width: '100%',
-                transition: 'color 0.18s, background 0.18s, border-color 0.18s, box-shadow 0.18s',
-                letterSpacing: active ? '-0.01em' : '0',
-              }}
-            >
-              <span className="gf-nav-icon" style={{ display: 'flex', color: active ? GOLD : 'rgba(255,255,255,0.55)', transition: 'color 0.18s' }}>
-                <NavIcon name={item.icon} size={17} color="currentColor" />
-              </span>
-              <span style={{ flex: 1 }}>{item.label}</span>
-              {/* Gold indicator dot for the active item */}
-              {active && <span style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}, 0 0 0 2px rgba(241,190,67,0.18)`, flexShrink: 0 }} />}
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 11, color: SB.dim, fontWeight: 500 }}>
+              {!multiWorkspace ? 'Subject' : workspace === 'study' ? 'Studying' : 'Workspace'}
+            </span>
+            <span style={{ display: 'block', fontSize: 12.5, color: SB.fg, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {workspace === 'study' ? (formatSubjectLabel(subject || {}) || 'Choose a subject') : currentWorkspace.label}
+            </span>
+          </span>
+          <ChevronsUpDown size={15} color={SB.dim} aria-hidden="true" style={{ flexShrink: 0 }} />
+        </button>
+        {subjectsOpen && (
+          <div id="gf-subject-menu"
+            style={{ marginTop: 6, padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, boxShadow: SB.menuShadow, display: 'flex', flexDirection: 'column', maxHeight: 420, overflowY: 'auto' }}>
+            {multiWorkspace && (
+              <>
+                <div style={{ fontSize: 11, color: SB.dim, fontWeight: 600, padding: '4px 10px 2px' }}>Workspace</div>
+                {workspaces.map(w => (
+                  <button key={w.id} type="button" className="gf-side-btn" aria-current={w.id === workspace ? 'true' : undefined}
+                    onClick={() => { setSubjectsOpen(false); if (w.id !== workspace) go(w.path) }}
+                    style={{ ...menuItem, fontWeight: w.id === workspace ? 700 : 500 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block' }}>{w.label}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: SB.dim, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.sub}</span>
+                    </span>
+                    {w.id === workspace && <Check size={15} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                  </button>
+                ))}
+              </>
+            )}
+            {workspace === 'study' && onSwitchSubject && (<>
+            {multiWorkspace && <div style={{ fontSize: 11, color: SB.dim, fontWeight: 600, padding: '10px 10px 2px', borderTop: `1px solid ${SB.line}`, marginTop: 4 }}>Subject</div>}
+            <div role="listbox" aria-label="Your subjects" style={{ display: 'flex', flexDirection: 'column' }}>
+            {subjectTiles === null
+              ? <div style={{ padding: '8px 10px', fontSize: 12.5, color: SB.dim }}>Loading subjects…</div>
+              : mySubjects.map(tile => {
+                  const current = tile.id === subject?.id
+                  return (
+                    <button key={tile.id} type="button" role="option" aria-selected={current} className="gf-side-btn"
+                      onClick={() => (current ? setSubjectsOpen(false) : switchTo(tile))}
+                      style={{ ...menuItem, fontWeight: current ? 700 : 500 }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{formatSubjectLabel(tile)}</span>
+                      {current && <Check size={15} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                    </button>
+                  )
+                })}
+            <button type="button" className="gf-side-btn" onClick={() => { setSubjectsOpen(false); onChangeSubject(); onClose?.() }}
+              style={{ ...menuItem, color: SB.sub, fontSize: 12.5, borderTop: subjectTiles === null || mySubjects.length === 0 ? 'none' : `1px solid ${SB.line}`, borderRadius: 0, marginTop: 4, paddingTop: 10 }}>
+              Browse all subjects
             </button>
-          )
-        })}
-      </nav>
-
-      {/* Hairline divider */}
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent)', flexShrink: 0 }} />
-
-      {/* Footer actions */}
-      <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        {/* Portals — kept apart from the study navigation above */}
-        {(hasTutoring || isTutor || isAdmin) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
-            {hasTutoring && (
-              <PortalLink icon="portal" title="Student Portal" subtitle="Your tutor & lessons" target="nav-portal"
-                active={portalActive} badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
-            )}
-            {isTutor && (
-              <PortalLink icon="tutor" title="Tutor Portal" subtitle="Students & lessons" target="nav-tutor"
-                active={tutorActive} badge={unreadMessages} onClick={() => go('/tutor')} />
-            )}
-            {isAdmin && (
-              <PortalLink icon="admin" title="Admin" subtitle="Manage gradefarm." target="nav-admin"
-                active={adminActive} onClick={() => go('/admin')} />
-            )}
+            </div>
+            </>)}
           </div>
         )}
-        <FamilySwitcher profile={profile} />
+      </div>
+
+      {/* Study navigation */}
+      <nav aria-label={workspace === 'study' ? 'Main' : currentWorkspace.label} style={{ flex: '1 0 auto', padding: '14px 12px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {portalGroups ? portalGroups.map((group, gi) => (
+          <div key={gi} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {group.label && <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>{group.label}</div>}
+            {group.items.map(item => (
+              <SidebarLink sb={SB} key={item.id} Icon={item.icon} label={item.label} active={portalSection === item.id}
+                target={workspace === 'tutor' && item.id === 'overview' ? 'nav-tutor' : `nav-${workspace}-${item.id}`}
+                badge={badgeFor(item.id)} onClick={() => go(`/${workspace}/${item.id}`)} />
+            ))}
+          </div>
+        )) : (
+          <>
+            {navItems.map(item => (
+              <SidebarLink sb={SB} key={item.id} icon={item.icon} label={item.label} active={isActivePath(item.path)}
+                target={`nav-${item.id}`} onClick={() => go(item.path)} />
+            ))}
+            {hasTutoring && (
+              <>
+                <div style={{ fontSize: 11.5, color: SB.dim, fontWeight: 600, padding: '0 12px', margin: '14px 0 4px' }}>Your tutor</div>
+                <SidebarLink sb={SB} icon="portal" label="Student Portal" active={portalActive} target="nav-portal"
+                  badge={isTutor ? 0 : unreadMessages} onClick={() => go('/portal')} />
+              </>
+            )}
+          </>
+        )}
+      </nav>
+
+      {/* Footer: family switcher (parents), then the account row and its menu */}
+      <div ref={accountRef} style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        <FamilySwitcher profile={profile} sb={SB} />
+        {accountOpen && (
+          <div id="gf-account-menu" style={{ padding: 6, borderRadius: 10, background: SB.raise, border: `1px solid ${SB.line}`, boxShadow: SB.menuShadow, display: 'flex', flexDirection: 'column' }}>
+            <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/my-account') }}>
+              <UserRound size={16} color={SB.sub} aria-hidden="true" />My account
+            </button>
+            {isTutor && (
+              <>
+                <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/tutor/profile') }}>
+                  <IdCard size={16} color={SB.sub} aria-hidden="true" />Tutor profile
+                </button>
+                <button type="button" className="gf-side-btn" style={menuItem} onClick={() => { setAccountOpen(false); go('/tutor/plan') }}>
+                  <CreditCard size={16} color={SB.sub} aria-hidden="true" />Plan and billing
+                </button>
+              </>
+            )}
+            <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
+              <Moon size={16} color={SB.sub} aria-hidden="true" />
+              <span style={{ flex: 1 }}>Dark mode</span>
+              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? SB.fg : '#c8cee0', position: 'relative', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? SB.bg : '#ffffff', transition: 'left 0.15s' }} />
+              </span>
+            </button>
+            <button type="button" className="gf-side-btn" style={menuItem} onClick={onSignOut}>
+              <LogOut size={16} color={SB.sub} aria-hidden="true" />Sign out
+            </button>
+          </div>
+        )}
         <button
-          data-tutorial-target="change-subject"
-          className="gf-footer-btn"
-          onClick={onChangeSubject}
-          style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.28)', background: 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))', color: GOLD, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, letterSpacing: '0.01em' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(241,190,67,0.20), rgba(241,190,67,0.08))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.45)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(241,190,67,0.12), rgba(241,190,67,0.05))'; e.currentTarget.style.borderColor = 'rgba(241,190,67,0.28)' }}
-        >⇄ Change Subject</button>
-        <button
-          className="gf-footer-btn"
-          onClick={onSignOut}
-          style={{ width: '100%', height: 32, padding: '0 12px', borderRadius: 10, border: '1px solid transparent', background: 'transparent', color: 'rgba(255,255,255,0.32)', fontSize: 11.5, cursor: 'pointer', fontFamily: FONT_B, transition: 'color 0.15s, background 0.15s, border-color 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
-        >Sign out</button>
+          type="button"
+          className="gf-side-btn"
+          aria-expanded={accountOpen}
+          aria-controls="gf-account-menu"
+          onClick={() => setAccountOpen(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: 10, borderRadius: 9, border: 'none', background: accountOpen ? SB.raise : 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
+        >
+          <span style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, color: '#06091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+            {profile.display_name[0].toUpperCase()}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: SB.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: SB.dim }}>
+              <RankIcon level={level} size={11} />{rank} · {profile.xp.toLocaleString()} XP
+            </span>
+            <span title={`Level ${level}`} style={{ display: 'block', height: 3, borderRadius: 2, background: SB.line, overflow: 'hidden', marginTop: 5 }}>
+              <span style={{ display: 'block', width: `${pct}%`, height: '100%', background: GOLD }} />
+            </span>
+          </span>
+          <Ellipsis size={16} color={SB.dim} aria-hidden="true" style={{ flexShrink: 0 }} />
+        </button>
       </div>
     </div>
   )
@@ -477,12 +558,6 @@ function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
 }
 
 /** Year level (7–12) a subject's stage points to: "Year 11" → 11, SACE "Stage 1"/"Stage 2" → 11/12. */
-function yearFromStage(stage) {
-  const year = /year\s*(\d{1,2})/i.exec(stage || '')
-  if (year) return Number(year[1])
-  const sace = /stage\s*([12])/i.exec(stage || '')
-  return sace ? 10 + Number(sace[1]) : null
-}
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
 /** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
@@ -493,7 +568,7 @@ function SectionTabs({ theme, subject }) {
   const activeRef = useRef(null)
   const section = sectionForPath(location.pathname)
   const pages = section ? visiblePages(section, subject) : []
-  const current = location.pathname === '/quiz' ? '/question-bank' : location.pathname
+  const current = tabPath(location.pathname)
   // On narrow screens the strip scrolls sideways; keep the current tab in view.
   useEffect(() => {
     const el = activeRef.current
@@ -570,54 +645,72 @@ function LiveLessonBanner({ profile, theme }) {
   )
 }
 
-function AppShell({ children, profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme, tutorialOverlay = null, onProfileUpdated }) {
+function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, onProfileUpdated }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const navigate = useNavigate()
   const location = useLocation()
 
-  // The first time a student has a tutor, announce the Student Portal and
-  // offer a tour. Remembered per browser.
-  const hasTutoring = useHasTutoring(profile?.id)
-  const portalWelcomeKey = `gf-portal-welcome-${profile?.id}`
-  const [portalWelcome, setPortalWelcome] = useState(false)
-  const [portalTour, setPortalTour] = useState(false)
+  // Page tips: the first time someone opens a page, show that page's tips
+  // (lib/pageTips). Pages can also ask for theirs at a moment that suits them
+  // (the question screen at the first wrong answer) with a gf-page-tip event.
+  const [tips, setTips] = useState(null) // { page, steps }
+  const tipsRef = useRef(null)
+  tipsRef.current = tips
+  const showTipsFor = useCallback((page) => {
+    if (!page || !profile?.id || !profile.onboarding_completed || tipsRef.current) return false
+    if (seenTips(profile)[page]) return false
+    const mobile = window.innerWidth < 860
+    // Only what's on screen now: a hidden screen's elements don't count.
+    const steps = (PAGE_TIPS[page]?.steps || []).filter(st => {
+      if (st.sidebar && mobile) return false
+      const el = document.querySelector(`[data-tutorial-target="${st.target}"]`)
+      return !!el && el.getClientRects().length > 0
+    })
+    if (!steps.length) return false
+    setTips({ page, steps })
+    markTipsSeen(profile, page).then(next => onProfileUpdated?.({ tours_seen: next }))
+    return true
+  }, [profile, onProfileUpdated])
   useEffect(() => {
-    if (!hasTutoring || tutorialOverlay || location.pathname === '/quiz') return
-    try { if (!localStorage.getItem(portalWelcomeKey)) setPortalWelcome(true) } catch {}
-  }, [hasTutoring, tutorialOverlay, location.pathname, portalWelcomeKey])
-  const closePortalWelcome = (tour) => {
-    try { localStorage.setItem(portalWelcomeKey, new Date().toISOString()) } catch {}
-    setPortalWelcome(false)
-    if (tour) { navigate('/portal'); setPortalTour(true) }
-  }
+    setTips(null)
+    const page = tipPageFor(location.pathname)
+    if (!page) return
+    // Give the page a moment to load what the tips point at.
+    const timer = setTimeout(() => showTipsFor(page), 900)
+    return () => clearTimeout(timer)
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onTip = (e) => { setTimeout(() => showTipsFor(e.detail?.page), 250) }
+    window.addEventListener('gf-page-tip', onTip)
+    return () => window.removeEventListener('gf-page-tip', onTip)
+  }, [showTipsFor])
 
-  useEffect(() => {
-    const open = () => setMenuOpen(true)
-    const close = () => setMenuOpen(false)
-    window.addEventListener('gf-tutorial-open-sidebar', open)
-    window.addEventListener('gf-tutorial-close-sidebar', close)
-    return () => {
-      window.removeEventListener('gf-tutorial-open-sidebar', open)
-      window.removeEventListener('gf-tutorial-close-sidebar', close)
-    }
-  }, [])
 
+  const [zoom, setZoom] = useState(appZoom)
   useEffect(() => {
-    const h = () => { setIsMobile(window.innerWidth < 860); if (window.innerWidth >= 860) setMenuOpen(false) }
+    const h = () => { setIsMobile(window.innerWidth < 860); setZoom(appZoom()); if (window.innerWidth >= 860) setMenuOpen(false) }
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const sProps = { profile, subject, onChangeSubject, onSignOut, theme, onToggleTheme }
+  const sProps = { profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme }
+  const shell = shellColors(theme)
+
+  // One screen tall in the shell's own (zoomed) CSS pixels.
+  const screenH = zoom === 1 ? '100vh' : `calc(100vh / ${zoom})`
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', height: isMobile ? 'auto' : '100vh', overflow: isMobile ? 'visible' : 'hidden', background: t.bg }}>
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}`}</style>
+    <>
+    {/* Desktop: the sidebar sits on the window colour and the page is an inset
+        sheet beside it. Phones: the page fills the screen. Wide screens draw
+        the whole shell at appZoom(). */}
+    <div style={{ display: 'flex', minHeight: screenH, height: isMobile ? 'auto' : screenH, overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg, zoom }}>
+      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}@media(min-width:860px){.gf-panel .tutor-desktop-sidebar,.gf-panel .td-main{height:100%!important}}`}</style>
 
       {!isMobile && (
-        <div style={{ width: 252, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)', zIndex: 10 }}>
+        <div style={{ width: 244, flexShrink: 0, position: 'sticky', top: 0, height: screenH, zIndex: 10 }}>
           <SidebarContent {...sProps} />
         </div>
       )}
@@ -625,22 +718,25 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
       {isMobile && menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100dvh', animation: 'slideIn 0.25s ease', zIndex: 1000, borderRight: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 272, height: '100dvh', animation: 'slideIn 0.25s ease', zIndex: 1000, boxShadow: shell.menuShadow }}>
             <SidebarContent {...sProps} onClose={() => setMenuOpen(false)} />
           </div>
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100vh' : 0, overflow: isMobile ? 'visible' : 'hidden' }}>
+      <div className="gf-panel" style={{
+        flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100vh' : 0, overflow: isMobile ? 'visible' : 'hidden',
+        ...(isMobile ? {} : { background: t.bg, margin: '8px 8px 8px 0', borderRadius: 12, border: `1px solid ${shell.line}` }),
+      }}>
         {isMobile && (
-          <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#080d28', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <button onClick={() => setMenuOpen(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
-              <div style={{ width: 14, height: 2, background: '#fff', borderRadius: 2 }} />
-              <div style={{ width: 20, height: 2, background: '#fff', borderRadius: 2 }} />
+          <div style={{ position: 'sticky', top: 0, zIndex: 100, background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <button onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
+              <div style={{ width: 14, height: 2, background: t.text, borderRadius: 2 }} />
+              <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
             </button>
             <span onClick={() => navigate('/home')} style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, cursor: 'pointer' }}>
-              <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+              <span style={{ color: t.text }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', color: GOLD }}>{theme === 'dark' ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}</button>
@@ -657,10 +753,10 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
           <Suspense fallback={<RouteFallback theme={theme} />}>{children}</Suspense>
         </div>
       </div>
-      {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
-      {portalWelcome && <PortalWelcome theme={theme} onTour={() => closePortalWelcome(true)} onClose={() => closePortalWelcome(false)} />}
-      {portalTour && <WebsiteTutorialOverlay theme={theme} steps={PORTAL_TOUR_STEPS} onFinish={() => setPortalTour(false)} />}
     </div>
+    {/* Outside the zoom: the tips line their highlight up with on-screen positions. */}
+    {tips && <PageTips key={tips.page} steps={tips.steps} theme={theme} onClose={() => setTips(null)} />}
+    </>
   )
 }
 
@@ -671,22 +767,23 @@ function AppShell({ children, profile, subject, onChangeSubject, onSignOut, them
 // Bank doesn't also load History, the leaderboard, Titan AI's quota, etc.
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
-  onStartSession, onChangeSubject, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
+  onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
-  tutorialOverlay,
   onReplayFeatureTour,
   onProfileUpdated,
   // learn state
   phase, setPhase, topic, setTopic, messages, setMessages,
   interests, setInterests, docContext, setDocContext, docName, setDocName,
   questionContext, setQuestionContext, onConsolidate,
+  learnRequest, setLearnRequest,
 }) {
   const navigate   = useNavigate()
   const location   = useLocation()
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
   const commonProps = { theme, onToggleTheme }
-  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate }
-  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSignOut, tutorialOverlay, onProfileUpdated }
+  const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate, learnRequest, setLearnRequest }
+  const openInLearn = (request) => { setLearnRequest({ ...request, at: Date.now() }); navigate('/learn') }
+  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, onProfileUpdated }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -703,6 +800,8 @@ function AppShellScreens({
   const onWriting = screen === 'writing' || screen.startsWith('writing/')
   if (onWriting && !writingSubject) return <Navigate to="/question-bank" replace />
   if (screen === 'writing') return <Navigate to="/writing/essay" replace />
+  // The study plan is now "This week's plan" on the Progress overview.
+  if (screen === 'study-plan') return <Navigate to="/my-progress" replace />
 
   return (
     <AppShell {...shellProps}>
@@ -732,22 +831,19 @@ function AppShellScreens({
           profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
-          onOpenStudyPlan={() => navigate('/study-plan')} />
-      </div>}
-      {wasOpened('study-plan') && <div style={show('study-plan')}>
-        <StudyPlanScreen
-          profile={profile} questions={questions} struggleMap={struggleMap}
-          theme={theme} onStartSession={onStartSession} subject={subject}
-          lastSessionAt={lastSessionAt} onOpenLearn={onOpenLearn} />
+          onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
       <div style={onPortal ? show(screen) : { display: 'none' }}>
-        <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} />
+        <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} onStartSession={onStartSession} />
       </div>
       <div style={onLessons ? show(screen) : { display: 'none' }}>
         <StudentLessonsScreen theme={theme} active={onLessons} />
       </div>
       {wasOpened('history') && <div style={show('history')}>
-        <HistoryScreen {...commonProps} profile={profile} embedded active={screen === 'history'} onStartSession={onStartSession} />
+        <HistoryScreen {...commonProps} profile={profile} subject={subject} questions={questions} embedded
+          active={screen === 'history'} onStartSession={onStartSession}
+          onOpenChat={(id) => openInLearn({ type: 'chat', id })}
+          onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
       {wasOpened('my-account') && <div style={show('my-account')}>
         <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} onProfileUpdated={onProfileUpdated} />
@@ -833,14 +929,18 @@ function AppInner() {
     } catch { return null }
   })
   const [showAuth, setShowAuth]               = useState(false)
-  const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
+  const [theme, setTheme]                     = useState(() => { try { return localStorage.getItem('gf-theme') || 'light' } catch { return 'light' } })
+  // Every theme token as a CSS variable (--t-bg, --t-text, ...), plus the ink
+  // colour as an RGB triple for translucent lines and fills, so screens can
+  // style with var() and follow light and dark without their own palettes.
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.theme = theme
+    for (const [key, value] of Object.entries(THEMES[theme])) root.style.setProperty(`--t-${key}`, value)
+    root.style.setProperty('--ink-rgb', theme === 'dark' ? '255,255,255' : '12,16,55')
+  }, [theme])
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
-  const [welcomeCelebration, setWelcomeCelebration] = useState(false)
-  // The first-run feature tour. Latched open: onSeen records it as seen the
-  // moment it mounts (so it never shows twice), which would otherwise make
-  // tourDue false and close it before the student saw anything.
-  const [tourOpen, setTourOpen] = useState(false)
 
   const refreshSubscriptions = async () => {
     try {
@@ -972,6 +1072,8 @@ function AppInner() {
 
   // Lifted Learn state — survives route changes
   const [learnPhase,      setLearnPhase]      = useState('setup')
+  // Open a saved chat or lesson in Learn from elsewhere: { type: 'chat', id } | { type: 'lesson', topic }.
+  const [learnRequest,    setLearnRequest]    = useState(null)
   const [learnTopic,      setLearnTopic]      = useState('')
   const [learnMessages,   setLearnMessages]   = useState([])
   const [learnInterests,  setLearnInterests]  = useState(null)
@@ -1023,6 +1125,8 @@ function AppInner() {
   const [activeAssignment, setActiveAssignment] = useState(null)
   const [quizExamMode, setQuizExamMode] = useState(false)
   const [quizTimerSeconds, setQuizTimerSeconds] = useState(0)
+  // Exam mode only: the session ends after this many questions (0 = no limit).
+  const [quizQuestionLimit, setQuizQuestionLimit] = useState(0)
   const [quizFinished, setQuizFinished] = useState(false)
   const [quizSessionTip, setQuizSessionTip] = useState('')
   const [quizSessionTipLoading, setQuizSessionTipLoading] = useState(false)
@@ -1032,7 +1136,7 @@ function AppInner() {
   const toggleTheme = () => {
     setTheme(prev => {
       const next = prev === 'dark' ? 'light' : 'dark'
-      localStorage.setItem('gf-theme', next)
+      try { localStorage.setItem('gf-theme', next) } catch {}
       return next
     })
   }
@@ -1146,22 +1250,15 @@ function AppInner() {
     navigate('/home')
   }
 
+  // Account › Show page tips again: every page shows its tips again.
   const handleReplayFeatureTour = useCallback(async () => {
     if (!profile?.id) return
-    const uid = profile.id
-    try {
-      localStorage.removeItem(gfTutorialStorageKey(uid))
-      await updateProfile(uid, { app_tutorial_completed_at: null })
-    } catch (e) {
-      console.error('[replay tutorial]', e)
-    }
-    setProfile(prev => (prev ? { ...prev, app_tutorial_completed_at: null } : prev))
+    await resetTips(profile)
+    setProfile(prev => (prev ? { ...prev, tours_seen: {} } : prev))
     navigate('/question-bank')
-  }, [profile?.id, navigate])
+  }, [profile, navigate])
 
   const handleSignOut = async () => {
-    setWelcomeCelebration(false)
-    setTourOpen(false)
     await signOut()
     setMyDiagnostics([])
     setDiagnosticsLoaded(false)
@@ -1203,6 +1300,7 @@ function AppInner() {
     setQuizSubtopics([])
     setQuizExamMode(false)
     setQuizTimerSeconds(0)
+    setQuizQuestionLimit(0)
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
     setQuizRemediationTarget(3)
@@ -1217,10 +1315,9 @@ function AppInner() {
     navigate('/home', { replace: true })
   }
 
-  const handleChangeSubject = () => {
+  // Leaving a subject: drop its questions and any quiz in progress.
+  const resetSubjectSession = () => {
     setConsolidation(null)
-    setSelectedSubject(null)
-    localStorage.removeItem('gf-subject')
     clearQuestions()
     setQuizQ(null)
     setQuizSelected(null)
@@ -1248,8 +1345,28 @@ function AppInner() {
     setQuizRemediationOriginalQ(null)
     setQuizRemediationUsedIds([])
     setQuizRemediationWrongCount(0)
+  }
+
+  const handleChangeSubject = () => {
+    resetSubjectSession()
+    setSelectedSubject(null)
+    localStorage.removeItem('gf-subject')
     setSubscriptionsLoaded(false)
     navigate('/subject-picker')
+  }
+
+  /** Switch straight to another subject from the sidebar, staying on the current page (a quiz goes back to Practice). */
+  const handleSwitchSubject = async (subject) => {
+    if (!subject || subject.id === selectedSubject?.id) return
+    resetSubjectSession()
+    setSelectedSubject(subject)
+    localStorage.setItem('gf-subject', JSON.stringify(subject))
+    if (location.pathname === '/quiz') navigate('/question-bank')
+    try {
+      const qs = await loadQuestions(subject)
+      // A quicker second switch wins.
+      if (questionsLoad.current.key === subject.id) setQuestions(qs)
+    } catch {}
   }
 
   const commonProps  = { theme, onToggleTheme: toggleTheme }
@@ -1286,6 +1403,7 @@ function AppInner() {
     sessionTipLoading: quizSessionTipLoading, setSessionTipLoading: setQuizSessionTipLoading,
     examMode: quizExamMode,
     timerSeconds: quizTimerSeconds,
+    questionLimit: quizQuestionLimit,
   }
 
   const quizIsActive = location.pathname === '/quiz' && quizAnswered.length > 0 && !quizFinished
@@ -1308,6 +1426,7 @@ function AppInner() {
     docContext: learnDocContext, setDocContext: setLearnDocContext,
     docName: learnDocName,   setDocName: setLearnDocName,
     questionContext, setQuestionContext,
+    learnRequest, setLearnRequest,
     onConsolidate: (target) => {
       if (!target?.subtopics?.length) return
       // Keep the quiz they're in to come back to after the round, minus any
@@ -1323,6 +1442,7 @@ function AppInner() {
       setActiveAssignment(null)
       setQuizExamMode(false)
       setQuizTimerSeconds(0)
+      setQuizQuestionLimit(0)
       resetQuizSession()
       navigate('/quiz')
     },
@@ -1339,7 +1459,7 @@ function AppInner() {
     q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
     earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
     results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
-    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds,
+    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit,
     assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
     remediation: {
       mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
@@ -1368,6 +1488,7 @@ function AppInner() {
     setQuizSessionId(saved.sessionId ?? null)
     setQuizExamMode(saved.examMode)
     setQuizTimerSeconds(saved.timerSeconds)
+    setQuizQuestionLimit(saved.questionLimit || 0)
     setActiveAssignment(saved.assignment)
     setQuizFinished(saved.finished)
     setQuizSessionTip(saved.sessionTip)
@@ -1432,13 +1553,6 @@ function AppInner() {
     else resetQuizSession()
   }
 
-  // A student's tour waits for their diagnostics to load and for any due on
-  // this subject to be done: the tour lives in the app shell, which the
-  // check-in screen replaces, and it counts as seen the moment it opens.
-  const tourDue = !!(user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject &&
-    (!isStudent || (diagnosticsLoaded && !diagnosticDue)))
-  useEffect(() => { if (tourDue) setTourOpen(true) }, [tourDue])
-
   // Also while a just-signed-in user's profile loads, so the landing or sign-in
   // page doesn't flash before the redirect into the app.
   if (((!bootstrapped || (user && !profile)) && loading) || openingCheckout) return (
@@ -1459,41 +1573,15 @@ function AppInner() {
     </div>
   )
 
-  const tutorialOverlay =
-    tourOpen && user && profile
-      ? {
-          isTutor: !!profile.is_tutor,
-          theme,
-          // Called as soon as the overlay mounts — prevents re-showing if the user
-          // closes the tab or navigates away before explicitly skipping/finishing.
-          onSeen: async () => {
-            const uid = profile.id
-            const ts = new Date().toISOString()
-            try {
-              localStorage.setItem(gfTutorialStorageKey(uid), ts)
-            } catch (_) {}
-            setProfile(prev => ({ ...prev, app_tutorial_completed_at: ts }))
-            try {
-              await markTutorialComplete(uid)
-            } catch (e) {
-              console.error('[tutorial seen]', e)
-            }
-          },
-          // Skip and Done both end here.
-          onFinish: () => {
-            setTourOpen(false)
-            setWelcomeCelebration(true)
-          },
-        }
-      : null
-
   const shellProps = {
     ...commonProps,
     profile,
     subject: selectedSubject,
     onChangeSubject: handleChangeSubject,
+    onSwitchSubject: handleSwitchSubject,
+    subscriptions,
+    fullAccess: hasFullAccess,
     onSignOut: handleSignOut,
-    tutorialOverlay,
     onProfileUpdated: (updates) => setProfile(prev => (prev ? { ...prev, ...updates } : prev)),
   }
 
@@ -1510,7 +1598,7 @@ function AppInner() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
-      <Route path="/reset-password" element={<ResetPasswordScreen signedIn={!!user} />} />
+      <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
@@ -1539,10 +1627,10 @@ function AppInner() {
       } />
 
       {/* Diagnostic assessment — public, no auth required */}
-      <Route path="/diagnostic/:token" element={<DiagnosticScreen />} />
+      <Route path="/diagnostic/:token" element={<DiagnosticScreen {...commonProps} />} />
 
       {/* Tutor invite — public; accepting needs the invited account signed in */}
-      <Route path="/invite/:token" element={<InviteScreen signedIn={!!(user && profile)} />} />
+      <Route path="/invite/:token" element={<InviteScreen {...commonProps} signedIn={!!(user && profile)} />} />
 
       {/* Landing page — public */}
       <Route path="/home" element={
@@ -1579,7 +1667,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
-          : <TutorSignupScreen />
+          : <TutorSignupScreen {...commonProps} />
       } />
 
       {/* Onboarding — students only (tutors use /onboarding/tutor) */}
@@ -1590,7 +1678,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path === 'tutor'
             ? <Navigate to="/onboarding/tutor" replace />
-            : <OnboardingScreen profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
+            : <OnboardingScreen {...commonProps} profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
                 asParent={user?.user_metadata?.signup_path === 'parent'}
                 parentName={user?.user_metadata?.parent_name || ''}
@@ -1612,7 +1700,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path !== 'tutor'
             ? <Navigate to="/onboarding" replace />
-          : <TutorOnboardingScreen profile={profile} userEmail={user?.email} onDone={() => {
+          : <TutorOnboardingScreen {...commonProps} profile={profile} userEmail={user?.email} pendingApplication={user?.user_metadata?.tutor_application} onDone={() => {
               setProfile(prev => ({ ...prev, onboarding_completed: true }))
               navigate('/subject-picker', { replace: true })
             }} />
@@ -1642,7 +1730,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <GetAccessScreen subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} />
+          : <GetAccessScreen {...commonProps} subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} onStartSubject={handleSelectSubject} />
       } />
 
       {/* Quiz — wrapped in AppShell so the shared sidebar appears */}
@@ -1688,7 +1776,7 @@ function AppInner() {
                   return fresh.length ? [...prev, ...fresh] : prev
                 })
               }}
-              onGoToStudyPlan={() => navigate('/study-plan')} />
+              onGoToStudyPlan={() => navigate('/my-progress')} />
             </AppShell>
       } />
 
@@ -1700,13 +1788,13 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           : <AdminRoute profile={profile}>
               <AppShell {...shellProps}>
-                <AdminScreen profile={profile} />
+                <AdminScreen profile={profile} theme={theme} />
               </AppShell>
             </AdminRoute>
       } />
 
       {/* Tutor — is_tutor only. Wrapped in AppShell so the redesigned sidebar (incl. active Tutor Dashboard state) is present here too. */}
-      <Route path="/tutor" element={
+      <Route path="/tutor/*" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
@@ -1809,6 +1897,7 @@ function AppInner() {
             setQuizSubtopics(expandedSubtopics)
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)
+            setQuizQuestionLimit(opts?.examMode && opts?.questionLimit > 0 ? opts.questionLimit : 0)
             setQuizQ(null)
             setQuizSelected(null)
             setQuizShowAns(false)
@@ -1842,9 +1931,6 @@ function AppInner() {
     </Routes>
     </Suspense>
     </ErrorBoundary>
-    {welcomeCelebration && (
-      <GradeFarmWelcomeCelebration theme={theme} onDismiss={() => setWelcomeCelebration(false)} />
-    )}
     </>
   )
 }

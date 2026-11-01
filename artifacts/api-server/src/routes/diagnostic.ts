@@ -759,13 +759,19 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     const { data, error } = await admin
       .from("diagnostic_assessments")
-      .select("id, token, year_level, subjects, questions, status, student_name, score_max, pre_call_form_url, completed_at, student_id, questions_ready_at, report")
+      .select("id, token, year_level, subjects, questions, status, student_name, score_max, pre_call_form_url, completed_at, student_id, questions_ready_at, report, tutor_id")
       .eq("token", token)
-      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "status" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "student_id" | "questions_ready_at" | "report">>();
+      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "status" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "student_id" | "questions_ready_at" | "report" | "tutor_id">>();
 
     if (error || !data) return res.status(404).json({ error: "Assessment not found" });
 
-    const { student_id, questions_ready_at, report, ...rest } = data;
+    const { student_id, questions_ready_at, report, tutor_id, ...rest } = data;
+    // The tutor's display name, so the page can say who it goes to.
+    let tutor_name: string | null = null;
+    if (tutor_id) {
+      const { data: tutor } = await admin.from("profiles").select("display_name").eq("id", tutor_id).maybeSingle<{ display_name: string | null }>();
+      tutor_name = tutor?.display_name?.trim() || null;
+    }
     // Never send correct answers to the student
     return res.json({
       assessment: {
@@ -776,6 +782,7 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
         linked: !!student_id,
         ready: !student_id || !!questions_ready_at,
         summary: student_id && report ? studentSummary(report) : null,
+        tutor_name,
       },
     });
   } catch (err) {

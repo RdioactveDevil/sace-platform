@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { saveQuestionVisuals } from '../lib/adminDb'
 import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
 
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD   = '#f1be43'
+import { ui, btn, note, FONT_B } from '../lib/adminUi'
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
 function parseJsonSilent(val) {
@@ -14,8 +14,8 @@ function parseJsonSilent(val) {
   try { return JSON.parse(val) } catch { return null }
 }
 
-export default function AdminQuestionPreviewTab() {
-  const [idInput,      setIdInput]      = useState('')
+export default function AdminQuestionPreviewTab({ initialId = null, theme = 'light' }) {
+  const [idInput,      setIdInput]      = useState(initialId || '')
   const [question,     setQuestion]     = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
@@ -29,8 +29,11 @@ export default function AdminQuestionPreviewTab() {
   const [saveMsg,        setSaveMsg]        = useState(null)
   const [uploading,      setUploading]      = useState(false)
 
-  async function lookup() {
-    const id = idInput.trim()
+  // Opened on a question (from the bank or a report): show it straight away.
+  useEffect(() => { if (initialId) { setIdInput(initialId); lookup(initialId) } }, [initialId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function lookup(idArg) {
+    const id = String(idArg ?? idInput).trim()
     if (!id) return
     setLoading(true)
     setError(null)
@@ -105,118 +108,110 @@ export default function AdminQuestionPreviewTab() {
       if (editTableJson.trim()) newTable = JSON.parse(editTableJson)
     } catch { setSaving(false); setSaveMsg({ ok: false, text: 'Table JSON is invalid.' }); return }
 
-    const table = question._source === 'draft' ? 'draft_questions' : 'questions'
-    const { error: err } = await supabase
-      .from(table)
-      .update({ graph: newGraph, table_data: newTable, image_url: editImageUrl || null })
-      .eq('id', question.id)
-
-    if (err) {
-      setSaveMsg({ ok: false, text: err.message })
-    } else {
-      setQuestion(q => ({ ...q, graph: newGraph, table_data: newTable, image_url: editImageUrl || null }))
+    try {
+      const saved = await saveQuestionVisuals(question.id, {
+        source: question._source, graph: newGraph, table_data: newTable, image_url: editImageUrl.trim() || null,
+      })
+      setQuestion(q => ({ ...q, graph: saved.graph, table_data: saved.table_data, image_url: saved.image_url }))
+      setEditImageUrl(saved.image_url ?? '')
       setSaveMsg({ ok: true, text: 'Saved.' })
+    } catch (err) {
+      setSaveMsg({ ok: false, text: `Didn't save: ${err.message}` })
     }
     setSaving(false)
   }
 
-  const s = styles
-
   return (
-    <div style={s.page}>
-      <p style={s.sub}>Look up any question by ID to preview and edit its visual fields (graph, table, image).</p>
+    <div style={{ fontFamily: FONT_B, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <p style={{ ...ui.hint, fontSize: 13, margin: 0 }}>Open any question by its ID to see it as students do, and change its graph, table or image. Questions in the Bank tab open here.</p>
 
       {/* Search */}
-      <div style={s.searchRow}>
+      <div style={{ display: 'flex', gap: 8, maxWidth: 560 }}>
         <input
-          style={s.input}
-          placeholder="Question ID  e.g. test_graph_01"
+          aria-label="Question ID"
+          style={{ ...ui.input, flex: 1 }}
+          placeholder="Question ID, e.g. test_graph_01"
           value={idInput}
           onChange={e => setIdInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && lookup()}
           spellCheck={false}
         />
-        <button style={s.btn} onClick={lookup} disabled={loading}>
-          {loading ? 'Loading…' : 'Preview'}
+        <button type="button" style={btn('primary', loading)} onClick={() => lookup()} disabled={loading}>
+          {loading ? 'Opening…' : 'Open'}
         </button>
       </div>
 
-      {error && <p style={s.error}>{error}</p>}
+      {error && <div role="alert" style={note('danger')}>{error}</div>}
 
       {question && (
-        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-          {/* ── Left: preview ── */}
-          <div style={{ ...s.card, flex: '1 1 400px', minWidth: 0 }}>
-            {/* Meta */}
-            <div style={s.metaRow}>
-              <span style={s.badge('#4f8ef7')}>{question._source === 'draft' ? 'Draft' : 'Live'}</span>
-              <span style={s.badge(GOLD)}>{question.subject}</span>
-              <span style={s.metaText}>{question.topic}</span>
-              {question.subtopic && <span style={s.metaText}>· {question.subtopic}</span>}
-              <span style={s.metaText}>· difficulty {question.difficulty}</span>
+          {/* ── Left: the question as students see it ── */}
+          <div style={{ ...ui.card, padding: '18px 20px', flex: '1 1 420px', minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 14 }}>
+              {[question._source === 'draft' ? 'Draft' : 'Live', question.subject, question.topic, question.subtopic, question.difficulty != null && `level ${question.difficulty}`].filter(Boolean).join(' · ')}
             </div>
 
-            {question.graph     && <GraphView graph={question.graph}          theme="dark" />}
-            {question.table_data && <TableView table={question.table_data}    theme="dark" />}
+            {question.graph     && <GraphView graph={question.graph}          theme={theme} />}
+            {question.table_data && <TableView table={question.table_data}    theme={theme} />}
             {question.image_url  && (
               <img src={question.image_url} alt="Question diagram"
                 style={{ width: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }} />
             )}
 
-            <div style={s.questionText}><MathText text={question.question} /></div>
+            <div style={{ color: 'var(--t-text)', fontSize: 16, fontWeight: 700, lineHeight: 1.6, marginBottom: 16 }}><MathText text={question.question} /></div>
 
-            <div style={s.optionsWrap}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {(question.options || []).map((opt, i) => {
-                const isCorrect = i === question.answer_index
-                let bg = 'rgba(255,255,255,0.04)', border = '1px solid rgba(255,255,255,0.1)', color = 'rgba(255,255,255,0.7)', lBg = 'rgba(255,255,255,0.1)', lCol = '#fff'
-                if (revealed && isCorrect) { bg = 'rgba(16,185,129,0.1)'; border = '1px solid rgba(16,185,129,0.35)'; color = '#4ade80'; lBg = 'rgba(16,185,129,0.2)'; lCol = '#4ade80' }
+                const right = revealed && i === question.answer_index
                 return (
-                  <div key={i} style={{ ...s.option, background: bg, border, color }}>
-                    <span style={{ ...s.optLabel, background: lBg, color: lCol }}>
-                      {revealed && isCorrect ? '✓' : OPTION_LABELS[i]}
-                    </span>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, borderRadius: 10, padding: '10px 14px', fontSize: 14, color: 'var(--t-text)',
+                    background: right ? 'var(--t-successBg)' : 'var(--t-bgCard)', border: `1px solid ${right ? 'var(--t-success)' : 'var(--t-border)'}` }}>
+                    <span style={{ width: 16, fontSize: 13, fontWeight: 800, color: right ? 'var(--t-success)' : 'var(--t-textMuted)' }}>{OPTION_LABELS[i]}</span>
                     <span style={{ flex: 1, minWidth: 0 }}><MathText text={opt} /></span>
+                    {right && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-success)' }}>Answer</span>}
                   </div>
                 )
               })}
             </div>
 
             {!revealed
-              ? <button style={s.revealBtn} onClick={() => setRevealed(true)}>Reveal Answer</button>
-              : <div style={s.solution}>
-                  <span style={s.solutionLabel}>Solution</span>
-                  <MathText text={question.solution || 'No solution provided.'} />
+              ? <button type="button" style={btn('secondary')} onClick={() => setRevealed(true)}>Show answer</button>
+              : <div style={{ borderRadius: 10, padding: '12px 14px', background: 'var(--t-bgSubtle)', color: 'var(--t-textSub)', fontSize: 13.5, lineHeight: 1.65 }}>
+                  <span style={{ display: 'block', color: 'var(--t-text)', fontSize: 13, fontWeight: 800, marginBottom: 4 }}>Worked solution</span>
+                  <MathText text={question.solution || 'No solution written.'} />
                 </div>
             }
           </div>
 
           {/* ── Right: editor ── */}
-          <div style={{ ...s.card, flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Edit visuals</div>
+          <div style={{ ...ui.card, padding: '16px 18px', flex: '0 1 320px', minWidth: 260, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={ui.heading}>Graph, table and image</div>
 
             {/* Image */}
             <div>
-              <div style={s.fieldLabel}>Image URL</div>
+              <label htmlFor="pv-image" style={ui.label}>Image link</label>
               <input
-                style={{ ...s.input, marginBottom: 6 }}
+                id="pv-image"
+                style={{ ...ui.input, width: '100%', marginBottom: 8 }}
                 placeholder="https://…"
                 value={editImageUrl}
                 onChange={e => setEditImageUrl(e.target.value)}
               />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: uploading ? 'not-allowed' : 'pointer' }}>
+              <label style={{ display: 'inline-flex', cursor: uploading ? 'not-allowed' : 'pointer' }}>
                 <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} style={{ display: 'none' }} />
-                <span style={{ ...s.uploadBtn, opacity: uploading ? 0.6 : 1 }}>
-                  {uploading ? 'Uploading…' : '↑ Upload image'}
+                <span style={{ ...btn('secondary', uploading), fontSize: 12.5 }}>
+                  {uploading ? 'Uploading…' : 'Upload an image'}
                 </span>
               </label>
             </div>
 
             {/* Graph */}
             <div>
-              <div style={s.fieldLabel}>Graph spec (JSON)</div>
+              <label htmlFor="pv-graph" style={ui.label}>Graph (JSON)</label>
               <textarea
-                style={{ ...s.textarea }}
+                id="pv-graph"
+                style={codeArea}
                 rows={6}
                 placeholder={'{\n  "functions": [{"expr": "x**2-4"}],\n  "xRange": [-5,5],\n  "yRange": [-6,6]\n}'}
                 value={editGraphJson}
@@ -227,9 +222,10 @@ export default function AdminQuestionPreviewTab() {
 
             {/* Table */}
             <div>
-              <div style={s.fieldLabel}>Table spec (JSON)</div>
+              <label htmlFor="pv-table" style={ui.label}>Table (JSON)</label>
               <textarea
-                style={{ ...s.textarea }}
+                id="pv-table"
+                style={codeArea}
                 rows={5}
                 placeholder={'{\n  "headers": ["x", "y"],\n  "rows": [[1,2],[3,4]]\n}'}
                 value={editTableJson}
@@ -238,22 +234,22 @@ export default function AdminQuestionPreviewTab() {
               />
             </div>
 
-            <button style={{ ...s.btn, width: '100%', opacity: saving ? 0.7 : 1 }} onClick={saveVisuals} disabled={saving}>
+            <button type="button" style={btn('primary', saving)} onClick={saveVisuals} disabled={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
-            {saveMsg && <p style={{ fontSize: 12, color: saveMsg.ok ? '#4ade80' : '#f87171', margin: 0 }}>{saveMsg.text}</p>}
+            {saveMsg && <div role="status" style={{ fontSize: 12.5, color: saveMsg.ok ? 'var(--t-success)' : 'var(--t-danger)' }}>{saveMsg.text}</div>}
 
             {/* Raw specs */}
             {question.graph && (
-              <details style={s.details}>
-                <summary style={s.summary}>Raw graph spec</summary>
-                <pre style={s.pre}>{JSON.stringify(question.graph, null, 2)}</pre>
+              <details>
+                <summary style={summary}>Saved graph spec</summary>
+                <pre style={pre}>{JSON.stringify(question.graph, null, 2)}</pre>
               </details>
             )}
             {question.table_data && (
-              <details style={s.details}>
-                <summary style={s.summary}>Raw table spec</summary>
-                <pre style={s.pre}>{JSON.stringify(question.table_data, null, 2)}</pre>
+              <details>
+                <summary style={summary}>Saved table spec</summary>
+                <pre style={pre}>{JSON.stringify(question.table_data, null, 2)}</pre>
               </details>
             )}
           </div>
@@ -264,79 +260,6 @@ export default function AdminQuestionPreviewTab() {
   )
 }
 
-const styles = {
-  page: { padding: '28px 32px', maxWidth: 900, fontFamily: FONT_B },
-  sub: { color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: '0 0 24px' },
-  searchRow: { display: 'flex', gap: 8, marginBottom: 20 },
-  input: {
-    flex: 1, width: '100%',
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 8, color: '#fff', fontSize: 13,
-    padding: '10px 14px', fontFamily: FONT_B, outline: 'none',
-    boxSizing: 'border-box',
-  },
-  textarea: {
-    width: '100%',
-    background: 'rgba(0,0,0,0.3)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 8, color: 'rgba(255,255,255,0.8)', fontSize: 11,
-    padding: '10px 12px', fontFamily: 'monospace', outline: 'none',
-    resize: 'vertical', boxSizing: 'border-box',
-  },
-  btn: {
-    background: GOLD, border: 'none', borderRadius: 8,
-    color: '#080d28', fontSize: 14, fontWeight: 800,
-    padding: '10px 20px', cursor: 'pointer', fontFamily: FONT_B,
-  },
-  uploadBtn: {
-    background: 'rgba(255,255,255,0.07)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: 6, color: 'rgba(255,255,255,0.6)',
-    fontSize: 12, fontWeight: 600, padding: '6px 12px', cursor: 'pointer',
-  },
-  error: { color: '#f87171', fontSize: 13, margin: '0 0 16px' },
-  card: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 14, padding: 24,
-  },
-  metaRow: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 18 },
-  badge: (color) => ({
-    background: `${color}22`, border: `1px solid ${color}55`, color,
-    borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700,
-  }),
-  metaText: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
-  questionText: { color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1.7, marginBottom: 18 },
-  optionsWrap: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 },
-  option: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    borderRadius: 10, padding: '11px 14px', fontSize: 14, fontWeight: 600,
-  },
-  optLabel: {
-    width: 28, height: 28, borderRadius: '50%',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 11, fontWeight: 800, flexShrink: 0,
-  },
-  revealBtn: {
-    background: 'rgba(241,190,67,0.12)', border: `1px solid rgba(241,190,67,0.3)`,
-    borderRadius: 8, color: GOLD, fontSize: 13, fontWeight: 700,
-    padding: '9px 18px', cursor: 'pointer', fontFamily: FONT_B,
-  },
-  solution: {
-    background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)',
-    borderRadius: 10, padding: '14px 16px',
-    color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1.7,
-  },
-  solutionLabel: {
-    display: 'block', color: '#4ade80', fontSize: 11, fontWeight: 700,
-    marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em',
-  },
-  fieldLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 },
-  details: { marginTop: 4 },
-  summary: { color: 'rgba(255,255,255,0.3)', fontSize: 11, cursor: 'pointer', userSelect: 'none' },
-  pre: {
-    background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 10,
-    fontSize: 10, color: 'rgba(255,255,255,0.6)', overflowX: 'auto', marginTop: 6,
-  },
-}
+const codeArea = { ...ui.input, width: '100%', fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace", fontSize: 11.5, resize: 'vertical' }
+const summary = { color: 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', userSelect: 'none' }
+const pre = { background: 'var(--t-bgSubtle)', borderRadius: 8, padding: 10, fontSize: 11, color: 'var(--t-textSub)', overflowX: 'auto', marginTop: 6 }

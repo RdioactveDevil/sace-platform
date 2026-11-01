@@ -166,12 +166,10 @@ export default function ResourcesTab({ profile, theme }) {
     return <><Users size={12} aria-hidden="true" style={iconStyle} /> Entire roster</>
   }
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
-  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
-  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
-  const labelStyle = { fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
+  const divider = 'var(--t-border)'
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -179,21 +177,21 @@ export default function ResourcesTab({ profile, theme }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.bgHover : 'var(--t-accent)', color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
-          {showForm ? '✕ Cancel' : '+ Add resource'}
+          {showForm ? 'Close' : 'Add resource'}
         </button>
       </div>
 
       {status && (
-        <div style={{ padding: '12px 16px', borderRadius: 10, border: `1px solid ${status.ok ? '#4ade8040' : '#f8717140'}`, background: status.ok ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)', fontSize: 13, color: status.ok ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+        <div style={{ padding: '12px 16px', borderRadius: 10, border: `1px solid ${status.ok ? '#4ade8040' : '#f8717140'}`, background: status.ok ? 'var(--t-successBg)' : 'var(--t-dangerBg)', fontSize: 13, color: status.ok ? 'var(--t-success)' : 'var(--t-danger)', fontWeight: 600 }}>
           {status.msg}
         </div>
       )}
 
       {showForm && (
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ fontSize: 13, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text, marginBottom: 16 }}>Add Resource</div>
+          <div style={{ fontSize: 13, fontFamily: "'Sifonn Pro', sans-serif", color: t.text, marginBottom: 16 }}>Add a resource</div>
           <form onSubmit={handleSubmit}>
             {/* Source toggle */}
             <div style={{ marginBottom: 14 }}>
@@ -206,7 +204,7 @@ export default function ResourcesTab({ profile, theme }) {
                   const active = form.source === opt.id
                   return (
                     <button key={opt.id} type="button" onClick={() => setForm(f => ({ ...f, source: opt.id }))}
-                      style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: active ? 'var(--t-text)' : t.textMuted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                       <opt.icon size={15} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 6 }} />{opt.label}
                     </button>
                   )
@@ -264,7 +262,7 @@ export default function ResourcesTab({ profile, theme }) {
                   return (
                     <button key={opt.id} type="button" disabled={disabled}
                       onClick={() => !disabled && setForm(f => ({ ...f, target_mode: opt.id, class_id: '', student_id: '' }))}
-                      style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: disabled ? t.textFaint : active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONT_B, opacity: disabled ? 0.5 : 1 }}>
+                      style={{ padding: '6px 13px', borderRadius: 12, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: disabled ? t.textFaint : active ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONT_B, opacity: disabled ? 0.5 : 1 }}>
                       {opt.label}
                     </button>
                   )
@@ -287,28 +285,28 @@ export default function ResourcesTab({ profile, theme }) {
             {/* Options */}
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 16 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.visible_to_students} onChange={e => setForm(f => ({ ...f, visible_to_students: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                <input type="checkbox" checked={form.visible_to_students} onChange={e => setForm(f => ({ ...f, visible_to_students: e.target.checked }))} style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }} />
                 Visible to students
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.notify} onChange={e => setForm(f => ({ ...f, notify: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                <input type="checkbox" checked={form.notify} onChange={e => setForm(f => ({ ...f, notify: e.target.checked }))} style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }} />
                 Email students when shared
               </label>
             </div>
 
-            {formError && <div style={{ marginBottom: 12, fontSize: 12, color: '#f87171' }}>{formError}</div>}
+            {formError && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--t-danger)' }}>{formError}</div>}
 
             {saving && form.source === 'file' && uploadProgress !== null && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ height: 8, borderRadius: 5, background: t.border, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${uploadProgress}%`, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, borderRadius: 5, transition: 'width 0.2s' }} />
+                  <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--t-accent)', borderRadius: 5, transition: 'width 0.2s' }} />
                 </div>
                 <div style={{ fontSize: 11, color: t.textMuted, marginTop: 5 }}>Uploading… {uploadProgress}%</div>
               </div>
             )}
 
-            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
-              {saving ? (form.source === 'file' ? (uploadProgress !== null && uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Finishing…') : 'Saving…') : 'Share Resource'}
+            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+              {saving ? (form.source === 'file' ? (uploadProgress !== null && uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Finishing…') : 'Saving…') : 'Share resource'}
             </button>
           </form>
         </div>
@@ -316,7 +314,7 @@ export default function ResourcesTab({ profile, theme }) {
 
       <div style={card}>
         <div style={{ padding: '14px 20px', borderBottom: `1px solid ${divider}` }}>
-          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>Shared Resources</div>
+          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>Your resources</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{resources.length} resource{resources.length !== 1 ? 's' : ''}</div>
         </div>
         {loading ? (
@@ -333,9 +331,9 @@ export default function ResourcesTab({ profile, theme }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
                       <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{r.title}</span>
-                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.12)', color: GOLD, fontWeight: 700, textTransform: 'uppercase' }}>{meta.label}</span>
+                      <span style={{ fontSize: 11.5, padding: '2px 7px', borderRadius: 12, border: `1px solid var(--t-border)`, background: 'var(--t-bgSubtle)', color: 'var(--t-goldText)', fontWeight: 700 }}>{meta.label}</span>
                       {!r.visible_to_students && (
-                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: `1px solid ${t.border}`, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase' }}>Hidden</span>
+                        <span style={{ fontSize: 11.5, padding: '2px 7px', borderRadius: 12, border: `1px solid ${t.border}`, color: t.textMuted, fontWeight: 700 }}>Hidden</span>
                       )}
                     </div>
                     {r.description && <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>{r.description}</div>}
@@ -347,11 +345,11 @@ export default function ResourcesTab({ profile, theme }) {
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                     <button onClick={() => handleOpen(r.id)} disabled={busyId === r.id}
-                      style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${GOLD}55`, background: 'rgba(241,190,67,0.1)', color: GOLD, fontSize: 12, fontWeight: 700, cursor: busyId === r.id ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                      style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid var(--t-border)`, background: 'var(--t-bgSubtle)', color: 'var(--t-goldText)', fontSize: 12, fontWeight: 700, cursor: busyId === r.id ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
                       {busyId === r.id ? '…' : r.kind === 'link' ? 'Open' : 'Download'}
                     </button>
                     <button onClick={() => handleDelete(r.id)} disabled={deletingId === r.id}
-                      style={{ padding: '6px 11px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: deletingId === r.id ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                      style={{ padding: '6px 11px', borderRadius: 7, border: '1px solid var(--t-danger)', background: 'transparent', color: 'var(--t-danger)', fontSize: 12, cursor: deletingId === r.id ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
                       {deletingId === r.id ? '…' : 'Delete'}
                     </button>
                   </div>

@@ -1,25 +1,12 @@
-﻿import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { completeOnboarding, saveParentDetails } from '../lib/db'
 import { needsParentConsent } from '../lib/parentConsent'
-import { Trophy, Star, Target, TrendingUp, ThumbsUp, User, CircleCheck } from 'lucide-react'
-
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
-const NAVY   = '#0c1037'
-const NAVYD  = '#080d28'
-const FONT_D = "'Sifonn Pro', sans-serif"
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
+import { THEMES } from '../lib/theme'
+import { AuthLayout, Field, Note, authBtn, linkStyle, choiceChip } from './AuthLayout'
 
 const YEAR_LEVELS = [6, 7, 8, 9, 10, 11, 12]
 
-const ATAR_TARGETS = [
-  { value: 99.5, label: '99.5+', icon: Trophy, sub: 'Top 0.5%' },
-  { value: 95,   label: '95+',   icon: Star,   sub: 'Top 5%' },
-  { value: 90,   label: '90+',   icon: Target, sub: 'Top 10%' },
-  { value: 80,   label: '80+',   icon: TrendingUp, sub: 'Above average' },
-  { value: 70,   label: '70+',   icon: ThumbsUp, sub: 'Comfortable pass' },
-]
+const ATAR_TARGETS = [70, 80, 90, 95, 99.5]
 
 const STUDY_HOURS = [1, 2, 3, 5, 7, 10]
 
@@ -28,35 +15,27 @@ const SHOWS_ATAR = (year) => !year || year >= 11
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-const inp = {
-  padding: '12px 14px', borderRadius: 10,
-  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-  color: '#f1f5f9', fontSize: 15, outline: 'none',
-  fontFamily: FONT_B, boxSizing: 'border-box', width: '100%',
-}
-
 /**
+ * Setting up a new account, one question per screen: year level, date of
+ * birth, a parent's email if they're under 15, school, and what they're
+ * aiming for (with the terms). Name and email come from sign-up.
+ *
  * `suggestedYearLevel`: from the subjects their tutor included, pre-selected until they pick one.
  * `asParent`: they signed up as a parent setting the account up for their child
  * (`parentName` is theirs); they can still switch on the first step.
  */
-export default function OnboardingScreen({ profile, userEmail, onDone, suggestedYearLevel = null, asParent = false, parentName: initialParentName = '' }) {
-  const [step, setStep]       = useState(0)
+export default function OnboardingScreen({ profile, userEmail, onDone, suggestedYearLevel = null, asParent = false, parentName: initialParentName = '', theme = 'dark', onToggleTheme }) {
+  const t = THEMES[theme]
   const [saving, setSaving]   = useState(false)
   const [saveError, setSaveError] = useState('')
-  const [mounted, setMounted] = useState(false)
-  const navigate = useNavigate()
-
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 40); return () => clearTimeout(t) }, [])
 
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [dob, setDob]                 = useState('')
   const [school, setSchool]           = useState(profile.school || '')
-  const [yearLevel, setYearLevel]     = useState(() => (YEAR_LEVELS.includes(suggestedYearLevel) ? suggestedYearLevel : null))
-  // The tutor's subjects can arrive just after this mounts (the invite is accepted in the background).
-  useEffect(() => {
-    if (YEAR_LEVELS.includes(suggestedYearLevel)) setYearLevel(y => y ?? suggestedYearLevel)
-  }, [suggestedYearLevel])
+  // Until they choose, the year their tutor's subjects suggest (those can
+  // arrive just after this mounts, as the invite is accepted in the background).
+  const [chosenYear, setYearLevel]    = useState(null)
+  const yearLevel = chosenYear ?? (YEAR_LEVELS.includes(suggestedYearLevel) ? suggestedYearLevel : null)
   const [atarTarget, setAtarTarget]   = useState(null)
   const [goals, setGoals]             = useState('')
   const [studyHours, setStudyHours]   = useState(null)
@@ -74,14 +53,22 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const parentEmailError = !askParentEmail || !parentEmailClean ? ''
     : !EMAIL_RE.test(parentEmailClean) ? 'Enter a valid email address.'
     : parentEmailClean === (userEmail || '').trim().toLowerCase()
-      ? "That's the email you sign in with. Use your parent or guardian's email (or go back and choose \u201cI'm a parent\u201d)."
+      ? "That's the email you sign in with. Use your parent or guardian's email."
       : ''
-  const child = displayName.trim().split(' ')[0] || 'your child' 
-  // Subjects are chosen (and paid for) on the subject picker after onboarding.
-  const TOTAL_CONTENT_STEPS = 3
+  const firstName = displayName.trim().split(' ')[0]
+  const child = firstName || 'your child'
 
-  const next = () => setStep(s => s + 1)
-  const back = () => setStep(s => s - 1)
+  // Sign-up asks for names, so the name screen only shows when one is missing.
+  const [askNames] = useState(() => !(profile.display_name || '').trim() || !(initialParentName || '').trim())
+  const screens = [
+    askNames && (!(profile.display_name || '').trim() || isParent) && 'name',
+    'year', 'dob', askParentEmail && 'parent', 'school', 'goal',
+  ].filter(Boolean)
+  // Subjects are chosen (and paid for) on the subject picker after onboarding.
+  const [screen, setScreen] = useState(screens[0])
+  const at = Math.max(0, screens.indexOf(screen))
+  const next = () => setScreen(screens[Math.min(at + 1, screens.length - 1)])
+  const back = () => setScreen(screens[Math.max(at - 1, 0)])
 
   const finish = async () => {
     setSaving(true)
@@ -120,366 +107,168 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
     }
   }
 
-  const progressBar = () => {
-    if (step === 0) return null
-    return (
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          {['Details', 'Goals', 'Confirm'].map((label, i) => (
-            <span key={label} style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: step - 1 >= i ? GOLD : 'rgba(255,255,255,0.2)',
-              transition: 'color 0.4s',
-            }}>{label}</span>
+  const today = new Date().toISOString().split('T')[0]
+  const dobValid = !!dob && dob <= today && dob >= '1920-01-01'
+  const valid = {
+    name: !!displayName.trim() && (!isParent || !!parentName.trim()),
+    year: !!yearLevel,
+    dob: dobValid,
+    parent: !!parentEmailClean && !parentEmailError,
+    school: true,
+    goal: termsAccepted && !saving,
+  }[screen]
+  const isLast = at === screens.length - 1
+  const advance = () => { if (!valid) return; if (isLast) finish(); else next() }
+
+  const you = (student, parent) => (isParent ? parent : student)
+  const H = ({ children }) => <h1 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 30px)', fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.2, color: t.text, textWrap: 'balance' }}>{children}</h1>
+  const Sub = ({ children }) => <p style={{ margin: 0, fontSize: 14.5, color: t.textMuted, lineHeight: 1.6, maxWidth: '46ch' }}>{children}</p>
+  const bigInput = { fontSize: 17, padding: '13px 15px', borderRadius: 11, maxWidth: 380 }
+
+  const switchHolder = (
+    <p style={{ margin: 0, fontSize: 13, color: t.textMuted }}>
+      {isParent ? 'Are you the student? ' : 'Setting this up for your child? '}
+      <button type="button" className="af-link" onClick={() => setHolder(isParent ? 'student' : 'parent')} style={linkStyle(t)}>
+        {isParent ? 'Switch to a student account' : 'Switch to a parent account'}
+      </button>
+    </p>
+  )
+
+  const body = {
+    name: (
+      <>
+        <H>{you("What's your name?", "What's your child's name?")}</H>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 380 }}>
+          <Field id="onb-name" label={you('Your name', "Your child's name")} theme={theme}>
+            <input id="onb-name" className="af-inp" style={bigInput} value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete={isParent ? 'off' : 'name'} autoFocus />
+          </Field>
+          {isParent && (
+            <Field id="onb-pname" label="Your name" theme={theme}>
+              <input id="onb-pname" className="af-inp" style={bigInput} value={parentName} onChange={e => setParentName(e.target.value)} autoComplete="name" />
+            </Field>
+          )}
+        </div>
+        {switchHolder}
+      </>
+    ),
+    year: (
+      <>
+        <H>{you(`What year are you in${firstName ? `, ${firstName}` : ''}?`, `What year is ${child} in?`)}</H>
+        <Sub>{you("We'll start you on questions for that year.", "We'll start them on questions for that year.")}</Sub>
+        <div role="radiogroup" aria-label="Year level" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {YEAR_LEVELS.map(y => (
+            <button key={y} type="button" role="radio" aria-checked={yearLevel === y} className="af-chip"
+              onClick={() => { setYearLevel(y); setTimeout(next, 160) }}
+              aria-label={`Year ${y}`} style={{ ...choiceChip(t, yearLevel === y, 'lg'), minWidth: 58 }}>
+              {y}
+            </button>
           ))}
         </div>
-        <div style={{ height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 99 }}>
-          <div style={{
-            height: '100%', borderRadius: 99,
-            background: `linear-gradient(90deg,${GOLD},${GOLDL})`,
-            width: `${((step - 1) / TOTAL_CONTENT_STEPS) * 100}%`,
-            transition: 'width 0.5s cubic-bezier(0.34,1.56,0.64,1)',
-            boxShadow: `0 0 8px ${GOLD}80`,
-          }} />
+        {!screens.includes('name') && switchHolder}
+      </>
+    ),
+    dob: (
+      <>
+        <H>{you("When's your birthday?", `When's ${child}'s birthday?`)}</H>
+        {!isParent && <Sub>Under 15? We'll ask a parent or guardian to OK Titan AI. Practice questions work straight away.</Sub>}
+        <Field id="onb-dob" label="Date of birth" theme={theme}>
+          <input id="onb-dob" className="af-inp" style={bigInput} type="date" value={dob} onChange={e => setDob(e.target.value)} max={today} min="1920-01-01" autoFocus />
+        </Field>
+      </>
+    ),
+    parent: (
+      <>
+        <H>Your parent or guardian's email</H>
+        <Sub>Because you're under 15, we'll email them to OK your account. Practice questions work straight away. Titan AI switches on when they say yes.</Sub>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 380 }}>
+          <Field id="onb-pemail" label="Their email" error={parentEmailError} theme={theme}>
+            <input id="onb-pemail" className="af-inp" style={bigInput} type="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={parentEmail} onChange={e => setParentEmail(e.target.value)}
+              aria-invalid={!!parentEmailError || undefined} aria-describedby={parentEmailError ? 'onb-pemail-err' : undefined} autoFocus />
+          </Field>
+          <Field id="onb-pname2" label="Their name" optional theme={theme}>
+            <input id="onb-pname2" className="af-inp" style={bigInput} value={parentName} onChange={e => setParentName(e.target.value)} />
+          </Field>
         </div>
-      </div>
-    )
-  }
-
-  const navButtons = ({ onNext, nextLabel = 'Continue →', nextDisabled = false, hideBack = false }) => (
-    <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-      {!hideBack && (
-        <button type="button" onClick={back} style={{
-          flex: 1, padding: '12px', borderRadius: 10,
-          border: '1px solid rgba(255,255,255,0.1)', background: 'transparent',
-          color: '#475569', fontSize: 14, cursor: 'pointer', fontFamily: FONT_B,
-        }}>← Back</button>
-      )}
-      <button type="button"
-        onClick={onNext}
-        disabled={nextDisabled}
-        style={{
-          flex: 2, padding: '13px', borderRadius: 10, border: 'none',
-          background: nextDisabled ? 'rgba(255,255,255,0.05)' : `linear-gradient(135deg,${GOLD},${GOLDL})`,
-          color: nextDisabled ? '#475569' : NAVYD,
-          fontSize: 14, fontWeight: 800,
-          cursor: nextDisabled ? 'default' : 'pointer',
-          fontFamily: FONT_B,
-          boxShadow: nextDisabled ? 'none' : `0 4px 20px ${GOLD}40`,
-          transition: 'all 0.2s',
-        }}
-      >{nextLabel}</button>
-    </div>
-  )
-
-  const stepWelcome = () => (
-    <div style={{ textAlign: 'center', animation: 'slideIn 0.55s cubic-bezier(0.34,1.2,0.64,1) both' }}>
-      <h2 style={{ fontFamily: FONT_D, fontSize: 24, color: '#f1f5f9', margin: '0 0 10px', letterSpacing: 1, lineHeight: 1.3 }}>
-        WELCOME TO<br /><span style={{ color: GOLD }}>GRADEFARM.</span>
-      </h2>
-      <p style={{ fontSize: 15, color: '#94a3b8', lineHeight: 1.75, margin: '0 0 6px' }}>
-        {isParent
-          ? "Let's set up your child's account so their practice starts at the right level."
-          : "Let's set up your account so we can personalise your experience and give you access to the right subjects."}
-      </p>
-      <div role="radiogroup" aria-label="Who is setting up this account?" style={{ display: 'flex', gap: 8, margin: '18px 0 6px' }}>
-        {[['student', "I'm the student"], ['parent', "I'm a parent setting this up"]].map(([v, label]) => (
-          <button key={v} type="button" role="radio" aria-checked={holder === v} onClick={() => setHolder(v)} style={{
-            flex: 1, padding: '10px 8px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
-            border: `1px solid ${holder === v ? GOLD : 'rgba(255,255,255,0.1)'}`,
-            background: holder === v ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.02)',
-            color: holder === v ? GOLD : '#94a3b8', transition: 'all 0.2s',
-          }}>{label}</button>
-        ))}
-      </div>
-      <p style={{ fontSize: 12, color: '#475569', marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        <span style={{ display: 'inline-block', width: 20, height: 1, background: 'rgba(255,255,255,0.12)' }} />
-        Takes about 2 minutes
-        <span style={{ display: 'inline-block', width: 20, height: 1, background: 'rgba(255,255,255,0.12)' }} />
-      </p>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
-        {[
-          { num: '1,000+', label: 'Questions' },
-          { num: '24/7', label: 'AI tutor' },
-          { num: '1 free', label: 'Subject to start' },
-        ].map((s, i) => (
-          <div key={s.label} style={{
-            flex: 1, padding: '12px 8px', borderRadius: 12,
-            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-            animation: `slideIn 0.5s ${0.1 + i * 0.07}s cubic-bezier(0.34,1.2,0.64,1) both`,
-          }}>
-            <div style={{ fontFamily: FONT_D, fontSize: 15, color: GOLD, letterSpacing: 0.5 }}>{s.num}</div>
-            <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <button type="button" onClick={next} style={{
-        width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-        background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
-        color: NAVYD, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B,
-        position: 'relative', overflow: 'hidden',
-        animation: 'pulseBtn 2.5s ease-in-out infinite',
-      }}>
-        <span style={{ position: 'relative', zIndex: 1 }}>Let's go →</span>
-        <div style={{
-          position: 'absolute', top: 0, left: '-100%', width: '60%', height: '100%',
-          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)',
-          animation: 'shimmer 2.8s ease-in-out 0.8s infinite',
-        }} />
-      </button>
-    </div>
-  )
-
-  const stepDetails = () => (
-    <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><User size={26} color={NAVY} aria-hidden="true" /></div>
-      </div>
-      <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>{isParent ? "YOUR CHILD'S DETAILS" : 'YOUR DETAILS'}</h2>
-      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>{isParent ? 'So their questions start at the right level.' : 'Tell us a bit about yourself.'}</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {isParent && (
-          <div>
-            <label style={labelStyle}>Your Name <span style={{ color: '#f87171' }}>*</span></label>
-            <input style={{ ...inp, borderColor: !parentName.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={parentName} onChange={e => setParentName(e.target.value)} placeholder="Your name (parent or guardian)" autoComplete="name" />
-          </div>
-        )}
-        <div>
-          <label style={labelStyle}>{isParent ? "Child's Name" : 'Full Name'} <span style={{ color: '#f87171' }}>*</span></label>
-          <input style={{ ...inp, borderColor: !displayName.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder={isParent ? "Your child's name" : 'Your full name'} />
-        </div>
-        <div>
-          <label style={labelStyle}>{isParent ? 'Your Email (you sign in with this)' : 'Email'}</label>
-          <input
-            style={{ ...inp, opacity: 0.6, cursor: 'not-allowed' }}
-            value={userEmail || ''}
-            readOnly
-            tabIndex={-1}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>{isParent ? "Child's Date of Birth" : 'Date of Birth'} <span style={{ color: '#f87171' }}>*</span></label>
-          <input style={{ ...inp, colorScheme: 'dark', borderColor: !dob ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} type="date" value={dob} onChange={e => setDob(e.target.value)} max={new Date().toISOString().split('T')[0]} />
-        </div>
-        <div>
-          <label style={labelStyle}>{isParent ? "Child's School" : 'School'} <span style={{ color: '#f87171' }}>*</span></label>
-          <input style={{ ...inp, borderColor: !school.trim() ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} value={school} onChange={e => setSchool(e.target.value)} placeholder={isParent ? 'Their school' : 'Your school name'} />
-        </div>
-        <div>
-          <label style={labelStyle}>Year Level <span style={{ color: '#f87171' }}>*</span></label>
-          <select
-            value={yearLevel ?? ''}
-            onChange={e => setYearLevel(e.target.value ? Number(e.target.value) : null)}
-            style={{
-              ...inp,
-              cursor: 'pointer', appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center',
-              borderColor: yearLevel ? GOLD : 'rgba(255,255,255,0.1)',
-              boxShadow: yearLevel ? `0 0 0 3px rgba(241,190,67,0.12)` : 'none',
-            }}
-          >
-            <option value="" disabled style={{ background: '#0c1037' }}>Select year level</option>
-            {YEAR_LEVELS.map(y => (
-              <option key={y} value={y} style={{ background: '#0c1037' }}>Year {y}</option>
-            ))}
-          </select>
-        </div>
-        {askParentEmail && (
-          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(241,190,67,0.25)', background: 'rgba(241,190,67,0.05)' }}>
-            <div style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.55, marginBottom: 10 }}>
-              Because you're under 15, we'll email your parent or guardian to OK your account. Practice questions work straight away; Titan AI switches on when they say yes.
+      </>
+    ),
+    school: (
+      <>
+        <H>{you('Which school do you go to?', `Which school does ${child} go to?`)}</H>
+        <Sub>Optional.</Sub>
+        <Field id="onb-school" label="School" theme={theme}>
+          <input id="onb-school" className="af-inp" style={bigInput} value={school} onChange={e => setSchool(e.target.value)} autoComplete="organization" autoFocus />
+        </Field>
+      </>
+    ),
+    goal: (
+      <>
+        <H>{you('What are you aiming for?', `What is ${child} aiming for?`)}</H>
+        <Sub>Optional. You can change these later in Account.</Sub>
+        {SHOWS_ATAR(yearLevel) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span id="onb-atar" style={{ fontSize: 13, fontWeight: 700, color: t.textSub }}>ATAR target</span>
+            <div role="radiogroup" aria-labelledby="onb-atar" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {ATAR_TARGETS.map(v => (
+                <button key={v} type="button" role="radio" aria-checked={atarTarget === v} className="af-chip" onClick={() => setAtarTarget(atarTarget === v ? null : v)} style={choiceChip(t, atarTarget === v)}>{v}+</button>
+              ))}
             </div>
-            <label style={labelStyle}>Parent or Guardian's Email <span style={{ color: '#f87171' }}>*</span></label>
-            <input style={{ ...inp, borderColor: !parentEmailClean || parentEmailError ? 'rgba(248,113,113,0.4)' : 'rgba(255,255,255,0.1)' }} type="email" inputMode="email" autoCapitalize="none" spellCheck={false}
-              value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="parent@example.com" />
-            {parentEmailError && <div style={{ fontSize: 11.5, color: '#f87171', marginTop: 6, lineHeight: 1.45 }}>{parentEmailError}</div>}
-            <label style={{ ...labelStyle, marginTop: 10 }}>Their Name (optional)</label>
-            <input style={inp} value={parentName} onChange={e => setParentName(e.target.value)} placeholder="e.g. Sam Smith" />
           </div>
         )}
-      </div>
-      {(() => {
-        const missing = []
-        if (isParent && !parentName.trim()) missing.push('Your Name')
-        if (!displayName.trim()) missing.push(isParent ? "Child's Name" : 'Full Name')
-        if (!dob)                missing.push('Date of Birth')
-        if (!school.trim())     missing.push('School')
-        if (!yearLevel)         missing.push('Year Level')
-        if (askParentEmail && (!parentEmailClean || parentEmailError)) missing.push("Parent's Email")
-        return (
-          <>
-            {missing.length > 0 && (
-              <p style={{ fontSize: 11, color: '#475569', marginTop: 16, marginBottom: 0, textAlign: 'center' }}>
-                Required: {missing.join(' · ')}
-              </p>
-            )}
-            {navButtons({ onNext: next, hideBack: true, nextLabel: "Continue \u2192", nextDisabled: missing.length > 0 })}
-          </>
-        )
-      })()}
-    </div>
-  )
-
-  const stepGoals = () => (
-    <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><Target size={26} color={NAVY} aria-hidden="true" /></div>
-      </div>
-      <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>YOUR GOALS</h2>
-      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 22 }}>{isParent ? `This helps us calibrate ${child}'s study plan.` : 'This helps us calibrate your study plan.'}</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {SHOWS_ATAR(yearLevel) && <div>
-          <label style={labelStyle}>ATAR Target</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {ATAR_TARGETS.map(a => (
-              <button type="button" key={a.value} onClick={() => setAtarTarget(atarTarget === a.value ? null : a.value)} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10,
-                border: `1px solid ${atarTarget === a.value ? GOLD : 'rgba(255,255,255,0.08)'}`,
-                background: atarTarget === a.value ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.02)',
-                cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left', transition: 'all 0.2s',
-                boxShadow: atarTarget === a.value ? `0 0 12px ${GOLD}25` : 'none',
-              }}>
-                <span style={{ width: 24, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><a.icon size={20} color={atarTarget === a.value ? GOLD : '#e2e8f0'} aria-hidden="true" /></span>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: atarTarget === a.value ? GOLD : '#e2e8f0' }}>{a.label}</span>
-                  <span style={{ fontSize: 12, color: '#475569', marginLeft: 8 }}>{a.sub}</span>
-                </div>
-                {atarTarget === a.value && <span style={{ color: GOLD, fontSize: 14 }}>✓</span>}
-              </button>
-            ))}
-          </div>
-        </div>}
-        <div>
-          <label style={labelStyle}>Study hours per week (optional)</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span id="onb-hours" style={{ fontSize: 13, fontWeight: 700, color: t.textSub }}>Hours a week {you('you can', 'they can')} study</span>
+          <div role="radiogroup" aria-labelledby="onb-hours" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {STUDY_HOURS.map(h => (
-              <button type="button" key={h} onClick={() => setStudyHours(studyHours === h ? null : h)} style={{
-                padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT_B,
-                border: `1px solid ${studyHours === h ? GOLD : 'rgba(255,255,255,0.1)'}`,
-                background: studyHours === h ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.03)',
-                color: studyHours === h ? GOLD : '#94a3b8', fontSize: 13, fontWeight: 600,
-                transition: 'all 0.2s',
-              }}>{h}h</button>
+              <button key={h} type="button" role="radio" aria-checked={studyHours === h} className="af-chip" onClick={() => setStudyHours(studyHours === h ? null : h)} style={{ ...choiceChip(t, studyHours === h), minWidth: 44 }}>{h}</button>
             ))}
           </div>
         </div>
-        <div>
-          <label style={labelStyle}>Anything else? (optional)</label>
-          <textarea value={goals} onChange={e => setGoals(e.target.value)}
-            placeholder={SHOWS_ATAR(yearLevel)
-              ? 'e.g. I want to improve my understanding of organic chemistry...'
-              : isParent ? 'e.g. Preparing for a selective-entry test next year' : 'e.g. I want to get faster at problem solving'}
-            style={{ ...inp, resize: 'vertical', minHeight: 72, lineHeight: 1.5 }} />
-        </div>
-      </div>
-      {navButtons({ onNext: next })}
-    </div>
-  )
-
-  const stepConfirm = () => (
-    <div style={{ animation: 'slideIn 0.4s cubic-bezier(0.34,1.1,0.64,1) both' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${GOLD}, ${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 8px 24px ${GOLD}45, inset 0 1px 0 rgba(255,255,255,0.3)` }}><CircleCheck size={26} color={NAVY} aria-hidden="true" /></div>
-      </div>
-      <h2 style={{ fontFamily: FONT_D, fontSize: 20, color: '#f1f5f9', margin: '0 0 4px', letterSpacing: 1, textAlign: 'center' }}>ALMOST THERE</h2>
-      <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20 }}>Review your setup and accept terms to get started.</p>
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
-        {[
-          isParent && { label: 'Parent',     value: parentName || '\u2014' },
-          { label: isParent ? 'Student' : 'Name', value: displayName || '\u2014' },
-          { label: 'School',         value: school || '\u2014' },
-          { label: 'Year',           value: yearLevel ? `Year ${yearLevel}` : '\u2014' },
-          SHOWS_ATAR(yearLevel) && { label: 'ATAR Target', value: atarTarget ? `${atarTarget}+` : '\u2014' },
-          { label: 'Study hrs/week', value: studyHours ? `${studyHours}h` : '\u2014' },
-          askParentEmail && { label: 'Parent email', value: parentEmailClean || '\u2014' },
-        ].filter(Boolean).map(row => (
-          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <span style={{ fontSize: 12, color: '#475569' }}>{row.label}</span>
-            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, maxWidth: '55%', textAlign: 'right' }}>{row.value}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px', borderRadius: 10, border: `1px solid ${termsAccepted ? GOLD : 'rgba(255,255,255,0.1)'}`, background: termsAccepted ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.02)', width: '100%', fontFamily: FONT_B, marginBottom: 6, boxSizing: 'border-box', transition: 'border-color 0.2s, background 0.2s' }}>
-        <button type="button" onClick={() => setTermsAccepted(v => !v)} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${termsAccepted ? GOLD : 'rgba(255,255,255,0.2)'}`, background: termsAccepted ? GOLD : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, transition: 'all 0.2s', cursor: 'pointer', padding: 0 }}>
-          {termsAccepted && <span style={{ fontSize: 11, color: NAVYD, fontWeight: 800 }}>✓</span>}
-        </button>
-        <span style={{ fontSize: 13, color: termsAccepted ? '#e2e8f0' : '#64748b', textAlign: 'left', lineHeight: 1.5 }}>
-          I agree to the{' '}
-          <button type="button" onClick={() => window.open('/terms', '_blank')} style={{ background: 'none', border: 'none', padding: 0, color: GOLD, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B, fontSize: 'inherit' }}>Terms of Service</button>
-          {' '}and{' '}
-          <button type="button" onClick={() => window.open('/privacy', '_blank')} style={{ background: 'none', border: 'none', padding: 0, color: GOLD, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B, fontSize: 'inherit' }}>Privacy Policy</button>
-          {isParent
-            ? ` on behalf of ${child}, and confirm I'm their parent or guardian. I'll get a weekly progress email about them.`
-            : askParentEmail
-              ? ". We'll also email my parent or guardian to ask for their OK."
-              : '. I confirm I am 18 or older, or my parent or guardian has agreed to them too.'}
-        </span>
-      </div>
-      {saveError && (
-        <div role="alert" style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: 8, fontSize: 13, color: '#f87171' }}>{saveError}</div>
-      )}
-      {navButtons({ onNext: finish, nextLabel: saving ? 'Setting up…' : "Let's start!", nextDisabled: !termsAccepted || saving })}
-    </div>
-  )
-
-
-
-  return (
-    <div style={{
-      minHeight: '100vh', background: NAVYD,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20, fontFamily: FONT_B,
-      position: 'relative', overflow: 'hidden',
-    }}>
-      <style>{`
-        @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
-        @keyframes slideIn  { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes shimmer  { 0%{left:-100%} 60%{left:160%} 100%{left:160%} }
-        @keyframes pulseBtn { 0%,100%{box-shadow:0 8px 32px rgba(241,190,67,0.5)} 50%{box-shadow:0 8px 52px rgba(241,190,67,0.8)} }
-        @keyframes float1   { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(30px,-40px) scale(1.08)} }
-        @keyframes float2   { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(-20px,30px) scale(0.95)} }
-        @keyframes float3   { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(15px,20px)  scale(1.05)} }
-        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
-        input:focus, textarea:focus { border-color: #f1be43 !important; box-shadow: 0 0 0 3px rgba(241,190,67,0.12) !important; }
-      `}</style>
-
-      {/* Animated background orbs */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: '-15%', left: '-10%', width: 480, height: 480, borderRadius: '50%', background: 'radial-gradient(circle, rgba(241,190,67,0.1) 0%, transparent 70%)', animation: 'float1 14s ease-in-out infinite' }} />
-        <div style={{ position: 'absolute', bottom: '-10%', right: '-5%', width: 360, height: 360, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.09) 0%, transparent 70%)', animation: 'float2 18s ease-in-out infinite' }} />
-        <div style={{ position: 'absolute', top: '40%', right: '10%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(241,190,67,0.07) 0%, transparent 70%)', animation: 'float3 10s ease-in-out infinite' }} />
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.016) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
-      </div>
-
-      {/* Card */}
-      <div style={{
-        width: '100%', maxWidth: 440, position: 'relative',
-        background: 'rgba(8,13,40,0.96)', borderRadius: 24,
-        border: '1px solid rgba(241,190,67,0.2)',
-        padding: '36px 32px',
-        boxShadow: '0 40px 100px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04)',
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0) scale(1)' : 'translateY(36px) scale(0.97)',
-        transition: 'opacity 0.6s ease, transform 0.6s cubic-bezier(0.34,1.2,0.64,1)',
-        backdropFilter: 'blur(24px)',
-      }}>
-        {/* Top glow edge */}
-        <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: 1, background: 'linear-gradient(90deg, transparent, rgba(241,190,67,0.7), transparent)', borderRadius: 99 }} />
-
-        {step > 0 && <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <span style={{ fontFamily: FONT_D, fontSize: 22, letterSpacing: 1 }}>
-            <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+        <Field id="onb-goals" label="Anything else?" optional theme={theme}>
+          <textarea id="onb-goals" className="af-inp" rows={2} value={goals} onChange={e => setGoals(e.target.value)} style={{ resize: 'vertical', maxWidth: 480, lineHeight: 1.5 }}
+            placeholder={SHOWS_ATAR(yearLevel) ? 'e.g. Get faster at organic chemistry' : isParent ? 'e.g. Preparing for a selective-entry test' : 'e.g. Get faster at problem solving'} />
+        </Field>
+        <label htmlFor="onb-terms" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13.5, color: t.textSub, lineHeight: 1.55, maxWidth: 520, cursor: 'pointer' }}>
+          <input id="onb-terms" type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} style={{ width: 17, height: 17, marginTop: 2, accentColor: t.text, flexShrink: 0, cursor: 'pointer' }} />
+          <span>
+            I agree to the <a href="/terms" target="_blank" rel="noreferrer" className="af-link" style={linkStyle(t)}>terms</a> and <a href="/privacy" target="_blank" rel="noreferrer" className="af-link" style={linkStyle(t)}>privacy policy</a>
+            {isParent
+              ? ` on behalf of ${child}, and I'm their parent or guardian. I'll get a weekly email about their progress.`
+              : askParentEmail
+                ? ". We'll also email my parent or guardian to ask for their OK."
+                : ". I'm 18 or older, or my parent or guardian agrees to them too."}
           </span>
-          <div style={{ fontSize: 10, color: '#475569', letterSpacing: '0.08em', marginTop: 3, fontFamily: FONT_B }}>by Titanium Tutoring</div>
-        </div>}
-        {progressBar()}
-        {[stepWelcome, stepDetails, stepGoals, stepConfirm][step]()}
-      </div>
-    </div>
+        </label>
+        {saveError && <Note tone="danger" theme={theme}>{saveError}</Note>}
+      </>
+    ),
+  }[screen]
+
+  const optionalScreen = screen === 'school'
+  return (
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top"
+      center={(
+        <div role="progressbar" aria-label="Setting up your account" aria-valuemin={1} aria-valuemax={screens.length} aria-valuenow={at + 1} style={{ display: 'flex', gap: 5 }}>
+          {screens.map((s, i) => <span key={s} style={{ width: 22, height: 3, borderRadius: 3, background: i <= at ? t.text : t.border }} />)}
+        </div>
+      )}>
+      <form key={screen} className="af-in" noValidate onSubmit={e => { e.preventDefault(); advance() }}
+        style={{ width: '100%', maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 18, padding: 'clamp(16px, 12vh, 120px) 0 0' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: t.textFaint }}>Question {at + 1} of {screens.length}</span>
+        {body}
+        {screen !== 'year' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+            <button type="submit" className="af-btn" disabled={!valid} style={authBtn(t, 'primary', { disabled: !valid })}>
+              {isLast ? (saving ? 'Setting up…' : 'Start') : 'Next'}
+            </button>
+            {optionalScreen && !school.trim() && <button type="button" className="af-btn" onClick={next} style={authBtn(t, 'secondary')}>Skip</button>}
+            {at > 0 && <button type="button" className="af-link" onClick={back} style={{ ...linkStyle(t), fontSize: 13.5, fontWeight: 600, textDecorationColor: t.border, color: t.textMuted, marginLeft: 6 }}>Back</button>}
+            {!isLast && <span style={{ fontSize: 12.5, color: t.textFaint, marginLeft: 4 }} className="onb-kbd">or press Enter</span>}
+          </div>
+        )}
+        {screen === 'year' && at > 0 && (
+          <div><button type="button" className="af-link" onClick={back} style={{ ...linkStyle(t), fontSize: 13.5, fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back</button></div>
+        )}
+      </form>
+      <style>{'@media (max-width: 600px) { .onb-kbd { display: none } }'}</style>
+    </AuthLayout>
   )
 }
-
-const labelStyle = { display: 'block', fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 6, letterSpacing: '0.03em' }

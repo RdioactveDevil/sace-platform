@@ -7,7 +7,6 @@ import { getTutorBilling, chooseTutorPlan, openTutorBillingPortal, removeTutorPl
 // TutorPlanGate shows the plan picker instead of the portal until then;
 // TutorPlanTab is the portal's "Plan & billing" tab.
 
-const PURPLE = '#a78bfa'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const studentsText = (n) => (n == null ? 'Unlimited students' : `Up to ${n} students`)
@@ -25,9 +24,7 @@ const shortDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { da
 
 function useCard(theme) {
   const t = THEMES[theme]
-  return theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20 }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
+  return { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
 }
 
 /** Back from Stripe Checkout (?plan_checkout=success&session_id=…): record the plan, then tidy the URL. */
@@ -65,11 +62,11 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
 
   return (
     <div>
-      <div role="radiogroup" aria-label="Billing period" style={{ display: 'inline-flex', gap: 4, padding: 4, borderRadius: 12, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, marginBottom: 18 }}>
+      <div role="radiogroup" aria-label="Billing period" style={{ display: 'inline-flex', gap: 4, padding: 4, borderRadius: 12, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bgInput, marginBottom: 18 }}>
         {[['month', 'Monthly'], ['year', discount ? `Annual · save ${discount}%` : 'Annual']].map(([value, label]) => (
           <button key={value} type="button" role="radio" aria-checked={period === value} onClick={() => setPeriod(value)} disabled={!!busy}
             style={{ padding: '8px 16px', borderRadius: 9, border: 'none', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer',
-              background: period === value ? PURPLE : 'transparent', color: period === value ? '#0c1037' : t.textMuted }}>
+              background: period === value ? 'var(--t-text)' : 'transparent', color: period === value ? 'var(--t-bg)' : t.textMuted }}>
             {label}
           </button>
         ))}
@@ -79,8 +76,8 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
           const current = billing.plan === plan.name && billing.interval === period && !billing.endsAtPeriodEnd
           const full = plan.students != null && billing.studentsUsed > plan.students
           return (
-            <div key={plan.name} style={{ ...card, padding: 22, display: 'flex', flexDirection: 'column', gap: 8, ...(current ? { borderColor: PURPLE } : {}) }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: PURPLE, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{plan.name}</div>
+            <div key={plan.name} style={{ ...card, padding: 22, display: 'flex', flexDirection: 'column', gap: 8, ...(current ? { borderColor: 'var(--t-text)', boxShadow: '0 0 0 1px var(--t-text)' } : {}) }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{plan.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <span style={{ fontSize: 34, fontWeight: 900, color: t.text }}>${period === 'year' ? plan.annual : plan.monthly}</span>
                 <span style={{ fontSize: 13, color: t.textMuted }}>/ {period} · AUD</span>
@@ -89,7 +86,7 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
               <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {planFeatures(plan).map(([text, included]) => (
                   <li key={text} aria-label={included ? text : `Not included: ${text}`} style={{ fontSize: 13, color: included ? t.textSub : t.textMuted, display: 'flex', gap: 8 }}>
-                    <span aria-hidden="true" style={{ color: included ? PURPLE : t.textMuted, fontWeight: 900 }}>{included ? '✓' : '–'}</span>
+                    <span aria-hidden="true" style={{ color: included ? t.success : t.textMuted, fontWeight: 900 }}>{included ? '✓' : '–'}</span>
                     <span aria-hidden="true" style={{ textDecoration: included ? 'none' : 'line-through' }}>{text}</span>
                   </li>
                 ))}
@@ -98,7 +95,7 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
               <button type="button" onClick={() => choose(plan)} disabled={!!busy || current || billing.enabled === false}
                 style={{ marginTop: 'auto', padding: '11px 14px', borderRadius: 12, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
                   cursor: busy || current || billing.enabled === false ? 'default' : 'pointer',
-                  background: current ? 'transparent' : PURPLE, color: current ? PURPLE : '#0c1037', opacity: busy && busy !== plan.name ? 0.5 : 1 }}>
+                  background: current ? 'transparent' : 'var(--t-accent)', color: current ? t.textMuted : '#0c1037', opacity: busy && busy !== plan.name ? 0.5 : 1 }}>
                 {busy === plan.name ? 'Opening…' : current ? 'Your plan' : billing.enabled === false ? 'Payments coming soon' : billing.plan && !billing.exempt ? `Switch to ${plan.name}` : `Choose ${plan.name}`}
               </button>
             </div>
@@ -129,7 +126,7 @@ export default function TutorPlanGate({ theme, children }) {
     <div style={{ padding: '32px 24px 56px', maxWidth: 980, margin: '0 auto', fontFamily: FONT_B, color: t.text }}>
       {error ? (
         <div style={{ fontSize: 14, color: t.danger }}>
-          {error} <button type="button" onClick={load} style={{ border: 'none', background: 'none', color: PURPLE, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Try again</button>
+          {error} <button type="button" onClick={load} style={{ border: 'none', background: 'none', color: t.text, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B }}>Try again</button>
         </div>
       ) : !billing ? (
         <div style={{ fontSize: 14, color: t.textMuted }}>Loading…</div>
@@ -189,7 +186,7 @@ export function TutorPlanTab({ theme }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: FONT_B }}>
       <div style={{ ...card, padding: 22, display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center' }}>
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: PURPLE, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Your plan</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>Your plan</div>
           <div style={{ fontSize: 20, fontWeight: 900, color: t.text }}>{summary}</div>
           {renewal && <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>{renewal}</div>}
           {billing.status === 'past_due' && <div style={{ fontSize: 13, color: t.danger, marginTop: 6 }}>Your last payment didn't go through. Update your card to keep the portal.</div>}
@@ -198,8 +195,8 @@ export function TutorPlanTab({ theme }) {
           <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 6 }}>Students and pending invites</div>
           <div style={{ fontSize: 20, fontWeight: 900, color: t.text }}>{billing.studentsUsed}{limit != null ? ` of ${limit}` : ''}</div>
           {limit != null && (
-            <div style={{ height: 6, borderRadius: 99, background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : t.border, marginTop: 8, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, (billing.studentsUsed / limit) * 100)}%`, height: '100%', background: billing.studentsUsed >= limit ? t.danger : PURPLE }} />
+            <div style={{ height: 6, borderRadius: 99, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.border, marginTop: 8, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.min(100, (billing.studentsUsed / limit) * 100)}%`, height: '100%', background: billing.studentsUsed >= limit ? t.danger : t.text }} />
             </div>
           )}
         </div>

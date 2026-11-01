@@ -36,14 +36,27 @@ export async function signUp(email, password, displayName, school, applyForTutor
 }
 
 /** Tutor signup entry: tags auth metadata so the post-auth tutorial can tailor copy. */
-export async function signUpAsTutorAccount(email, password, displayName) {
+/**
+ * Create a tutor's account. `application` (profile fields such as
+ * tutor_organization) is stored with the account too, so it can still be
+ * sent after the email is confirmed if sign-up doesn't sign them in.
+ */
+export async function signUpAsTutorAccount(email, password, displayName, application = null) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName, signup_path: 'tutor' } }
+    options: { data: { display_name: displayName, signup_path: 'tutor', ...(application ? { tutor_application: application } : {}) } }
   })
   if (error) throw error
   return data
+}
+
+/** Save a tutor's application details to their profile and send the application. */
+export async function sendTutorApplication(userId, application) {
+  const allowed = ['display_name', 'school', 'tutor_organization', 'tutor_phone', 'tutor_subjects_offered', 'tutor_qualifications', 'tutor_experience_years', 'tutor_bio']
+  const updates = Object.fromEntries(Object.entries(application || {}).filter(([k]) => allowed.includes(k)))
+  if (Object.keys(updates).length) await updateProfile(userId, updates)
+  await applyForTutor()
 }
 
 export async function applyForTutor() {
@@ -588,9 +601,14 @@ export async function flagQuestion(userId, questionId, flagType) {
 }
 
 export async function reportQuestion(questionId) {
+  // The API needs to know who's reporting (it rejects anonymous reports).
+  const session = await getSession()
   const res = await fetch('/api/report-question', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
     body: JSON.stringify({ questionId }),
   })
   if (!res.ok) throw new Error(`Report failed (${res.status})`)
@@ -614,6 +632,18 @@ export async function getUserFlags(userId, questionIds) {
 }
 
 // â”€â”€â”€ ANSWER LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/** Every answer since `days` ago (paged, so heavy users don't lose the latest). */
+export async function getAnswerLogSince(userId, days) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  return fetchAllRows(() =>
+    supabase
+      .from('answer_log')
+      .select('answered_at, correct, question_id')
+      .eq('user_id', userId)
+      .gte('answered_at', since),
+    'answered_at')
+}
+
 export async function getAnswerLogLast30Days(userId) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   // Heavy users can log >1000 answers in 30 days; an unpaginated ascending
@@ -1306,6 +1336,52 @@ export async function createAssignment(tutorId, studentId, { type, subject, topi
 }
 
 /** Fetch all assignments created by a tutor (every tutor's with `allTutors`), with student profile data. */
+/**
+ * Rostered students' answers over the last `days` days, with each question's
+ * subtopic, for the tutor's Today page. Tutors can read their own students'
+ * answers (RLS); admins can read everyone's.
+ */
+export async function fetchRosterActivity(studentIds, days = 14) {
+  const ids = [...new Set(studentIds)].filter(Boolean)
+  if (!ids.length) return []
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  const rows = []
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100)
+    rows.push(...await fetchAllRows(() =>
+      supabase.from('answer_log').select('user_id, answered_at, correct, question_id').in('user_id', chunk).gte('answered_at', since),
+      'answered_at'))
+  }
+  const qIds = [...new Set(rows.map(r => r.question_id).filter(Boolean))]
+  const topics = {}
+  for (let i = 0; i < qIds.length; i += 200) {
+    const { data } = await supabase.from('questions').select('id, topic, subtopic').in('id', qIds.slice(i, i + 200))
+    ;(data || []).forEach(q => { topics[q.id] = q.subtopic || q.topic || null })
+  }
+  return rows.map(r => ({ ...r, subtopic: topics[r.question_id] || null }))
+}
+
+/**
+ * Every answer on the platform between two times (admins can read them all):
+ * [{ user_id, correct, question_id, answered_at }], each with its question's
+ * subject when withSubject is set.
+ */
+export async function adminAnswersBetween(sinceIso, untilIso = null, { withSubject = false } = {}) {
+  const rows = await fetchAllRows(() => {
+    let q = supabase.from('answer_log').select('user_id, correct, question_id, answered_at').gte('answered_at', sinceIso)
+    if (untilIso) q = q.lt('answered_at', untilIso)
+    return q
+  }, 'answered_at')
+  if (!withSubject) return rows
+  const ids = [...new Set(rows.map(r => r.question_id).filter(Boolean))]
+  const subjects = {}
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabase.from('questions').select('id, subject').in('id', ids.slice(i, i + 200))
+    ;(data || []).forEach(q => { subjects[q.id] = q.subject })
+  }
+  return rows.map(r => ({ ...r, subject: subjects[r.question_id] || null }))
+}
+
 export async function fetchAssignmentsForTutor(tutorId, { allTutors = false } = {}) {
   let query = supabase
     .from('assignments')

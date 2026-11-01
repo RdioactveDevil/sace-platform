@@ -71,7 +71,7 @@ export default function MessagesView({ theme, active = true, initialOtherId = nu
   }, [threads, search])
 
   const openThread = threads?.find(th => th.other_id === openId) || null
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: t.shadowCard }
 
   if (threadsError && !threads) {
     return <div style={{ ...card, padding: 18, color: t.danger, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center' }}><CircleAlert size={16} aria-hidden="true" />{threadsError}</div>
@@ -101,8 +101,8 @@ export default function MessagesView({ theme, active = true, initialOtherId = nu
           return (
             <button key={th.other_id} type="button" onClick={() => setOpenId(th.other_id)}
               style={{ display: 'flex', gap: 11, alignItems: 'center', width: '100%', textAlign: 'left', padding: '12px 14px', border: 'none', borderBottom: `1px solid ${t.border}`, cursor: 'pointer', fontFamily: FONT_B,
-                background: selected ? (isDark ? 'rgba(241,190,67,0.10)' : '#fff8e6') : 'transparent' }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: '#0c1037', background: `linear-gradient(135deg,${GOLD},#f9d87a)` }}>
+                background: selected ? (isDark ? 'var(--t-bgSubtle)' : '#fff8e6') : 'transparent' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: '#0c1037', background: 'var(--t-accent)' }}>
                 {th.other_name[0]?.toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -114,7 +114,7 @@ export default function MessagesView({ theme, active = true, initialOtherId = nu
                   <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: th.unread ? t.text : t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {th.last_message ? `${th.last_message.from_me ? 'You: ' : ''}${th.last_message.body}` : (th.other_role === 'tutor' ? 'Your tutor · say hello' : 'Student · no messages yet')}
                   </span>
-                  {th.unread > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: '#171724', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>{th.unread > 9 ? '9+' : th.unread}</span>}
+                  {th.unread > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: 'var(--t-accent)', color: '#171724', fontSize: 11.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>{th.unread > 9 ? '9+' : th.unread}</span>}
                 </div>
               </div>
             </button>
@@ -221,15 +221,15 @@ function Conversation({ theme, thread, active, onBack, onChanged }) {
           lastDay = day
           return (
             <div key={m.id} style={{ display: 'flex', flexDirection: 'column' }}>
-              {sep && <div style={{ alignSelf: 'center', margin: '10px 0 6px', fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.04em' }}>{day}</div>}
+              {sep && <div style={{ alignSelf: 'center', margin: '10px 0 6px', fontSize: 11, fontWeight: 700, color: t.textMuted }}>{day}</div>}
               <div style={{ alignSelf: m.from_me ? 'flex-end' : 'flex-start', maxWidth: '78%' }}>
                 <div style={{ padding: '9px 13px', borderRadius: 14, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
-                  background: m.from_me ? (isDark ? 'rgba(241,190,67,0.18)' : '#fdf0c8') : (isDark ? 'rgba(255,255,255,0.07)' : '#eef0f6'),
+                  background: m.from_me ? (isDark ? 'var(--t-bgSubtle)' : '#fdf0c8') : (isDark ? 'var(--t-bgSubtle)' : '#eef0f6'),
                   color: t.text,
                   borderBottomRightRadius: m.from_me ? 4 : 14, borderBottomLeftRadius: m.from_me ? 14 : 4 }}>
                   {m.body}
                 </div>
-                <div style={{ fontSize: 10.5, color: t.textMuted, marginTop: 3, textAlign: m.from_me ? 'right' : 'left' }}>
+                <div style={{ fontSize: 11.5, color: t.textMuted, marginTop: 3, textAlign: m.from_me ? 'right' : 'left' }}>
                   {new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                   {m.from_me && m.read_at ? ' · Seen' : ''}
                 </div>
@@ -246,7 +246,7 @@ function Conversation({ theme, thread, active, onBack, onChanged }) {
           placeholder={`Message ${thread.other_name.split(' ')[0]}…`} aria-label="Message"
           style={{ flex: 1, minWidth: 0, resize: 'none', maxHeight: 120, padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13.5, fontFamily: FONT_B, outline: 'none' }} />
         <button type="submit" disabled={!draft.trim() || sending} aria-label="Send"
-          style={{ width: 42, height: 42, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 10, background: GOLD, color: '#171724', cursor: !draft.trim() || sending ? 'default' : 'pointer', opacity: !draft.trim() || sending ? 0.45 : 1 }}>
+          style={{ width: 42, height: 42, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 10, background: 'var(--t-accent)', color: '#171724', cursor: !draft.trim() || sending ? 'default' : 'pointer', opacity: !draft.trim() || sending ? 0.45 : 1 }}>
           <SendHorizontal size={17} aria-hidden="true" />
         </button>
       </form>

@@ -32,13 +32,13 @@ function statusColor(status, t) {
   if (status === 'active')    return { bg: t.successBg, text: t.success }
   if (status === 'completed') return { bg: t.blueBg, text: t.blue }
   if (status === 'cancelled') return { bg: t.dangerBg, text: t.danger }
-  return { bg: 'rgba(241,190,67,0.14)', text: t.goldText }
+  return { bg: 'var(--t-bgSubtle)', text: t.goldText }
 }
 
 function StatusBadge({ status, t }) {
   const { bg, text } = statusColor(status, t)
   return (
-    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: FONT_B }}>
+    <span style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 12, letterSpacing: '0.03em', fontFamily: FONT_B }}>
       {status}
     </span>
   )
@@ -52,10 +52,10 @@ function RecordingBadge({ session, t }) {
   else if (rs === 'processing')    { label = 'Saving recording';   bg = t.blueBg;    text = t.blue;   icon = <Video size={12} aria-hidden="true" /> }
   else if (rs === 'ready')         { label = 'Recorded';           bg = t.blueBg;    text = t.blue;   icon = <Video size={12} aria-hidden="true" /> }
   else if (rs === 'failed')        { label = 'Recording failed';   bg = t.dangerBg;  text = t.danger; icon = <TriangleAlert size={12} aria-hidden="true" /> }
-  else if (session.record_session) { label = '● Will record';      bg = 'rgba(241,190,67,0.14)'; text = t.goldText }
+  else if (session.record_session) { label = '● Will record';      bg = 'var(--t-bgSubtle)'; text = t.goldText }
   else return null
   return (
-    <span title={rs === 'failed' ? session.recording_error || undefined : undefined} style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+    <span title={rs === 'failed' ? session.recording_error || undefined : undefined} style={{ background: bg, color: text, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 12, fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
       {icon}{label}
     </span>
   )
@@ -156,31 +156,31 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   const isDark = theme === 'dark'
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
-    background: isDark ? 'rgba(255,255,255,0.05)' : t.bgCard,
+    border: isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`,
+    background: isDark ? 'var(--t-bgSubtle)' : t.bgCard,
     color: t.text, fontFamily: FONT_B, fontSize: 14, boxSizing: 'border-box', outline: 'none',
   }
-  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B, textTransform: 'uppercase', letterSpacing: '0.06em' }
+  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, marginBottom: 6, fontFamily: FONT_B }
 
   const typeBtn = (type) => ({
     flex: 1, padding: '10px 12px', borderRadius: 8,
-    border: sessionType === type ? 'none' : isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
+    border: sessionType === type ? 'none' : isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`,
     cursor: 'pointer', fontFamily: FONT_B, fontSize: 14, fontWeight: 700,
-    background: sessionType === type ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDark ? 'rgba(255,255,255,0.05)' : t.bgCard,
+    background: sessionType === type ? 'var(--t-accent)' : isDark ? 'var(--t-bgSubtle)' : t.bgCard,
     color: sessionType === type ? '#0c1037' : t.textMuted,
   })
 
-  const modalBg = isDark ? 'rgba(7,9,30,0.97)' : t.bgCard
-  const modalBdr = isDark ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`
-  const toggleBg = isDark ? 'rgba(255,255,255,0.04)' : t.bgSubtle
-  const toggleBdr = isDark ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`
+  const modalBg = t.bgCard
+  const modalBdr = isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`
+  const toggleBg = 'var(--t-bgSubtle)'
+  const toggleBdr = isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`
 
   if (createdLink) {
     return createPortal(
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-        <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center', backdropFilter: 'blur(16px)' }}>
+        <div style={{ background: modalBg, border: modalBdr, borderRadius: 12, padding: 32, width: '100%', maxWidth: 480, fontFamily: FONT_B, textAlign: 'center', backdropFilter: 'blur(16px)' }}>
           <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><CircleCheck size={48} color={t.success} aria-hidden="true" /></div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: t.text }}>Meeting Created</h2>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: t.text }}>Lesson created</h2>
           <p style={{ margin: '0 0 24px', fontSize: 14, color: t.textMuted }}>
             Share this link with anyone you want in the session.
           </p>
@@ -190,7 +190,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             </span>
             <button
               onClick={handleCopyLink}
-              style={{ flexShrink: 0, background: copied ? t.successBg : GOLD, color: copied ? t.success : '#1a1a2e', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
+              style={{ flexShrink: 0, background: copied ? t.successBg : 'var(--t-accent)', color: copied ? t.success : '#1a1a2e', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>
@@ -198,7 +198,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           <button
             onClick={onClose}
             className="btn-gold-shimmer"
-            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
           >
             Done
           </button>
@@ -212,13 +212,13 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   // which would otherwise pin this "fixed" overlay inside the tab and clip it.
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
-      <div style={{ background: modalBg, border: modalBdr, borderRadius: 20, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
-        <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, letterSpacing: '0.04em', color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={17} aria-hidden="true" />New Meeting</h2>
+      <div style={{ background: modalBg, border: modalBdr, borderRadius: 12, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
+        <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={17} aria-hidden="true" />New lesson</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Session type toggle */}
           <div>
-            <label style={labelStyle}>Session Type</label>
+            <label style={labelStyle}>Lesson type</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" style={typeBtn('individual')} onClick={() => setSessionType('individual')}>
                 <User size={16} aria-hidden="true" style={{ verticalAlign: '-3px' }} /> 1-on-1
@@ -241,12 +241,12 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               onClick={() => setIsRecurring(r => !r)}
               style={{
                 width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0,
-                background: isRecurring ? GOLD : t.border, position: 'relative', transition: 'background 0.2s',
+                background: isRecurring ? 'var(--t-accent)' : t.border, position: 'relative', transition: 'background 0.2s',
               }}
             >
               <span style={{
                 position: 'absolute', top: 3, left: isRecurring ? 23 : 3,
-                width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                width: 18, height: 18, borderRadius: '50%', background: 'var(--t-bgCard)',
                 transition: 'left 0.2s', display: 'block',
               }} />
             </button>
@@ -329,14 +329,14 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                     return (
                       <label key={s.student_id} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                        cursor: 'pointer', borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : `1px solid ${t.border}`,
-                        background: checked ? (isDark ? 'rgba(241,190,67,0.08)' : '#fdf8e8') : 'transparent',
+                        cursor: 'pointer', borderBottom: isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`,
+                        background: checked ? (isDark ? 'var(--t-bgSubtle)' : '#fdf8e8') : 'transparent',
                       }}>
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleStudent(s.student_id)}
-                          style={{ accentColor: GOLD, width: 16, height: 16, flexShrink: 0 }}
+                          style={{ accentColor: 'var(--t-text)', width: 16, height: 16, flexShrink: 0 }}
                         />
                         <span style={{ color: t.text, fontSize: 14 }}>{name}</span>
                       </label>
@@ -414,20 +414,20 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
               aria-label="Record"
               disabled={canRecord === false}
               onClick={() => setRecordSession(r => !r)}
-              style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: canRecord === false ? 'not-allowed' : 'pointer', opacity: canRecord === false ? 0.5 : 1, flexShrink: 0, background: recordSession ? GOLD : t.border, position: 'relative', transition: 'background 0.2s' }}
+              style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: canRecord === false ? 'not-allowed' : 'pointer', opacity: canRecord === false ? 0.5 : 1, flexShrink: 0, background: recordSession ? 'var(--t-accent)' : t.border, position: 'relative', transition: 'background 0.2s' }}
             >
-              <span style={{ position: 'absolute', top: 3, left: recordSession ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+              <span style={{ position: 'absolute', top: 3, left: recordSession ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: 'var(--t-bgCard)', transition: 'left 0.2s', display: 'block' }} />
             </button>
           </div>
 
           {error && <p style={{ color: t.danger, fontSize: 13, margin: 0 }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 9, border: isDark ? '1px solid rgba(255,255,255,0.12)' : `1px solid ${t.border}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 9, border: isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: isDark ? 'var(--t-bgSubtle)' : 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               Cancel
             </button>
-            <button type="submit" disabled={loading} className={loading ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: loading ? (isDark ? 'rgba(255,255,255,0.1)' : t.border) : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: loading ? t.textMuted : '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Creating…' : isRecurring ? 'Create Recurring Series' : 'Create Meeting Link'}
+            <button type="submit" disabled={loading} className={loading ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: loading ? (isDark ? 'var(--t-bgSubtle)' : t.border) : 'var(--t-accent)', color: loading ? t.textMuted : '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Creating…' : isRecurring ? 'Create recurring lessons' : 'Create lesson'}
             </button>
           </div>
         </form>
@@ -459,20 +459,20 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const cardBg  = theme === 'dark' ? 'rgba(255,255,255,0.025)' : t.bgCard
-  const cardBdr = theme === 'dark' ? '1px solid rgba(255,255,255,0.07)' : `1px solid ${t.border}`
-  const cardShadow = theme === 'dark' ? '0 4px 28px rgba(0,0,0,0.40)' : t.shadowCard
+  const cardBg = 'var(--t-bgCard)'
+  const cardBdr = theme === 'dark' ? '1px solid var(--t-border)' : `1px solid ${t.border}`
+  const cardShadow = 'none'
 
   return (
     <div style={{
-      background: cardBg, border: cardBdr, borderRadius: 20, boxShadow: cardShadow,
+      background: cardBg, border: cardBdr, borderRadius: 12, boxShadow: cardShadow,
       padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 20,
       flexWrap: 'wrap',
     }}>
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>
-            {session.title || 'Tutoring Session'}
+            {session.title || 'Lesson'}
           </span>
           <StatusBadge status={session.status} t={t} />
           <RecordingBadge session={session} t={t} />
@@ -503,10 +503,10 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
         {canJoin && (
           <button
             onClick={() => onJoin(session.id)}
-            style={{ background: GOLD, color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ background: 'var(--t-accent)', color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             {session.status === 'active'
-              ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />Rejoin</>
+              ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--t-danger)', display: 'inline-block' }} />Rejoin</>
               : <><Play size={13} fill="currentColor" aria-hidden="true" />Join</>}
           </button>
         )}
@@ -542,17 +542,17 @@ function SeriesCard({ series, theme, onCancel }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const serCardBg  = theme === 'dark' ? 'rgba(255,255,255,0.025)' : t.bgCard
-  const serCardBdr = theme === 'dark' ? '1px solid rgba(241,190,67,0.18)' : `1px solid ${GOLD}33`
-  const serCardShadow = theme === 'dark' ? '0 4px 28px rgba(0,0,0,0.40)' : t.shadowCard
+  const serCardBg = 'var(--t-bgCard)'
+  const serCardBdr = theme === 'dark' ? '1px solid var(--t-border)' : `1px solid var(--t-border)`
+  const serCardShadow = 'none'
 
   return (
-    <div style={{ background: serCardBg, border: serCardBdr, borderRadius: 20, boxShadow: serCardShadow, padding: '18px 22px' }}>
+    <div style={{ background: serCardBg, border: serCardBdr, borderRadius: 12, boxShadow: serCardShadow, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{series.title || 'Recurring Session'}</span>
-            <span style={{ background: series.status === 'active' ? t.successBg : t.dangerBg, color: series.status === 'active' ? t.success : t.danger, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{series.title || 'Recurring lesson'}</span>
+            <span style={{ background: series.status === 'active' ? t.successBg : t.dangerBg, color: series.status === 'active' ? t.success : t.danger, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <Repeat size={12} aria-hidden="true" />{series.status}
             </span>
           </div>
@@ -579,7 +579,7 @@ function SeriesCard({ series, theme, onCancel }) {
         </div>
         {series.status === 'active' && (
           <button onClick={handleCancel} disabled={cancelling} style={{ background: 'transparent', color: t.danger, border: `1px solid ${t.danger}55`, borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', flexShrink: 0 }}>
-            {cancelling ? '…' : 'Cancel Series'}
+            {cancelling ? '…' : 'Cancel all'}
           </button>
         )}
       </div>
@@ -658,18 +658,20 @@ export default function SessionsTab({ profile, theme }) {
 
   const isDarkMain = theme === 'dark'
 
+  // One-off lessons or recurring series: a segmented switch. Filters: pills,
+  // ink when chosen (gold is kept for the action buttons).
   const tabBtn = (id) => ({
-    padding: '9px 20px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-    border: view === id ? 'none' : isDarkMain ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`,
-    background: view === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.05)' : t.bgCard,
-    color: view === id ? '#0c1037' : t.textMuted,
+    padding: '7px 14px', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    background: view === id ? 'var(--t-text)' : 'var(--t-bgCard)',
+    color: view === id ? 'var(--t-bg)' : 'var(--t-textMuted)',
   })
 
   const filterStyle = (id) => ({
-    padding: '7px 16px', borderRadius: 20, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-    border: filter === id ? 'none' : isDarkMain ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${t.border}`,
-    background: filter === id ? `linear-gradient(135deg,${GOLD},${GOLDL})` : isDarkMain ? 'rgba(255,255,255,0.04)' : t.bgCard,
-    color: filter === id ? '#0c1037' : t.textMuted,
+    padding: '6px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
+    border: `1px solid ${filter === id ? 'var(--t-text)' : 'var(--t-border)'}`,
+    background: filter === id ? 'var(--t-text)' : 'var(--t-bgCard)',
+    color: filter === id ? 'var(--t-bg)' : 'var(--t-textMuted)',
   })
 
   return (
@@ -678,17 +680,19 @@ export default function SessionsTab({ profile, theme }) {
 
       {/* Toolbar: view toggle + primary action (page title lives in the shell top bar) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        <button style={tabBtn('sessions', 'Sessions')} onClick={() => setView('sessions')}>
-          Sessions {sessions.length > 0 && `(${sessions.length})`}
-        </button>
-        <button style={tabBtn('recurring', 'Recurring')} onClick={() => setView('recurring')}>
-          <Repeat size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Recurring {seriesList.length > 0 && `(${seriesList.length})`}
-        </button>
+        <div role="group" aria-label="Show" style={{ display: 'inline-flex', border: '1px solid var(--t-border)', borderRadius: 9, overflow: 'hidden' }}>
+          <button type="button" aria-pressed={view === 'sessions'} style={tabBtn('sessions')} onClick={() => setView('sessions')}>
+            Lessons {sessions.length > 0 && <span style={{ fontWeight: 600, opacity: 0.75 }}>{sessions.length}</span>}
+          </button>
+          <button type="button" aria-pressed={view === 'recurring'} style={tabBtn('recurring')} onClick={() => setView('recurring')}>
+            <Repeat size={14} aria-hidden="true" /> Recurring {seriesList.length > 0 && <span style={{ fontWeight: 600, opacity: 0.75 }}>{seriesList.length}</span>}
+          </button>
+        </div>
         <button
           onClick={() => setShowModal(true)}
-          style={{ marginLeft: 'auto', background: `linear-gradient(135deg,${GOLD},#f9d87a)`, color: '#0c1037', border: 'none', borderRadius: 9, padding: '10px 18px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer' }}
+          style={{ marginLeft: 'auto', background: 'var(--t-accent)', color: '#0c1037', border: 'none', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer' }}
         >
-          + Schedule session
+          Schedule lesson
         </button>
       </div>
 
@@ -698,7 +702,7 @@ export default function SessionsTab({ profile, theme }) {
           {seriesList.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: t.textMuted }}>
               <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Repeat size={40} aria-hidden="true" /></div>
-              <p style={{ fontSize: 15, margin: 0 }}>No recurring series yet. Create one with the "Schedule Session" button and toggle Recurring on.</p>
+              <p style={{ fontSize: 15, margin: 0 }}>No recurring series yet. Schedule a lesson and turn on Repeat.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

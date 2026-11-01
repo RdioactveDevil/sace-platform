@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard, CreditCard, Repeat, Pause, Play } from 'lucide-react'
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
-import OverviewTab from './OverviewTab'
+import TutorToday from './TutorToday'
+import { reportPortalBadges } from '../lib/portalNav'
 import MessagesView from './MessagesView'
 import TutorProfileTab from './TutorProfileTab'
 import { TutorPlanTab } from './TutorPlan'
@@ -93,13 +94,12 @@ function assignmentStatus(a) {
   return 'Pending'
 }
 
-function statusColor(s) {
-  if (s === 'Completed') return '#4ade80'
-  if (s === 'Overdue' || s === 'Not passed') return '#f87171'
-  return GOLD
+function statusColor(s, t) {
+  if (s === 'Completed') return t.success
+  if (s === 'Overdue' || s === 'Not passed') return t.danger
+  return t.goldText
 }
 
-// ── (legacy Students Tab — superseded by ./StudentsTab.jsx; kept out of the tree) ──
 // An assignment's report is worth opening once the student has answered something.
 const hasReport = (a) => !!a.question_count && ((a.progress_count || 0) > 0 || !!a.completed_at)
 
@@ -108,184 +108,16 @@ function ReportButton({ assignment, onOpen, theme }) {
   const t = THEMES[theme]
   return (
     <button type="button" onClick={() => onOpen(assignment.id)}
-      style={{ padding: '5px 11px', borderRadius: 7, border: `1px solid ${GOLD}66`, background: 'rgba(241,190,67,0.10)', color: t.goldText, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
+      style={{ padding: '5px 11px', borderRadius: 7, border: `1px solid var(--t-border)`, background: 'var(--t-bgSubtle)', color: t.goldText, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
       Report
     </button>
-  )
-}
-
-// eslint-disable-next-line no-unused-vars
-function _LegacyStudentsTab({ profile, theme }) {
-  const t = THEMES[theme]
-  const [roster, setRoster]       = useState([])
-  const [emails, setEmails]       = useState({})
-  const [loading, setLoading]     = useState(true)
-  const [email, setEmail]         = useState('')
-  const [addError, setAddError]   = useState('')
-  const [addLoading, setAddLoading] = useState(false)
-  const [confirmRemove, setConfirmRemove] = useState(null)
-  const [notifyStudentId, setNotifyStudentId] = useState(null)
-  const [notifyMessage, setNotifyMessage] = useState('')
-  const [notifySending, setNotifySending] = useState(false)
-  const [notifyResult, setNotifyResult] = useState(null)
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const r = await fetchRoster(profile.id)
-      setRoster(r)
-      if (r.length > 0) {
-        try { setEmails(await fetchStudentEmails(r.map(x => x.student_id))) } catch {}
-      } else {
-        setEmails({})
-      }
-    } catch {}
-    setLoading(false)
-  }
-  useEffect(() => { load() }, [profile.id])
-
-  const handleAdd = async (e) => {
-    e.preventDefault()
-    if (!email.trim()) return
-    setAddError('')
-    setAddLoading(true)
-    try {
-      await inviteStudent(email.trim().toLowerCase())
-      setEmail('')
-      await load()
-    } catch (err) {
-      setAddError(err.message || 'Could not find a student with that email.')
-    }
-    setAddLoading(false)
-  }
-
-  const handleRemove = async (studentId) => {
-    try {
-      await removeStudentFromRoster(profile.id, studentId)
-      setConfirmRemove(null)
-      await load()
-    } catch {}
-  }
-
-  const handleNotifySend = async (studentId) => {
-    setNotifySending(true)
-    setNotifyResult(null)
-    const result = await notifyStudent(studentId, notifyMessage.trim() || undefined)
-    setNotifySending(false)
-    if (result.ok) {
-      setNotifyResult({ ok: true, msg: 'Email sent!' })
-      setTimeout(() => { setNotifyStudentId(null); setNotifyMessage(''); setNotifyResult(null) }, 1800)
-    } else {
-      setNotifyResult({ ok: false, msg: result.error || 'Failed to send.' })
-    }
-  }
-
-  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: t.shadowCard }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ ...card, padding: '18px 20px' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Add Student</div>
-        <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>Enter the student's email address to add them to your roster.</div>
-        <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <input
-            value={email}
-            onChange={e => { setEmail(e.target.value); setAddError('') }}
-            placeholder="student@email.com"
-            type="email"
-            style={{ flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 9, border: `1px solid ${addError ? '#f87171' : t.border}`, background: t.bgCard, color: t.text, fontSize: 14, fontFamily: FONT_B, outline: 'none' }}
-          />
-          <button
-            type="submit"
-            disabled={addLoading || !email.trim()}
-            style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: addLoading || !email.trim() ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: addLoading || !email.trim() ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: addLoading || !email.trim() ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
-          >
-            {addLoading ? 'Adding…' : 'Add Student'}
-          </button>
-        </form>
-        {addError && <div style={{ marginTop: 8, fontSize: 12, color: '#f87171' }}>{addError}</div>}
-      </div>
-
-      <div style={card}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>My Students</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>{roster.length} student{roster.length !== 1 ? 's' : ''} on your roster</div>
-        </div>
-        {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
-        ) : roster.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No students yet. Add a student above.</div>
-        ) : (
-          <div>
-            {roster.map(s => (
-              <div key={s.student_id} style={{ borderBottom: `1px solid ${t.border}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
-                    {(s.profiles?.display_name || '?')[0].toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.profiles?.display_name || 'Unknown'}</div>
-                    {emails[s.student_id] && (
-                      <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emails[s.student_id]}</div>
-                    )}
-                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{s.profiles?.xp ?? 0} XP · Streak {s.profiles?.streak ?? 0} · Joined {fmtDate(s.invited_at)}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    {confirmRemove === s.student_id ? (
-                      <>
-                        <button onClick={() => handleRemove(s.student_id)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
-                        <button onClick={() => setConfirmRemove(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => { setNotifyStudentId(notifyStudentId === s.student_id ? null : s.student_id); setNotifyMessage(''); setNotifyResult(null) }}
-                          style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${notifyStudentId === s.student_id ? GOLD : t.border}`, background: notifyStudentId === s.student_id ? 'rgba(241,190,67,0.12)' : 'transparent', color: notifyStudentId === s.student_id ? GOLD : t.textMuted, fontSize: 12, fontWeight: notifyStudentId === s.student_id ? 700 : 400, cursor: 'pointer', fontFamily: FONT_B }}
-                        >
-                          <Mail size={13} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Notify
-                        </button>
-                        <button onClick={() => setConfirmRemove(s.student_id)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {notifyStudentId === s.student_id && (
-                  <div style={{ padding: '0 20px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: 12, color: t.textMuted }}>Send an email to <strong style={{ color: t.text }}>{s.profiles?.display_name || 'this student'}</strong>. Leave blank for a default "check your assignments" message.</div>
-                    <textarea
-                      value={notifyMessage}
-                      onChange={e => setNotifyMessage(e.target.value)}
-                      placeholder="Optional message… (leave blank for default)"
-                      rows={3}
-                      style={{ padding: '9px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <button
-                        onClick={() => handleNotifySend(s.student_id)}
-                        disabled={notifySending}
-                        style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: notifySending ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: notifySending ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: notifySending ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}
-                      >
-                        {notifySending ? 'Sending…' : 'Send Email'}
-                      </button>
-                      {notifyResult && (
-                        <span style={{ fontSize: 12, color: notifyResult.ok ? '#4ade80' : '#f87171', fontWeight: 600 }}>{notifyResult.msg}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
 const STATUS_OPTIONS = ['All', 'Pending', 'Overdue', 'Completed', 'Not passed']
 
 // ── Assignments Tab ───────────────────────────────────────────────────────────
-function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenReport }) {
+function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenReport, newForStudent = null }) {
   const t = THEMES[theme]
   const [assignments, setAssignments] = useState([])
   const [roster, setRoster]           = useState([])
@@ -319,6 +151,12 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     notify_each: true,
   })
   const [form, setForm]               = useState(blankForm)
+  // /tutor/assignments?student=<id> (Assign work on a student) opens the form set to them.
+  useEffect(() => {
+    if (!newForStudent) return
+    setForm({ ...blankForm(), target_mode: 'single', student_ids: [newForStudent] })
+    setShowForm(true)
+  }, [newForStudent]) // eslint-disable-line react-hooks/exhaustive-deps
   const [schedules, setSchedules]     = useState([])
   const [scheduleBusy, setScheduleBusy] = useState(null)
   const [curriculumMacroGroups, setCurriculumMacroGroups] = useState([])
@@ -543,10 +381,8 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
     return true
   })
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
-  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -555,44 +391,44 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
           onClick={() => setFilterStatus(s => (s === 'Overdue' ? 'All' : 'Overdue'))}
           aria-pressed={filterStatus === 'Overdue'}
           title={overdueCount > 0 ? `${overdueCount} overdue assignment${overdueCount !== 1 ? 's' : ''}` : 'No overdue assignments'}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', height: 38, borderRadius: 9, border: `1px solid ${filterStatus === 'Overdue' ? '#f87171' : t.border}`, background: filterStatus === 'Overdue' ? 'rgba(248,113,113,0.10)' : 'transparent', color: overdueCount > 0 ? '#f87171' : t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', height: 38, borderRadius: 9, border: `1px solid ${filterStatus === 'Overdue' ? 'var(--t-danger)' : t.border}`, background: filterStatus === 'Overdue' ? 'var(--t-dangerBg)' : 'transparent', color: overdueCount > 0 ? 'var(--t-danger)' : t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
         >
           <Bell size={15} aria-hidden="true" />
           {overdueCount > 0 ? `${overdueCount} overdue` : 'None overdue'}
         </button>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? (theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border) : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '8px 14px', borderRadius: 9, border: showForm ? `1px solid ${t.border}` : 'none', background: showForm ? t.bgCard : 'var(--t-accent)', color: showForm ? t.text : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
-          {showForm ? '✕ Cancel' : '+ New Assignment'}
+          {showForm ? 'Close' : 'New assignment'}
         </button>
       </div>
 
       {notifyStatus && (
-        <div style={{ padding: '12px 16px', borderRadius: 10, border: `1px solid ${notifyStatus.ok ? '#4ade8040' : '#f8717140'}`, background: notifyStatus.ok ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)', fontSize: 13, color: notifyStatus.ok ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+        <div style={{ padding: '12px 16px', borderRadius: 10, border: `1px solid ${notifyStatus.ok ? '#4ade8040' : '#f8717140'}`, background: notifyStatus.ok ? 'var(--t-successBg)' : 'var(--t-dangerBg)', fontSize: 13, color: notifyStatus.ok ? 'var(--t-success)' : 'var(--t-danger)', fontWeight: 600 }}>
           {notifyStatus.msg}
         </div>
       )}
 
       {showForm && (
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Create Assignment</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>New assignment</div>
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Type</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Type</label>
                 <select className="td-input-gold" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
                   {ASSIGNMENT_TYPES.map(ty => <option key={ty} value={ty}>{ty}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Subject</label>
                 <div style={{ ...inputStyle, color: t.text, opacity: 0.85 }}>{form.subject || '—'}</div>
               </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Topics ({form.topics.length} selected)</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>Topics ({form.topics.length} selected)</label>
               <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 8 }}>Tap a topic to assign the whole topic, or expand it to pick individual subtopics.</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {allTopics.map(tp => {
@@ -601,10 +437,10 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                   const isExpanded = expandedTopic === tp
                   const selectedSubsForTopic = subs.filter(s => form.topics.includes(s))
                   return (
-                    <div key={tp} style={{ border: `1px solid ${(sel || selectedSubsForTopic.length > 0) ? GOLD : t.border}`, borderRadius: 10, padding: 8 }}>
+                    <div key={tp} style={{ border: `1px solid ${(sel || selectedSubsForTopic.length > 0) ? 'var(--t-text)' : t.border}`, borderRadius: 10, padding: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button type="button" onClick={() => toggleTopic(tp)}
-                          style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.15)' : 'transparent', color: sel ? GOLD : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                          style={{ padding: '5px 11px', borderRadius: 12, border: `1px solid ${sel ? 'var(--t-text)' : t.border}`, background: sel ? 'var(--t-bgSubtle)' : 'transparent', color: sel ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                           {tp}
                         </button>
                         {subs.length > 0 && (
@@ -614,7 +450,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                           </button>
                         )}
                         {selectedSubsForTopic.length > 0 && !sel && (
-                          <span style={{ fontSize: 11, color: GOLD, fontWeight: 700 }}>{selectedSubsForTopic.length} selected</span>
+                          <span style={{ fontSize: 11, color: 'var(--t-goldText)', fontWeight: 700 }}>{selectedSubsForTopic.length} selected</span>
                         )}
                       </div>
                       {isExpanded && subs.length > 0 && (
@@ -623,7 +459,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                             const subSel = form.topics.includes(sub)
                             return (
                               <button key={sub} type="button" onClick={() => toggleTopic(sub)}
-                                style={{ padding: '4px 9px', borderRadius: 16, border: `1px solid ${subSel ? GOLD : t.border}`, background: subSel ? 'rgba(241,190,67,0.15)' : 'transparent', color: subSel ? GOLD : t.textMuted, fontSize: 11, fontWeight: subSel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                                style={{ padding: '4px 9px', borderRadius: 12, border: `1px solid ${subSel ? 'var(--t-text)' : t.border}`, background: subSel ? 'var(--t-bgSubtle)' : 'transparent', color: subSel ? 'var(--t-text)' : t.textMuted, fontSize: 11, fontWeight: subSel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                                 {sub}
                               </button>
                             )
@@ -638,13 +474,13 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 14 }}>
               <div>
-                <label htmlFor="assignment-question-count" style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Questions to complete</label>
+                <label htmlFor="assignment-question-count" style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>Questions to complete</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   {QUESTION_COUNT_PRESETS.map(n => {
                     const active = Number(form.question_count) === n
                     return (
                       <button key={n} type="button" onClick={() => setForm(f => ({ ...f, question_count: n }))} aria-pressed={active}
-                        style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                        style={{ padding: '5px 11px', borderRadius: 12, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: active ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                         {n}
                       </button>
                     )
@@ -656,13 +492,13 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                 <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>Marked complete once the student has answered this many. Progress carries over between sessions.</div>
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Difficulty</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>Difficulty</label>
                 <div role="radiogroup" aria-label="Difficulty" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {DIFFICULTY_OPTIONS.map(opt => {
                     const active = form.difficulty === opt.id
                     return (
                       <button key={opt.id} type="button" role="radio" aria-checked={active} title={opt.hint} onClick={() => setForm(f => ({ ...f, difficulty: opt.id }))}
-                        style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                        style={{ padding: '5px 11px', borderRadius: 12, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: active ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                         {opt.label}
                       </button>
                     )
@@ -674,7 +510,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, fontWeight: 600, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.remediation} onChange={e => setForm(f => ({ ...f, remediation: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                <input type="checkbox" checked={form.remediation} onChange={e => setForm(f => ({ ...f, remediation: e.target.checked }))} style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }} />
                 Remediation
               </label>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4, paddingLeft: 23 }}>
@@ -686,7 +522,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, fontWeight: 600, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.pass_mark_on} onChange={e => setForm(f => ({ ...f, pass_mark_on: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                <input type="checkbox" checked={form.pass_mark_on} onChange={e => setForm(f => ({ ...f, pass_mark_on: e.target.checked }))} style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }} />
                 Require a pass mark <span style={{ fontSize: 11, color: t.textMuted, fontWeight: 500 }}>(optional)</span>
               </label>
               {form.pass_mark_on && (
@@ -703,7 +539,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                       { id: 'one_attempt', label: 'One attempt: pass or fail', hint: `The assignment ends after ${Number(form.question_count) || 'N'} questions and is marked passed or not passed. You get the report either way.` },
                     ].map(opt => (
                       <label key={opt.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                        <input type="radio" name="pass_mode" checked={form.pass_mode === opt.id} onChange={() => setForm(f => ({ ...f, pass_mode: opt.id }))} style={{ accentColor: GOLD, marginTop: 2 }} />
+                        <input type="radio" name="pass_mode" checked={form.pass_mode === opt.id} onChange={() => setForm(f => ({ ...f, pass_mode: opt.id }))} style={{ accentColor: 'var(--t-text)', marginTop: 2 }} />
                         <span>
                           <span style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{opt.label}</span>
                           <span style={{ display: 'block', fontSize: 11, color: t.textMuted, marginTop: 2 }}>{opt.hint}</span>
@@ -716,13 +552,13 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Repeat</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>Repeat</label>
               <div role="radiogroup" aria-label="Repeat" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {REPEAT_OPTIONS.map(opt => {
                   const active = form.repeat === opt.id
                   return (
                     <button key={opt.id} type="button" role="radio" aria-checked={active} onClick={() => setRepeat(opt.id)}
-                      style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                      style={{ padding: '5px 11px', borderRadius: 12, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: active ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                       {opt.id !== 'none' && <Repeat size={11} aria-hidden="true" style={{ marginRight: 5, verticalAlign: '-1px' }} />}
                       {opt.label}
                     </button>
@@ -738,7 +574,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                         const active = form.days_of_week.includes(d.id)
                         return (
                           <button key={d.id} type="button" aria-pressed={active} aria-label={d.short} title={d.short} onClick={() => toggleDay(d.id)}
-                            style={{ width: 38, height: 34, borderRadius: 8, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 800 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                            style={{ width: 38, height: 34, borderRadius: 8, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: active ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: active ? 800 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                             {d.short.slice(0, 2)}
                           </button>
                         )
@@ -762,11 +598,11 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                     </div>
                   </div>
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: t.text, fontWeight: 600, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.notify_each} onChange={e => setForm(f => ({ ...f, notify_each: e.target.checked }))} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                    <input type="checkbox" checked={form.notify_each} onChange={e => setForm(f => ({ ...f, notify_each: e.target.checked }))} style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }} />
                     Email students each time it’s set
                   </label>
                   {form.days_of_week.length > 0 && (
-                    <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 12px', borderRadius: 8, background: 'rgba(241,190,67,0.06)', border: `1px solid ${t.border}` }}>
+                    <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 12px', borderRadius: 8, background: 'var(--t-bgSubtle)', border: `1px solid ${t.border}` }}>
                       {describeRepeat({ days_of_week: form.days_of_week, every_weeks: form.repeat === 'fortnightly' ? 2 : 1 })}, {describeDue(Number(form.due_days))}
                       {form.end_date ? `, until ${fmtDay(form.end_date)}` : ''}. Students who join a class or roster you pick get it from then on.
                     </div>
@@ -777,13 +613,13 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
             {form.repeat === 'none' && (
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Due Date</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>Due date</label>
                 <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={{ ...inputStyle, maxWidth: 220 }} min={new Date().toISOString().slice(0, 10)} />
               </div>
             )}
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>
                 Assign To
               </label>
               {roster.length === 0 ? (
@@ -801,7 +637,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                       const disabled = opt.id === 'classes' && classes.length === 0
                       return (
                         <button key={opt.id} type="button" disabled={disabled} onClick={() => !disabled && setTargetMode(opt.id)}
-                          style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${active ? GOLD : t.border}`, background: active ? 'rgba(241,190,67,0.15)' : 'transparent', color: disabled ? t.textFaint : active ? GOLD : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONT_B, opacity: disabled ? 0.5 : 1 }}>
+                          style={{ padding: '6px 13px', borderRadius: 12, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: disabled ? t.textFaint : active ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: FONT_B, opacity: disabled ? 0.5 : 1 }}>
                           {opt.label}
                         </button>
                       )
@@ -809,7 +645,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                   </div>
 
                   {form.target_mode === 'all' && (
-                    <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 12px', borderRadius: 8, background: 'rgba(241,190,67,0.06)', border: `1px solid ${t.border}` }}>
+                    <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 12px', borderRadius: 8, background: 'var(--t-bgSubtle)', border: `1px solid ${t.border}` }}>
                       All {roster.length} student{roster.length !== 1 ? 's' : ''} on your roster will receive this.
                     </div>
                   )}
@@ -821,7 +657,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                         const accent = c.color || GOLD
                         return (
                           <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
-                            style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${sel ? accent : t.border}`, background: sel ? `${accent}1f` : 'transparent', color: sel ? accent : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                            style={{ padding: '6px 12px', borderRadius: 12, border: `1px solid ${sel ? accent : t.border}`, background: sel ? `${accent}1f` : 'transparent', color: sel ? accent : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                             {c.name} · {c.members.length}
                           </button>
                         )
@@ -840,7 +676,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                               name="assign-target"
                               checked={checked}
                               onChange={() => toggleStudent(s.student_id)}
-                              style={{ accentColor: GOLD, width: 15, height: 15 }}
+                              style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }}
                             />
                             {s.profiles?.display_name || 'Unknown'}
                           </label>
@@ -849,17 +685,17 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                     </div>
                   )}
 
-                  <div style={{ marginTop: 10, fontSize: 12, color: resolvedCount > 0 ? GOLD : t.textMuted, fontWeight: 700 }}>
+                  <div style={{ marginTop: 10, fontSize: 12, color: resolvedCount > 0 ? 'var(--t-text)' : t.textMuted, fontWeight: 700 }}>
                     This will be sent to {resolvedCount} student{resolvedCount !== 1 ? 's' : ''}.
                   </div>
                 </>
               )}
             </div>
 
-            {formError && <div style={{ marginBottom: 12, fontSize: 12, color: '#f87171' }}>{formError}</div>}
+            {formError && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--t-danger)' }}>{formError}</div>}
 
-            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
-              {saving ? 'Creating…' : `${form.repeat !== 'none' ? 'Create Recurring Assignment' : 'Create Assignment'}${resolvedCount > 1 ? ` (${resolvedCount} students)` : ''}`}
+            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+              {saving ? 'Creating…' : `${form.repeat !== 'none' ? 'Create recurring assignment' : 'Create assignment'}${resolvedCount > 1 ? ` (${resolvedCount} students)` : ''}`}
             </button>
           </form>
         </div>
@@ -867,8 +703,8 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
       {schedules.length > 0 && (
         <div style={card}>
-          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>Recurring</div>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>Recurring</div>
             <div style={{ fontSize: 12, color: t.textMuted }}>{schedules.length} active or paused</div>
           </div>
           {schedules.map(sch => {
@@ -882,12 +718,12 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
             const state = paused ? 'Paused' : finished ? 'Finished' : `Next: ${fmtDay(sch.next_on)}`
             const stateColor = paused ? t.textMuted : finished ? t.textMuted : GOLD
             return (
-              <div key={sch.id} style={{ padding: '13px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14, opacity: paused || finished ? 0.75 : 1 }}>
+              <div key={sch.id} style={{ padding: '13px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'flex-start', gap: 14, opacity: paused || finished ? 0.75 : 1 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                     <Repeat size={14} color={GOLD} aria-hidden="true" />
                     <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{sch.type}</span>
-                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${stateColor}40`, background: `${stateColor}15`, color: stateColor, fontWeight: 700 }}>{state}</span>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${stateColor}40`, background: `${stateColor}15`, color: stateColor, fontWeight: 700 }}>{state}</span>
                     <span style={{ fontSize: 11, color: t.textMuted }}>{describeRepeat(sch)}, {describeDue(sch.due_days)}{sch.end_date ? ` · until ${fmtDay(sch.end_date)}` : ''}</span>
                   </div>
                   <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>
@@ -906,7 +742,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                   </button>
                 )}
                 <button type="button" onClick={() => stopSchedule(sch)} disabled={busy}
-                  style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
+                  style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid var(--t-danger)', background: 'transparent', color: 'var(--t-danger)', fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
                   {finished ? 'Remove' : 'Stop'}
                 </button>
               </div>
@@ -916,9 +752,9 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
       )}
 
       <div style={card}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}` }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--t-border)' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>All Assignments</div>
+            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>All assignments</div>
             <div style={{ fontSize: 12, color: t.textMuted }}>
               {filteredAssignments.length !== assignments.length
                 ? `${filteredAssignments.length} of ${assignments.length} shown`
@@ -930,7 +766,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
             <select
               value={filterStudent}
               onChange={e => setFilterStudent(e.target.value)}
-              style={{ padding: '7px 11px', borderRadius: 8, border: `1px solid ${filterStudent ? GOLD : t.border}`, background: t.bgCard, color: filterStudent ? GOLD : t.textMuted, fontSize: 12, fontFamily: FONT_B, outline: 'none', fontWeight: filterStudent ? 700 : 400, cursor: 'pointer' }}
+              style={{ padding: '7px 11px', borderRadius: 8, border: `1px solid ${filterStudent ? 'var(--t-text)' : t.border}`, background: t.bgCard, color: filterStudent ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontFamily: FONT_B, outline: 'none', fontWeight: filterStudent ? 700 : 400, cursor: 'pointer' }}
             >
               <option value="">All students</option>
               {roster.map(s => (
@@ -938,15 +774,15 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
               ))}
             </select>
 
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {STATUS_OPTIONS.map(s => {
                 const active = filterStatus === s
-                const col = s === 'Completed' ? '#4ade80' : s === 'Overdue' ? '#f87171' : s === 'Pending' ? GOLD : t.textMuted
+                const col = s === 'Completed' ? t.success : s === 'Overdue' ? t.danger : s === 'Pending' ? t.goldText : t.textMuted
                 return (
                   <button
                     key={s}
                     onClick={() => setFilterStatus(s)}
-                    style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${active ? col : t.border}`, background: active ? `${col}18` : 'transparent', color: active ? col : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}
+                    style={{ padding: '5px 12px', borderRadius: 12, border: `1px solid ${active ? col : t.border}`, background: active ? `${col}18` : 'transparent', color: active ? col : t.textMuted, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}
                   >
                     {s}
                   </button>
@@ -982,19 +818,19 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
             const renderRow = (a, indent = false) => {
               const status = assignmentStatus(a)
-              const sc = statusColor(status)
+              const sc = statusColor(status, t)
               return (
-                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? (theme === 'dark' ? 'rgba(255,255,255,0.015)' : 'rgba(12,16,55,0.02)') : 'transparent' }}>
+                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? (theme === 'dark' ? 'var(--t-bgCard)' : 'rgba(12,16,55,0.02)') : 'transparent' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                       {!indent && <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{a.type}</span>}
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700 }}>{status}</span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700 }}>{status}</span>
                       {!indent && <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}</span>}
-                      {!indent && a.schedule_id && <span title="Set by a recurring assignment" style={{ fontSize: 11, color: GOLD, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Repeat size={11} aria-hidden="true" />Recurring</span>}
+                      {!indent && a.schedule_id && <span title="Set by a recurring assignment" style={{ fontSize: 11, color: 'var(--t-goldText)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Repeat size={11} aria-hidden="true" />Recurring</span>}
                     </div>
                     <div style={{ fontSize: 12, color: t.textMuted, marginBottom: indent ? 0 : 3 }}>
                       <strong style={{ color: t.text }}>Student:</strong> {a.profiles?.display_name || a.student_id}
-                      {a.completed_at && <span style={{ marginLeft: 8, color: '#4ade80' }}>· Completed {fmtDate(a.completed_at)}</span>}
+                      {a.completed_at && <span style={{ marginLeft: 8, color: 'var(--t-success)' }}>· Completed {fmtDate(a.completed_at)}</span>}
                       {assignmentGoalLabel(a) && <span style={{ marginLeft: 8 }}>· {assignmentGoalLabel(a)}</span>}
                     </div>
                     {!indent && (
@@ -1007,7 +843,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                   <button
                     onClick={() => handleDelete(a.id)}
                     disabled={deletingId === a.id}
-                    style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: deletingId === a.id ? 'not-allowed' : 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
+                    style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid var(--t-danger)', background: 'transparent', color: 'var(--t-danger)', fontSize: 12, cursor: deletingId === a.id ? 'not-allowed' : 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>
                     {deletingId === a.id ? '…' : 'Delete'}
                   </button>
                 </div>
@@ -1047,12 +883,12 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
                           else next.add(g.batchId)
                           return next
                         })}
-                        style={{ width: '100%', textAlign: 'left', padding: '13px 20px', borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.05)' : 'rgba(241,190,67,0.06)', border: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', cursor: 'pointer', fontFamily: FONT_B, color: t.text }}
+                        style={{ width: '100%', textAlign: 'left', padding: '13px 20px', borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : 'var(--t-bgSubtle)', border: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', cursor: 'pointer', fontFamily: FONT_B, color: t.text }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, color: GOLD, fontWeight: 800 }}>{isExpanded ? '▾' : '▸'}</span>
+                          <span style={{ fontSize: 11, color: 'var(--t-goldText)', fontWeight: 800 }}>{isExpanded ? '▾' : '▸'}</span>
                           <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{head.type}</span>
-                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${GOLD}40`, background: 'rgba(241,190,67,0.15)', color: GOLD, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{head.schedule_id && <Repeat size={11} aria-hidden="true" />}{head.schedule_id ? 'Recurring' : 'Batch'}</span>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid var(--t-border)`, background: 'var(--t-bgSubtle)', color: 'var(--t-goldText)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{head.schedule_id && <Repeat size={11} aria-hidden="true" />}{head.schedule_id ? 'Recurring' : 'Batch'}</span>
                           <span style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(head.due_date)}</span>
                           {head.question_count > 0 && <span style={{ fontSize: 11, color: t.textMuted }}>{head.question_count} questions · {ASSIGNMENT_DIFFICULTIES[head.difficulty]?.label || 'Adaptive'}{head.min_accuracy ? ` · Pass ${head.min_accuracy}%` : ''}</span>}
                         </div>
@@ -1077,10 +913,10 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 }
 
 // ── Progress Tab ──────────────────────────────────────────────────────────────
-function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
+function ProgressTab({ profile, theme, allTutors = false, onOpenReport, initialStudentId = null }) {
   const t = THEMES[theme]
   const [roster, setRoster]           = useState([])
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [selectedStudentId, setSelectedStudentId] = useState(initialStudentId || '')
   const [progress, setProgress]       = useState(null)
   const [loading, setLoading]         = useState(false)
   const [rosterLoading, setRosterLoading] = useState(true)
@@ -1109,17 +945,15 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
       .catch(() => { setWritingAttempts([]); setWritingLoading(false) })
   }, [selectedStudentId, profile.id, allTutors])
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
-  const divider = theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
+  const divider = 'var(--t-border)'
   const cardSecHdr = { padding: '14px 20px', borderBottom: `1px solid ${divider}` }
-  const secTitle = { fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }
+  const secTitle = { fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ ...card, padding: '18px 20px' }}>
-        <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Select Student</label>
+        <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 8 }}>Student</label>
         <select
           value={selectedStudentId}
           onChange={e => setSelectedStudentId(e.target.value)}
@@ -1141,14 +975,14 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
             {[
-              { label: 'Total XP', val: progress.xp?.toLocaleString() ?? 0, color: GOLD },
-              { label: 'Streak', val: <>{progress.streak ?? 0} days <Flame size={22} aria-hidden="true" style={{ verticalAlign: '-2px' }} /></>, color: GOLD },
-              { label: 'Accuracy', val: `${progress.accuracy ?? 0}%`, color: progress.accuracy >= 70 ? '#4ade80' : progress.accuracy >= 40 ? GOLD : '#f87171' },
-              { label: 'Questions Done', val: progress.totalAttempts ?? 0, color: t.text },
+              { label: 'Total XP', val: progress.xp?.toLocaleString() ?? 0, color: 'var(--t-goldText)' },
+              { label: 'Streak', val: <>{progress.streak ?? 0} days <Flame size={22} aria-hidden="true" style={{ verticalAlign: '-2px' }} /></>, color: 'var(--t-goldText)' },
+              { label: 'Accuracy', val: `${progress.accuracy ?? 0}%`, color: progress.accuracy >= 70 ? 'var(--t-success)' : progress.accuracy >= 40 ? 'var(--t-text)' : 'var(--t-danger)' },
+              { label: 'Questions done', val: progress.totalAttempts ?? 0, color: t.text },
             ].map((s, i) => (
               <div key={s.label} className={`td-fadein td-fadein-${i + 1}`} style={{ ...card, padding: '16px 18px', textAlign: 'center' }}>
                 <div style={{ fontSize: 26, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '-0.5px', lineHeight: 1, color: s.color, marginBottom: 8 }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</div>
+                <div style={{ fontSize: 11.5, color: t.textMuted, fontWeight: 700 }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -1156,12 +990,12 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
           {progress.topicBreakdown && progress.topicBreakdown.length > 0 && (
             <div style={card}>
               <div style={cardSecHdr}>
-                <div style={secTitle}>Topic Accuracy</div>
+                <div style={secTitle}>Accuracy by topic</div>
               </div>
               <div>
                 {progress.topicBreakdown.map(tb => {
                   const acc = tb.attempts > 0 ? Math.round(((tb.attempts - tb.wrong) / tb.attempts) * 100) : null
-                  const color = acc == null ? t.textMuted : acc >= 70 ? '#4ade80' : acc >= 40 ? GOLD : '#f87171'
+                  const color = acc == null ? t.textMuted : acc >= 70 ? 'var(--t-success)' : acc >= 40 ? 'var(--t-goldText)' : 'var(--t-danger)'
                   return (
                     <div key={tb.topic} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 20px', borderBottom: `1px solid ${divider}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1186,14 +1020,14 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
               <div>
                 {progress.assignments.map(a => {
                   const status = assignmentStatus(a)
-                  const sc = statusColor(status)
+                  const sc = statusColor(status, t)
                   return (
                     <div key={a.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', gap: 14 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{a.type} — {(a.topics || []).join(', ') || a.subject}</div>
                         <div style={{ fontSize: 11, color: t.textMuted }}>Due {fmtDate(a.due_date)}{a.completed_at ? ` · Completed ${fmtDate(a.completed_at)}` : ''}{assignmentGoalLabel(a) ? ` · ${assignmentGoalLabel(a)}` : ''}</div>
                       </div>
-                      <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700, flexShrink: 0 }}>{status}</span>
+                      <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, border: `1px solid ${sc}40`, background: `${sc}15`, color: sc, fontWeight: 700, flexShrink: 0 }}>{status}</span>
                       <ReportButton assignment={a} onOpen={onOpenReport} theme={theme} />
                     </div>
                   )
@@ -1205,13 +1039,13 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
           {progress.recentActivity && progress.recentActivity.length > 0 && (
             <div style={card}>
               <div style={cardSecHdr}>
-                <div style={secTitle}>Recent Activity</div>
+                <div style={secTitle}>Recent activity</div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Last 10 sessions</div>
               </div>
               <div>
                 {progress.recentActivity.map((r, i) => (
                   <div key={i} style={{ padding: '10px 20px', borderBottom: `1px solid ${divider}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.correct ? '#4ade80' : '#f87171', flexShrink: 0 }} />
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.correct ? 'var(--t-success)' : 'var(--t-danger)', flexShrink: 0 }} />
                     <div style={{ flex: 1, fontSize: 13, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.question_id ? 'Question answered' : 'Session'}
                     </div>
@@ -1226,8 +1060,8 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
             <div style={card}>
               <div style={{ padding: '14px 20px', borderBottom: `1px solid ${divider}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={secTitle}>Off-Topic Questions</div>
-                  <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontWeight: 700 }}>
+                  <div style={secTitle}>Off-topic questions</div>
+                  <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 12, border: '1px solid var(--t-danger)', background: 'var(--t-dangerBg)', color: 'var(--t-danger)', fontWeight: 700 }}>
                     {progress.offTopicAttempts.reduce((s, r) => s + r.count, 0)} total
                   </span>
                 </div>
@@ -1241,8 +1075,8 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
                       <div style={{ fontSize: 11, color: t.textMuted }}>{r.subject}{r.last_attempt ? ` · Last ${fmtDate(r.last_attempt)}` : ''}</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: r.count >= 3 ? '#f87171' : GOLD }}>{r.count}×</div>
-                      <div style={{ fontSize: 10, color: t.textMuted }}>redirect{r.count !== 1 ? 's' : ''}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: r.count >= 3 ? 'var(--t-danger)' : GOLD }}>{r.count}×</div>
+                      <div style={{ fontSize: 11.5, color: t.textMuted }}>redirect{r.count !== 1 ? 's' : ''}</div>
                     </div>
                   </div>
                 ))}
@@ -1273,7 +1107,7 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
                           <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{w.subject} · {fmtDate(w.created_at)}</div>
                           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.prompt}</div>
                           {typeof sc === 'number' && (
-                            <div style={{ fontSize: 12, fontWeight: 800, color: GOLD, marginTop: 8 }}>Overall: {sc}/10</div>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-goldText)', marginTop: 8 }}>Overall: {sc}/10</div>
                           )}
                         </div>
                         <button
@@ -1290,9 +1124,9 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport }) {
                             flexShrink: 0,
                             padding: '6px 12px',
                             borderRadius: 8,
-                            border: `1px solid ${GOLD}55`,
-                            background: 'rgba(241,190,67,0.1)',
-                            color: GOLD,
+                            border: `1px solid var(--t-border)`,
+                            background: 'var(--t-bgSubtle)',
+                            color: 'var(--t-goldText)',
                             fontSize: 11,
                             fontWeight: 700,
                             cursor: !w.feedback || pdfBusyId === w.id ? 'not-allowed' : 'pointer',
@@ -1463,57 +1297,55 @@ function ClassesTab({ profile, theme, allTutors = false }) {
     } catch (err) { setTutorError(err.message || 'Could not remove the student.') }
   }
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, boxShadow: '0 4px 28px rgba(0,0,0,0.40)' }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, boxShadow: t.shadowCard }
-  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: theme === 'dark' ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bg, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={() => { setShowCreate(v => !v); setCreateError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showCreate ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: showCreate ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showCreate ? t.border : 'var(--t-accent)', color: showCreate ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
-          {showCreate ? '✕ Cancel' : '+ New Class'}
+          {showCreate ? 'Close' : 'New class'}
         </button>
       </div>
 
       {showCreate && (
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 14 }}>Create Class</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 14 }}>New class</div>
           <form onSubmit={handleCreate}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Name *</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Name *</label>
                 <input className="td-input-gold" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Year 10 Chem - Tuesday" style={inputStyle} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Subject (optional)</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Subject (optional)</label>
                 <input className="td-input-gold" value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={inputStyle} />
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14, marginBottom: 14 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Color</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Color</label>
                 <input type="color" value={newColor || '#f1be43'} onChange={e => setNewColor(e.target.value)} style={{ ...inputStyle, padding: 4, height: 36 }} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Description</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Description</label>
                 <input className="td-input-gold" value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Optional notes about this class" style={inputStyle} />
               </div>
             </div>
-            {createError && <div style={{ marginBottom: 10, fontSize: 12, color: '#f87171' }}>{createError}</div>}
-            <button type="submit" disabled={creating} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: creating ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: creating ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: creating ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
-              {creating ? 'Creating…' : 'Create Class'}
+            {createError && <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--t-danger)' }}>{createError}</div>}
+            <button type="submit" disabled={creating} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: creating ? t.border : 'var(--t-accent)', color: creating ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: creating ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+              {creating ? 'Creating…' : 'Create class'}
             </button>
           </form>
         </div>
       )}
 
       <div style={card}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}` }}>
-          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>My Classes</div>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--t-border)' }}>
+          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>Your classes</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{classes.length} class{classes.length !== 1 ? 'es' : ''}</div>
         </div>
         {loading ? (
@@ -1528,14 +1360,14 @@ function ClassesTab({ profile, theme, allTutors = false }) {
               const memberRows = (cls.members || []).map(m => ({ ...m, profile: rosterById[m.student_id] || null }))
               const availableToAdd = roster.filter(r => !cls.members.some(m => m.student_id === r.student_id))
               return (
-                <div key={cls.id} style={{ borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}` }}>
+                <div key={cls.id} style={{ borderBottom: '1px solid var(--t-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px' }}>
                     <div style={{ width: 8, height: 36, borderRadius: 4, background: accent, flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {renamingId === cls.id ? (
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <input value={renameValue} onChange={e => setRenameValue(e.target.value)} style={{ ...inputStyle, maxWidth: 280 }} autoFocus />
-                          <button onClick={() => handleRename(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Save</button>
+                          <button onClick={() => handleRename(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Save</button>
                           <button onClick={() => { setRenamingId(null); setRenameValue('') }} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
                         </div>
                       ) : (
@@ -1553,16 +1385,16 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                       {confirmDelete === cls.id ? (
                         <>
-                          <button onClick={() => handleDelete(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Delete class</button>
+                          <button onClick={() => handleDelete(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-danger)', color: 'var(--t-text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Delete class</button>
                           <button onClick={() => setConfirmDelete(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
                         </>
                       ) : (
                         <>
-                          <button onClick={() => setExpandedClass(expanded ? null : cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${expanded ? GOLD : t.border}`, background: expanded ? 'rgba(241,190,67,0.12)' : 'transparent', color: expanded ? GOLD : t.textMuted, fontSize: 12, fontWeight: expanded ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
+                          <button onClick={() => setExpandedClass(expanded ? null : cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${expanded ? 'var(--t-text)' : t.border}`, background: expanded ? 'var(--t-bgSubtle)' : 'transparent', color: expanded ? 'var(--t-text)' : t.textMuted, fontSize: 12, fontWeight: expanded ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B }}>
                             {expanded ? '▾ Hide' : '▸ View'}
                           </button>
                           <button onClick={() => { setRenamingId(cls.id); setRenameValue(cls.name) }} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Rename</button>
-                          {canManageTutors(cls) && <button onClick={() => setConfirmDelete(cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Delete</button>}
+                          {canManageTutors(cls) && <button onClick={() => setConfirmDelete(cls.id)} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--t-danger)', background: 'transparent', color: 'var(--t-danger)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Delete</button>}
                         </>
                       )}
                     </div>
@@ -1570,12 +1402,12 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                   {expanded && (
                     <div style={{ padding: '0 20px 16px 38px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Tutors</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: t.textMuted, marginRight: 4 }}>Tutors</span>
                         {(cls.tutors || []).map(tu => (
                           <span key={tu.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999, border: `1px solid ${t.border}`, background: t.bg, fontSize: 12, color: t.text }}>
-                            {tu.display_name || 'Unnamed'}{tu.role === 'owner' && <span style={{ fontSize: 10, color: t.textMuted }}>owner</span>}
+                            {tu.display_name || 'Unnamed'}{tu.role === 'owner' && <span style={{ fontSize: 11.5, color: t.textMuted }}>owner</span>}
                             {tu.role === 'co' && canManageTutors(cls) && (
-                              <button onClick={() => handleRemoveTutor(cls, tu.id)} title="Remove tutor" style={{ border: 'none', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+                              <button onClick={() => handleRemoveTutor(cls, tu.id)} title="Remove tutor" style={{ border: 'none', background: 'transparent', color: 'var(--t-danger)', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
                             )}
                           </span>
                         ))}
@@ -1590,18 +1422,18 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                           <button onClick={() => openTutorPicker(cls)} style={{ padding: '3px 10px', borderRadius: 999, border: `1px dashed ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>+ Add tutor</button>
                         ))}
                       </div>
-                      {tutorError && expanded && <div style={{ fontSize: 12, color: '#f87171' }}>{tutorError}</div>}
+                      {tutorError && expanded && <div style={{ fontSize: 12, color: 'var(--t-danger)' }}>{tutorError}</div>}
                       {memberRows.length === 0 ? (
                         <div style={{ fontSize: 12, color: t.textMuted, padding: '8px 0' }}>No students in this class yet.</div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {memberRows.map(m => (
                             <div key={m.student_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8, background: t.bg, border: `1px solid ${t.border}` }}>
-                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--t-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
                                 {(m.profile?.profiles?.display_name || '?')[0].toUpperCase()}
                               </div>
                               <div style={{ flex: 1, fontSize: 13, color: t.text }}>{m.profile?.profiles?.display_name || 'Unknown student'}</div>
-                              <button onClick={() => handleRemoveMember(cls, m.student_id)} style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
+                              <button onClick={() => handleRemoveMember(cls, m.student_id)} style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid var(--t-danger)', background: 'transparent', color: 'var(--t-danger)', fontSize: 11, cursor: 'pointer', fontFamily: FONT_B }}>Remove</button>
                             </div>
                           ))}
                         </div>
@@ -1615,14 +1447,14 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
                               {availableToAdd.map(r => (
                                 <label key={r.student_id} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: t.textMuted }}>
-                                  <input type="checkbox" checked={pickerSelected.includes(r.student_id)} onChange={() => togglePickerStudent(r.student_id)} style={{ accentColor: GOLD, width: 15, height: 15 }} />
+                                  <input type="checkbox" checked={pickerSelected.includes(r.student_id)} onChange={() => togglePickerStudent(r.student_id)} style={{ accentColor: 'var(--t-text)', width: 15, height: 15 }} />
                                   {r.profiles?.display_name || 'Unknown'}
                                 </label>
                               ))}
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => handleAddMembers(cls)} disabled={pickerSelected.length === 0 || pickerSaving} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: pickerSelected.length === 0 || pickerSaving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: pickerSelected.length === 0 || pickerSaving ? t.textMuted : '#0c1037', fontSize: 12, fontWeight: 800, cursor: pickerSelected.length === 0 || pickerSaving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                            <button onClick={() => handleAddMembers(cls)} disabled={pickerSelected.length === 0 || pickerSaving} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: pickerSelected.length === 0 || pickerSaving ? t.border : 'var(--t-accent)', color: pickerSelected.length === 0 || pickerSaving ? t.textMuted : '#0c1037', fontSize: 12, fontWeight: 800, cursor: pickerSelected.length === 0 || pickerSaving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
                               {pickerSaving ? 'Adding…' : `Add ${pickerSelected.length} student${pickerSelected.length !== 1 ? 's' : ''}`}
                             </button>
                             <button onClick={() => { setPickerForClass(null); setPickerSelected([]) }} style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
@@ -1971,12 +1803,10 @@ function DiagnosticTab({ profile, theme }) {
     setSaveError('')
   }
 
-  const card = theme === 'dark'
-    ? { background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 18, overflow: 'hidden', marginBottom: 18 }
-    : { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 18, overflow: 'hidden', marginBottom: 18, boxShadow: t.shadowCard }
-  const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
-  const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
-  const sectionHdr = { padding: '14px 20px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
+  const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
+  const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: theme === 'dark' ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }
+  const sectionHdr = { padding: '14px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
 
   // Difficulty totals for preview
   const easyMarks = questions.filter(q => q.difficulty === 'easy').reduce((s, q) => s + q.marks, 0)
@@ -1989,13 +1819,13 @@ function DiagnosticTab({ profile, theme }) {
       {/* ── Tab sub-nav ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {[
-          { key: 'form',    label: '+ New Assessment' },
-          { key: 'list',    label: `Past Diagnostics (${diagnostics.length})` },
+          { key: 'form',    label: 'New diagnostic' },
+          { key: 'list',    label: `Past diagnostics (${diagnostics.length})` },
         ].map(btn => (
           <button
             key={btn.key}
             onClick={() => { if (btn.key === 'form') resetForm(); else setStep('list') }}
-            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${(step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? GOLD : t.border}`, background: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'rgba(241,190,67,0.1)' : 'transparent', color: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? t.goldText : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${(step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'var(--t-text)' : t.border}`, background: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'var(--t-bgSubtle)' : 'transparent', color: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? t.text : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
           >
             {btn.label}
           </button>
@@ -2008,14 +1838,14 @@ function DiagnosticTab({ profile, theme }) {
           <div style={card}>
             <div style={sectionHdr}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '0.04em', color: t.text }}>Generate Diagnostic Assessment</div>
+                <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>New diagnostic test</div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
               </div>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
               {/* Year level */}
               <div>
-                <label style={labelStyle}>Year Level</label>
+                <label style={labelStyle}>Year level</label>
                 <select className="td-input-gold" value={yearLevel} onChange={e => { setYearLevel(e.target.value); setSelectedSubjectId(''); setSelectedTopics([]) }} style={inputStyle}>
                   <option value="">Select year level…</option>
                   {YEAR_LEVEL_GROUPS.map(g => (
@@ -2046,7 +1876,7 @@ function DiagnosticTab({ profile, theme }) {
                         <button
                           key={topic}
                           onClick={() => toggleTopic(topic)}
-                          style={{ padding: '6px 13px', borderRadius: 20, border: `1px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.12)' : 'transparent', color: sel ? t.goldText : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
+                          style={{ padding: '6px 13px', borderRadius: 12, border: `1px solid ${sel ? 'var(--t-text)' : t.border}`, background: sel ? 'var(--t-bgSubtle)' : 'transparent', color: sel ? t.text : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
                         >
                           {topic}
                         </button>
@@ -2070,9 +1900,9 @@ function DiagnosticTab({ profile, theme }) {
                         <button
                           key={opt.value}
                           onClick={() => setWritingType(opt.value)}
-                          style={{ flex: 1, padding: '12px 16px', borderRadius: 10, border: `2px solid ${sel ? GOLD : t.border}`, background: sel ? 'rgba(241,190,67,0.1)' : 'transparent', color: t.text, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
+                          style={{ flex: 1, padding: '12px 16px', borderRadius: 10, border: `2px solid ${sel ? 'var(--t-text)' : t.border}`, background: sel ? 'var(--t-bgSubtle)' : 'transparent', color: t.text, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
                         >
-                          <div style={{ fontSize: 13, fontWeight: 700, color: sel ? GOLD : t.text, marginBottom: 2 }}>{opt.label}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: sel ? 'var(--t-text)' : t.text, marginBottom: 2 }}>{opt.label}</div>
                           <div style={{ fontSize: 11, color: t.textMuted }}>{opt.desc}</div>
                         </button>
                       )
@@ -2084,11 +1914,11 @@ function DiagnosticTab({ profile, theme }) {
               {/* Optional student name */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
-                  <label style={labelStyle}>Student Name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <label style={labelStyle}>Student name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Pre-Call Questionnaire URL <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <label style={labelStyle}>Pre-lesson questionnaire link <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Student is redirected here after completing the test</div>
                 </div>
@@ -2099,9 +1929,9 @@ function DiagnosticTab({ profile, theme }) {
               <button
                 onClick={handleGenerate}
                 disabled={generating}
-                style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: generating ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
+                style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : 'var(--t-accent)', color: generating ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
               >
-                {generating ? <><Bot size={17} aria-hidden="true" /> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : <><Bot size={17} aria-hidden="true" /> Generate Assessment</>}
+                {generating ? <><Bot size={17} aria-hidden="true" /> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : <><Bot size={17} aria-hidden="true" /> Generate test</>}
               </button>
             </div>
           </div>
@@ -2113,10 +1943,10 @@ function DiagnosticTab({ profile, theme }) {
             </div>
             <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 16 }}>
               {[
-                { icon: Bot, title: '30-Mark AI Test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
-                { icon: Link, title: 'Unique Link', desc: "Copy and share the link with the student's parent — the test runs entirely in the browser" },
-                { icon: ChartColumn, title: 'Auto-Marked by AI', desc: 'As soon as the student submits, AI marks every question and generates a diagnostic report' },
-                { icon: ClipboardList, title: 'Report to Tutor', desc: 'Pain points, patterns and recommendations appear here in the tutor portal for your review' },
+                { icon: Bot, title: 'A 30-mark test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
+                { icon: Link, title: 'A link to share', desc: "Copy and share the link with the student's parent — the test runs entirely in the browser" },
+                { icon: ChartColumn, title: 'Marked by AI', desc: 'As soon as the student submits, AI marks every question and generates a diagnostic report' },
+                { icon: ClipboardList, title: 'A report for you', desc: 'Pain points, patterns and recommendations appear here in the tutor portal for your review' },
               ].map(item => (
                 <div key={item.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ flexShrink: 0, display: 'flex' }}><item.icon size={22} aria-hidden="true" /></div>
@@ -2137,7 +1967,7 @@ function DiagnosticTab({ profile, theme }) {
           <div style={card}>
             <div style={sectionHdr}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Preview Generated Questions</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Check the questions</div>
                 <div style={{ fontSize: 12, color: t.textMuted }}>{questions.length} questions · {totalMarks} marks</div>
               </div>
               <button onClick={resetForm} style={{ padding: '6px 14px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -2149,7 +1979,7 @@ function DiagnosticTab({ profile, theme }) {
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               {[
                 { label: 'Section A — Foundation', marks: easyMarks, color: t.success },
-                { label: 'Section B — Core Skills', marks: modMarks,  color: GOLD },
+                { label: 'Section B — Core Skills', marks: modMarks,  color: 'var(--t-goldText)' },
                 { label: 'Section C — Exam Style', marks: examMarks, color: t.danger },
                 { label: 'TOTAL', marks: totalMarks, color: t.text },
               ].map(s => (
@@ -2163,7 +1993,7 @@ function DiagnosticTab({ profile, theme }) {
             {/* Questions list */}
             <div style={{ maxHeight: 440, overflowY: 'auto' }}>
               {questions.map((q, i) => {
-                const dc = q.difficulty === 'easy' ? t.success : q.difficulty === 'moderate' ? GOLD : t.danger
+                const dc = q.difficulty === 'easy' ? t.success : q.difficulty === 'moderate' ? t.goldText : t.danger
                 return (
                   <div key={q.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                     <div style={{ width: 30, height: 30, borderRadius: 8, background: `${dc}15`, border: `1px solid ${dc}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: dc, flexShrink: 0 }}>
@@ -2171,7 +2001,7 @@ function DiagnosticTab({ profile, theme }) {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4, alignItems: 'center' }}>
-                        <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 20, border: `1px solid ${dc}30`, background: `${dc}10`, color: dc, fontWeight: 700 }}>{DIFF_LABEL[q.difficulty] || q.difficulty}</span>
+                        <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 12, border: `1px solid ${dc}30`, background: `${dc}10`, color: dc, fontWeight: 700 }}>{DIFF_LABEL[q.difficulty] || q.difficulty}</span>
                         <span style={{ fontSize: 11, color: t.textMuted }}>{q.marks} mark{q.marks !== 1 ? 's' : ''}</span>
                         <span style={{ fontSize: 11, color: t.textFaint }}>{q.topic}{q.subtopic ? ` · ${q.subtopic}` : ''}</span>
                         <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 'auto' }}>{q.type?.replace(/_/g, ' ')}</span>
@@ -2196,23 +2026,23 @@ function DiagnosticTab({ profile, theme }) {
           {/* Save form */}
           <div style={card}>
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Create Assessment & Get Link</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Create the test and get its link</div>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
-                  <label style={labelStyle}>Student Name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <label style={labelStyle}>Student name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Pre-Call Questionnaire URL <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <label style={labelStyle}>Pre-lesson questionnaire link <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
                 </div>
               </div>
               {saveError && <div style={{ fontSize: 13, color: t.danger }}>{saveError}</div>}
               <button onClick={handleCreate} disabled={saving}
-                style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: saving ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start' }}>
-                {saving ? 'Creating…' : <><CircleCheck size={15} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 6 }} />Create & Get Student Link</>}
+                style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start' }}>
+                {saving ? 'Creating…' : <><CircleCheck size={15} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 6 }} />Create and get the student's link</>}
               </button>
             </div>
           </div>
@@ -2226,23 +2056,23 @@ function DiagnosticTab({ profile, theme }) {
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}4d`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CircleCheck size={24} color={t.success} aria-hidden="true" /></div>
               <div>
-                <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>Assessment Created!</div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>Test created</div>
                 <div style={{ fontSize: 13, color: t.textMuted }}>Share this link with the student or parent</div>
               </div>
             </div>
 
             <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: GOLD, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{createdLink}</div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--t-goldText)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{createdLink}</div>
               <button
                 onClick={() => handleCopy(createdLink)}
                 style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${copied ? t.success : t.border}`, background: copied ? t.successBg : 'transparent', color: copied ? t.success : t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}
               >
-                {copied ? '✓ Copied!' : 'Copy Link'}
+                {copied ? '✓ Copied!' : 'Copy link'}
               </button>
             </div>
 
-            <div style={{ background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.2)', borderRadius: 10, padding: '14px 16px' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>What happens next?</div>
+            <div style={{ background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)', borderRadius: 10, padding: '14px 16px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-goldText)', marginBottom: 6 }}>What happens next?</div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <li style={{ fontSize: 13, color: t.textMuted }}>Send the link to the student or parent</li>
                 <li style={{ fontSize: 13, color: t.textMuted }}>The student opens the link and completes the test at their own pace</li>
@@ -2253,7 +2083,7 @@ function DiagnosticTab({ profile, theme }) {
             </div>
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={resetForm} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+              <button onClick={resetForm} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                 + New Assessment
               </button>
               <button onClick={() => setStep('list')} style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -2268,7 +2098,7 @@ function DiagnosticTab({ profile, theme }) {
       {step === 'list' && (
         <div style={card}>
           <div style={{ ...sectionHdr }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Past Diagnostics</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Past diagnostics</div>
             <button onClick={loadList} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Refresh</button>
           </div>
           {listLoading ? (
@@ -2285,7 +2115,7 @@ function DiagnosticTab({ profile, theme }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.year_level} · {subjectNames}</span>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${completed ? `${t.success}59` : 'rgba(241,190,67,0.35)'}`, background: completed ? t.successBg : 'rgba(241,190,67,0.1)', color: completed ? t.success : t.goldText, fontWeight: 700 }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${completed ? `${t.success}59` : 'var(--t-border)'}`, background: completed ? t.successBg : 'var(--t-bgSubtle)', color: completed ? t.success : t.goldText, fontWeight: 700 }}>
                           {completed ? 'Completed' : 'Pending'}
                         </span>
                       </div>
@@ -2302,7 +2132,7 @@ function DiagnosticTab({ profile, theme }) {
                         Copy Link
                       </button>
                       {completed && (
-                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                           View Report
                         </button>
                       )}
@@ -2343,7 +2173,7 @@ function DiagnosticTab({ profile, theme }) {
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 32, fontWeight: 900, color: t.text }}>{r.total_score}<span style={{ fontSize: 18, color: t.textMuted }}>/{r.max_score}</span></div>
                       <div style={{ fontSize: 13, color: t.textMuted }}>{pct}%</div>
-                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, border: `1px solid ${bc}40`, background: `${bc}15`, color: bc, fontWeight: 700 }}>{r.performance_band}</span>
+                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, border: `1px solid ${bc}40`, background: `${bc}15`, color: bc, fontWeight: 700 }}>{r.performance_band}</span>
                     </div>
                   </div>
                 </div>
@@ -2351,12 +2181,12 @@ function DiagnosticTab({ profile, theme }) {
                 {/* Section breakdown */}
                 <div style={card}>
                   <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Section Scores</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Section scores</div>
                   </div>
                   <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {[
                       { label: 'Section A — Foundation', score: r.easy_score, max: r.easy_max, color: t.success },
-                      { label: 'Section B — Core Skills', score: r.moderate_score, max: r.moderate_max, color: GOLD },
+                      { label: 'Section B — Core Skills', score: r.moderate_score, max: r.moderate_max, color: 'var(--t-goldText)' },
                       { label: 'Section C — Exam Style', score: r.exam_score, max: r.exam_max, color: t.danger },
                     ].filter(s => s.max > 0).map(s => (
                       <div key={s.label}>
@@ -2376,12 +2206,12 @@ function DiagnosticTab({ profile, theme }) {
                 {r.topic_breakdown?.length > 0 && (
                   <div style={card}>
                     <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Topic Breakdown</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>By topic</div>
                     </div>
                     <div>
                       {r.topic_breakdown.map(tb => {
                         const pct = tb.percentage
-                        const c = pct >= 75 ? t.success : pct >= 50 ? GOLD : t.danger
+                        const c = pct >= 75 ? t.success : pct >= 50 ? t.goldText : t.danger
                         return (
                           <div key={tb.topic} style={{ padding: '11px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
                             <div style={{ flex: 1, fontSize: 13, color: t.text }}>{tb.topic}</div>
@@ -2399,8 +2229,8 @@ function DiagnosticTab({ profile, theme }) {
 
                 {/* AI Report sections */}
                 {[
-                  { key: 'pain_points',     label: 'Pain Points',        icon: Zap,         color: t.danger,  items: r.pain_points },
-                  { key: 'patterns',        label: 'Patterns Observed',  icon: Search,      color: GOLD,      items: r.patterns },
+                  { key: 'pain_points',     label: 'Pain points',        icon: Zap,         color: t.danger,  items: r.pain_points },
+                  { key: 'patterns',        label: 'Patterns',  icon: Search,      color: 'var(--t-goldText)',      items: r.patterns },
                   { key: 'recommendations', label: 'Recommendations',    icon: CircleCheck, color: t.success, items: r.recommendations },
                 ].filter(s => s.items?.length > 0).map(section => (
                   <div key={section.key} style={card}>
@@ -2422,7 +2252,7 @@ function DiagnosticTab({ profile, theme }) {
                 {r.summary && (
                   <div style={card}>
                     <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><PenLine size={16} aria-hidden="true" />Tutor Summary</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><PenLine size={16} aria-hidden="true" />Summary for you</div>
                     </div>
                     <div style={{ padding: '14px 20px', fontSize: 13, color: t.text, lineHeight: 1.65 }}>{r.summary}</div>
                   </div>
@@ -2439,11 +2269,11 @@ function DiagnosticTab({ profile, theme }) {
                         const q = (a.questions || []).find(x => String(x.id) === String(qr.id))
                         const full = qr.marks_awarded === qr.marks_possible
                         const partial = !full && qr.marks_awarded > 0
-                        const col = full ? t.success : partial ? GOLD : t.danger
+                        const col = full ? t.success : partial ? t.goldText : t.danger
                         const studentAnswer = qr.student_answer || a.student_answers?.[String(qr.id)] || ''
                         const correctAnswer = q?.correct_answer ?? qr.correct_answer
                         const isMcq = q?.type === 'multiple_choice' && q.options?.length > 0
-                        const label = { fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }
+                        const label = { fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 4 }
                         const answerBox = (c) => ({ fontSize: 13, color: t.text, lineHeight: 1.55, padding: '8px 12px', borderRadius: 8, background: `${c}10`, border: `1px solid ${c}30`, whiteSpace: 'pre-wrap', overflowX: 'auto' })
                         return (
                           <div key={qr.id} style={{ padding: '16px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
@@ -2517,7 +2347,7 @@ function DiagnosticTab({ profile, theme }) {
   )
 }
 
-const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam Style' }
+const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam style' }
 
 // A maths answer is the bare LaTeX the MathLive answer box gives (\frac{1}{2},
 // x^{2}, a_{n}); wrap it so MathText renders it as maths. Prose and answers
@@ -2526,53 +2356,39 @@ function asMath(answer) {
   return !answer.includes('$') && /\\|\^|_\{/.test(answer) ? `$${answer}$` : answer
 }
 
-// ── Main TutorScreen — sidebar shell ───────────────────────────────────────────
-const NAV_GROUPS = [
-  { label: 'Main', items: [
-    { id: 'overview',    label: 'Overview',    icon: LayoutDashboard },
-    { id: 'students',    label: 'Students',    icon: Users },
-    { id: 'classes',     label: 'Classes',     icon: School },
-    { id: 'messages',    label: 'Messages',    icon: MessageSquare },
-  ]},
-  { label: 'Teaching', items: [
-    { id: 'assignments', label: 'Assignments', icon: ClipboardList },
-    { id: 'sessions',    label: 'Sessions',    icon: Video },
-    { id: 'resources',   label: 'Resources',   icon: Folder },
-  ]},
-  { label: 'Insights', items: [
-    { id: 'progress',    label: 'Progress',    icon: ChartColumn },
-    { id: 'diagnostic',  label: 'Diagnostic',  icon: FlaskConical },
-  ]},
-  { label: 'You', items: [
-    { id: 'profile',     label: 'My Profile',  icon: IdCard },
-    { id: 'plan',        label: 'Plan & billing', icon: CreditCard },
-  ]},
-]
+// ── Main TutorScreen ───────────────────────────────────────────────────────────
+// The sections are in the app sidebar (lib/portalNav TUTOR_NAV) and live at
+// /tutor/<section>. Progress reports sit inside Students; profile and billing
+// open from the account menu.
 const SECTION_META = {
-  overview:    { title: 'Overview',    sub: "Welcome back — here's what needs you today." },
-  students:    { title: 'Students',    sub: 'Your roster, performance & open tasks at a glance.' },
-  classes:     { title: 'Classes',     sub: 'Group students for assignments & sessions.' },
-  assignments: { title: 'Assignments', sub: 'Create, batch-assign and track work.' },
-  sessions:    { title: 'Sessions',    sub: 'Live video lessons — one-off & recurring.' },
-  resources:   { title: 'Resources',   sub: 'Notes, files & class recordings.' },
-  progress:    { title: 'Progress',    sub: 'Per-student analytics & reports.' },
-  diagnostic:  { title: 'Diagnostic',  sub: 'AI-built diagnostic assessments.' },
-  messages:    { title: 'Messages',    sub: 'Conversations with your students.' },
-  profile:     { title: 'My Profile',  sub: 'What your students see about you.' },
-  plan:        { title: 'Plan & billing', sub: 'Your tutor plan, student limit and payments.' },
+  overview:    { title: 'Today' },
+  students:    { title: 'Students' },
+  classes:     { title: 'Classes' },
+  assignments: { title: 'Assignments' },
+  sessions:    { title: 'Lessons' },
+  resources:   { title: 'Resources' },
+  diagnostic:  { title: 'Diagnostics' },
+  messages:    { title: 'Messages' },
+  profile:     { title: 'Tutor profile' },
+  plan:        { title: 'Plan and billing' },
 }
 
 export default function TutorScreen({ profile, theme, subject }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  // ?tab=messages (from message emails) opens a tab directly.
-  const [activeTab, setActiveTab] = useState(() => {
-    const tab = new URLSearchParams(window.location.search).get('tab')
-    return tab && SECTION_META[tab] ? tab : 'overview'
-  })
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileSearch, setMobileSearch] = useState(false)
-  const activeMobileTab = useRef(null)
+  const location = useLocation()
+  const section = location.pathname.split('/')[2] || 'overview'
+  // Old links: /tutor?tab=messages (message emails) and the Progress section.
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get('tab')
+    if (tab && SECTION_META[tab]) navigate(`/tutor/${tab}${location.search.replace(/[?&]tab=[^&]*/, '').replace(/^&/, '?')}`, { replace: true })
+    else if (section === 'progress') navigate('/tutor/students?view=progress', { replace: true })
+    else if (!SECTION_META[section]) navigate('/tutor', { replace: true })
+  }, [location.pathname, location.search]) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeTab = SECTION_META[section] ? section : 'overview'
+  const params = new URLSearchParams(location.search)
+  const studentsView = params.get('view') === 'progress' ? 'progress' : 'roster'
+
   // An assignment report open over the portal. ?report=<id> (from the
   // "assignment finished" email) opens one directly.
   const [reportId, setReportId] = useState(() => new URLSearchParams(window.location.search).get('report'))
@@ -2588,7 +2404,7 @@ export default function TutorScreen({ profile, theme, subject }) {
     try { localStorage.setItem('gf-tutor-scope', v ? 'all' : 'mine') } catch {}
   }
 
-  // Shell-level data — powers Overview, the global search and sidebar badges.
+  // Shell-level data — powers Today, the search and the sidebar badges.
   const [roster, setRoster] = useState([])
   const [classes, setClasses] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -2610,231 +2426,73 @@ export default function TutorScreen({ profile, theme, subject }) {
     return () => { cancelled = true }
   }, [profile.id, allTutors])
 
+  // Overdue work, shown as a badge on Assignments in the app sidebar.
   const overdueCount = useMemo(
     () => assignments.filter(a => !a.completed_at && a.due_date && new Date(a.due_date).setHours(23,59,59,999) < Date.now()).length,
     [assignments],
   )
-  // Unread student messages, refreshed every minute and when a conversation changes.
-  const [unreadMessages, setUnreadMessages] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    const refresh = () => { fetchUnreadMessageCount().then(n => { if (!cancelled) setUnreadMessages(n) }).catch(() => {}) }
-    refresh()
-    const id = setInterval(refresh, 60_000)
-    window.addEventListener('gf-messages-changed', refresh)
-    return () => { cancelled = true; clearInterval(id); window.removeEventListener('gf-messages-changed', refresh) }
-  }, [])
+  useEffect(() => { reportPortalBadges('tutor', { assignments: overdueCount }) }, [overdueCount])
 
-  const badges = { students: roster.length || null, assignments: overdueCount || null, messages: unreadMessages || null }
+  const go = (id) => navigate(id === 'overview' ? '/tutor' : `/tutor/${id}`)
+  const meta = SECTION_META[activeTab]
+  const isDark = theme === 'dark'
 
-  const go = (id) => { setActiveTab(id); setMobileSearch(false) }
+  // A short, true line under each title.
+  const context = {
+    overview: new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }),
+    students: `${roster.length} student${roster.length !== 1 ? 's' : ''} · ${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
+    classes: `${classes.length} class${classes.length !== 1 ? 'es' : ''}`,
+    assignments: overdueCount ? `${overdueCount} overdue` : `${assignments.filter(a => !a.completed_at).length} open`,
+  }[activeTab]
 
-  // Phones: keep the selected tab visible in the swipeable tab strip.
-  useEffect(() => {
-    activeMobileTab.current?.scrollIntoView({ inline: 'center', block: 'nearest' })
-  }, [activeTab])
-
-  const SIDEBAR_W = collapsed ? 74 : 224
-  const meta = SECTION_META[activeTab] || { title: '', sub: '' }
-
-  const isDark      = theme === 'dark'
-  const sidebarBg   = isDark ? '#07091e' : '#f8f9fc'
-  const sidebarBdr  = isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'
-  const headerBg    = isDark ? 'rgba(6,7,26,0.92)' : 'rgba(255,255,255,0.90)'
-  const headerBdr   = isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'
-  const navGroupLbl = isDark ? 'rgba(255,255,255,0.22)' : '#94a3b8'
-  const navItemDflt = isDark ? 'rgba(255,255,255,0.52)' : '#64748b'
-  const navAccent   = isDark ? GOLD : '#0f172a'
-  // Layout is identical in both themes; only these colours change.
-  const goldText    = t.goldText
-
-  const sidebar = (
-    <aside className={isDark ? '' : 'td-sidebar-light'} style={{
-      width: SIDEBAR_W, flexShrink: 0,
-      background: isDark
-        ? 'linear-gradient(180deg, #08091f 0%, #070918 100%)'
-        : sidebarBg,
-      borderRight: `1px solid ${sidebarBdr}`,
-      display: 'flex', flexDirection: 'column', height: '100%', transition: 'width 0.18s',
-      boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.28)' : 'none',
-    }}>
-      {/* Portal label. The app sidebar beside this one already shows the
-          gradefarm logo, so it isn't repeated here. */}
-      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '0 12px' : '0 20px', borderBottom: `1px solid ${sidebarBdr}` }}>
-        <div title={collapsed ? 'Tutor Portal' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: isDark ? 'rgba(241,190,67,0.12)' : 'rgba(241,190,67,0.16)', border: `1px solid ${isDark ? 'rgba(241,190,67,0.28)' : 'rgba(241,190,67,0.45)'}`, borderRadius: 30, padding: collapsed ? '6px' : '6px 14px' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: isDark ? '0 0 8px rgba(241,190,67,0.9)' : 'none', flexShrink: 0 }} />
-          {!collapsed && <span style={{ fontFamily: FONT_D, fontSize: 10, letterSpacing: '0.18em', color: goldText, whiteSpace: 'nowrap' }}>TUTOR PORTAL</span>}
-        </div>
-      </div>
-
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
-        {NAV_GROUPS.map(group => (
-          <div key={group.label} style={{ marginTop: 14 }}>
-            {!collapsed && (
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: navGroupLbl, padding: '4px 12px 6px' }}>{group.label}</div>
-            )}
-            {group.items.map(item => {
-              const active = activeTab === item.id
-              const badge = badges[item.id]
-              return (
-                <button key={item.id} onClick={() => go(item.id)} title={collapsed ? item.label : undefined}
-                  className={`td-nav-item${active ? ' active' : ''}`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left',
-                    padding: collapsed ? '11px 0' : '10px 14px',
-                    justifyContent: collapsed ? 'center' : undefined,
-                    margin: '1px 0', cursor: 'pointer',
-                    fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
-                    color: active ? navAccent : navItemDflt,
-                    background: 'transparent',
-                  }}
-                >
-                  <span style={{ display: 'flex', flexShrink: 0, opacity: active ? 1 : 0.75 }}><item.icon size={17} aria-hidden="true" /></span>
-                  {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
-                  {!collapsed && badge != null && (
-                    <span style={{
-                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.18)' : item.id === 'messages' ? GOLD : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
-                      color: item.id === 'assignments' ? '#f87171' : item.id === 'messages' ? '#0c1037' : (isDark ? t.textSub : '#64748b'),
-                      fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '2px 7px',
-                      border: item.id === 'assignments' ? '1px solid rgba(248,113,113,0.30)' : (isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #cbd5e1'),
-                    }}>{badge}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {/* User profile footer */}
-      <div style={{ padding: '10px 10px 12px', borderTop: `1px solid ${sidebarBdr}` }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '9px 10px', borderRadius: 12,
-          background: isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : '#e2e6ed'}`,
-          cursor: 'default',
-        }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%',
-            background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, color: '#0c1037', flexShrink: 0, fontSize: 14,
-            boxShadow: isDark ? '0 0 14px rgba(241,190,67,0.35)' : 'none',
-          }}>
-            {(profile.display_name || '?')[0].toUpperCase()}
-          </div>
-          {!collapsed && (
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.92)' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name || 'Tutor'}</div>
-              <div style={{ fontSize: 11, color: goldText, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tutor</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </aside>
+  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const segOn = { background: 'var(--t-text)', color: 'var(--t-bg)' }
+  const segment = (options, value, onChange, label) => (
+    <div role="group" aria-label={label} style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+      {options.map(([v, l]) => (
+        <button key={String(v)} type="button" aria-pressed={value === v} onClick={() => onChange(v)}
+          style={{ padding: '6px 12px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', ...(value === v ? segOn : { background: 'transparent', color: t.textMuted }) }}>
+          {l}
+        </button>
+      ))}
+    </div>
   )
 
   return (
-    <div
-      className="td-root"
-      style={{
-        flex: 1, display: 'flex',
-        background: theme === 'dark' ? '#06071a' : t.bg,
-        backgroundImage: theme === 'dark'
-          ? 'radial-gradient(ellipse 900px 700px at 85% -8%, rgba(241,190,67,0.055) 0%, transparent 55%), radial-gradient(ellipse 700px 600px at -5% 95%, rgba(99,102,241,0.05) 0%, transparent 60%)'
-          : 'none',
-        fontFamily: FONT_B, color: t.text, minHeight: 0,
-      }}
-    >
-      <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}`}</style>
-
-      {/* Desktop sidebar */}
-      <div className="tutor-desktop-sidebar" style={{ display: 'flex', height: '100vh', position: 'sticky', top: 0 }}>{sidebar}</div>
-
-      {/* Main column. On phones the sidebar is replaced by a tab strip in the header. */}
-      <div className="td-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100vh' }}>
-        {/* Top bar */}
-        <header className="td-header" style={{
-          position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14,
-          padding: '0 24px',
-          background: headerBg, backdropFilter: 'blur(16px)',
-          borderBottom: `1px solid ${headerBdr}`,
-          minHeight: 64, height: 64,
-        }}>
-          <span className="td-header-sep" />
-          <button className="td-collapse-btn" onClick={() => setCollapsed(v => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'transparent', color: isDark ? 'rgba(255,255,255,0.5)' : '#94a3b8', cursor: 'pointer', fontSize: 14, flexShrink: 0, transition: 'background 0.12s' }}>☰</button>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 18, fontFamily: FONT_D, fontWeight: 400, letterSpacing: '0.04em', color: isDark ? t.text : '#0f172a', lineHeight: 1.1 }}>{meta.title}</div>
-            <div className="td-header-sub" style={{ fontSize: 11, color: isDark ? t.textMuted : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3, letterSpacing: '0.02em' }}>{meta.sub}</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {isAdmin && (
-              <div role="group" aria-label="Whose students" style={{ display: 'flex', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`, overflow: 'hidden', flexShrink: 0 }}>
-                {[{ v: false, label: 'My students' }, { v: true, label: 'All tutors' }].map(opt => (
-                  <button key={opt.label} onClick={() => setAllTutors(opt.v)} aria-pressed={allTutors === opt.v}
-                    style={{ padding: '0 12px', height: 32, border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                      background: allTutors === opt.v ? (isDark ? 'rgba(241,190,67,0.16)' : '#0f172a') : 'transparent',
-                      color: allTutors === opt.v ? (isDark ? GOLD : '#fff') : (isDark ? 'rgba(255,255,255,0.55)' : '#64748b') }}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="td-search-desktop">
-              <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} />
-            </div>
-            <button type="button" className="tutor-mobile-only" onClick={() => setMobileSearch(v => !v)} aria-label="Search" aria-pressed={mobileSearch}
-              style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9, cursor: 'pointer', display: 'flex',
-                border: `1px solid ${mobileSearch ? GOLD : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`, background: 'transparent', color: mobileSearch ? GOLD : (isDark ? 'rgba(255,255,255,0.6)' : '#64748b') }}>
-              <Search size={16} aria-hidden="true" />
-            </button>
-          </div>
-          {mobileSearch && (
-            <div className="tutor-mobile-only" style={{ width: '100%' }}>
-              <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} width="100%" autoFocus />
-            </div>
+    <div className="td-root" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0, background: t.bg, fontFamily: FONT_B, color: t.text }}>
+      <header className="td-header" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '18px 28px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+        <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, lineHeight: 1.2 }}>{meta.title}</h1>
+          {context && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>{context}</div>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {isAdmin && segment([[false, 'My students'], [true, 'All tutors']], allTutors, setAllTutors, 'Whose students')}
+          <GlobalSearch theme={theme} roster={roster} classes={classes} resources={resources} assignments={assignments} onNavigate={go} width="min(280px, 70vw)" />
+          {activeTab === 'overview' && (
+            <>
+              <button type="button" style={btn(false)} onClick={() => go('sessions')}>Schedule lesson</button>
+              <button type="button" style={btn(true)} onClick={() => go('assignments')}>New assignment</button>
+            </>
           )}
-          {/* Phones: every section as a swipeable strip of tabs */}
-          <nav className="tutor-mobile-only td-mobile-tabs" aria-label="Tutor portal sections">
-            {NAV_GROUPS.flatMap(g => g.items).map(item => {
-              const active = activeTab === item.id
-              const badge = badges[item.id]
-              return (
-                <button key={item.id} type="button" ref={active ? activeMobileTab : undefined} onClick={() => go(item.id)} aria-current={active ? 'page' : undefined}
-                  style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: active ? 800 : 600, whiteSpace: 'nowrap',
-                    border: `1px solid ${active ? 'rgba(241,190,67,0.55)' : (isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0')}`,
-                    background: active ? (isDark ? 'rgba(241,190,67,0.16)' : '#0f172a') : 'transparent',
-                    color: active ? (isDark ? GOLD : '#fff') : navItemDflt }}>
-                  <item.icon size={14} aria-hidden="true" />
-                  {item.label}
-                  {badge != null && (
-                    <span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, fontSize: 10, fontWeight: 800, lineHeight: '17px', textAlign: 'center',
-                      background: item.id === 'assignments' ? 'rgba(248,113,113,0.2)' : item.id === 'messages' ? GOLD : (isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0'),
-                      color: item.id === 'assignments' ? '#f87171' : item.id === 'messages' ? '#0c1037' : (isDark ? t.textSub : '#64748b') }}>{badge}</span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
-        </header>
+          {activeTab === 'students' && segment([['roster', 'Roster'], ['progress', 'Progress reports']], studentsView, (v) => navigate(v === 'progress' ? '/tutor/students?view=progress' : '/tutor/students'), 'Students view')}
+        </div>
+      </header>
 
-        {/* Section content */}
-        <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 56px' }}>
-          <div key={`${activeTab}-${allTutors ? 'all' : 'mine'}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
-            {activeTab === 'overview'    && <OverviewTab    profile={profile} theme={theme} roster={roster} classes={classes} assignments={assignments} resources={resources} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} />}
-            {activeTab === 'students'    && <StudentsTab    profile={profile} theme={theme} allTutors={allTutors} />}
-            {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} allTutors={allTutors} />}
-            {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} onOpenReport={setReportId} />}
-            {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
-            {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
-            {activeTab === 'progress'    && <ProgressTab    profile={profile} theme={theme} allTutors={allTutors} onOpenReport={setReportId} />}
-            {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
-            {activeTab === 'messages'    && <MessagesView   theme={theme} emptyHint="Invite a student from the Students tab to start a conversation." />}
-            {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
-            {activeTab === 'plan'        && <TutorPlanTab theme={theme} />}
-          </div>
+      {/* Section content */}
+      <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 56px' }}>
+        <div key={`${activeTab}-${studentsView}-${allTutors ? 'all' : 'mine'}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+          {activeTab === 'overview'    && <TutorToday     theme={theme} roster={roster} assignments={assignments} sessions={sessions} onNavigate={go} onJoinSession={(id) => navigate(`/session/${id}`)} onOpenReport={setReportId} />}
+          {activeTab === 'students'    && (studentsView === 'progress'
+            ? <ProgressTab profile={profile} theme={theme} allTutors={allTutors} onOpenReport={setReportId} initialStudentId={params.get('student')} />
+            : <StudentsTab profile={profile} theme={theme} allTutors={allTutors} onNavigate={(to) => navigate(to)} />)}
+          {activeTab === 'classes'     && <ClassesTab     profile={profile} theme={theme} allTutors={allTutors} />}
+          {activeTab === 'assignments' && <AssignmentsTab profile={profile} theme={theme} subject={subject} allTutors={allTutors} onOpenReport={setReportId} newForStudent={params.get('student')} />}
+          {activeTab === 'sessions'    && <SessionsTab    profile={profile} theme={theme} />}
+          {activeTab === 'resources'   && <ResourcesTab   profile={profile} theme={theme} />}
+          {activeTab === 'diagnostic'  && <DiagnosticTab  profile={profile} theme={theme} />}
+          {activeTab === 'messages'    && <MessagesView   theme={theme} initialOtherId={params.get('with')} emptyHint="Invite a student from Students to start a conversation." />}
+          {activeTab === 'profile'     && <TutorProfileTab profile={profile} theme={theme} />}
+          {activeTab === 'plan'        && <TutorPlanTab theme={theme} />}
         </div>
       </div>
       {reportId && <AssignmentReport assignmentId={reportId} theme={theme} onClose={() => setReportId(null)} />}
@@ -2878,7 +2536,7 @@ function GlobalSearch({ theme, roster, classes, resources, assignments, onNaviga
 
   return (
     <div ref={boxRef} style={{ position: 'relative', width }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgInput, border: `1px solid ${open ? GOLD : (theme === 'dark' ? 'rgba(255,255,255,0.10)' : t.border)}`, borderRadius: 10, padding: '8px 12px', transition: 'border-color 0.15s' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bgInput, border: `1px solid ${open ? 'var(--t-text)' : (theme === 'dark' ? 'var(--t-border)' : t.border)}`, borderRadius: 10, padding: '8px 12px', transition: 'border-color 0.15s' }}>
         <Search size={14} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0 }} />
         <input
           value={q}
@@ -2890,19 +2548,19 @@ function GlobalSearch({ theme, roster, classes, resources, assignments, onNaviga
         />
       </div>
       {open && q.trim() && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: theme === 'dark' ? 'rgba(7,9,30,0.96)' : t.bgCard, border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : t.border}`, borderRadius: 12, boxShadow: theme === 'dark' ? '0 8px 32px rgba(0,0,0,0.6)' : t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto', backdropFilter: 'blur(12px)' }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, left: 0, background: t.bgCard, border: '1px solid var(--t-border)', borderRadius: 12, boxShadow: theme === 'dark' ? '0 8px 32px rgba(0,0,0,0.6)' : t.shadowModal, overflow: 'hidden', zIndex: 30, maxHeight: 360, overflowY: 'auto', backdropFilter: 'blur(12px)' }}>
           {results.length === 0 ? (
             <div style={{ padding: '14px 16px', fontSize: 13, color: t.textMuted }}>No matches for “{q.trim()}”.</div>
           ) : results.map((r, i) => (
             <button key={i} onClick={() => { onNavigate(r.to); setOpen(false); setQ('') }}
-              style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.07)' : t.border}`, background: 'transparent', cursor: 'pointer', fontFamily: FONT_B }}
-              onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.04)' : t.bgHover}
+              style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--t-border)', background: 'transparent', cursor: 'pointer', fontFamily: FONT_B }}
+              onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'var(--t-bgCard)' : t.bgHover}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <span style={{ display: 'flex', flexShrink: 0, color: t.textMuted }}><r.icon size={16} aria-hidden="true" /></span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
               </span>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: t.textMuted, letterSpacing: '0.05em' }}>{r.kind}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: t.textMuted }}>{r.kind}</span>
             </button>
           ))}
         </div>

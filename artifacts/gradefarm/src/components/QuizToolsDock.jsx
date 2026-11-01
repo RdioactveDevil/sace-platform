@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Calculator as CalculatorIcon, Atom, Ruler, Repeat, Wrench } from 'lucide-react'
+import { appZoom } from '../lib/appZoom'
 import { THEMES } from '../lib/theme'
 import { ELEMENTS, CATEGORIES } from '../lib/periodicTable'
 import { CONSTANTS, FORMULAS } from '../lib/dataSheet'
@@ -15,9 +16,9 @@ const FONT_M = "'JetBrains Mono', monospace"
 // ── Tool registry ───────────────────────────────────────────────────────────
 const TOOLS = [
   { id: 'calc',     icon: CalculatorIcon, label: 'Calculator',    w: 300, h: 440 },
-  { id: 'periodic', icon: Atom,       label: 'Periodic Table', w: 640, h: 480 },
-  { id: 'data',     icon: Ruler,      label: 'Data Sheet',     w: 360, h: 460 },
-  { id: 'convert',  icon: Repeat,     label: 'Unit Converter', w: 320, h: 360 },
+  { id: 'periodic', icon: Atom,       label: 'Periodic table', w: 640, h: 480 },
+  { id: 'data',     icon: Ruler,      label: 'Data sheet',     w: 360, h: 460 },
+  { id: 'convert',  icon: Repeat,     label: 'Unit converter', w: 320, h: 360 },
 ]
 
 // ── Safe calculator evaluator ────────────────────────────────────────────────
@@ -64,10 +65,12 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
     const origin = { ...pos }
     dragRef.current = { startX, startY, origin }
     const move = (ev) => {
-      const dx = ev.clientX - dragRef.current.startX
-      const dy = ev.clientY - dragRef.current.startY
-      const maxX = window.innerWidth - 120
-      const maxY = window.innerHeight - 60
+      // Pointer moves are in screen pixels; the dock sits inside the zoomed app.
+      const z = appZoom()
+      const dx = (ev.clientX - dragRef.current.startX) / z
+      const dy = (ev.clientY - dragRef.current.startY) / z
+      const maxX = window.innerWidth / z - 120
+      const maxY = window.innerHeight / z - 60
       setPos({
         x: Math.max(8, Math.min(maxX, dragRef.current.origin.x + dx)),
         y: Math.max(8, Math.min(maxY, dragRef.current.origin.y + dy)),
@@ -83,7 +86,7 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
 
   const frameStyle = isMobile
     ? { position: 'fixed', inset: '8px', width: 'auto', height: 'auto', maxHeight: 'calc(100vh - 16px)' }
-    : { position: 'fixed', left: pos.x, top: pos.y, width: tool.w, maxWidth: 'calc(100vw - 16px)', height: tool.h, maxHeight: 'calc(100vh - 16px)' }
+    : { position: 'fixed', left: pos.x, top: pos.y, width: tool.w, maxWidth: `calc(100vw / ${appZoom()} - 16px)`, height: tool.h, maxHeight: `calc(100vh / ${appZoom()} - 16px)` }
 
   return (
     <div
@@ -108,20 +111,21 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 12px',
-          background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
+          padding: '9px 12px',
+          background: t.bgSubtle,
+          borderBottom: `1px solid ${t.border}`,
           cursor: isMobile ? 'default' : 'grab',
           touchAction: 'none',
           userSelect: 'none',
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 800, color: NAVY, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}>
           <tool.icon size={15} style={{ flexShrink: 0 }} aria-hidden="true" />{tool.label}
         </span>
         <button
           onClick={onClose}
           aria-label="Close tool"
-          style={{ border: 'none', background: 'rgba(0,0,0,0.12)', color: NAVY, width: 24, height: 24, borderRadius: 7, fontSize: 14, fontWeight: 800, cursor: 'pointer', lineHeight: 1 }}
+          style={{ border: 'none', background: 'transparent', color: t.textMuted, width: 24, height: 24, borderRadius: 7, fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}
         >×</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -182,7 +186,7 @@ function Calculator({ theme }) {
 
       {/* Mode row */}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => setDeg(d => !d)} style={{ ...modeBtn(t), color: GOLD, borderColor: t.borderAccent }}>
+        <button onClick={() => setDeg(d => !d)} style={{ ...modeBtn(t), color: t.text, borderColor: t.border }}>
           {deg ? 'DEG' : 'RAD'}
         </button>
         <button onClick={back} style={modeBtn(t)}>⌫</button>
@@ -207,11 +211,10 @@ function Calculator({ theme }) {
                 padding: '0',
                 minHeight: 38,
                 transition: 'all 0.12s',
-                background: equalsKey ? `linear-gradient(135deg,${GOLD},${GOLDL})`
+                background: equalsKey ? t.accent
                   : isOp(k) ? t.bgHover
-                  : isFn(k) ? t.accentGlow2
                   : t.bgSubtle,
-                color: equalsKey ? NAVY : isFn(k) ? GOLD : t.text,
+                color: equalsKey ? NAVY : isFn(k) ? t.textSub : t.text,
               }}
             >{k}</button>
           )
@@ -285,7 +288,7 @@ function PeriodicTable({ theme }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{sel.name}</div>
             <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
-              Atomic mass <b style={{ color: GOLD }}>{sel.mass}</b> · Group {sel.group} · Period {sel.period}
+              Atomic mass <b style={{ color: t.text }}>{sel.mass}</b> · Group {sel.group} · Period {sel.period}
             </div>
             <div style={{ fontSize: 11, color: CATEGORIES[sel.cat]?.color, marginTop: 2, fontWeight: 700 }}>{CATEGORIES[sel.cat]?.label}</div>
           </div>
@@ -331,7 +334,7 @@ function DataSheet({ theme }) {
               fontFamily: FONT_B, transition: 'all 0.12s',
               border: `1px solid ${tab === tb ? t.borderAccent : t.border}`,
               background: tab === tb ? t.accentGlow : 'transparent',
-              color: tab === tb ? GOLD : t.textMuted,
+              color: tab === tb ? t.text : t.textMuted,
             }}>{tb}</button>
         ))}
       </div>
@@ -346,7 +349,7 @@ function DataSheet({ theme }) {
               <div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{r.left}</div>
               {r.sub && <div style={{ fontSize: 11, color: t.textMuted }}>{r.sub}</div>}
             </div>
-            <div style={{ fontSize: 13, color: GOLD, textAlign: 'right', flexShrink: 0 }}>{r.right}</div>
+            <div style={{ fontSize: 13, color: t.goldText, textAlign: 'right', flexShrink: 0 }}>{r.right}</div>
           </div>
         ))}
       </div>
@@ -399,11 +402,11 @@ function UnitConverter({ theme }) {
         </select>
       </div>
 
-      <div style={{ textAlign: 'center', color: GOLD, fontSize: 18 }}>↓</div>
+      <div style={{ textAlign: 'center', color: t.textMuted, fontSize: 18 }}>↓</div>
 
       <div>
         <label style={lbl(t)}>To</label>
-        <div style={{ ...sel, fontFamily: FONT_M, marginBottom: 6, color: GOLD, fontWeight: 800, minHeight: 38, display: 'flex', alignItems: 'center' }}>
+        <div style={{ ...sel, fontFamily: FONT_M, marginBottom: 6, color: t.text, fontWeight: 800, minHeight: 38, display: 'flex', alignItems: 'center' }}>
           {outStr || '—'}
         </div>
         <select value={to} onChange={e => setTo(e.target.value)} style={sel}>
@@ -419,31 +422,74 @@ function lbl(t) {
 }
 
 // ── Main dock ────────────────────────────────────────────────────────────────
-export default function QuizToolsDock({ theme = 'dark' }) {
+/**
+ * The tools a subject's questions call for, by its name: a calculator for
+ * maths and the sciences, plus the periodic table, data sheet and unit
+ * converter for chemistry and physics. Nothing for English, humanities or
+ * verbal reasoning. Unknown subjects get everything.
+ */
+export function toolsForSubject(name) {
+  const n = String(name || '').toLowerCase()
+  if (!n) return TOOLS.map(tt => tt.id)
+  if (/english|literary|literature|reading|writing|verbal|history|geograph|business|legal|essay/.test(n)) return []
+  if (/chem/.test(n)) return ['calc', 'periodic', 'data', 'convert']
+  if (/physic/.test(n)) return ['calc', 'data', 'convert']
+  if (/biolog|science|psych/.test(n)) return ['calc', 'convert']
+  if (/math|method|numer|quantit|specialist|statist|calculus|algebra/.test(n)) return ['calc']
+  return TOOLS.map(tt => tt.id)
+}
+
+/**
+ * Study tools for a question: a "Tools" menu (or a single button when the
+ * subject has one tool), and each tool opens in a window the student can
+ * drag. `tools` limits which are offered. `inline` puts the launcher where
+ * it's rendered (the quiz's top bar); otherwise it floats bottom-right.
+ */
+export default function QuizToolsDock({ theme = 'dark', tools = TOOLS.map(tt => tt.id), inline = false }) {
   const t = THEMES[theme]
+  const offered = TOOLS.filter(tt => tools.includes(tt.id))
   const [open, setOpen] = useState([])        // array of open tool ids
   const [expanded, setExpanded] = useState(false)
   const [topId, setTopId] = useState(null)     // which window is focused (on top)
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 860)
+  const menuRef = useRef(null)
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 860)
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
+  // Close the menu on a click outside it or Escape.
+  useEffect(() => {
+    if (!expanded) return
+    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setExpanded(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setExpanded(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [expanded])
 
   const toggleTool = (id) => {
     setOpen(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
     setTopId(id)
-    if (isMobile) setExpanded(false)
+    setExpanded(false)
   }
   const closeTool = (id) => setOpen(prev => prev.filter(x => x !== id))
 
   // Cascade initial positions so multiple windows don't stack perfectly.
   const initialFor = (id) => {
     const idx = TOOLS.findIndex(tt => tt.id === id)
-    return { x: Math.max(16, window.innerWidth - 380 - idx * 28), y: 88 + idx * 28 }
+    return { x: Math.max(16, window.innerWidth / appZoom() - 380 - idx * 28), y: 88 + idx * 28 }
   }
+
+  if (!offered.length) return null
+  const barBtn = (on) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
+    border: `1px solid ${on ? t.text : t.border}`, background: t.bgCard, color: t.text,
+    fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+    ...(inline ? {} : { padding: '9px 14px', borderRadius: 10, fontSize: 13, boxShadow: t.shadowModal }),
+  })
+  const single = offered.length === 1 ? offered[0] : null
 
   return (
     <>
@@ -465,47 +511,35 @@ export default function QuizToolsDock({ theme = 'dark' }) {
         )
       })}
 
-      {/* Launcher */}
-      <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 2100, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, fontFamily: FONT_B }}>
-        {expanded && TOOLS.map(tool => {
-          const isOpen = open.includes(tool.id)
-          return (
-            <button
-              key={tool.id}
-              onClick={() => toggleTool(tool.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 9,
-                padding: '8px 14px 8px 12px', borderRadius: 999,
-                border: `1px solid ${isOpen ? t.borderAccent : t.border}`,
-                background: isOpen ? t.accentGlow : t.bgCard,
-                color: isOpen ? GOLD : t.text,
-                boxShadow: t.shadowCard, cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
-                animation: 'gf-tooldock-in 0.16s ease',
-              }}
-            >
-              <tool.icon size={16} style={{ flexShrink: 0 }} aria-hidden="true" />{tool.label}
-              {isOpen && <span style={{ fontSize: 10, color: GOLD }}>● open</span>}
-            </button>
-          )
-        })}
-        <button
-          onClick={() => setExpanded(e => !e)}
-          aria-label="Study tools"
-          style={{
-            width: 56, height: 56, borderRadius: '50%',
-            border: 'none', cursor: 'pointer',
-            background: `linear-gradient(135deg,${GOLD},${GOLDL})`,
-            color: NAVY, fontSize: 24, boxShadow: '0 6px 20px rgba(241,190,67,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'transform 0.18s',
-            transform: expanded ? 'rotate(45deg)' : 'none',
-          }}
-        >
-          {expanded ? '+' : <Wrench size={24} aria-hidden="true" />}
+      {/* Launcher: one button for one tool, otherwise a menu */}
+      <div style={inline ? { display: 'contents' } : { position: 'fixed', right: 16, bottom: 16, zIndex: 2100 }}>
+      {single ? (
+        <button type="button" onClick={() => toggleTool(single.id)} aria-pressed={open.includes(single.id)} style={barBtn(open.includes(single.id))}>
+          <single.icon size={14} aria-hidden="true" />{isMobile ? null : single.label}
         </button>
+      ) : (
+        <div ref={menuRef} style={{ position: 'relative', fontFamily: FONT_B }}>
+          <button type="button" onClick={() => setExpanded(e => !e)} aria-expanded={expanded} aria-haspopup="menu" style={barBtn(expanded)}>
+            <Wrench size={14} aria-hidden="true" />{isMobile ? null : 'Tools'}
+          </button>
+          {expanded && (
+            <div role="menu" style={{ position: 'absolute', right: 0, ...(inline ? { top: 'calc(100% + 6px)' } : { bottom: 'calc(100% + 6px)' }), zIndex: 2100, minWidth: 190, padding: 5, borderRadius: 10, background: t.bgCard, border: `1px solid ${t.border}`, boxShadow: t.shadowModal, display: 'flex', flexDirection: 'column' }}>
+              {offered.map(tool => {
+                const isOpen = open.includes(tool.id)
+                return (
+                  <button key={tool.id} type="button" role="menuitemcheckbox" aria-checked={isOpen} onClick={() => toggleTool(tool.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, border: 'none', background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = t.bgHover }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+                    <tool.icon size={15} style={{ flexShrink: 0, color: t.textMuted }} aria-hidden="true" />{tool.label}
+                    {isOpen && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: t.textMuted }}>Open</span>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
       </div>
-      <style>{`@keyframes gf-tooldock-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </>
   )
 }

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripe, removePaidSubject } from "./billing";
 import { currentStreak } from "../lib/streak";
 import { planIsLive, type TutorBillingRow } from "../lib/tutor-plan";
+import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -132,7 +133,7 @@ router.get("/admin/tutor-applications", async (req, res) => {
 
     const { data: pending, error: pendErr } = await admin
       .from("profiles")
-      .select("id, display_name, school, tutor_application_at")
+      .select("id, display_name, school, tutor_application_at, tutor_organization, tutor_phone, tutor_subjects_offered, tutor_experience_years, tutor_qualifications, tutor_bio")
       .eq("tutor_application_status", "pending")
       .order("tutor_application_at", { ascending: true });
 
@@ -159,6 +160,13 @@ router.get("/admin/tutor-applications", async (req, res) => {
       school: p.school,
       email: emailById.get(p.id) || null,
       applied_at: p.tutor_application_at,
+      // What they told us on the tutor sign-up page.
+      organization: p.tutor_organization ?? null,
+      phone: p.tutor_phone ?? null,
+      subjects: p.tutor_subjects_offered ?? null,
+      experience_years: p.tutor_experience_years ?? null,
+      qualifications: p.tutor_qualifications ?? null,
+      bio: p.tutor_bio ?? null,
     }));
 
     return res.json({ applications });
@@ -1210,6 +1218,83 @@ router.get("/admin/cohort-stats", async (req, res) => {
     }));
 
     return res.json({ rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/questions/:id/content — an admin rewrites a live question
+// (Student flags). Body: any of question, options, answerIndex, solution,
+// difficulty. Reports use /question-reports/:id/resolve, which also settles them.
+router.patch("/admin/questions/:id/content", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const { data: q } = await admin.from("questions").select("id, options").eq("id", req.params.id).maybeSingle();
+    if (!q) return res.status(404).json({ error: "No question with that ID" });
+    const built = buildQuestionUpdate(parseOptions(q.options), req.body || {});
+    if ("error" in built) return res.status(400).json({ error: built.error });
+    const { error } = await admin.from("questions").update(built.update).eq("id", req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /admin/questions/:id — take a live question out of the bank. Its
+// variants, flags and students' review history for it go with it (cascade).
+router.delete("/admin/questions/:id", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { data, error } = await ctx.admin.from("questions").delete().eq("id", req.params.id).select("id");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No question with that ID" });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/questions/:id/visuals — an admin changes a question's graph,
+// table or image from Preview. Body: { source: "live" | "draft", graph,
+// table_data, image_url }; null clears a field. Live questions have no update
+// policy for signed-in users, so this goes through the service key.
+router.patch("/admin/questions/:id/visuals", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const { source, graph, table_data, image_url } = (req.body || {}) as {
+      source?: string; graph?: unknown; table_data?: unknown; image_url?: unknown;
+    };
+    const table = source === "draft" ? "draft_questions" : "questions";
+    const isJson = (v: unknown) => v === null || (typeof v === "object" && !Array.isArray(v));
+    if (!isJson(graph) || !isJson(table_data)) {
+      return res.status(400).json({ error: "graph and table_data must each be a JSON object or null" });
+    }
+    if (image_url !== null && typeof image_url !== "string") {
+      return res.status(400).json({ error: "image_url must be a link or null" });
+    }
+    const url = typeof image_url === "string" ? image_url.trim() : "";
+    if (url && !/^https:\/\//i.test(url)) {
+      return res.status(400).json({ error: "The image link must start with https://" });
+    }
+
+    const { data, error } = await admin
+      .from(table)
+      .update({ graph, table_data, image_url: url || null })
+      .eq("id", req.params.id)
+      .select("id, graph, table_data, image_url");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No question with that ID" });
+    return res.json({ question: data[0] });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

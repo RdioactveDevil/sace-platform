@@ -1,19 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { loadDiagnosticByToken, submitDiagnosticAnswers, prepareDiagnostic } from '../lib/db'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'mathlive'
 import 'mathlive/fonts.css'
 import MathText from './MathText'
-import { Check, GraduationCap, Hourglass, TriangleAlert, ClipboardList, PenLine, Star, Target, Bot, TrendingUp } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { AuthLayout, Field } from './AuthLayout'
 
-const GOLD  = '#f1be43'
-const GOLDL = '#f9d87a'
-const NAVY  = '#0c1037'
 const FONT  = "'Plus Jakarta Sans', sans-serif"
-
-const DIFF_COLOR = { easy: '#4ade80', moderate: GOLD, exam: '#f87171' }
+// Colours come from the app's theme variables (set on <html> by App), so the
+// page and its maths input follow light and dark mode.
+const C = {
+  text: 'var(--t-text)', sub: 'var(--t-textSub)', muted: 'var(--t-textMuted)', faint: 'var(--t-textFaint)',
+  card: 'var(--t-bgCard)', subtle: 'var(--t-bgSubtle)', hover: 'var(--t-bgHover)', border: 'var(--t-border)', bg: 'var(--t-bg)',
+  success: 'var(--t-success)', accent: 'var(--t-accent)',
+}
 
 // ── Math rendering ─────────────────────────────────────────────────────────────
 
@@ -99,14 +102,14 @@ function MathKeyboard({ onInsert }) {
   const group = MATH_SYMBOLS[activeGroup]
 
   return (
-    <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid rgba(255,255,255,0.08)', scrollbarWidth: 'none' }}>
+    <div style={{ marginTop: 8, background: C.subtle, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <div role="tablist" aria-label="Symbol groups" style={{ display: 'flex', overflowX: 'auto', borderBottom: `1px solid ${C.border}`, scrollbarWidth: 'none' }}>
         {MATH_SYMBOLS.map((g, i) => (
-          <button key={g.group} onClick={() => setActiveGroup(i)} style={{
+          <button key={g.group} type="button" role="tab" aria-selected={activeGroup === i} onClick={() => setActiveGroup(i)} style={{
             padding: '7px 13px', border: 'none', background: 'transparent', fontFamily: FONT,
-            fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-            color: activeGroup === i ? GOLD : 'rgba(255,255,255,0.45)',
-            borderBottom: activeGroup === i ? `2px solid ${GOLD}` : '2px solid transparent',
+            fontSize: 12, fontWeight: activeGroup === i ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap',
+            color: activeGroup === i ? C.text : C.muted,
+            borderBottom: activeGroup === i ? `2px solid ${C.text}` : '2px solid transparent',
           }}>
             {g.group}
           </button>
@@ -116,16 +119,15 @@ function MathKeyboard({ onInsert }) {
         {group.symbols.map((sym) => (
           <button
             key={sym.label}
+            type="button"
+            className="dg-key"
             onClick={() => onInsert(sym)}
             style={{
-              padding: '6px 11px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)',
-              background: 'rgba(255,255,255,0.06)', color: '#fff', fontFamily: FONT,
+              padding: '6px 11px', borderRadius: 7, border: `1px solid ${C.border}`,
+              background: C.card, color: C.text, fontFamily: FONT,
               fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              transition: 'background 0.12s, border-color 0.12s',
               display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 36, minHeight: 32,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(241,190,67,0.15)'; e.currentTarget.style.borderColor = `${GOLD}60` }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
           >
             {sym.preview
               ? <span dangerouslySetInnerHTML={{ __html: renderMath(sym.preview) }} style={{ pointerEvents: 'none' }} />
@@ -165,9 +167,9 @@ function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, min
       width: '100%',
       minHeight: `${minHeight || 60}px`,
       borderRadius: '10px',
-      border: '2px solid rgba(255,255,255,0.12)',
-      background: 'rgba(255,255,255,0.05)',
-      color: '#fff',
+      border: `1px solid ${C.border}`,
+      background: C.card,
+      color: C.text,
       fontSize: '17px',
       padding: '14px 16px',
       boxSizing: 'border-box',
@@ -188,11 +190,12 @@ function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabled, min
 
       const onInput = () => stableAnswer.current(questionId, mf.value)
       const onFocus = () => {
-        mf.style.borderColor = GOLD
+        mf.style.borderColor = 'var(--t-text)'
+        mf.style.boxShadow = '0 0 0 1px var(--t-text)'
         // Keep the field visible above the virtual keyboard once it slides up
         if (isTouchDevice()) setTimeout(() => mf.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400)
       }
-      const onBlur  = () => { mf.style.borderColor = 'rgba(255,255,255,0.12)' }
+      const onBlur  = () => { mf.style.borderColor = C.border; mf.style.boxShadow = 'none' }
       mf.addEventListener('input', onInput)
       mf.addEventListener('focus', onFocus)
       mf.addEventListener('blur', onBlur)
@@ -231,9 +234,9 @@ function difficultyGroups(questions) {
   const moderate = questions.filter(q => q.difficulty === 'moderate')
   const exam     = questions.filter(q => q.difficulty === 'exam')
   return [
-    { key: 'easy',     label: 'Section A — Foundation',    color: '#4ade80', questions: easy,     marks: easy.reduce((s, q) => s + q.marks, 0) },
-    { key: 'moderate', label: 'Section B — Core Skills',   color: GOLD,       questions: moderate, marks: moderate.reduce((s, q) => s + q.marks, 0) },
-    { key: 'exam',     label: 'Section C — Exam Style',    color: '#f87171',  questions: exam,     marks: exam.reduce((s, q) => s + q.marks, 0) },
+    { key: 'easy',     label: 'Warm-up',    questions: easy,     marks: easy.reduce((s, q) => s + q.marks, 0) },
+    { key: 'moderate', label: 'Core',       questions: moderate, marks: moderate.reduce((s, q) => s + q.marks, 0) },
+    { key: 'exam',     label: 'Exam style', questions: exam,     marks: exam.reduce((s, q) => s + q.marks, 0) },
   ].filter(g => g.questions.length > 0)
 }
 
@@ -241,35 +244,37 @@ function difficultyGroups(questions) {
 
 function McqQuestion({ q, answer, onAnswer, disabled }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div role="radiogroup" aria-label={`Question ${q.id} options`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {(q.options || []).map((opt, i) => {
         const letter = String.fromCharCode(65 + i)
         const selected = answer === letter
         return (
           <button
             key={letter}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            className="dg-opt"
             onClick={() => !disabled && onAnswer(q.id, letter)}
             style={{
-              display: 'flex', alignItems: 'flex-start', gap: 12,
-              padding: '13px 16px', borderRadius: 10, textAlign: 'left',
-              border: `2px solid ${selected ? GOLD : 'rgba(255,255,255,0.1)'}`,
-              background: selected ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.03)',
-              color: selected ? '#fff' : 'rgba(255,255,255,0.8)',
-              cursor: disabled ? 'default' : 'pointer', fontFamily: FONT, fontSize: 14,
-              transition: 'border-color 0.15s, background 0.15s',
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '11px 14px', borderRadius: 10, textAlign: 'left',
+              border: `1px solid ${selected ? C.text : C.border}`, boxShadow: selected ? `0 0 0 1px ${C.text}` : 'none',
+              background: C.card, color: C.text,
+              cursor: disabled ? 'default' : 'pointer', fontFamily: FONT, fontSize: 14.5,
             }}
           >
-            <span style={{
-              width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-              border: `2px solid ${selected ? GOLD : 'rgba(255,255,255,0.25)'}`,
-              background: selected ? GOLD : 'transparent',
-              color: selected ? NAVY : 'rgba(255,255,255,0.6)',
+            <span aria-hidden="true" style={{
+              width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+              border: `1px solid ${selected ? C.text : C.border}`,
+              background: selected ? C.text : 'transparent',
+              color: selected ? C.bg : C.muted,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 800,
+              fontSize: 11.5, fontWeight: 800,
             }}>
               {letter}
             </span>
-            <span style={{ flex: 1, lineHeight: 1.5, marginTop: 2 }}>
+            <span style={{ flex: 1, minWidth: 0, lineHeight: 1.5 }}>
               <MathText text={opt.replace(/^[A-D]\.\s*/, '')} />
             </span>
           </button>
@@ -293,28 +298,29 @@ function TextQuestion({ q, answer, onAnswer, disabled, isMath }) {
   if (isMath && !isExtended) {
     return (
       <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-          <button
-            onClick={() => setShowKeyboard(v => !v)}
-            style={{
-              padding: '4px 12px', borderRadius: 7,
-              border: `1px solid ${showKeyboard ? GOLD : 'rgba(255,255,255,0.15)'}`,
-              background: showKeyboard ? 'rgba(241,190,67,0.12)' : 'rgba(255,255,255,0.05)',
-              color: showKeyboard ? GOLD : 'rgba(255,255,255,0.6)',
-              fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            }}
-          >
-            ∑ Math
-          </button>
-        </div>
         <MathLiveInput
           questionId={q.id}
           value={answer}
           onAnswer={onAnswer}
           insertFnRef={insertFnRef}
           disabled={disabled}
-          minHeight={isExtended ? 180 : 80}
+          minHeight={isExtended ? 180 : 64}
         />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <button
+            type="button"
+            onClick={() => setShowKeyboard(v => !v)}
+            aria-pressed={showKeyboard}
+            style={{
+              padding: '4px 10px', borderRadius: 7,
+              border: `1px solid ${showKeyboard ? C.text : C.border}`,
+              background: C.card, color: showKeyboard ? C.text : C.muted,
+              fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            {showKeyboard ? 'Hide symbols' : 'Maths symbols'}
+          </button>
+        </div>
         {showKeyboard && !disabled && <MathKeyboard onInsert={handleInsert} />}
       </div>
     )
@@ -327,82 +333,72 @@ function TextQuestion({ q, answer, onAnswer, disabled, isMath }) {
       onChange={v => onAnswer(q.id, v)}
       disabled={disabled}
       isExtended={isExtended}
+      label={`Answer to question ${q.id}`}
     />
   )
 }
 
-function PlainTextInput({ value, onChange, disabled, isExtended }) {
-  const placeholder = isExtended
-    ? 'Write your full response here…'
-    : 'Write your answer here…'
-  const [borderColor, setBorderColor] = useState('rgba(255,255,255,0.12)')
+function PlainTextInput({ value, onChange, disabled, isExtended, label }) {
   return (
     <textarea
+      className="af-inp"
+      aria-label={label}
       value={value}
       onChange={e => onChange(e.target.value)}
       disabled={disabled}
-      placeholder={placeholder}
-      onFocus={() => setBorderColor(GOLD)}
-      onBlur={() => setBorderColor('rgba(255,255,255,0.12)')}
-      style={{
-        width: '100%', boxSizing: 'border-box',
-        minHeight: isExtended ? 180 : 100,
-        padding: '14px 16px', borderRadius: 10,
-        border: `2px solid ${borderColor}`,
-        background: 'rgba(255,255,255,0.05)',
-        color: '#fff', fontFamily: FONT, fontSize: 17, lineHeight: 1.8,
-        outline: 'none', resize: 'vertical',
-        cursor: disabled ? 'default' : 'text',
-        transition: 'border-color 0.15s',
-      }}
+      placeholder={isExtended ? 'Write your full answer here' : 'Write your answer here'}
+      style={{ minHeight: isExtended ? 180 : 96, fontSize: 15.5, lineHeight: 1.7, resize: 'vertical', cursor: disabled ? 'default' : 'text' }}
     />
   )
 }
 
 function QuestionCard({ q, idx, answer, onAnswer, disabled, isMath }) {
-  const dc = DIFF_COLOR[q.difficulty] || GOLD
+  const answered = !!answer?.trim?.()
   return (
-    <div style={{
-      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
-      borderRadius: 14, padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 10, background: `${dc}20`, border: `1px solid ${dc}40`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 13, fontWeight: 800, color: dc, flexShrink: 0,
-        }}>
-          Q{idx + 1}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>{q.topic}{q.subtopic ? ` · ${q.subtopic}` : ''}</span>
-            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, border: `1px solid ${dc}40`, background: `${dc}15`, color: dc, fontWeight: 700 }}>
-              {q.marks} {q.marks === 1 ? 'mark' : 'marks'}
-            </span>
-            {!answer && (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>Unanswered</span>
-            )}
-            {answer && (
-              <span style={{ fontSize: 11, color: '#4ade80', marginLeft: 'auto' }}>✓ Answered</span>
-            )}
-          </div>
-          <div style={{ fontSize: 15, color: '#fff', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-            <MathText text={q.question} />
-          </div>
-        </div>
+    <section aria-labelledby={`dq-${q.id}`} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: C.muted }}>
+        <span id={`dq-${q.id}`} style={{ fontWeight: 700, color: C.sub }}>Question {idx + 1}</span>
+        {q.topic && <span>· {q.topic}{q.subtopic ? `, ${q.subtopic}` : ''}</span>}
+        <span>· {q.marks} {q.marks === 1 ? 'mark' : 'marks'}</span>
+        {answered && <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: C.success, fontWeight: 700 }}><Check size={13} strokeWidth={2.5} aria-hidden="true" />Answered</span>}
+      </div>
+      <div style={{ fontSize: 15.5, fontWeight: 700, color: C.text, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+        <MathText text={q.question} />
       </div>
       {q.type === 'multiple_choice'
         ? <McqQuestion q={q} answer={answer} onAnswer={onAnswer} disabled={disabled} />
         : <TextQuestion q={q} answer={answer} onAnswer={onAnswer} disabled={disabled} isMath={isMath} />
       }
+    </section>
+  )
+}
+
+function Dots() {
+  return (
+    <div aria-hidden="true" style={{ display: 'flex', gap: 6 }}>
+      {[0, 1, 2].map(i => <span key={i} className="dg-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: C.muted, animation: `dgPulse 1.2s ${i * 0.4}s infinite` }} />)}
     </div>
   )
 }
 
-// ── Submitted screen ───────────────────────────────────────────────────────────
+// A centred card for the short screens (loading, done, errors).
+function Panel({ children }) {
+  return (
+    <div className="af-in" style={{ width: '100%', maxWidth: 460, margin: '0 auto', background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {children}
+    </div>
+  )
+}
+const H1 = ({ children }) => <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.25, color: C.text, textWrap: 'balance' }}>{children}</h1>
+const P = ({ children, muted }) => <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: muted ? C.muted : C.sub }}>{children}</p>
+const OkLine = ({ children }) => <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 700, color: C.success }}><Check size={16} strokeWidth={2.5} aria-hidden="true" />{children}</div>
+const btnStyle = (kind, full = true) => ({
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 42, padding: '0 18px', borderRadius: 10,
+  fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: 'pointer', width: full ? '100%' : undefined,
+  ...(kind === 'primary' ? { border: 'none', background: C.accent, color: '#0c1037' } : { border: `1px solid ${C.border}`, background: C.card, color: C.text }),
+})
 
-function SubmittedScreen({ preCallFormUrl, onRedirect }) {
+function SubmittedScreen({ preCallFormUrl, onRedirect, studentName, tutorName }) {
   useEffect(() => {
     if (preCallFormUrl) {
       const timer = setTimeout(onRedirect, 6000)
@@ -410,77 +406,52 @@ function SubmittedScreen({ preCallFormUrl, onRedirect }) {
     }
   }, [preCallFormUrl, onRedirect])
 
+  const first = (studentName || '').trim().split(' ')[0]
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28, padding: '64px 24px', textAlign: 'center' }}>
-      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, color: '#4ade80' }}>
-        <Check size={34} aria-hidden="true" />
-      </div>
-      <div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 10 }}>Assessment Submitted!</div>
-        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', maxWidth: 420, lineHeight: 1.6 }}>
-          Thank you for completing the diagnostic. Your tutor will review your responses and get in touch with you soon.
-        </div>
-      </div>
+    <Panel>
+      <OkLine>Sent to {tutorName || 'your tutor'}</OkLine>
+      <H1>Thanks{first ? `, ${first}` : ''}. That's done.</H1>
+      <P muted>{tutorName || 'Your tutor'} will go through your answers and plan your lessons around them.{preCallFormUrl ? '' : ' You can close this page.'}</P>
       {preCallFormUrl && (
-        <div style={{ background: 'rgba(241,190,67,0.1)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 12, padding: '20px 28px', maxWidth: 420, width: '100%' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 6 }}>One more step</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 16, lineHeight: 1.5 }}>
-            Please complete a short Pre-Call Questionnaire to help your tutor prepare for your first session.
-          </div>
-          <button
-            onClick={onRedirect}
-            style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}
-          >
-            Go to Questionnaire →
-          </button>
-        </div>
+        <>
+          <P muted>Next, a few questions to help {tutorName || 'your tutor'} prepare for your first lesson. They open in a few seconds.</P>
+          <button type="button" className="af-btn" onClick={onRedirect} style={btnStyle('primary')}>Open the questions now</button>
+        </>
       )}
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
-        You can close this page.
-      </div>
-    </div>
+    </Panel>
   )
 }
 
 /** What a student sees after their tutor-included subject's diagnostic: the tutor gets the full report. */
-function LinkedResult({ summary, subject }) {
-  const list = (title, items, color) => items.length > 0 && (
-    <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px 20px', textAlign: 'left', width: '100%' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 8 }}>{title}</div>
-      <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {items.map(item => <li key={item} style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>{item}</li>)}
+function LinkedResult({ summary, subject, tutorName }) {
+  const list = (title, items) => items.length > 0 && (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.sub, marginBottom: 6 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {items.map(item => <li key={item} style={{ fontSize: 14, color: C.text, lineHeight: 1.5 }}>{item}</li>)}
       </ul>
     </div>
   )
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '56px 0', textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
-      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80' }}>
-        <Check size={34} aria-hidden="true" />
+    <Panel>
+      <OkLine>Diagnostic done</OkLine>
+      <H1>{subject || 'Your diagnostic'}</H1>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em', color: C.text, fontVariantNumeric: 'tabular-nums' }}>{summary.percentage}%</span>
+        {summary.band && <span style={{ fontSize: 14, color: C.muted }}>{summary.band}</span>}
       </div>
-      <div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Diagnostic done</div>
-        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }}>
-          {subject ? `${subject} · ` : ''}<strong style={{ color: GOLD }}>{summary.percentage}%</strong> · {summary.band}
-        </div>
-      </div>
-      {list("You're strong at", summary.strong || [], '#4ade80')}
-      {list("What we'll work on", summary.work_on || [], GOLD)}
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
-        Your tutor has your full results. Your practice now starts with the areas that need it most.
-      </div>
-      <button onClick={() => window.location.assign('/home')}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '13px 28px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-        <TrendingUp size={18} aria-hidden="true" />Start practising →
-      </button>
-    </div>
+      {list("You're strong at", summary.strong || [])}
+      {list("What we'll work on", summary.work_on || [])}
+      <P muted>{tutorName || 'Your tutor'} has your full results. Your practice now starts with the areas that need it most.</P>
+      <button type="button" className="af-btn" onClick={() => window.location.assign('/home')} style={btnStyle('primary')}>Start practising</button>
+    </Panel>
   )
 }
 
 // ── Main DiagnosticScreen ──────────────────────────────────────────────────────
 
-export default function DiagnosticScreen() {
+export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
   const { token } = useParams()
-  const navigate  = useNavigate()
 
   const [phase, setPhase]           = useState('loading')
   const [assessment, setAssessment] = useState(null)
@@ -490,7 +461,8 @@ export default function DiagnosticScreen() {
   const [error, setError]           = useState('')
   const [submitError, setSubmitError] = useState('')
   const [groups, setGroups]         = useState([])
-  const [activeGroup, setActiveGroup] = useState(0)
+  // Submitting with questions unanswered asks first.
+  const [confirmSubmit, setConfirmSubmit] = useState(false)
   const [isMath, setIsMath]         = useState(true)
   const [prepareError, setPrepareError] = useState('')
   const [prepareAttempt, setPrepareAttempt] = useState(0)
@@ -514,6 +486,8 @@ export default function DiagnosticScreen() {
           return
         }
         setAssessment(a)
+        // The name the tutor gave, filled in (they can change it).
+        if (a.student_name) setStudentName(n => n || a.student_name)
         if (a.linked && !a.ready) { setPhase('preparing'); return }
         setGroups(difficultyGroups(a.questions))
         setIsMath(detectIsMath(a.subjects || []))
@@ -578,11 +552,6 @@ export default function DiagnosticScreen() {
     setAnswers(prev => ({ ...prev, [String(questionId)]: value }))
   }
 
-  const allCurrentGroupAnswered = () => {
-    if (!groups[activeGroup]) return false
-    return groups[activeGroup].questions.every(q => answers[String(q.id)]?.trim())
-  }
-
   const allAnswered = () => {
     if (!assessment) return false
     return assessment.questions.every(q => answers[String(q.id)]?.trim())
@@ -590,7 +559,9 @@ export default function DiagnosticScreen() {
 
   const handleSubmit = async () => {
     setSubmitError('')
-    if (!linked && !studentName.trim()) { setSubmitError('Please enter your name before submitting.'); return }
+    if (!linked && !studentName.trim()) { setSubmitError('Add your name at the top before you submit.'); return }
+    if (!allAnswered() && !confirmSubmit) { setConfirmSubmit(true); return }
+    setConfirmSubmit(false)
     setPhase('submitting')
     try {
       const res = await submitDiagnosticAnswers(token, { studentName: studentName.trim(), answers })
@@ -598,7 +569,7 @@ export default function DiagnosticScreen() {
       setPhase('result')
       topRef.current?.scrollIntoView({ behavior: 'smooth' })
     } catch (err) {
-      setSubmitError(err.message || 'Submission failed. Please try again.')
+      setSubmitError(err.message || "That didn't send. Try again.")
       setPhase('test')
     }
   }
@@ -613,258 +584,156 @@ export default function DiagnosticScreen() {
   const totalCount    = assessment ? assessment.questions.length : 0
   const subjectNames  = (assessment?.subjects || []).map(s => s.name).join(', ')
 
+  const tutorName = assessment?.tutor_name || null
+  const tutorFirst = tutorName ? tutorName.split(' ')[0] : null
+  const sectionNames = groups.map(g => g.label)
+  const sectionsLine = sectionNames.length > 1
+    ? `${sectionNames.length === 2 ? 'Two' : 'Three'} short sections: ${sectionNames.slice(0, -1).join(', ')} and ${sectionNames[sectionNames.length - 1]}.`
+    : null
+  const title = linked ? `Your ${subjectNames} diagnostic` : `${assessment?.year_level ? `${assessment.year_level} ` : ''}${subjectNames} diagnostic`
+  const unanswered = totalCount - answeredCount
+
   return (
-    <div ref={topRef} style={{ minHeight: '100vh', background: NAVY, fontFamily: FONT, color: '#fff', paddingBottom: keyboardHeight }}>
-      <style>{`
-        @font-face { font-family: 'Plus Jakarta Sans'; src: url('/PlusJakartaSans.woff2') format('woff2'); font-display: swap; }
-        * { box-sizing: border-box; }
-        textarea:focus { outline: none; }
-        math-field {
-          --caret-color: ${GOLD};
-          --selection-background-color: rgba(241,190,67,0.25);
-          --selection-background-color-focused: rgba(241,190,67,0.3);
-          --primary-color: ${GOLD};
-          --text-color: #ffffff;
-          --smart-fence-color: rgba(255,255,255,0.5);
-          --placeholder-color: rgba(255,255,255,0.3);
-          --contains-highlight-background-color: rgba(241,190,67,0.15);
-          color: #fff;
-          font-family: ${FONT};
-        }
-        math-field::part(virtual-keyboard-toggle) { display: none; }
-        math-field::part(menu-toggle) { display: none; }
-        math-field .ML__latex { color: #fff; }
-        math-field .ML__fieldcontainer { background: transparent; }
-        @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
-      `}</style>
+    <div ref={topRef} style={{ paddingBottom: keyboardHeight }}>
+      <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align={phase === 'test' ? 'top' : 'center'}>
+        <style>{`
+          math-field {
+            --caret-color: var(--t-text);
+            --selection-background-color: rgba(var(--ink-rgb), 0.15);
+            --selection-background-color-focused: rgba(var(--ink-rgb), 0.2);
+            --primary-color: var(--t-text);
+            --text-color: var(--t-text);
+            --smart-fence-color: var(--t-textMuted);
+            --placeholder-color: var(--t-textFaint);
+            --contains-highlight-background-color: rgba(var(--ink-rgb), 0.06);
+            color: var(--t-text);
+            font-family: ${FONT};
+          }
+          math-field::part(virtual-keyboard-toggle) { display: none; }
+          math-field::part(menu-toggle) { display: none; }
+          math-field .ML__latex { color: var(--t-text); }
+          math-field .ML__fieldcontainer { background: transparent; }
+          .dg-opt:hover, .dg-key:hover { border-color: var(--t-textMuted) !important; }
+          .dg-opt:focus-visible, .dg-key:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; }
+          @keyframes dgPulse { 0%,100% { opacity: 0.35 } 50% { opacity: 1 } }
+          @media (prefers-reduced-motion: reduce) { .dg-dot { animation: none !important; } }
+        `}</style>
 
-      {/* Header */}
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: NAVY }}><GraduationCap size={18} aria-hidden="true" /></div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>Diagnostic Assessment</div>
-            {assessment && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{assessment.year_level} · {subjectNames}</div>}
-          </div>
-        </div>
-        {phase === 'test' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{answeredCount}/{totalCount} answered</div>
-            <div style={{ width: 80, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${totalCount > 0 ? (answeredCount / totalCount) * 100 : 0}%`, background: GOLD, borderRadius: 3, transition: 'width 0.3s' }} />
-            </div>
-          </div>
-        )}
-      </div>
+        {phase === 'loading' && <Panel><P muted>Loading your diagnostic…</P></Panel>}
 
-      <div style={{ maxWidth: 740, margin: '0 auto', padding: '0 20px' }}>
-
-        {/* ─ Loading ─ */}
-        {phase === 'loading' && (
-          <div style={{ paddingTop: 80, textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}><Hourglass size={32} aria-hidden="true" /></div>
-            <div style={{ fontSize: 15 }}>Loading your assessment…</div>
-          </div>
-        )}
-
-        {/* ─ Preparing (a tutor-included subject's diagnostic, written on first use) ─ */}
+        {/* Still being written (a tutor-included subject's diagnostic, written on first use) */}
         {phase === 'preparing' && (
-          <div style={{ paddingTop: 80, textAlign: 'center' }}>
+          <Panel>
             {prepareError ? (
               <>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: GOLD }}><TriangleAlert size={36} aria-hidden="true" /></div>
-                <div style={{ fontSize: 16, color: '#fff', marginBottom: 16 }}>{prepareError}</div>
-                <button onClick={() => setPrepareAttempt(n => n + 1)} style={{ padding: '11px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Try again</button>
+                <H1>That didn't load</H1>
+                <P muted>{prepareError}</P>
+                <button type="button" className="af-btn" onClick={() => setPrepareAttempt(n => n + 1)} style={btnStyle('primary')}>Try again</button>
               </>
             ) : (
               <>
-                <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center', color: GOLD }}><Bot size={36} aria-hidden="true" /></div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Preparing your diagnostic…</div>
-                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>We're writing questions on the topics your tutor picked. This takes about a minute.</div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
-                  {[0, 1, 2].map(i => (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4, animation: `pulse 1.2s ${i * 0.4}s infinite` }} />
-                  ))}
-                </div>
+                <H1>Getting your diagnostic ready</H1>
+                <P muted>We're writing questions on the topics {tutorFirst || 'your tutor'} picked. This takes about a minute.</P>
+                <Dots />
               </>
             )}
-          </div>
+          </Panel>
         )}
 
-        {/* ─ Error ─ */}
         {phase === 'error' && (
-          <div style={{ paddingTop: 80, textAlign: 'center' }}>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: GOLD }}><TriangleAlert size={40} aria-hidden="true" /></div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 8 }}>Assessment Unavailable</div>
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>{error || 'This assessment could not be found.'}</div>
-          </div>
+          <Panel>
+            <H1>This diagnostic isn't available</H1>
+            <P muted>{error || "We couldn't find it. Check the link with your tutor."}</P>
+          </Panel>
         )}
 
-        {/* ─ Intro ─ */}
         {phase === 'intro' && assessment && (
-          <div style={{ paddingTop: 48, display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: GOLD }}><ClipboardList size={36} aria-hidden="true" /></div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 8 }}>
-                {linked ? 'Your diagnostic' : `${assessment.year_level} Diagnostic Assessment`}
-              </div>
-              <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }}>{subjectNames}</div>
+          <Panel>
+            <H1>{title}</H1>
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13.5, color: C.muted }}>
+              <span><strong style={{ color: C.text }}>{assessment.questions.length}</strong> questions</span>
+              <span><strong style={{ color: C.text }}>{assessment.score_max}</strong> marks</span>
+              <span>No time limit</span>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-              {[
-                { icon: PenLine, label: 'Questions', value: `${assessment.questions.length}` },
-                { icon: Star, label: 'Total Marks', value: `${assessment.score_max}` },
-                { icon: Target, label: 'Sections', value: `${groups.length}` },
-              ].map(item => (
-                <div key={item.label} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px', textAlign: 'center' }}>
-                  <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center', color: GOLD }}><item.icon size={22} aria-hidden="true" /></div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: GOLD }}>{item.value}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{item.label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '20px 24px' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 12 }}>About this assessment</div>
-              <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>This diagnostic covers {subjectNames} at the {assessment.year_level} level.</li>
-                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>There are 3 sections: Foundation (easy), Core Skills (moderate), and Exam Style (challenging).</li>
-                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>Work through each section at your own pace. There is no time limit.</li>
-                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
-                  {linked ? 'Your results go to your tutor, and your practice starts with what needs it most.' : 'Your results will be sent to your tutor to help plan your lessons.'}
-                </li>
-                <li style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>Answer every question as best you can — it's okay if you're unsure!</li>
-              </ul>
-            </div>
-
-            {!linked && <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: 8 }}>
-                Your Name
-              </label>
-              <input
-                type="text"
-                value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-                placeholder={assessment.student_name || 'Enter your full name'}
-                style={{ width: '100%', padding: '13px 16px', borderRadius: 10, border: `2px solid rgba(255,255,255,0.12)`, background: 'rgba(255,255,255,0.05)', color: '#fff', fontFamily: FONT, fontSize: 14, outline: 'none' }}
-                onFocus={e => { e.target.style.borderColor = GOLD }}
-                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
-                onKeyDown={e => { if (e.key === 'Enter' && studentName.trim()) setPhase('test') }}
-              />
-            </div>}
-
-            <button
-              onClick={() => { if (linked || studentName.trim()) setPhase('test') }}
-              disabled={!linked && !studentName.trim()}
-              style={{ padding: '14px 32px', borderRadius: 10, border: 'none', background: linked || studentName.trim() ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.1)', color: linked || studentName.trim() ? NAVY : 'rgba(255,255,255,0.3)', fontSize: 15, fontWeight: 800, cursor: linked || studentName.trim() ? 'pointer' : 'not-allowed', fontFamily: FONT }}
-            >
-              Start Assessment →
-            </button>
-          </div>
-        )}
-
-        {/* ─ Test ─ */}
-        {phase === 'test' && assessment && (
-          <div style={{ paddingTop: 32, paddingBottom: 80, display: 'flex', flexDirection: 'column', gap: 0 }}>
-            <div style={{ display: 'flex', gap: 2, marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' }}>
-              {groups.map((g, i) => (
-                <button
-                  key={g.key}
-                  onClick={() => setActiveGroup(i)}
-                  style={{
-                    padding: '12px 18px', border: 'none', background: 'transparent', fontFamily: FONT,
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    color: activeGroup === i ? g.color : 'rgba(255,255,255,0.4)',
-                    borderBottom: activeGroup === i ? `2px solid ${g.color}` : '2px solid transparent',
-                  }}
-                >
-                  {g.label.split('—')[0].trim()}
-                  <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>
-                    ({g.questions.filter(q => answers[String(q.id)]?.trim()).length}/{g.questions.length})
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {groups[activeGroup] && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 4 }}>{groups[activeGroup].label}</div>
-                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{groups[activeGroup].marks} marks — {groups[activeGroup].questions.length} question{groups[activeGroup].questions.length !== 1 ? 's' : ''}</div>
-                </div>
-                {groups[activeGroup].questions.map((q) => (
-                  <QuestionCard
-                    key={q.id}
-                    q={q}
-                    idx={assessment.questions.indexOf(q)}
-                    answer={answers[String(q.id)]}
-                    onAnswer={handleAnswer}
-                    disabled={false}
-                    isMath={isMath}
-                  />
-                ))}
-
-                <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                  {activeGroup > 0 && (
-                    <button onClick={() => { setActiveGroup(activeGroup - 1); topRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
-                      style={{ padding: '11px 20px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-                      ← Previous
-                    </button>
-                  )}
-                  {activeGroup < groups.length - 1 && (
-                    <button onClick={() => { setActiveGroup(activeGroup + 1); topRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
-                      style={{ padding: '11px 20px', borderRadius: 9, border: `1px solid ${allCurrentGroupAnswered() ? GOLD : 'rgba(255,255,255,0.15)'}`, background: allCurrentGroupAnswered() ? 'rgba(241,190,67,0.1)' : 'transparent', color: allCurrentGroupAnswered() ? GOLD : 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-                      Next Section →
-                    </button>
-                  )}
-                </div>
-              </div>
+            <P>
+              {sectionsLine ? `${sectionsLine} ` : ''}Answer what you can; it's fine to be unsure.{' '}
+              {linked
+                ? `${tutorFirst || 'Your tutor'} gets your results, and your practice starts with what needs it most.`
+                : `${tutorFirst || 'Your tutor'} gets your answers to plan your lessons.`}
+            </P>
+            {!linked && (
+              <Field id="dg-name" label="Your name" theme={theme}>
+                <input id="dg-name" className="af-inp" type="text" autoComplete="name" value={studentName} onChange={e => setStudentName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && studentName.trim()) setPhase('test') }} />
+              </Field>
             )}
+            <button type="button" className="af-btn" onClick={() => { if (linked || studentName.trim()) setPhase('test') }} disabled={!linked && !studentName.trim()}
+              style={{ ...btnStyle('primary'), opacity: !linked && !studentName.trim() ? 0.55 : 1, cursor: !linked && !studentName.trim() ? 'default' : 'pointer' }}>
+              Start
+            </button>
+          </Panel>
+        )}
 
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(12,16,55,0.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px', display: typing ? 'none' : 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, zIndex: 100 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-                {answeredCount}/{totalCount} questions answered
-                {!allAnswered() && <span style={{ color: GOLD }}> — try to answer all before submitting</span>}
+        {phase === 'test' && assessment && (
+          <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 96 }}>
+            <H1>{title}</H1>
+            {groups.map(g => (
+              <div key={g.key} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>
+                  {g.label}
+                  <span style={{ fontWeight: 500, fontSize: 13, color: C.muted, marginLeft: 8 }}>
+                    {g.questions.length} question{g.questions.length !== 1 ? 's' : ''} · {g.marks} mark{g.marks !== 1 ? 's' : ''}
+                  </span>
+                </h2>
+                {g.questions.map(q => (
+                  <QuestionCard key={q.id} q={q} idx={assessment.questions.indexOf(q)} answer={answers[String(q.id)]} onAnswer={handleAnswer} disabled={false} isMath={isMath} />
+                ))}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                {submitError && <div style={{ fontSize: 12, color: '#f87171' }}>{submitError}</div>}
-                <button
-                  onClick={handleSubmit}
-                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}
-                >
-                  Submit Assessment
-                </button>
+            ))}
+
+            <div style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20, background: C.card, borderTop: `1px solid ${C.border}`,
+              padding: '12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))',
+              display: typing ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <div style={{ width: '100%', maxWidth: 680, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div role="status" style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: submitError ? 'var(--t-danger)' : C.muted }}>
+                  {submitError
+                    ? submitError
+                    : confirmSubmit
+                      ? <>{unanswered} question{unanswered !== 1 ? 's are' : ' is'} unanswered. Submit anyway?</>
+                      : <><strong style={{ color: C.text }}>{answeredCount} of {totalCount}</strong> answered</>}
+                </div>
+                {confirmSubmit && !submitError && (
+                  <button type="button" className="af-btn" onClick={() => setConfirmSubmit(false)} style={btnStyle('secondary', false)}>Keep going</button>
+                )}
+                <button type="button" className="af-btn" onClick={handleSubmit} style={btnStyle('primary', false)}>{confirmSubmit ? 'Submit anyway' : 'Submit'}</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ─ Submitting ─ */}
         {phase === 'submitting' && (
-          <div style={{ paddingTop: 80, textAlign: 'center' }}>
-            <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center', color: GOLD }}><Bot size={36} aria-hidden="true" /></div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 8 }}>Marking your assessment…</div>
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>AI is reviewing your responses. This may take 20–40 seconds.</div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4, animation: `pulse 1.2s ${i * 0.4}s infinite` }} />
-              ))}
-            </div>
-          </div>
+          <Panel>
+            <H1>Marking your answers</H1>
+            <P muted>This usually takes 20 to 40 seconds. Keep this page open.</P>
+            <Dots />
+          </Panel>
         )}
 
-        {/* ─ Result ─ */}
         {phase === 'result' && result?.linked && (
-          <LinkedResult summary={result.summary} subject={subjectNames} />
+          <LinkedResult summary={result.summary} subject={subjectNames} tutorName={tutorName} />
         )}
         {phase === 'result' && !result?.linked && (
           <SubmittedScreen
             preCallFormUrl={result?.preCallFormUrl || assessment?.pre_call_form_url}
             onRedirect={handleRedirect}
+            studentName={studentName}
+            tutorName={tutorName}
           />
         )}
-      </div>
+      </AuthLayout>
     </div>
   )
+
 }

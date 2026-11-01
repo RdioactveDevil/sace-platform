@@ -1,13 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { fetchClassLeaderboards } from '../lib/db'
-import { getLevel, rankAccuracy } from '../lib/engine'
-import { Trophy, Medal, Flame } from 'lucide-react'
+import { getLevel, rankAccuracy, RANKS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
 import RankIcon from './RankIcon'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 const GOLD = '#f1be43'
 
 const CLASS_KEY = 'gf-leaderboard-class'
@@ -43,116 +41,90 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
   const visibleBoard = active?.board || []
   const me = visibleBoard.find(r => r.id === profile.id)
 
+  // How far behind the person above: the gap that's worth chasing.
+  const above = me && me.position > 1 ? visibleBoard.find(r => r.position === me.position - 1) : null
+  const segOn = theme === 'dark' ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
+  const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
+  const cell = { padding: '10px 12px', borderTop: `1px solid ${t.border}`, fontSize: 13.5, textAlign: 'left' }
+
   return (
-    <div style={{ height: embedded ? '100%' : '100vh', minHeight: 0, background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: FONT_B, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: embedded ? '100%' : '100vh', minHeight: 0, background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: FONT_B, overflowY: 'auto' }}>
       <style>{`
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        .lb-scroll { flex: 1; min-height: 0; overflow-y: auto; }
-        .lb-inner { padding: 28px 32px 32px; animation: fadeUp 0.3s ease; }
-        @media (max-width: 860px) { .lb-inner { padding: 18px 14px 22px; } }
+        .lb-inner { max-width: 900px; margin: 0 auto; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 14px; }
+        .lb-inner button:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+        @media (max-width: 860px) { .lb-inner { padding: 18px 14px 28px; } .lb-hide { display: none; } }
       `}</style>
-
-      <div className="lb-scroll">
-        <div className="lb-inner">
-          <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Competition</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-            <div>
-              <h1 style={{ fontSize: 26, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, margin: 0, color: t.text }}>Leaderboard</h1>
-              <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6 }}>
-                {active ? `${active.name} · ranked by XP` : 'Ranked by XP within your class'}
-              </div>
+      <div className="lb-inner">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <span style={{ fontSize: 13, color: t.textMuted }}>{active ? `${active.name} · ranked by XP` : 'Ranked by XP within your class'}</span>
+          {classes.length > 1 && (
+            <div role="group" aria-label="Class" style={{ display: 'inline-flex', flexWrap: 'wrap', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', maxWidth: '100%' }}>
+              {classes.map(c => (
+                <button key={c.id} type="button" aria-pressed={active?.id === c.id} onClick={() => pickClass(c.id)}
+                  style={{ padding: '6px 13px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', ...(active?.id === c.id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
+                  {c.name}
+                </button>
+              ))}
             </div>
-            {classes.length > 1 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10, padding: 4, maxWidth: '100%' }}>
-                {classes.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => pickClass(c.id)}
-                    style={{
-                      padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: FONT_B,
-                      background: active?.id === c.id ? GOLD : 'transparent',
-                      color:      active?.id === c.id ? '#080d28' : t.textMuted,
-                      transition: 'background 0.15s, color 0.15s',
-                    }}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} theme={theme} />)}
-            </div>
-          ) : error ? (
-            <div style={{ padding: '28px 20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center', fontSize: 13, color: t.danger }}>{error}</div>
-          ) : !active ? (
-            <div style={{ padding: '36px 24px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center' }}>
-              <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: GOLD }}><Trophy size={30} aria-hidden="true" /></div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 6 }}>You're not in a class yet</div>
-              <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
-                When your tutor adds you to a class, you'll see how you rank against your classmates here.
-              </div>
-            </div>
-          ) : visibleBoard.length === 0 ? (
-            <div style={{ padding: '28px 20px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, textAlign: 'center', fontSize: 13, color: t.textMuted }}>
-              No students in {active.name} yet.
-            </div>
-          ) : (
-            <>
-              {visibleBoard.length >= 3 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 12, marginBottom: 32, flexWrap: 'wrap' }}>
-                  {[visibleBoard[1], visibleBoard[0], visibleBoard[2]].map((p, pos) => {
-                    if (!p) return <div key={pos} style={{ width: 88 }} />
-                    const heights = [96, 124, 78]
-                    const colors = [t.textMuted, t.xp, '#cd7c2f']
-                    const isMe = p.id === profile.id
-                    return (
-                      <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                        <div style={{ display: 'flex' }}><Medal size={24} color={colors[pos]} aria-hidden="true" /></div>
-                        <div style={{ width: 84, height: heights[pos], background: isMe ? 'rgba(241,190,67,0.12)' : t.bgCard, border: `2px solid ${isMe ? GOLD : colors[pos]}`, borderRadius: '12px 12px 6px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, boxShadow: theme === 'light' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
-                          <div style={{ fontSize: 11, fontWeight: 800, color: isMe ? GOLD : colors[pos], textAlign: 'center', padding: '0 6px' }}>{p.display_name.split(' ')[0]}</div>
-                          <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 600 }}>{p.xp.toLocaleString()}</div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {visibleBoard.map((p) => {
-                  const isMe = p.id === profile.id
-                  const i = p.position - 1
-                  const lvl = getLevel(p.xp, rankAccuracy(p))
-                  return (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: isMe ? 'rgba(241,190,67,0.08)' : t.bgCard, border: `1px solid ${isMe ? 'rgba(241,190,67,0.4)' : t.border}`, borderRadius: 12, boxShadow: theme === 'light' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, width: 28, textAlign: 'center', color: i < 3 ? [t.xp, t.textSub, '#cd7c2f'][i] : t.textFaint }}>{i + 1}</div>
-                      <div style={{ display: 'flex', color: GOLD }}><RankIcon level={lvl} size={18} /></div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: isMe ? GOLD : t.text }}>{p.display_name}{isMe ? ' (You)' : ''}</div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: GOLD }}>{p.xp.toLocaleString()} XP</div>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }}>
-                          {p.streak > 0 && <span style={{ fontSize: 11, color: t.danger, display: 'inline-flex', alignItems: 'center', gap: 3 }}><Flame size={12} aria-hidden="true" /> {p.streak}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {me && (
-                <div style={{ marginTop: 16, padding: '12px 18px', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 13, color: t.textMuted, textAlign: 'center' }}>
-                  Your rank in {active.name}: <strong style={{ color: t.text }}>#{me.position}</strong> of {visibleBoard.length}
-                </div>
-              )}
-            </>
           )}
         </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} theme={theme} />)}
+          </div>
+        ) : error ? (
+          <div role="alert" style={{ ...card, padding: '24px 20px', textAlign: 'center', fontSize: 13, color: t.danger }}>{error}</div>
+        ) : !active ? (
+          <div style={{ ...card, padding: '28px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 6 }}>You're not in a class yet</div>
+            <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+              When your tutor adds you to a class, you'll see how you rank against your classmates here.
+            </div>
+          </div>
+        ) : visibleBoard.length === 0 ? (
+          <div style={{ ...card, padding: '24px 20px', textAlign: 'center', fontSize: 13, color: t.textMuted }}>No students in {active.name} yet.</div>
+        ) : (
+          <>
+            <div style={{ ...card, padding: '2px 4px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+                <thead>
+                  <tr>
+                    {['#', 'Student', 'Rank', 'Streak', 'XP'].map((h, i) => (
+                      <th key={h} className={h === 'Streak' || h === 'Rank' ? 'lb-hide' : undefined}
+                        style={{ ...cell, borderTop: 'none', fontSize: 12, fontWeight: 600, color: t.textFaint, textAlign: i >= 3 ? 'right' : 'left', width: i === 0 ? 44 : undefined }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleBoard.map(p => {
+                    const isMe = p.id === profile.id
+                    const lvl = getLevel(p.xp, rankAccuracy(p))
+                    const rowBg = isMe ? (theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgSubtle) : 'transparent'
+                    return (
+                      <tr key={p.id} aria-current={isMe ? 'true' : undefined} style={{ background: rowBg }}>
+                        <td style={{ ...cell, fontWeight: 700, color: t.textMuted }}>{p.position}</td>
+                        <td style={{ ...cell, fontWeight: isMe ? 800 : 600 }}>{isMe ? 'You' : p.display_name}</td>
+                        <td className="lb-hide" style={{ ...cell, color: t.textMuted }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><RankIcon level={lvl} size={14} />{RANKS[lvl]}</span>
+                        </td>
+                        <td className="lb-hide" style={{ ...cell, textAlign: 'right', color: t.textMuted }}>{p.streak > 0 ? `${p.streak} day${p.streak !== 1 ? 's' : ''}` : '—'}</td>
+                        <td style={{ ...cell, textAlign: 'right', fontWeight: 800 }}>{p.xp.toLocaleString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {me && (
+              <div style={{ fontSize: 13, color: t.textMuted }}>
+                {above
+                  ? <>You're <strong style={{ color: t.text }}>#{me.position}</strong> of {visibleBoard.length}. Another {(above.xp - me.xp).toLocaleString()} XP and you'll pass {above.display_name.split(' ')[0]}.</>
+                  : <>You're <strong style={{ color: t.text }}>top of {active.name}</strong>.</>}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

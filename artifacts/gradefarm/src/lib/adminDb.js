@@ -159,3 +159,72 @@ export async function retryPendingReports({ limit = 20 } = {}) {
     body: JSON.stringify({ limit }),
   })
 }
+
+/**
+ * Settle a question report by hand: 'dismiss', 'set_answer' ({ answerIndex }),
+ * 'edit' ({ question, options, answerIndex, solution, difficulty }), 'delete'
+ * or 'recheck'. Settles every open report on the same question.
+ */
+export async function resolveQuestionReport(reportId, action, fields = {}) {
+  return adminAuthFetch(`/api/question-reports/${encodeURIComponent(reportId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ action, ...fields }),
+  })
+}
+
+/** Students' flags, one row per question: { question_id, counts, total, last_at, questions }. */
+export async function fetchQuestionFlags() {
+  const json = await adminAuthFetch('/api/question-flags')
+  return json.flags || []
+}
+
+/** Clear every flag on a question once it's been dealt with. */
+export async function clearQuestionFlags(questionId) {
+  return adminAuthFetch('/api/question-flags/clear', { method: 'POST', body: JSON.stringify({ questionId }) })
+}
+
+/** A report still waiting on someone: the AI hasn't finished, or it failed and needs a person. */
+export const isOpenReport = (r) => !r.resolved_at || r.ai_status === 'error'
+
+/** Save a question's graph, table and image from Preview (live questions need the server). */
+export async function saveQuestionVisuals(id, { source, graph, table_data, image_url }) {
+  const json = await adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/visuals`, {
+    method: 'PATCH',
+    body: JSON.stringify({ source, graph, table_data, image_url }),
+  })
+  return json.question
+}
+
+/** Rewrite a live question: any of { question, options, answerIndex, solution, difficulty }. */
+export async function editQuestion(id, fields) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/content`, { method: 'PATCH', body: JSON.stringify(fields) })
+}
+
+/** Take a live question out of the bank (its variants, flags and review history go too). */
+export async function deleteQuestion(id) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Questions that best match a student's rough copy (text or ID), best first. */
+export async function searchQuestions(q, { subject } = {}) {
+  const params = new URLSearchParams({ q })
+  if (subject) params.set('subject', subject)
+  const json = await adminAuthFetch(`/api/admin/questions/search?${params}`)
+  return json.questions || []
+}
+
+/** Read the question out of a photo or screenshot; resolves to its text. */
+export async function transcribeQuestionImage(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = () => reject(new Error("Couldn't read that file."))
+    r.readAsDataURL(file)
+  })
+  const [, mediaType, imageBase64] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl) || []
+  const json = await adminAuthFetch('/api/admin/questions/transcribe', {
+    method: 'POST',
+    body: JSON.stringify({ imageBase64, mediaType }),
+  })
+  return json.text || ''
+}

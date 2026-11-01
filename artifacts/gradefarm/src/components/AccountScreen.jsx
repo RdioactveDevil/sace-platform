@@ -1,21 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, UserRound, CreditCard, ShieldCheck, SlidersHorizontal, Flame, Trophy, Zap, CalendarDays, Eye, EyeOff, Moon, Sun } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
-import { currentStreak } from '../lib/streak'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails, addFamilyChild, switchToChild, removeFamilyChild } from '../lib/db'
 import { useFamily } from './FamilySwitcher'
 import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
 import { studentTiers, planTotal, extraLadder, monthlySaving, money } from '../lib/pricing'
 import { supabase } from '../lib/supabase'
-import RankIcon from './RankIcon'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 const SUPPORT_EMAIL = 'support@titaniumtutoring.com.au'
 
 // Same choices as onboarding, so what a student picked there shows up here.
@@ -34,11 +27,11 @@ const longDate  = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { da
 
 /** What a subject's access row means for the student, in one line. */
 function accessLine(sub, freeDaily) {
-  if (sub.source === 'beta') return { text: 'Free — beta member', tone: 'success' }
-  if (sub.source === 'free') return { text: `Free subject — ${freeDaily} questions a day`, tone: 'success' }
+  if (sub.source === 'beta') return { text: 'Free as a beta member', tone: 'success' }
+  if (sub.source === 'free') return { text: `Free subject, ${freeDaily} questions a day`, tone: 'success' }
   if (sub.source === 'tutor') return { text: 'Included with your tutoring', tone: 'success' }
   if (sub.source !== 'stripe') return { text: 'Included by Titanium Tutoring', tone: 'success' }
-  if (sub.status === 'past_due') return { text: 'Payment failed — update your card', tone: 'danger' }
+  if (sub.status === 'past_due') return { text: 'Payment failed. Update your card.', tone: 'danger' }
   if (sub.cancel_at_period_end) return { text: `Ends ${shortDate(sub.current_period_end)}`, tone: 'muted' }
   if (sub.status === 'trialing') return { text: `Free trial until ${shortDate(sub.current_period_end)}`, tone: 'success' }
   return { text: 'In your plan', tone: 'muted' }
@@ -48,25 +41,25 @@ function accessLine(sub, freeDaily) {
 function CardTitle({ t, title, sub }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{title}</div>
-      {sub && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 3, lineHeight: 1.5 }}>{sub}</div>}
+      <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>{title}</div>
+      {sub && <div style={{ fontSize: 13, color: t.textMuted, marginTop: 3, lineHeight: 1.55 }}>{sub}</div>}
     </div>
   )
 }
 
-/** The gold on/off switch used for settings. */
+/** An on/off switch: ink when on. */
 function Toggle({ on, onClick, disabled, label }) {
   return (
     <button
-      type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick} disabled={disabled}
+      type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick} disabled={disabled} className="acct-switch"
       style={{
-        width: 44, height: 24, borderRadius: 999, border: 'none', padding: 2, flexShrink: 0,
+        width: 38, height: 22, borderRadius: 999, border: 'none', padding: 3, flexShrink: 0,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
-        background: on ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'rgba(148,163,184,0.35)',
-        display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start', transition: 'background 0.2s',
+        background: on ? 'var(--t-text)' : 'var(--t-borderMid)',
+        display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start', transition: 'background 0.15s',
       }}
     >
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+      <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--t-bgCard)' }} />
     </button>
   )
 }
@@ -75,10 +68,76 @@ function Toggle({ on, onClick, disabled, label }) {
 function Field({ t, label, hint, children }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color: t.textMuted }}>{label}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: t.textSub }}>{label}</span>
       {children}
-      {hint && <span style={{ fontSize: 11.5, color: t.textFaint }}>{hint}</span>}
+      {hint && <span style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.45 }}>{hint}</span>}
     </label>
+  )
+}
+
+/** A titled group of rows. `id` is what the section list jumps to. */
+function Section({ id, title, sub, t, children, bare = false }) {
+  return (
+    <section id={`acct-${id}`} aria-labelledby={`acct-h-${id}`} style={{ scrollMarginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div>
+        <h2 id={`acct-h-${id}`} style={{ margin: 0, fontSize: 15, fontWeight: 800, color: t.text }}>{title}</h2>
+        {sub && <p style={{ margin: '3px 0 0', fontSize: 13, color: t.textMuted, lineHeight: 1.55, maxWidth: '68ch' }}>{sub}</p>}
+      </div>
+      {bare ? children : (
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, overflow: 'hidden' }}>{children}</div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * One setting: label, its value (and a quieter note), an action on the
+ * right, and an editor that opens under it.
+ */
+function Row({ t, label, value, note, noteTone, action, first = false, editor = null }) {
+  const noteColour = noteTone === 'success' ? t.success : noteTone === 'danger' ? t.danger : t.textMuted
+  return (
+    <div style={{ borderTop: first ? 'none' : `1px solid ${t.border}` }}>
+      <div className="acct-row">
+        <div className="acct-row-label">{label}</div>
+        <div className="acct-row-value">
+          {value != null && value !== '' && <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, overflowWrap: 'anywhere' }}>{value}</div>}
+          {note && <div style={{ fontSize: 12.5, color: noteColour, lineHeight: 1.5, marginTop: value ? 2 : 0 }}>{note}</div>}
+        </div>
+        {action && <div className="acct-row-action">{action}</div>}
+      </div>
+      {editor && <div style={{ padding: '14px 16px 16px', borderTop: `1px solid ${t.border}`, background: t.bg, display: 'flex', flexDirection: 'column', gap: 12 }}>{editor}</div>}
+    </div>
+  )
+}
+
+/** The text-link action on a row. */
+function RowLink({ t, onClick, children, tone, disabled, href }) {
+  const style = {
+    border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+    color: tone === 'danger' ? t.danger : t.text, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1,
+    textDecoration: 'underline', textDecorationColor: tone === 'danger' ? t.danger : t.accent, textDecorationThickness: 2, textUnderlineOffset: 3,
+  }
+  return href
+    ? <a href={href} className="acct-link" style={style}>{children}</a>
+    : <button type="button" className="acct-link" onClick={onClick} disabled={disabled} style={style}>{children}</button>
+}
+
+/** Tap-to-choose options, ink when chosen. */
+function Chips({ t, options, value, onChange, label, disabled }) {
+  return (
+    <div role="radiogroup" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {options.map(([v, text]) => {
+        const on = String(value) === String(v)
+        return (
+          <button key={v} type="button" role="radio" aria-checked={on} disabled={disabled} onClick={() => onChange(on ? '' : v)} className="acct-chip"
+            style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${on ? t.text : t.border}`, background: on ? t.text : t.bgCard, color: on ? t.bg : t.textSub,
+              fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', fontVariantNumeric: 'tabular-nums' }}>
+            {text}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -206,7 +265,7 @@ function FamilyCard({ family, theme, card, btn, inputStyle }) {
           <div key={c.id} style={{ border: `1px solid ${t.border}`, borderRadius: 12, padding: '10px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-                <div style={{ fontWeight: 700, color: t.text, fontSize: 14 }}>{c.name}{c.id === family.currentId && <span style={{ color: t.goldText || GOLD, fontSize: 12, fontWeight: 700 }}> · open now</span>}</div>
+                <div style={{ fontWeight: 700, color: t.text, fontSize: 14 }}>{c.name}{c.id === family.currentId && <span style={{ color: t.textMuted, fontSize: 12, fontWeight: 700 }}> · open now</span>}</div>
                 <div style={{ fontSize: 12, color: t.textMuted }}>{[c.year_level ? (String(c.year_level).startsWith('Year') ? c.year_level : `Year ${c.year_level}`) : null, c.set_up ? null : 'Not set up yet', c.primary ? 'The account you sign in to' : null].filter(Boolean).join(' · ')}</div>
               </div>
               {c.id !== family.currentId && (
@@ -238,7 +297,7 @@ function FamilyCard({ family, theme, card, btn, inputStyle }) {
   )
 }
 
-function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
+function BillingCard({ profile, theme, onChangeSubject }) {
   const t = THEMES[theme]
   const [subs, setSubs] = useState(null)
   const [plan, setPlan] = useState(null)
@@ -300,116 +359,73 @@ function BillingCard({ profile, theme, card, btn, onChangeSubject }) {
 
   const toneColour = { success: t.success, danger: t.danger, muted: t.textMuted }
 
+  const toneOf = (line) => line.tone === 'danger' ? 'danger' : line.tone === 'success' ? 'success' : null
+  const pricing = `$${tiers[0]}/${plan?.hasPlan ? interval : 'week'} for your first paid subject${tiers.length > 1 ? `, then $${extraLadder(tiers)}/${plan?.hasPlan ? interval : 'week'} for each extra one` : ''}. One free subject has ${freeDaily} questions a day.`
+  let first = true
+  const isFirst = () => { const f = first; first = false; return f }
   return (
-    <>
-      <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Your subjects</div>
-          {plan?.hasPlan && (
-            <span style={{ fontSize: 12.5, color: t.textMuted }}>
-              <strong style={{ color: t.text }}>${money(plan.total)}/{interval}</strong>
-              {plan.endsAtPeriodEnd ? ` · ends ${shortDate(plan.renewsAt)}` : plan.renewsAt ? ` · ${plan.trialing ? 'first' : 'next'} bill ${shortDate(plan.renewsAt)}` : ''}
-            </span>
+    <Section id="billing" title="Subjects and billing" sub={pricing} t={t}>
+      {subs === null ? (
+        <Row t={t} first={isFirst()} label="Subjects" note="Loading…" />
+      ) : subs.length === 0 ? (
+        <Row t={t} first={isFirst()} label="Subjects" note="You haven't picked a subject yet." />
+      ) : subs.map(s => {
+        const line = accessLine(s, freeDaily)
+        const removable = s.source === 'stripe' && !s.cancel_at_period_end
+        return (
+          <Row key={s.id} t={t} first={isFirst()} label={formatSubjectLabel({ name: s.subject_name, stage: s.stage })} note={line.text} noteTone={toneOf(line)}
+            action={removable && <RowLink t={t} onClick={() => remove(s)} disabled={!!busy}>{busy === s.id ? 'Removing…' : 'Remove'}</RowLink>} />
+        )
+      })}
+      <Row t={t} label="Change subject" note="Add a subject, or switch which one you're studying."
+        action={<RowLink t={t} onClick={onChangeSubject}>Choose subject</RowLink>} />
+      {plan?.hasPlan ? (
+        <>
+          <Row t={t} label="Plan" value={`$${money(plan.total)} a ${interval}`}
+            note={plan.endsAtPeriodEnd ? `Ends ${shortDate(plan.renewsAt)}` : plan.renewsAt ? `${plan.trialing ? 'First' : 'Next'} bill ${shortDate(plan.renewsAt)}` : null}
+            action={paid.length > 0 && <RowLink t={t} onClick={openPortal} disabled={!!busy}>{busy === 'portal' ? 'Opening…' : 'Card and receipts'}</RowLink>} />
+          {!plan.endsAtPeriodEnd && (
+            <Row t={t} label="Billed" value={interval === 'month' ? 'Monthly' : 'Weekly'}
+              action={<RowLink t={t} onClick={switchInterval} disabled={!!busy}>
+                {busy === 'interval' ? 'Switching…' : otherInterval === 'month' ? `Pay monthly${saving ? ` (save ${saving}%)` : ''}` : 'Pay weekly instead'}
+              </RowLink>} />
           )}
-        </div>
-        {subs === null ? (
-          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Loading…</div>
-        ) : subs.length === 0 ? (
-          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>You haven't picked a subject yet.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
-            {subs.map((s, i) => {
-              const line = accessLine(s, freeDaily)
-              const removable = s.source === 'stripe' && !s.cancel_at_period_end
-              return (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i ? `1px solid ${t.border}` : 'none', flexWrap: 'wrap' }}>
-                  <span style={{ flex: 1, minWidth: 140, fontSize: 13.5, fontWeight: 700, color: t.text }}>{formatSubjectLabel({ name: s.subject_name, stage: s.stage })}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: toneColour[line.tone], textAlign: 'right' }}>{line.text}</span>
-                  {removable && (
-                    <button type="button" onClick={() => remove(s)} disabled={!!busy}
-                      style={{ border: 'none', background: 'none', padding: 0, color: t.textFaint, fontFamily: FONT_B, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer' }}>
-                      {busy === s.id ? 'Removing…' : 'Remove'}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onChangeSubject} style={btn('primary')}>+ Add a subject</button>
-          <button type="button" onClick={onChangeSubject} style={btn('secondary')}>⇄ Switch subject</button>
-        </div>
-        {error && <div style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{error}</div>}
-      </div>
-
-      <div style={card}>
-        <CardTitle t={t} title="Pricing" sub={`${plan?.hasPlan ? `Your plan is billed ${interval}ly: ` : ''}$${tiers[0]}/${plan?.hasPlan ? interval : 'week'} for your first paid subject${tiers.length > 1 ? `, then $${extraLadder(tiers)}/${plan?.hasPlan ? interval : 'week'} for each extra one` : ''}.${plan?.hasPlan ? '' : ` Or pay monthly from $${monthly[0]}/month${saving ? ` (save ${saving}%)` : ''}.`} Your one free subject has ${freeDaily} questions a day.`} />
-        {paid.length > 0 ? (
-          <>
-            <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
-              Update your card, download receipts or cancel your plan in the secure Stripe billing portal.
-            </p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button type="button" onClick={openPortal} disabled={!!busy} style={btn('secondary', !!busy)}>
-                {busy === 'portal' ? 'Opening…' : 'Card & receipts'}
-              </button>
-              {plan?.hasPlan && !plan.endsAtPeriodEnd && (
-                <button type="button" onClick={switchInterval} disabled={!!busy} style={btn('secondary', !!busy)}>
-                  {busy === 'interval' ? 'Switching…'
-                    : otherInterval === 'month' ? `Pay monthly${saving ? ` · save ${saving}%` : ''}`
-                    : 'Pay weekly instead'}
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <p style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-            You don't have a paid plan. Add a subject to unlock unlimited questions in it.
-          </p>
-        )}
-      </div>
-    </>
+        </>
+      ) : paid.length > 0 ? (
+        <Row t={t} label="Plan" note="Update your card or download receipts in the secure Stripe billing page."
+          action={<RowLink t={t} onClick={openPortal} disabled={!!busy}>{busy === 'portal' ? 'Opening…' : 'Card and receipts'}</RowLink>} />
+      ) : (
+        <Row t={t} label="Plan" value="No paid plan" note="Add a subject to unlock unlimited questions in it." />
+      )}
+      {error && <div role="alert" style={{ fontSize: 12.5, color: t.danger, padding: '0 16px 12px' }}>{error}</div>}
+    </Section>
   )
 }
 
 export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut, onChangeSubject, onReplayFeatureTour, onProfileUpdated }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  const recentAccuracy = rankAccuracy(profile)
-  const { level, pct, next, maxed } = getLevelProgress(profile.xp, recentAccuracy)
-  const rank     = RANKS[level]
   const isStudent = !profile.is_tutor && !profile.is_admin
 
-  const TABS = [
-    { id: 'overview',    label: 'Overview',            icon: LayoutDashboard },
-    { id: 'profile',     label: 'Profile',             icon: UserRound },
-    isStudent && { id: 'billing', label: 'Subjects & billing', icon: CreditCard },
-    { id: 'security',    label: 'Security & privacy',  icon: ShieldCheck },
-    { id: 'preferences', label: 'Preferences',         icon: SlidersHorizontal },
-  ].filter(Boolean)
-
-  // ?tab=billing etc. opens a tab directly; switching tabs keeps the URL in step.
-  const [params, setParams] = useSearchParams()
-  const [tab, setTab] = useState(() => (TABS.some(x => x.id === params.get('tab')) ? params.get('tab') : 'overview'))
-  // The screen stays mounted, so a later link to ?tab=… switches tabs too.
+  // The section list on the left jumps to a section and shows where you are.
+  const scrollRef = useRef(null)
+  const [active, setActive] = useState('profile')
+  const jumpTo = (id, smooth = true) => {
+    const el = document.getElementById(`acct-${id}`)
+    if (!el) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: smooth && !reduce ? 'smooth' : 'auto', block: 'start' })
+    setActive(id)
+  }
+  // Old links (?tab=billing and so on) open at that section.
+  const [params] = useSearchParams()
   const tabParam = params.get('tab')
   useEffect(() => {
-    if (tabParam && tabParam !== tab && TABS.some(x => x.id === tabParam)) setTab(tabParam)
+    const id = { billing: 'billing', security: 'signin', preferences: 'preferences' }[tabParam]
+    if (!id) return
+    const timer = setTimeout(() => jumpTo(id, false), 80)
+    return () => clearTimeout(timer)
   }, [tabParam]) // eslint-disable-line react-hooks/exhaustive-deps
-  const tabRefs = useRef({})
-  const selectTab = (id, focus = false) => {
-    setTab(id)
-    setParams(p => { const n = new URLSearchParams(p); n.set('tab', id); return n }, { replace: true })
-    if (focus) tabRefs.current[id]?.focus()
-  }
-  const onTabKey = (e) => {
-    const i = TABS.findIndex(x => x.id === tab)
-    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
-    if (e.key === 'Home') { e.preventDefault(); selectTab(TABS[0].id, true) }
-    else if (e.key === 'End') { e.preventDefault(); selectTab(TABS[TABS.length - 1].id, true) }
-    else if (step) { e.preventDefault(); selectTab(TABS[(i + step + TABS.length) % TABS.length].id, true) }
-  }
 
   const [authUser, setAuthUser] = useState(null)
   useEffect(() => {
@@ -427,30 +443,36 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const pendingEmail = authUser?.new_email || ''
   const memberSince = profile.created_at || authUser?.created_at
 
-  // ── Profile form ──
-  const saved = {
-    display_name:         profile.display_name || '',
-    school:               profile.school || '',
-    year_level:           profile.year_level ?? '',
-    dob:                  profile.dob || '',
-    atar_target:          profile.atar_target ?? '',
-    study_hours_per_week: profile.study_hours_per_week ?? '',
-    goals:                profile.goals || '',
+  // ── Editing one row at a time ──
+  const [editing, setEditing]   = useState(null) // row key
+  const [draft, setDraft]       = useState({})
+  const [rowBusy, setRowBusy]   = useState(false)
+  const [rowMsg, setRowMsg]     = useState(null) // { key, ok, text }
+  const startEdit = (key, values) => { setEditing(key); setDraft(values); setRowMsg(null) }
+  const cancelEdit = () => { setEditing(null); setDraft({}); setRowMsg(null) }
+  const saveRow = async (key, updates) => {
+    setRowBusy(true)
+    try {
+      await updateProfile(profile.id, updates)
+      onProfileUpdated?.(updates)
+      setEditing(null)
+      setRowMsg({ key, ok: true, text: 'Saved.' })
+      setTimeout(() => setRowMsg(m => (m?.key === key && m.ok ? null : m)), 3000)
+    } catch {
+      setRowMsg({ key, ok: false, text: "Couldn't save. Check your connection and try again." })
+    }
+    setRowBusy(false)
   }
-  const [form, setForm]                 = useState(saved)
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [profileMsg, setProfileMsg]     = useState(null) // { ok, text }
-  const setField = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
-  const profileDirty = Object.keys(saved).some(k => String(form[k]) !== String(saved[k]))
+
   // Waiting on a parent: the database keeps these as they are (migration
   // 20261025000012_parent_consent.sql), so don't offer to change them.
   const dobLocked = awaitingParent(profile)
-  const nameMissing  = !form.display_name.trim()
 
   // ── Password ──
   const [newPw, setNewPw]               = useState('')
   const [confirmPw, setConfirmPw]       = useState('')
   const [showPw, setShowPw]             = useState(false)
+  const [editingPw, setEditingPw]       = useState(false)
   const [savingPw, setSavingPw]         = useState(false)
   const [pwMsg, setPwMsg]               = useState(null) // { ok, text }
   const [signingOutAll, setSigningOutAll] = useState(false)
@@ -474,77 +496,32 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const [savingReminders, setSavingReminders] = useState(false)
   const [remindersMsg, setRemindersMsg] = useState('')
 
-  const card = {
-    background: t.bgCard,
-    border: `1px solid ${t.border}`,
-    borderRadius: 16,
-    boxShadow: theme === 'light' ? '0 2px 12px rgba(12,16,55,0.07)' : '0 2px 12px rgba(0,0,0,0.25)',
-    padding: '20px 24px',
-  }
+  // A plain card, for the parent and family panels.
+  const plainCard = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '16px 18px' }
 
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: 10, boxSizing: 'border-box',
-    border: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bg,
+    border: `1px solid ${t.border}`, background: t.bgCard,
     color: t.text, fontSize: 14, fontFamily: FONT_B, outline: 'none', colorScheme: theme,
   }
 
   const btn = (variant = 'primary', disabled = false) => ({
-    padding: '10px 20px', borderRadius: 10, fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
-    ...(variant === 'primary' ? {
-      border: 'none',
-      background: disabled ? t.border : `linear-gradient(135deg,${GOLD},${GOLDL})`,
-      color: '#0c1037',
-      boxShadow: disabled ? 'none' : '0 4px 16px rgba(241,190,67,0.3)',
-    } : variant === 'danger' ? {
-      border: `1px solid rgba(239,68,68,0.35)`,
-      background: 'rgba(239,68,68,0.06)',
-      color: t.danger,
-    } : {
-      border: `1px solid ${t.border}`,
-      background: 'transparent',
-      color: t.textMuted,
-    }),
+    padding: '8px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800,
+    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1,
+    ...(variant === 'primary' ? { border: 'none', background: t.accent, color: '#0c1037' }
+      : variant === 'danger' ? { border: `1px solid ${t.danger}`, background: 'transparent', color: t.danger }
+      : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
   })
-
-  const handleSaveProfile = async () => {
-    if (nameMissing || !profileDirty) return
-    const updates = { display_name: form.display_name.trim() }
-    // Tutors and admins only see the name field.
-    if (isStudent) {
-      const num = (v) => (v === '' ? null : Number(v))
-      Object.assign(updates, {
-        school:               form.school.trim() || null,
-        year_level:           num(form.year_level),
-        dob:                  form.dob || null,
-        atar_target:          num(form.atar_target),
-        study_hours_per_week: num(form.study_hours_per_week),
-        goals:                form.goals.trim() || null,
-      })
-    }
-    setSavingProfile(true); setProfileMsg(null)
-    try {
-      await updateProfile(profile.id, updates)
-      onProfileUpdated?.(updates)
-      setForm(f => ({ ...f, display_name: updates.display_name }))
-      setProfileMsg({ ok: true, text: 'Saved!' })
-    } catch {
-      setProfileMsg({ ok: false, text: 'Failed to save. Check your connection and try again.' })
-    } finally {
-      setSavingProfile(false)
-      setTimeout(() => setProfileMsg(null), 3000)
-    }
-  }
 
   const pwTooShort = newPw.length < 6
   const pwMismatch = confirmPw.length > 0 && confirmPw !== newPw
   const handleChangePassword = async () => {
-    if (pwTooShort) { setPwMsg({ ok: false, text: 'Password must be at least 6 characters.' }); return }
-    if (newPw !== confirmPw) { setPwMsg({ ok: false, text: "Passwords don't match." }); return }
+    if (pwTooShort) { setPwMsg({ ok: false, text: 'Use at least 6 characters.' }); return }
+    if (newPw !== confirmPw) { setPwMsg({ ok: false, text: "The two don't match." }); return }
     setSavingPw(true); setPwMsg(null)
     const { error } = await supabase.auth.updateUser({ password: newPw })
     if (error) setPwMsg({ ok: false, text: error.message })
-    else { setPwMsg({ ok: true, text: 'Password updated!' }); setNewPw(''); setConfirmPw('') }
+    else { setPwMsg({ ok: true, text: 'Password updated.' }); setNewPw(''); setConfirmPw(''); setEditingPw(false) }
     setSavingPw(false)
     setTimeout(() => setPwMsg(null), 4000)
   }
@@ -597,7 +574,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       onProfileUpdated?.(updates)
       setRemindersOn(nextOn)
     } catch {
-      setRemindersMsg('Failed to save.')
+      setRemindersMsg("Couldn't save. Try again.")
       setTimeout(() => setRemindersMsg(''), 3000)
     } finally {
       setSavingReminders(false)
@@ -618,292 +595,226 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     `Hi,\n\nPlease send me a copy of the personal information GradeFarm holds about me.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`,
   )}`
 
-  const levelBadges = RANK_TIERS.map((tier, i) => ({
-    rank: tier.name, level: i,
-    xpRequired: tier.xp,
-    accuracyRequired: tier.accuracy,
-    unlocked: i <= level,
-    current: i === level,
-  }))
+  // ── Sections ──
+  const isFamilyParent = isStudent && !!family
+  const hasParentCard = isStudent && 'parent_consent_at' in profile
+  const NAV = [
+    { id: 'profile', label: 'Profile' },
+    isFamilyParent && { id: 'family', label: 'Your children' },
+    hasParentCard && { id: 'parent', label: 'Parent or guardian' },
+    isStudent && { id: 'billing', label: 'Subjects and billing' },
+    { id: 'signin', label: 'Sign-in' },
+    { id: 'preferences', label: 'Preferences' },
+    { id: 'data', label: 'Your data' },
+  ].filter(Boolean)
+
+  // Highlight the section being read in the list on the left.
+  const navKey = NAV.map(n => n.id).join(',')
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(entries => {
+      const seen = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+      if (seen[0]) setActive(seen[0].target.id.replace('acct-', ''))
+    }, { root, rootMargin: '0px 0px -65% 0px' })
+    navKey.split(',').forEach(id => { const el = document.getElementById(`acct-${id}`); if (el) obs.observe(el) })
+    return () => obs.disconnect()
+  }, [navKey])
 
   const atarLabel = ATAR_TARGETS.find(a => a.value === Number(profile.atar_target))?.label
-
-  const dayStreak = currentStreak(profile.streak, profile.last_active)
-  const stats = [
-    { icon: Zap,          label: 'Total XP',       value: (profile.xp || 0).toLocaleString('en-AU') },
-    { icon: Flame,        label: 'Current streak', value: `${dayStreak} day${dayStreak === 1 ? '' : 's'}` },
-    { icon: Trophy,       label: 'Best streak',    value: `${profile.best_streak || 0} day${profile.best_streak === 1 ? '' : 's'}` },
-    { icon: CalendarDays, label: 'Member since',   value: memberSince ? new Date(memberSince).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }) : '—' },
-  ]
-
-  const msgLine = (m) => m && <div role="status" style={{ fontSize: 12, color: m.ok ? t.success : t.danger, marginTop: 8 }}>{m.text}</div>
-
-  // ── Tab panels ──
-
-  const overview = (
-    <>
-      {/* ── Profile summary ── */}
-      <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 800, color: '#080d28', flexShrink: 0 }}>
-            {(profile.display_name || '?')[0].toUpperCase()}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.display_name}</div>
-            <div style={{ fontSize: 12, color: GOLD, fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}><RankIcon level={level} size={13} /> {rank} · Level {level}</div>
-            {(profile.school || profile.year_level) && (
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>
-                {[profile.year_level && `Year ${profile.year_level}`, profile.school].filter(Boolean).join(' · ')}
-              </div>
-            )}
-          </div>
-          <button type="button" onClick={() => selectTab('profile')} style={btn('secondary')}>Edit profile</button>
-        </div>
-
-        {/* XP bar */}
-        <div style={{ marginBottom: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-            <span style={{ fontSize: 11, color: t.textMuted }}>Level {level}</span>
-            <span style={{ fontSize: 11, color: t.textMuted }}>{maxed ? `${profile.xp.toLocaleString('en-AU')} XP` : `${profile.xp} / ${next} XP`}</span>
-          </div>
-          <div style={{ background: t.border, borderRadius: 999, height: 6, overflow: 'hidden' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${GOLD},${GOLDL})`, borderRadius: 999, transition: 'width 0.8s' }} />
-          </div>
-        </div>
-        <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
-          {nextRankHint(profile.xp, recentAccuracy)}
-        </div>
-      </div>
-
-      {/* ── Stats ── */}
-      <div className="acct-stats">
-        {stats.map(s => (
-          <div key={s.label} style={{ ...card, padding: '14px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: t.textMuted, fontWeight: 600 }}>
-              <s.icon size={14} color={GOLD} aria-hidden="true" /> {s.label}
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: t.text, marginTop: 6 }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Goals ── */}
-      {isStudent && (
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Your goals</div>
-            <button type="button" onClick={() => selectTab('profile')}
-              style={{ border: 'none', background: 'none', padding: 0, color: t.goldText || GOLD, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-              Edit
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 11.5, color: t.textMuted, fontWeight: 600 }}>ATAR target</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginTop: 3 }}>{atarLabel || 'Not set'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11.5, color: t.textMuted, fontWeight: 600 }}>Study time</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginTop: 3 }}>{profile.study_hours_per_week ? `${profile.study_hours_per_week} hours a week` : 'Not set'}</div>
-            </div>
-          </div>
-          {profile.goals && <p style={{ fontSize: 13, color: t.textMuted, marginTop: 12, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{profile.goals}</p>}
-        </div>
-      )}
-
-      {/* ── Rank progression ── */}
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Rank Progression</div>
-        <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.55, marginBottom: 14 }}>
-          Each rank needs its XP and, from Silver up, a minimum accuracy over your recent answers.
-          Yours is <strong style={{ color: t.text }}>{profile.recent_answers > 0 ? `${Math.round(recentAccuracy * 100)}%` : 'not set yet'}</strong>.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
-          {levelBadges.map(b => (
-            <div key={b.rank} style={{
-              padding: '10px 12px', borderRadius: 10, border: `1px solid ${b.current ? GOLD : b.unlocked ? t.success + '44' : t.border}`,
-              background: b.current ? `${GOLD}12` : b.unlocked ? `${t.success}08` : 'transparent',
-              opacity: b.unlocked ? 1 : 0.45,
-            }}>
-              <div style={{ marginBottom: 4, display: 'flex' }}><RankIcon level={b.level} size={18} color={b.unlocked ? GOLD : t.textMuted} /></div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: b.current ? GOLD : t.text }}>{b.rank}</div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>
-                {b.xpRequired.toLocaleString('en-AU')} XP{b.accuracyRequired > 0 && ` · ${Math.round(b.accuracyRequired * 100)}%`}
-              </div>
-              {b.current && <div style={{ fontSize: 9, color: GOLD, fontWeight: 700, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  )
-
-  const profilePanel = (
-    <div style={card}>
-      <CardTitle t={t} title="Personal details" sub={isStudent ? 'Your name shows on class leaderboards. The rest helps us pitch questions and your study plan at the right level.' : 'Your name shows to students and on class leaderboards.'} />
-      <div className="acct-form">
-        <Field t={t} label="Display name">
-          <input value={form.display_name} onChange={setField('display_name')} maxLength={60} style={{ ...inputStyle, borderColor: nameMissing ? 'rgba(248,113,113,0.5)' : t.border }} />
-        </Field>
-        <Field t={t} label="Email" hint={pendingEmail ? `Changing to ${pendingEmail}, waiting for confirmation.` : 'Change it under Security & privacy.'}>
-          <input value={email} readOnly disabled style={{ ...inputStyle, opacity: 0.7, cursor: 'not-allowed' }} />
-        </Field>
-        {isStudent && (
-          <>
-            <Field t={t} label="School">
-              <input value={form.school} onChange={setField('school')} maxLength={120} placeholder="Your school name" style={inputStyle} />
-            </Field>
-            <Field t={t} label="Year level" hint={dobLocked ? 'Can be changed once your parent or guardian confirms.' : null}>
-              <select value={form.year_level} onChange={setField('year_level')} disabled={dobLocked} style={{ ...inputStyle, cursor: dobLocked ? 'not-allowed' : 'pointer' }}>
-                <option value="">Not set</option>
-                {YEAR_LEVELS.map(y => <option key={y} value={y}>Year {y}</option>)}
-              </select>
-            </Field>
-            <Field t={t} label="Date of birth" hint={dobLocked ? 'Can be changed once your parent or guardian confirms.' : null}>
-              <input type="date" value={form.dob} onChange={setField('dob')} max={new Date().toISOString().split('T')[0]} disabled={dobLocked} style={inputStyle} />
-            </Field>
-            {(!form.year_level || Number(form.year_level) >= 11 || form.atar_target !== '') && (
-              <Field t={t} label="ATAR target">
-                <select value={form.atar_target} onChange={setField('atar_target')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="">Not set</option>
-                  {ATAR_TARGETS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                </select>
-              </Field>
-            )}
-            <Field t={t} label="Study hours per week">
-              <select value={form.study_hours_per_week} onChange={setField('study_hours_per_week')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                <option value="">Not set</option>
-                {STUDY_HOURS.map(h => <option key={h} value={h}>{h} hour{h === 1 ? '' : 's'}</option>)}
-              </select>
-            </Field>
-            <div className="acct-form-wide">
-              <Field t={t} label="What do you want to get better at?">
-                <textarea value={form.goals} onChange={setField('goals')} maxLength={1000} rows={3}
-                  placeholder="e.g. I want to improve my understanding of organic chemistry…"
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} />
-              </Field>
-            </div>
-          </>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-        <button type="button" onClick={handleSaveProfile} disabled={savingProfile || nameMissing || !profileDirty} style={btn('primary', savingProfile || nameMissing || !profileDirty)}>
-          {savingProfile ? 'Saving…' : 'Save changes'}
-        </button>
-        {profileDirty && !savingProfile && (
-          <button type="button" onClick={() => setForm(saved)} style={btn('secondary')}>Discard</button>
-        )}
-        {nameMissing && <span style={{ fontSize: 12, color: t.danger }}>Your display name can't be empty.</span>}
-      </div>
-      {msgLine(profileMsg)}
+  const goalValue = [atarLabel && `ATAR ${atarLabel}`, profile.study_hours_per_week && `${profile.study_hours_per_week} hour${Number(profile.study_hours_per_week) === 1 ? '' : 's'} a week`].filter(Boolean).join(' · ')
+  const lockNote = 'Can be changed once your parent or guardian confirms.'
+  const saveCancel = (key, onSave, disabled) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <button type="button" onClick={onSave} disabled={disabled || rowBusy} style={btn('primary', disabled || rowBusy)}>{rowBusy ? 'Saving…' : 'Save'}</button>
+      <button type="button" onClick={cancelEdit} disabled={rowBusy} style={btn('secondary', rowBusy)}>Cancel</button>
+      {rowMsg?.key === key && !rowMsg.ok && <span role="alert" style={{ fontSize: 12.5, color: t.danger }}>{rowMsg.text}</span>}
     </div>
   )
+  const saved = (key) => rowMsg?.key === key && rowMsg.ok ? 'Saved.' : null
+  const change = (key, values, disabled) => editing === key ? null : <RowLink t={t} onClick={() => startEdit(key, values)} disabled={disabled}>Change</RowLink>
 
-  const securityPanel = (
-    <>
-      {familyChild ? (
-      <div style={card}>
-        <CardTitle t={t} title="Sign-in" sub={<>{profile.display_name || 'This child'} is part of your family account. You sign in with <strong style={{ color: t.text }}>{email}</strong> and switch to them from the menu, so they have no email or password of their own. To change the email or password, switch to the account you sign in to.</>} />
-      </div>
-      ) : (
-      <div style={card}>
-        <CardTitle t={t} title="Sign-in" sub={email ? <>You sign in as <strong style={{ color: t.text }}>{email}</strong>{authUser?.last_sign_in_at ? ` · last signed in ${longDate(authUser.last_sign_in_at)}` : ''}.</> : null} />
-
-        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Email address</div>
-        {pendingEmail && !emailMsg && (
-          <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 10, lineHeight: 1.5 }}>
-            Waiting for you to confirm <strong style={{ color: t.text }}>{pendingEmail}</strong> from the link we emailed.
-          </div>
-        )}
-        {editingEmail ? (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input
-              type="email" autoComplete="email" aria-label="New email address" placeholder="New email address"
-              value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleChangeEmail()}
-              style={{ ...inputStyle, flex: '1 1 220px', width: 'auto' }} autoFocus
-            />
-            <button type="button" onClick={handleChangeEmail} disabled={!newEmailValid || savingEmail} style={btn('primary', !newEmailValid || savingEmail)}>
-              {savingEmail ? 'Sending…' : 'Send confirmation'}
-            </button>
-            <button type="button" onClick={() => { setEditingEmail(false); setNewEmail('') }} style={btn('secondary')}>Cancel</button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => { setEditingEmail(true); setEmailMsg(null) }} style={btn('secondary')}>Change email</button>
-        )}
-        {msgLine(emailMsg)}
-
-        <div style={{ height: 1, background: t.border, margin: '18px 0' }} />
-        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Change password</div>
-        <div className="acct-form">
-          <div style={{ position: 'relative' }}>
-            <input
-              type={showPw ? 'text' : 'password'} autoComplete="new-password" aria-label="New password"
-              placeholder="New password (min 6 chars)" value={newPw} onChange={e => setNewPw(e.target.value)}
-              style={{ ...inputStyle, paddingRight: 40 }}
-            />
-            <button type="button" onClick={() => setShowPw(s => !s)} aria-label={showPw ? 'Hide password' : 'Show password'}
-              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', padding: 4, cursor: 'pointer', color: t.textMuted, display: 'flex' }}>
-              {showPw ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-            </button>
-          </div>
-          <input
-            type={showPw ? 'text' : 'password'} autoComplete="new-password" aria-label="Confirm new password"
-            placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
-            style={{ ...inputStyle, borderColor: pwMismatch ? 'rgba(248,113,113,0.5)' : t.border }}
-          />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-          <button type="button" onClick={handleChangePassword} disabled={savingPw || pwTooShort || newPw !== confirmPw} style={btn('primary', savingPw || pwTooShort || newPw !== confirmPw)}>
-            {savingPw ? 'Saving…' : 'Update password'}
-          </button>
-          {pwMismatch && <span style={{ fontSize: 12, color: t.danger }}>Passwords don't match.</span>}
-        </div>
-        {msgLine(pwMsg)}
-      </div>
-      )}
-
-      <div style={card}>
-        <CardTitle t={t} title="Sessions" sub="Signed in on a shared or lost device? Signing out everywhere ends every session, including this one." />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onSignOut} style={btn('secondary')}>Sign out</button>
-          <button type="button" onClick={handleSignOutEverywhere} disabled={signingOutAll} style={btn('danger', signingOutAll)}>
-            {signingOutAll ? 'Signing out…' : 'Sign out everywhere'}
-          </button>
-        </div>
-      </div>
-
-      <div style={card}>
-        <CardTitle t={t} title="Your data" sub="You can ask for a copy of the information we hold about you. We action requests within 30 days." />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-          <a href={exportMailto} style={{ ...btn('secondary'), textDecoration: 'none', display: 'inline-block' }}>Request a copy of my data</a>
-        </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12.5 }}>
-          <button type="button" onClick={() => navigate('/privacy')} style={{ border: 'none', background: 'none', padding: 0, color: t.goldText || GOLD, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Privacy Policy</button>
-          <button type="button" onClick={() => navigate('/terms')} style={{ border: 'none', background: 'none', padding: 0, color: t.goldText || GOLD, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Terms of Service</button>
-          <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: t.textMuted, fontWeight: 600, textDecoration: 'none' }}>{SUPPORT_EMAIL}</a>
-        </div>
-      </div>
-
-      <div style={{ ...card, borderColor: 'rgba(239,68,68,0.3)' }}>
-        <CardTitle t={t} title="Delete account" sub={profile.is_admin
-          ? 'Admin accounts can\'t be deleted here. Ask another admin to remove your admin access first.'
-          : profile.is_tutor
-            ? 'Your students rely on your classes, lessons and recordings, so tutor accounts are closed by our team. We\'ll move your classes over first.'
-            : familyChild
-              ? `Permanently delete ${profile.display_name || 'this child'}'s account and everything tied to it. This can't be undone.`
-              : otherChildren.length
-                ? `Permanently delete this account and everything tied to it. ${otherChildren.map(c => c.name).join(' and ')}'s account${otherChildren.length > 1 ? 's are' : ' is'} deleted too, since you sign in to ${otherChildren.length > 1 ? 'them' : 'it'} through this one. This can't be undone.`
-                : 'Permanently delete your account and everything tied to it. This can\'t be undone.'} />
-        {profile.is_tutor && !profile.is_admin && (
-          <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Close my GradeFarm tutor account')}&body=${encodeURIComponent(`Hi,\n\nPlease close my GradeFarm tutor account.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`)}`}
-            style={{ ...btn('danger'), textDecoration: 'none', display: 'inline-block' }}>Contact support</a>
-        )}
-        {isStudent && (!deleteOpen ? (
-          <button type="button" onClick={() => setDeleteOpen(true)} style={btn('danger')}>Delete my account…</button>
-        ) : (
+  const profileSection = (
+    <Section id="profile" title="Profile" t={t}>
+      <Row t={t} first label="Name" value={profile.display_name || 'Not set'}
+        note={saved('name') || (isStudent ? 'Shows on class leaderboards.' : 'Shows to students and on class leaderboards.')} noteTone={saved('name') ? 'success' : null}
+        action={change('name', { display_name: profile.display_name || '' })}
+        editor={editing === 'name' && (
           <>
-            <ul style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, margin: '0 0 14px', paddingLeft: 18 }}>
+            <Field t={t} label="Name">
+              <input value={draft.display_name} onChange={e => setDraft(d => ({ ...d, display_name: e.target.value }))} maxLength={60} autoFocus style={inputStyle}
+                onKeyDown={e => { if (e.key === 'Enter' && draft.display_name.trim()) saveRow('name', { display_name: draft.display_name.trim() }) }} />
+            </Field>
+            {saveCancel('name', () => saveRow('name', { display_name: draft.display_name.trim() }), !draft.display_name?.trim())}
+          </>
+        )} />
+      {isStudent && (
+        <>
+          <Row t={t} label="Year level" value={profile.year_level ? `Year ${profile.year_level}` : 'Not set'} note={saved('year') || (dobLocked ? lockNote : null)} noteTone={saved('year') ? 'success' : null}
+            action={!dobLocked && change('year', { year_level: profile.year_level ?? '' })}
+            editor={editing === 'year' && (
+              <>
+                <Chips t={t} label="Year level" options={YEAR_LEVELS.map(y => [y, `Year ${y}`])} value={draft.year_level} onChange={v => setDraft(d => ({ ...d, year_level: v }))} />
+                {saveCancel('year', () => saveRow('year', { year_level: draft.year_level === '' ? null : Number(draft.year_level) }))}
+              </>
+            )} />
+          <Row t={t} label="School" value={profile.school || 'Not set'} note={saved('school')} noteTone="success"
+            action={change('school', { school: profile.school || '' })}
+            editor={editing === 'school' && (
+              <>
+                <Field t={t} label="School">
+                  <input value={draft.school} onChange={e => setDraft(d => ({ ...d, school: e.target.value }))} maxLength={120} autoFocus autoComplete="organization" style={inputStyle}
+                    onKeyDown={e => { if (e.key === 'Enter') saveRow('school', { school: draft.school.trim() || null }) }} />
+                </Field>
+                {saveCancel('school', () => saveRow('school', { school: draft.school.trim() || null }))}
+              </>
+            )} />
+          <Row t={t} label="Date of birth" value={profile.dob ? longDate(profile.dob) : 'Not set'} note={saved('dob') || (dobLocked ? lockNote : null)} noteTone={saved('dob') ? 'success' : null}
+            action={!dobLocked && change('dob', { dob: profile.dob || '' })}
+            editor={editing === 'dob' && (
+              <>
+                <Field t={t} label="Date of birth">
+                  <input type="date" value={draft.dob} onChange={e => setDraft(d => ({ ...d, dob: e.target.value }))} max={new Date().toISOString().split('T')[0]} autoFocus style={{ ...inputStyle, maxWidth: 240 }} />
+                </Field>
+                {saveCancel('dob', () => saveRow('dob', { dob: draft.dob || null }))}
+              </>
+            )} />
+          <Row t={t} label="Goal" value={goalValue || 'Not set'} note={saved('goal') || profile.goals || null} noteTone={saved('goal') ? 'success' : null}
+            action={change('goal', { atar_target: profile.atar_target ?? '', study_hours_per_week: profile.study_hours_per_week ?? '', goals: profile.goals || '' })}
+            editor={editing === 'goal' && (
+              <>
+                {(!profile.year_level || Number(profile.year_level) >= 11 || draft.atar_target !== '') && (
+                  <Field t={t} label="ATAR target">
+                    <Chips t={t} label="ATAR target" options={ATAR_TARGETS.map(a => [a.value, a.label])} value={draft.atar_target} onChange={v => setDraft(d => ({ ...d, atar_target: v }))} />
+                  </Field>
+                )}
+                <Field t={t} label="Hours a week you can study">
+                  <Chips t={t} label="Hours a week" options={STUDY_HOURS.map(h => [h, String(h)])} value={draft.study_hours_per_week} onChange={v => setDraft(d => ({ ...d, study_hours_per_week: v }))} />
+                </Field>
+                <Field t={t} label="What do you want to get better at?">
+                  <textarea value={draft.goals} onChange={e => setDraft(d => ({ ...d, goals: e.target.value }))} maxLength={1000} rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} />
+                </Field>
+                {saveCancel('goal', () => saveRow('goal', {
+                  atar_target: draft.atar_target === '' ? null : Number(draft.atar_target),
+                  study_hours_per_week: draft.study_hours_per_week === '' ? null : Number(draft.study_hours_per_week),
+                  goals: draft.goals.trim() || null,
+                }))}
+              </>
+            )} />
+        </>
+      )}
+    </Section>
+  )
+
+  const signinSection = (
+    <Section id="signin" title="Sign-in" t={t}>
+      {familyChild ? (
+        <Row t={t} first label="Sign-in" note={<>{profile.display_name || 'This child'} is part of your family account. You sign in with <strong style={{ color: t.text }}>{email}</strong> and switch to them from the menu, so they have no email or password of their own.</>} />
+      ) : (
+        <>
+          <Row t={t} first label="Email" value={email || '—'}
+            note={emailMsg ? emailMsg.text : pendingEmail ? `Waiting for you to confirm ${pendingEmail} from the link we emailed.` : null}
+            noteTone={emailMsg ? (emailMsg.ok ? 'success' : 'danger') : null}
+            action={!editingEmail && <RowLink t={t} onClick={() => { setEditingEmail(true); setEmailMsg(null) }}>Change</RowLink>}
+            editor={editingEmail && (
+              <>
+                <Field t={t} label="New email address" hint="We email it a link to confirm. You keep signing in with the old one until then.">
+                  <input type="email" autoComplete="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleChangeEmail()} autoFocus style={inputStyle} />
+                </Field>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={handleChangeEmail} disabled={!newEmailValid || savingEmail} style={btn('primary', !newEmailValid || savingEmail)}>{savingEmail ? 'Sending…' : 'Send confirmation'}</button>
+                  <button type="button" onClick={() => { setEditingEmail(false); setNewEmail('') }} style={btn('secondary')}>Cancel</button>
+                </div>
+              </>
+            )} />
+          <Row t={t} label="Password" value="••••••••" note={pwMsg?.text} noteTone={pwMsg ? (pwMsg.ok ? 'success' : 'danger') : null}
+            action={!editingPw && <RowLink t={t} onClick={() => { setEditingPw(true); setPwMsg(null) }}>Change</RowLink>}
+            editor={editingPw && (
+              <>
+                <div className="acct-form">
+                  <Field t={t} label="New password" hint="At least 6 characters.">
+                    <div style={{ position: 'relative' }}>
+                      <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={newPw} onChange={e => setNewPw(e.target.value)} autoFocus style={{ ...inputStyle, paddingRight: 60 }} />
+                      <button type="button" onClick={() => setShowPw(s => !s)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
+                        style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', padding: '4px 6px', cursor: 'pointer', color: t.textSub, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700 }}>
+                        {showPw ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  </Field>
+                  <Field t={t} label="Type it again">
+                    <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
+                      aria-invalid={pwMismatch || undefined} style={{ ...inputStyle, borderColor: pwMismatch ? t.danger : t.border }} />
+                  </Field>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={handleChangePassword} disabled={savingPw || pwTooShort || newPw !== confirmPw} style={btn('primary', savingPw || pwTooShort || newPw !== confirmPw)}>{savingPw ? 'Saving…' : 'Update password'}</button>
+                  <button type="button" onClick={() => { setEditingPw(false); setNewPw(''); setConfirmPw('') }} style={btn('secondary')}>Cancel</button>
+                  {pwMismatch && <span style={{ fontSize: 12.5, color: t.danger }}>The two don't match.</span>}
+                </div>
+              </>
+            )} />
+        </>
+      )}
+      <Row t={t} label="This device" note={authUser?.last_sign_in_at ? `Last signed in ${longDate(authUser.last_sign_in_at)}. Signing out everywhere ends every session, including this one.` : 'Signing out everywhere ends every session, including this one.'}
+        action={(
+          <span style={{ display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+            <RowLink t={t} onClick={onSignOut}>Sign out</RowLink>
+            <RowLink t={t} onClick={handleSignOutEverywhere} disabled={signingOutAll}>{signingOutAll ? 'Signing out…' : 'Sign out everywhere'}</RowLink>
+          </span>
+        )} />
+    </Section>
+  )
+
+  const preferencesSection = (
+    <Section id="preferences" title="Preferences" t={t}>
+      {'emails_unsubscribed_at' in profile && (
+        <Row t={t} first label="Email reminders" note={remindersMsg || 'Lesson reminders and assignment due dates. Emails your tutor sends you directly always arrive.'} noteTone={remindersMsg ? 'danger' : null}
+          action={<Toggle on={remindersOn} onClick={handleToggleReminders} disabled={savingReminders} label="Email reminders" />} />
+      )}
+      {typeof onToggleTheme === 'function' && (
+        <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Dark mode" note="Saved on this device. Also in the sidebar."
+          action={<Toggle on={theme === 'dark'} onClick={onToggleTheme} label="Dark mode" />} />
+      )}
+      {!isStudent && (
+        <Row t={t} label="Subject" note="Which subject the Question Bank, Learn and Study Plan show."
+          action={<RowLink t={t} onClick={onChangeSubject}>Change subject</RowLink>} />
+      )}
+      {typeof onReplayFeatureTour === 'function' && (
+        <Row t={t} label="Page tips" note="Each page shows a few tips the first time you open it. Show them again takes you to Practice to start."
+          action={<RowLink t={t} onClick={handleReplayFeatureTour} disabled={replayTourBusy}>Show them again</RowLink>} />
+      )}
+    </Section>
+  )
+
+  const deleteNote = profile.is_admin
+    ? "Admin accounts can't be deleted here. Ask another admin to remove your admin access first."
+    : profile.is_tutor
+      ? 'Your students rely on your classes, lessons and recordings, so tutor accounts are closed by our team. We move your classes over first.'
+      : familyChild
+        ? `Deletes ${profile.display_name || 'this child'}'s account and everything tied to it. This can't be undone.`
+        : otherChildren.length
+          ? `Deletes this account and everything tied to it. ${otherChildren.map(c => c.name).join(' and ')}'s account${otherChildren.length > 1 ? 's are' : ' is'} deleted too, since you sign in to ${otherChildren.length > 1 ? 'them' : 'it'} through this one. This can't be undone.`
+          : "Deletes your account and everything tied to it. This can't be undone."
+  const dataSection = (
+    <Section id="data" title="Your data" t={t}>
+      <Row t={t} first label="A copy of your data" note="Ask for a copy of the information we hold about you. We reply within 30 days."
+        action={<RowLink t={t} href={exportMailto}>Ask for a copy</RowLink>} />
+      <Row t={t} label="Policies" note={<>Questions? Email <span style={{ color: t.text, fontWeight: 600, userSelect: 'all' }}>{SUPPORT_EMAIL}</span></>}
+        action={(
+          <span style={{ display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+            <RowLink t={t} onClick={() => navigate('/privacy')}>Privacy policy</RowLink>
+            <RowLink t={t} onClick={() => navigate('/terms')}>Terms</RowLink>
+          </span>
+        )} />
+      <Row t={t} label="Delete account" note={deleteNote}
+        action={
+          profile.is_tutor && !profile.is_admin
+            ? <RowLink t={t} tone="danger" href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Close my GradeFarm tutor account')}&body=${encodeURIComponent(`Hi,\n\nPlease close my GradeFarm tutor account.\n\nAccount email: ${email || '(the email I signed up with)'}\n\nThanks`)}`}>Contact support</RowLink>
+            : isStudent && !deleteOpen && <RowLink t={t} tone="danger" onClick={() => setDeleteOpen(true)}>Delete account</RowLink>
+        }
+        editor={isStudent && deleteOpen && (
+          <>
+            <ul style={{ fontSize: 13, color: t.textSub, lineHeight: 1.6, margin: 0, paddingLeft: 18 }}>
               <li>Your profile, XP, streaks, practice history, study plan and messages are deleted.</li>
               <li>Any paid plan is cancelled straight away and you won't be charged again. There's no refund for the current week.</li>
               <li>You're removed from your tutors' rosters and classes.</li>
@@ -918,139 +829,74 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
                 <input value={deleteWord} onChange={e => setDeleteWord(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleDeleteAccount()} autoComplete="off" style={inputStyle} />
               </Field>
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" onClick={handleDeleteAccount} disabled={!canDelete || deleting} style={{ ...btn('danger', !canDelete || deleting), ...(canDelete && !deleting ? { background: t.danger, color: '#fff', border: 'none' } : {}) }}>
                 {deleting ? 'Deleting…' : 'Permanently delete my account'}
               </button>
               <button type="button" onClick={() => { setDeleteOpen(false); setDeletePw(''); setDeleteWord(''); setDeleteMsg('') }} disabled={deleting} style={btn('secondary', deleting)}>Cancel</button>
             </div>
-            {deleteMsg && <div role="alert" style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{deleteMsg}</div>}
+            {deleteMsg && <div role="alert" style={{ fontSize: 12.5, color: t.danger }}>{deleteMsg}</div>}
           </>
-        ))}
-      </div>
-    </>
+        )} />
+    </Section>
   )
-
-  const preferencesPanel = (
-    <>
-      {typeof onToggleTheme === 'function' && (
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                {theme === 'dark' ? <Moon size={15} color={GOLD} aria-hidden="true" /> : <Sun size={15} color={GOLD} aria-hidden="true" />} Dark mode
-              </div>
-              <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>Saved on this device.</div>
-            </div>
-            <Toggle on={theme === 'dark'} onClick={onToggleTheme} label="Dark mode" />
-          </div>
-        </div>
-      )}
-
-      {/* ── Email reminders (hidden until the automated-emails migration adds the column) ── */}
-      {'emails_unsubscribed_at' in profile && (
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Email reminders</div>
-              <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-                Session reminders and assignment due dates. Emails your tutor sends you directly always arrive.
-              </div>
-            </div>
-            <Toggle on={remindersOn} onClick={handleToggleReminders} disabled={savingReminders} label="Email reminders" />
-          </div>
-          {remindersMsg && <div style={{ fontSize: 12, color: t.danger, marginTop: 8 }}>{remindersMsg}</div>}
-        </div>
-      )}
-
-      {!isStudent && (
-        <div style={card}>
-          <CardTitle t={t} title="Subject" sub="Switch which subject the Question Bank, Learn and Study Plan show." />
-          <button type="button" onClick={onChangeSubject} style={btn('secondary')}>⇄ Change Subject</button>
-        </div>
-      )}
-
-      {/* ── Feature tour (replay from Settings) ── */}
-      {typeof onReplayFeatureTour === 'function' && (
-        <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8 }}>Feature tour</div>
-          <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
-            Replay the guided walkthrough of the sidebar — Question Bank, Learn, History, Study Plan, and more.
-          </p>
-          <button type="button" onClick={handleReplayFeatureTour} disabled={replayTourBusy} style={btn('secondary', replayTourBusy)}>
-            {replayTourBusy ? 'Preparing…' : 'Replay feature tour'}
-          </button>
-        </div>
-      )}
-    </>
-  )
-
-  const panels = {
-    overview,
-    profile: (
-      <>
-        {profilePanel}
-        {isStudent && family && (
-          <FamilyCard family={family} theme={theme} card={card} btn={btn} inputStyle={inputStyle} />
-        )}
-        {isStudent && 'parent_consent_at' in profile && (
-          <ParentCard profile={profile} theme={theme} card={card} btn={btn} inputStyle={inputStyle} onProfileUpdated={onProfileUpdated} />
-        )}
-      </>
-    ),
-    billing: isStudent && <BillingCard profile={profile} theme={theme} card={card} btn={btn} onChangeSubject={onChangeSubject} />,
-    security: securityPanel,
-    preferences: preferencesPanel,
-  }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', fontFamily: FONT_B, color: t.text }}>
+    <div ref={scrollRef} style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', fontFamily: FONT_B, color: t.text, background: t.bg }}>
       <style>{`
-        @font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}
-        .acct-wrap { max-width: 880px; margin: 0 auto; padding: 32px 32px 48px; }
-        .acct-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid ${t.border}; margin-bottom: 20px; }
-        .acct-tabs::-webkit-scrollbar { display: none; }
-        .acct-tab { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; padding: 10px 14px; margin-bottom: -1px;
-          border: none; border-bottom: 2px solid transparent; background: none; cursor: pointer; white-space: nowrap;
-          font-family: ${FONT_B}; font-size: 13px; font-weight: 700; color: ${t.textMuted}; transition: color 0.15s, border-color 0.15s; }
-        .acct-tab:hover { color: ${t.text}; }
-        .acct-tab[aria-selected="true"] { color: ${t.goldText || GOLD}; border-bottom-color: ${GOLD}; }
-        .acct-tab:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; border-radius: 6px 6px 0 0; }
-        .acct-panel { display: flex; flex-direction: column; gap: 16px; }
-        .acct-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-        .acct-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-        .acct-form-wide { grid-column: 1 / -1; }
-        @media (max-width: 720px) { .acct-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .acct-form { grid-template-columns: minmax(0, 1fr); } }
-        @media (max-width: 640px) { .acct-wrap { padding: 20px 16px 40px; } .acct-tab { padding: 10px 10px; } }
+        .acct-wrap { max-width: 980px; margin: 0 auto; padding: 24px 28px 64px; }
+        .acct-grid { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 20px; }
+        .acct-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; }
+        .acct-nav button { text-align: left; padding: 7px 10px; border-radius: 8px; border: none; background: transparent; color: ${t.textMuted}; font-family: ${FONT_B}; font-size: 13px; font-weight: 500; cursor: pointer; }
+        .acct-nav button:hover { color: ${t.text}; }
+        .acct-nav button[aria-current="true"] { background: ${t.bgCard}; color: ${t.text}; font-weight: 700; box-shadow: 0 0 0 1px ${t.border}; }
+        .acct-main { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+        .acct-row { display: flex; align-items: center; gap: 16px; padding: 12px 16px; }
+        .acct-row-label { width: 170px; flex-shrink: 0; font-size: 13px; color: ${t.textMuted}; }
+        .acct-row-value { flex: 1; min-width: 0; }
+        .acct-row-action { flex-shrink: 0; display: flex; align-items: center; }
+        .acct-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .acct-link:focus-visible, .acct-switch:focus-visible, .acct-chip:focus-visible, .acct-nav button:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 2px; }
+        .acct-chip:hover:not(:disabled) { border-color: ${t.textMuted} !important; }
+        @media (max-width: 860px) {
+          .acct-wrap { padding: 18px 16px 48px; }
+          .acct-grid { grid-template-columns: 1fr; }
+          .acct-nav { display: none; }
+        }
+        @media (max-width: 560px) {
+          .acct-row { flex-wrap: wrap; gap: 2px 12px; }
+          .acct-row-label { width: 100%; }
+          .acct-form { grid-template-columns: 1fr; }
+        }
       `}</style>
       <div className="acct-wrap">
-        <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Settings</div>
-        <h1 style={{ fontSize: 22, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.2, marginBottom: 6, color: t.text }}>My Account</h1>
-        <p style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Your profile, subjects, security and preferences in one place.</p>
-
-        {/* Tutor application status — surfaced here now that the global RoleSwitcherBar has been removed. */}
-        {profile.tutor_application_status === 'pending' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', marginBottom: 16, borderRadius: 12, background: 'rgba(241,190,67,0.10)', border: '1px solid rgba(241,190,67,0.28)', color: t.text, fontSize: 13 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, boxShadow: `0 0 8px ${GOLD}`, flexShrink: 0 }} />
-            <span><strong style={{ color: GOLD, fontWeight: 700 }}>Tutor application pending</strong> — an admin will review your application shortly.</span>
-          </div>
-        )}
-
-        <div className="acct-tabs" role="tablist" aria-label="Account sections" onKeyDown={onTabKey}>
-          {TABS.map(x => (
-            <button
-              key={x.id} ref={el => { tabRefs.current[x.id] = el }}
-              type="button" role="tab" id={`acct-tab-${x.id}`} aria-controls={`acct-panel-${x.id}`}
-              aria-selected={tab === x.id} tabIndex={tab === x.id ? 0 : -1}
-              className="acct-tab" onClick={() => selectTab(x.id)}
-            >
-              <x.icon size={15} aria-hidden="true" /> {x.label}
-            </button>
-          ))}
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>Account</h1>
+        <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>
+          {[email, memberSince && `member since ${new Date(memberSince).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}`].filter(Boolean).join(' · ')}
         </div>
-
-        <div className="acct-panel" role="tabpanel" id={`acct-panel-${tab}`} aria-labelledby={`acct-tab-${tab}`}>
-          {panels[tab]}
+        <div className="acct-grid">
+          <nav className="acct-nav" aria-label="Account sections">
+            {NAV.map(n => (
+              <button key={n.id} type="button" aria-current={active === n.id ? 'true' : undefined} onClick={() => jumpTo(n.id)}>{n.label}</button>
+            ))}
+          </nav>
+          <div className="acct-main">
+            {profileSection}
+            {isFamilyParent && (
+              <section id="acct-family" style={{ scrollMarginTop: 16 }}>
+                <FamilyCard family={family} theme={theme} card={plainCard} btn={btn} inputStyle={inputStyle} />
+              </section>
+            )}
+            {hasParentCard && (
+              <section id="acct-parent" style={{ scrollMarginTop: 16 }}>
+                <ParentCard profile={profile} theme={theme} card={plainCard} btn={btn} inputStyle={inputStyle} onProfileUpdated={onProfileUpdated} />
+              </section>
+            )}
+            {isStudent && <BillingCard profile={profile} theme={theme} onChangeSubject={onChangeSubject} />}
+            {signinSection}
+            {preferencesSection}
+            {dataSection}
+          </div>
         </div>
       </div>
     </div>
