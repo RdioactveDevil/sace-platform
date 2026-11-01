@@ -16,14 +16,18 @@
 
 ## To add the voice and music
 
-1. Record the lines above (a phone in a quiet room is fine) or use a voice service, and save as `voice.m4a`.
-2. Optional: a quiet music bed, `music.mp3`.
-3. Mix onto the video:
+`voiceover.py` places each line at its scene's timestamp, warns if a line runs into the next scene, optionally ducks a music bed under the voice, and writes `GradeFarm-Promo-Video-voiced.mp4` at the repo root. The video itself is copied untouched.
+
+Your own recordings (name them `line01.wav` … `line09.wav`, one per row above):
 
 ```
-ffmpeg -i GradeFarm-Promo-Video.mp4 -i voice.m4a -i music.mp3 \
-  -filter_complex "[2:a]volume=0.12[m];[1:a][m]amix=inputs=2:duration=first[a]" \
-  -map 0:v -map "[a]" -c:v copy -c:a aac -shortest gradefarm-explainer-voiced.mp4
+python3 voiceover.py --recordings ./takes --music bed.mp3
+```
+
+A Piper neural voice, generated on your machine (`pip install piper-tts`, then download a voice such as `en_GB-cori-high` from huggingface.co/rhasspy/piper-voices):
+
+```
+python3 voiceover.py --piper en_GB-cori-high.onnx
 ```
 
 ## Editing the video
