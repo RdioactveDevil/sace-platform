@@ -922,7 +922,7 @@ function AppInner() {
     } catch { return null }
   })
   const [showAuth, setShowAuth]               = useState(false)
-  const [theme, setTheme]                     = useState(() => localStorage.getItem('gf-theme') || 'dark')
+  const [theme, setTheme]                     = useState(() => { try { return localStorage.getItem('gf-theme') || 'light' } catch { return 'light' } })
   // Every theme token as a CSS variable (--t-bg, --t-text, ...), plus the ink
   // colour as an RGB triple for translucent lines and fills, so screens can
   // style with var() and follow light and dark without their own palettes.
@@ -1133,7 +1133,7 @@ function AppInner() {
   const toggleTheme = () => {
     setTheme(prev => {
       const next = prev === 'dark' ? 'light' : 'dark'
-      localStorage.setItem('gf-theme', next)
+      try { localStorage.setItem('gf-theme', next) } catch {}
       return next
     })
   }

@@ -58,18 +58,23 @@
        Safari lets position:fixed bars drift while scrolling. hidden stays as
        the fallback for browsers without clip. */
     html, body { margin: 0; padding: 0; overflow-x: hidden; overflow-x: clip; }
-    html { background: #06071a; min-height: 100%; }
+    /* Before the app loads: the saved theme's background (light unless they
+       chose dark), then the app's own --t-bg once it has set it. */
+    :root { --gf-boot-bg: #f8f9ff; }
+    :root.gf-boot-dark { --gf-boot-bg: #06071a; }
+    html { background: var(--t-bg, var(--gf-boot-bg)); min-height: 100%; }
     body {
-      background: #06071a;
+      background: var(--t-bg, var(--gf-boot-bg));
       min-height: 100dvh;
       -webkit-font-smoothing: antialiased;
       font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
     }
-    #root { background: #06071a; min-height: 100dvh; }
+    #root { background: var(--t-bg, var(--gf-boot-bg)); min-height: 100dvh; }
     button, input, textarea, select {
       font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
     }
   </style>
+  <script>try { if (localStorage.getItem('gf-theme') === 'dark') document.documentElement.classList.add('gf-boot-dark') } catch (e) {}</script>
   <title>gradefarm. — Adaptive study platform for Australian students</title>
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-4KKJ9W4V19"></script>
