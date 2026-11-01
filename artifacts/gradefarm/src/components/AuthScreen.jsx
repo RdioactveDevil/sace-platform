@@ -1,23 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { signIn, signUp, sendPasswordReset } from '../lib/db'
-import { Zap, GraduationCap, ChartColumn, Trophy } from 'lucide-react'
+import { THEMES } from '../lib/theme'
+import { AuthLayout, Field, PasswordInput, Note, authBtn, linkStyle, FONT_B } from './AuthLayout'
 
-const GOLD  = '#f1be43'
-const GOLDL = '#f9d87a'
-const NAVY  = '#0c1037'
-const NAVYD = '#080d28'
-const FONT_D = "'Sifonn Pro', sans-serif"
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-
-const TRUST_ITEMS = [
-  { icon: Zap, label: 'Adaptive algorithm learns your weak spots' },
-  { icon: GraduationCap, label: 'Titan AI explains using your own class notes' },
-  { icon: ChartColumn, label: 'Real-time exam readiness score after every session' },
-  { icon: Trophy, label: 'XP, streaks & leaderboards built in' },
-]
-
-export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
+/** Sign in, create an account (as a student or for a child), or reset a password. */
+export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleTheme }) {
+  const t = THEMES[theme]
   const navigate = useNavigate()
   const location = useLocation()
   // The tutor-invite page links here with { mode, email, redirectTo, invitedBy },
@@ -27,7 +16,6 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
   const [email, setEmail]     = useState(location.state?.email || '')
   const [pass, setPass]       = useState('')
   const [name, setName]       = useState('')
-  const [school, setSchool]   = useState('')
   // A parent setting up an account for their child (the Year 6 page and a
   // parent's invite link here with { as: 'parent' }): they sign in with their own email.
   const [asParent, setAsParent] = useState(location.state?.as === 'parent')
@@ -54,20 +42,23 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
         await sendPasswordReset(addr)
         setNotice(`If ${addr} has an account, we've emailed it a link to choose a new password.`)
       } else if (mode === 'signin') {
+        if (!addr || !pass) throw new Error('Enter your email and password.')
         await signIn(addr, pass)
         onAuth(false)
       } else {
-        if (!name.trim()) throw new Error('Please enter your name.')
-        if (asParent && !childName.trim()) throw new Error("Please enter your child's first name.")
+        if (!name.trim()) throw new Error('Enter your name.')
+        if (asParent && !childName.trim()) throw new Error("Enter your child's first name.")
+        if (!addr) throw new Error('Enter your email address.')
+        if (pass.length < 6) throw new Error('Use at least 6 characters for your password.')
         const data = asParent
           ? await signUp(addr, pass, childName.trim(), '', false, invite?.redirectTo, name.trim())
-          : await signUp(addr, pass, name.trim(), school.trim(), false, invite?.redirectTo)
+          : await signUp(addr, pass, name.trim(), '', false, invite?.redirectTo)
         // With email confirmation on there is no session until the link is clicked.
         if (data?.session) onAuth(true)
         else {
           setNotice(invite
-            ? `Almost there — we've sent a confirmation link to ${addr}. Open it and we'll accept your invite${invite.invitedBy ? ` from ${invite.invitedBy}` : ''} straight away.`
-            : `Almost there — we've sent a confirmation link to ${addr}. Open it to finish creating your account, then sign in.`)
+            ? `We've sent a confirmation link to ${addr}. Open it and we'll accept your invite${invite.invitedBy ? ` from ${invite.invitedBy}` : ''}.`
+            : `We've sent a confirmation link to ${addr}. Open it to finish creating your account, then sign in.`)
           setMode('signin')
         }
       }
@@ -77,186 +68,76 @@ export default function AuthScreen({ onAuth, onBack, theme, onToggleTheme }) {
     setLoading(false)
   }
 
+  const title = mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : asParent ? "Set up your child's account" : 'Create your account'
+  const subtitle = invite?.invitedBy && mode !== 'reset'
+    ? `${mode === 'signin' ? 'Sign in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
+    : mode === 'reset' ? "We'll email you a link to choose a new one."
+    : mode === 'signup' ? (asParent ? "You sign in with your email, and we send you their progress each week. Their first subject is free." : 'Start with one subject free.')
+    : null
+  const emailLabel = mode === 'signup' && asParent ? 'Your email' : 'Email'
+  const submitLabel = loading
+    ? (mode === 'signin' ? 'Signing in…' : mode === 'reset' ? 'Sending…' : 'Creating your account…')
+    : (mode === 'signin' ? 'Sign in' : mode === 'reset' ? 'Send reset link' : 'Create account')
+
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0c18', display: 'flex', fontFamily: FONT_B, position: 'relative', overflow: 'hidden' }}>
-      <style>{`
-        @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes authGlow { 0%,100%{opacity:0.4} 50%{opacity:0.8} }
-        .auth-inp { width:100%; padding:12px 14px; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.09); color:#f1f5f9; font-size:14px; outline:none; font-family:${FONT_B}; box-sizing:border-box; transition:border-color 0.2s, background 0.2s; }
-        .auth-inp::placeholder { color:#334155; }
-        .auth-inp:focus { border-color:${GOLD} !important; background:rgba(241,190,67,0.03) !important; }
-        .auth-inp:hover { border-color:rgba(255,255,255,0.16); }
-        .auth-left { display:flex; flex-direction:column; justify-content:center; padding:48px 56px; }
-        @media(max-width:820px) { .auth-left { display:none !important; } .auth-right { padding:24px 20px !important; } .auth-mobile-logo { display:block !important; } }
-      `}</style>
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={onBack}
+      right={onBack && <button type="button" className="af-link" onClick={onBack} style={{ ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back to home</button>}>
+      <div className="af-in" style={{ width: '100%', maxWidth: 400, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box' }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{title}</h1>
+        {subtitle && <p style={{ margin: '4px 0 0', fontSize: 13.5, color: t.textMuted, lineHeight: 1.55 }}>{subtitle}</p>}
 
-      <div style={{ position:'absolute', top:'10%', left:'30%', width:600, height:600, borderRadius:'50%', background:'radial-gradient(circle,rgba(241,190,67,0.07) 0%,transparent 65%)', animation:'authGlow 8s ease-in-out infinite', pointerEvents:'none' }} />
-      <div style={{ position:'absolute', bottom:'5%', right:'10%', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle,rgba(167,139,250,0.05) 0%,transparent 65%)', animation:'authGlow 10s ease-in-out infinite 3s', pointerEvents:'none' }} />
-
-      {onBack && (
-        <button onClick={onBack} style={{ position:'fixed', top:20, left:24, background:'transparent', border:'1px solid rgba(255,255,255,0.08)', color:'#64748b', fontSize:13, cursor:'pointer', fontFamily:FONT_B, display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:8, transition:'all 0.2s', zIndex:10 }}
-          onMouseEnter={e => { e.currentTarget.style.color='#e2e8f0'; e.currentTarget.style.borderColor='rgba(255,255,255,0.2)' }}
-          onMouseLeave={e => { e.currentTarget.style.color='#64748b'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)' }}
-        >← Back to home</button>
-      )}
-
-      <div className="auth-left" style={{ flex:1, background:'linear-gradient(135deg,#080d28 0%,#06091f 100%)', borderRight:'1px solid rgba(255,255,255,0.06)', position:'relative', overflow:'hidden' }}>
-        <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(241,190,67,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(241,190,67,0.04) 1px,transparent 1px)', backgroundSize:'48px 48px', pointerEvents:'none' }} />
-        <div style={{ position:'relative', zIndex:1 }}>
-          <div style={{ marginBottom:48 }}>
-            <div style={{ fontFamily:FONT_D, fontSize:22, letterSpacing:1.5, marginBottom:6 }}>
-              <span style={{ color:'#fff' }}>grade</span><span style={{ color:GOLD }}>farm.</span>
-            </div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', letterSpacing:'0.06em', textTransform:'uppercase' }}>by Titanium Tutoring</div>
-          </div>
-
-          <div style={{ marginBottom:48 }}>
-            <h2 style={{ fontFamily:FONT_D, fontSize:32, color:'#fff', margin:'0 0 12px', lineHeight:1.15, letterSpacing:1 }}>
-              STUDY SMARTER.<br />
-              <span style={{ color:GOLD }}>SCORE HIGHER.</span>
-            </h2>
-            <p style={{ fontSize:14, color:'rgba(255,255,255,0.45)', lineHeight:1.7, margin:0, maxWidth:340 }}>
-              The adaptive study platform for students who want results — not more hours grinding.
-            </p>
-          </div>
-
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            {TRUST_ITEMS.map((item, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:14 }}>
-                <div style={{ width:34, height:34, borderRadius:9, background:'rgba(241,190,67,0.10)', border:'1px solid rgba(241,190,67,0.18)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}><item.icon size={18} color={GOLD} aria-hidden="true" /></div>
-                <div style={{ fontSize:13, color:'rgba(255,255,255,0.55)', lineHeight:1.5 }}>{item.label}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop:56, display:'flex', alignItems:'center', gap:12 }}>
-            <div style={{ display:'flex' }}>
-              {['A','K','S','M'].map((l,i) => (
-                <div key={i} style={{ width:28, height:28, borderRadius:'50%', background:`linear-gradient(135deg,${GOLD},${GOLDL})`, border:'2px solid #080d28', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, color:NAVYD, marginLeft: i > 0 ? -8 : 0 }}>{l}</div>
+        <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
+          {mode === 'signup' && !invite && (
+            <div role="radiogroup" aria-label="Who is this account for?" style={{ display: 'flex', padding: 3, gap: 3, borderRadius: 10, background: t.bgSubtle }}>
+              {[[false, 'For me'], [true, 'For my child']].map(([v, label]) => (
+                <button key={label} type="button" role="radio" aria-checked={asParent === v} className="af-btn" onClick={() => { setAsParent(v); setError('') }}
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, border: 'none',
+                    background: asParent === v ? t.bgCard : 'transparent', color: asParent === v ? t.text : t.textMuted, boxShadow: asParent === v ? `0 0 0 1px ${t.border}` : 'none' }}>
+                  {label}
+                </button>
               ))}
             </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:700, color:'#f1f5f9' }}>Built by Titanium Tutoring</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)' }}>Your first subject is free</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="auth-right" style={{ flex:'0 0 440px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px 40px', position:'relative', zIndex:1 }}>
-        <div style={{ width:'100%', maxWidth:360, animation:'fadeUp 0.45s ease' }}>
-          <div style={{ textAlign:'center', marginBottom:28, display:'none' }} className="auth-mobile-logo">
-            <div style={{ fontFamily:FONT_D, fontSize:22, letterSpacing:1 }}>
-              <span style={{ color:'#f1f5f9' }}>grade</span><span style={{ color:GOLD }}>farm.</span>
-            </div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:4 }}>by Titanium Tutoring</div>
-          </div>
-
-          <h2 style={{ fontSize:22, fontWeight:800, color:'#f1f5f9', margin:'0 0 4px', letterSpacing:'-0.02em' }}>
-            {mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : asParent ? "Set up your child's account" : 'Create your account'}
-          </h2>
-          <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', margin:'0 0 28px' }}>
-            {invite?.invitedBy && mode !== 'reset'
-              ? `${mode === 'signin' ? 'Sign in' : 'Create your account'} to accept ${invite.invitedBy}'s invite.`
-              : mode === 'signin' ? 'Sign in to continue your study sessions.' : mode === 'reset' ? "We'll email you a link to choose a new one."
-              : asParent ? "You'll sign in with your email, and we'll send you your child's progress every week. First subject free."
-              : 'Your first subject is free. No credit card required.'}
-          </p>
-
-          {mode !== 'reset' && <div style={{ display:'flex', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:4, marginBottom:24, gap:4 }}>
-            {['signin', 'signup'].map(m => (
-              <button key={m} type="button" onClick={() => switchMode(m)}
-                style={{ flex:1, padding:'9px', borderRadius:8, border:'none', background: mode === m ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent', color: mode === m ? NAVYD : 'rgba(255,255,255,0.4)', fontSize:13, fontWeight:800, cursor:'pointer', transition:'all 0.2s', fontFamily:FONT_B }}>
-                {m === 'signin' ? 'Sign In' : 'Sign Up'}
-              </button>
-            ))}
-          </div>}
-
-          <form onSubmit={submit} noValidate>
-          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {mode === 'signup' && !invite && (
-              <div role="radiogroup" aria-label="Who is this account for?" style={{ display: 'flex', gap: 6 }}>
-                {[[false, "I'm a student"], [true, "I'm a parent"]].map(([v, label]) => (
-                  <button key={label} type="button" role="radio" aria-checked={asParent === v} onClick={() => setAsParent(v)}
-                    style={{ flex: 1, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
-                      border: `1px solid ${asParent === v ? GOLD : 'rgba(255,255,255,0.12)'}`,
-                      background: asParent === v ? 'rgba(241,190,67,0.1)' : 'transparent',
-                      color: asParent === v ? GOLD : 'rgba(255,255,255,0.55)' }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {mode === 'signup' && (asParent ? (
-              <>
-                <input className="auth-inp" placeholder="Your name" aria-label="Your name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} />
-                <input className="auth-inp" placeholder="Your child's first name" aria-label="Your child's first name" autoComplete="off" value={childName} onChange={e => setChildName(e.target.value)} />
-              </>
-            ) : (
-              <>
-                <input className="auth-inp" placeholder="Your name" aria-label="Your name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} />
-                <input className="auth-inp" placeholder="School (optional)" aria-label="School (optional)" autoComplete="organization" value={school} onChange={e => setSchool(e.target.value)} />
-              </>
-            ))}
-            <input className="auth-inp" placeholder={mode === 'signup' && asParent ? 'Your email address' : 'Email address'} aria-label={mode === 'signup' && asParent ? 'Your email address' : 'Email address'} type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
-            {mode !== 'reset' && (
-              <input className="auth-inp" placeholder="Password" aria-label="Password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={pass} onChange={e => setPass(e.target.value)} />
-            )}
-            {mode === 'signin' && (
-              <button type="button" onClick={() => switchMode('reset')}
-                style={{ alignSelf:'flex-end', background:'transparent', border:'none', padding:'2px 0', color:'rgba(255,255,255,0.45)', fontSize:12, cursor:'pointer', fontFamily:FONT_B }}>
-                Forgot password?
-              </button>
-            )}
-            {mode === 'signup' && !asParent && (
-              <button
-                type="button"
-                onClick={() => navigate('/auth/tutor')}
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(241,190,67,0.35)',
-                  background: 'rgba(241,190,67,0.06)',
-                  color: GOLD,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  fontFamily: FONT_B,
-                  marginTop: 2,
-                }}
-              >
-                Sign up as Tutor →
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div role="alert" style={{ marginTop:12, padding:'10px 14px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.28)', borderRadius:8, fontSize:13, color:'#f87171' }}>{error}</div>
-          )}
-          {notice && (
-            <div role="status" style={{ marginTop:12, padding:'10px 14px', background:'rgba(241,190,67,0.08)', border:'1px solid rgba(241,190,67,0.3)', borderRadius:8, fontSize:13, color:GOLDL, lineHeight:1.5 }}>{notice}</div>
-          )}
-
-          <button type="submit" disabled={loading}
-            style={{ width:'100%', marginTop:16, padding:'14px', borderRadius:12, border:'none', background: loading ? 'rgba(255,255,255,0.05)' : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: loading ? '#475569' : NAVYD, fontSize:15, fontWeight:800, cursor: loading ? 'default' : 'pointer', fontFamily:FONT_B, boxShadow: loading ? 'none' : `0 6px 22px rgba(241,190,67,0.30)`, transition:'all 0.2s', letterSpacing:'-0.01em' }}>
-            {loading ? 'Loading…' : mode === 'signin' ? 'Sign In →' : mode === 'reset' ? 'Send reset link →' : 'Create Account →'}
-          </button>
-          </form>
-
-          {mode === 'reset' && (
-            <button type="button" onClick={() => switchMode('signin')}
-              style={{ display:'block', margin:'14px auto 0', background:'transparent', border:'none', color:'rgba(255,255,255,0.45)', fontSize:12.5, cursor:'pointer', fontFamily:FONT_B }}>
-              ← Back to sign in
-            </button>
           )}
 
           {mode === 'signup' && (
-            <p style={{ margin:'14px 0 0', fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center' }}>First subject free · No credit card needed</p>
+            <Field id="auth-name" label="Your name" theme={theme}>
+              <input id="auth-name" className="af-inp" autoComplete="name" value={name} onChange={e => setName(e.target.value)} />
+            </Field>
+          )}
+          {mode === 'signup' && asParent && (
+            <Field id="auth-child" label="Your child's first name" theme={theme}>
+              <input id="auth-child" className="af-inp" autoComplete="off" value={childName} onChange={e => setChildName(e.target.value)} />
+            </Field>
+          )}
+          <Field id="auth-email" label={emailLabel} theme={theme}>
+            <input id="auth-email" className="af-inp" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
+          </Field>
+          {mode !== 'reset' && (
+            <Field id="auth-pass" label="Password" hint={mode === 'signup' ? 'At least 6 characters.' : null} theme={theme}>
+              <PasswordInput id="auth-pass" theme={theme} value={pass} onChange={e => setPass(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} />
+            </Field>
+          )}
+          {mode === 'signin' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -6, fontSize: 13 }}>
+              <button type="button" className="af-link" onClick={() => switchMode('reset')} style={{ ...linkStyle(t), fontWeight: 600 }}>Forgot password?</button>
+            </div>
+          )}
+
+          {error && <Note tone="danger" theme={theme}>{error}</Note>}
+          {notice && <Note theme={theme}>{notice}</Note>}
+
+          <button type="submit" className="af-btn" disabled={loading} style={authBtn(t, 'primary', { disabled: loading, full: true })}>{submitLabel}</button>
+        </form>
+
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', fontSize: 13, color: t.textMuted, textAlign: 'center' }}>
+          {mode === 'signin' && <span>New here? <button type="button" className="af-link" onClick={() => switchMode('signup')} style={linkStyle(t)}>Create an account</button></span>}
+          {mode === 'signup' && <span>Have an account? <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Sign in</button></span>}
+          {mode === 'reset' && <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Back to sign in</button>}
+          {mode === 'signup' && !asParent && !invite && (
+            <span>Tutoring with us? <button type="button" className="af-link" onClick={() => navigate('/auth/tutor')} style={linkStyle(t)}>Apply as a tutor</button></span>
           )}
         </div>
       </div>
-    </div>
+    </AuthLayout>
   )
 }

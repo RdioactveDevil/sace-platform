@@ -1,4 +1,10 @@
-/* Reuse shared platform keyframes from SubjectPicker.css (spFadeUp, spTileIn) */
+@keyframes spFadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-fadein, .td-content-enter { animation: none !important; }
+}
 
 /* ─── Staggered entry ───────────────────────────────────────────────────── */
 /* `backwards`, not `both`: the end state is the element's own style anyway, and

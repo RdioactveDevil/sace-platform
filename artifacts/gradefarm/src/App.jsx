@@ -15,7 +15,7 @@ import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
-import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess } from './lib/subjects'
+import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
@@ -558,12 +558,6 @@ function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
 }
 
 /** Year level (7–12) a subject's stage points to: "Year 11" → 11, SACE "Stage 1"/"Stage 2" → 11/12. */
-function yearFromStage(stage) {
-  const year = /year\s*(\d{1,2})/i.exec(stage || '')
-  if (year) return Number(year[1])
-  const sace = /stage\s*([12])/i.exec(stage || '')
-  return sace ? 10 + Number(sace[1]) : null
-}
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
 /** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
@@ -1642,7 +1636,7 @@ function AppInner() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
-      <Route path="/reset-password" element={<ResetPasswordScreen signedIn={!!user} />} />
+      <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
       <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
@@ -1722,7 +1716,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path === 'tutor'
             ? <Navigate to="/onboarding/tutor" replace />
-            : <OnboardingScreen profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
+            : <OnboardingScreen {...commonProps} profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
                 asParent={user?.user_metadata?.signup_path === 'parent'}
                 parentName={user?.user_metadata?.parent_name || ''}

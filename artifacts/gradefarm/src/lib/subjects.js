@@ -281,3 +281,11 @@ export function subjectAccess(subscriptions, subject, fullAccess = false) {
   if (rows.some(r => r.source !== 'free')) return 'full'
   return rows.length ? 'free' : 'none'
 }
+
+/** The school year a subject's stage is for: "Year 6" → 6, SACE "Stage 1" → 11, "Stage 2" → 12. */
+export function yearFromStage(stage) {
+  const year = /year\s*(\d{1,2})/i.exec(stage || '')
+  if (year) return Number(year[1])
+  const sace = /stage\s*([12])/i.exec(stage || '')
+  return sace ? 10 + Number(sace[1]) : null
+}
