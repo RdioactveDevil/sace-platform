@@ -1,0 +1,319 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap">
+<style>
+@font-face { font-family: 'Sifonn Pro'; src: url('../../gradefarm/public/SIFONN_PRO.otf') format('opentype'); }
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #f6f7fb; font-family: 'Plus Jakarta Sans', sans-serif; color: #0c1037; -webkit-font-smoothing: antialiased; }
+.ab { position: absolute; }
+.logo { display: inline-flex; align-items: center; justify-content: center; background: #0c1037; border-radius: 18px; font-family: 'Sifonn Pro', sans-serif; letter-spacing: 3px; line-height: 1; white-space: nowrap; }
+.logo .g { color: #fff; } .logo .f { color: #f1be43; }
+.card { background: #fff; border: 2px solid #e2e6f0; border-radius: 26px; }
+#cap { left: 120px; top: 360px; width: 660px; font-size: 68px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.06; }
+#cap small { display: block; font-size: 32px; font-weight: 600; color: #4d5578; letter-spacing: -0.01em; margin-top: 24px; line-height: 1.35; }
+#brand { right: 80px; top: 60px; height: 56px; padding: 0 20px; font-size: 24px; }
+/* title + definition */
+#title { left: 0; right: 0; top: 330px; text-align: center; }
+#title .logo { height: 150px; padding: 0 56px; font-size: 76px; }
+#title h1 { font-size: 92px; font-weight: 800; letter-spacing: -0.04em; margin: 56px 0 0; }
+#def { left: 160px; top: 230px; width: 1560px; }
+#def .word { display: flex; align-items: center; gap: 26px; font-size: 34px; color: #4d5578; }
+#def .word .logo { height: 86px; padding: 0 30px; font-size: 40px; }
+#def h2 { font-size: 104px; font-weight: 800; letter-spacing: -0.045em; line-height: 1.04; margin: 40px 0 0; }
+#def h2 .hl { background-image: linear-gradient(#f7dc93, #f7dc93); background-repeat: no-repeat; background-position: 0 88%; background-size: 0% 34%; }
+#def h2 .rest { opacity: 0; }
+/* question card */
+#q { left: 900px; top: 150px; width: 860px; padding: 40px; display: flex; flex-direction: column; gap: 18px; }
+#q .qt { display: flex; justify-content: space-between; font-size: 24px; color: #64748b; }
+#q .qt b { color: #0c1037; }
+#q .stem { font-size: 40px; font-weight: 800; letter-spacing: -0.02em; margin: 6px 0 8px; }
+.op { display: flex; align-items: center; gap: 22px; padding: 20px 24px; border: 2px solid #e2e6f0; border-radius: 18px; font-size: 32px; font-weight: 700; }
+.op .k { width: 46px; height: 46px; border-radius: 12px; border: 2px solid #e2e6f0; display: grid; place-items: center; font-size: 22px; font-weight: 800; color: #64748b; }
+.op .tg { margin-left: auto; font-size: 24px; font-weight: 800; }
+.op.sel { border-color: #0c1037; box-shadow: 0 0 0 2px #0c1037; }
+.op.r { border-color: #059669; background: rgba(5,150,105,0.08); } .op.r .k, .op.r .tg { color: #047857; border-color: #059669; }
+.op.w { border-color: #dc2626; background: rgba(220,38,38,0.07); } .op.w .k, .op.w .tg { color: #b91c1c; border-color: #dc2626; }
+.op.d { color: #a0a6bd; }
+#check { align-self: flex-start; padding: 16px 34px; border-radius: 16px; background: #f1be43; font-size: 28px; font-weight: 800; }
+#sol { border-top: 2px solid #e2e6f0; padding-top: 18px; font-size: 28px; color: #1e2a5e; line-height: 1.45; overflow: hidden; }
+#sol b { display: block; font-size: 24px; color: #0c1037; }
+#cursor { width: 46px; height: 46px; z-index: 20; }
+/* comes back */
+#back { left: 860px; width: 960px; top: 400px; }
+#stops { position: relative; height: 340px; }
+#rail { position: absolute; left: 80px; right: 80px; top: 120px; height: 8px; border-radius: 4px; background: #e2e6f0; }
+#railf { position: absolute; left: 0; top: 0; bottom: 0; background: #0c1037; border-radius: 4px; }
+.stop { position: absolute; top: 0; width: 180px; margin-left: -90px; text-align: center; }
+.stop .dot { width: 40px; height: 40px; border-radius: 50%; background: #fff; border: 6px solid #c8cee0; margin: 104px auto 0; }
+.stop .lab { font-size: 30px; font-weight: 800; margin-top: 22px; }
+.stop .sub { font-size: 22px; color: #64748b; margin-top: 4px; }
+.stop .ok { font-size: 30px; font-weight: 800; color: #047857; margin-top: 6px; opacity: 0; }
+#sq { width: 96px; height: 96px; border-radius: 20px; top: -20px; margin-left: -48px; z-index: 3; }
+#notif { right: 0; top: -260px; width: 640px; background: #0c1037; color: #fff; border-radius: 28px; padding: 24px 28px; display: grid; grid-template-columns: 64px 1fr; gap: 20px; align-items: center; font-size: 26px; }
+#notif .ic { width: 64px; height: 64px; border-radius: 16px; background: #f1be43; display: grid; place-items: center; font-family: 'Sifonn Pro'; font-size: 18px; color: #0c1037; }
+#notif b { display: block; font-size: 24px; color: #f1be43; }
+/* field */
+#fieldwrap { left: 860px; width: 960px; top: 220px; height: 640px; }
+#field { position: absolute; left: 0; top: 0; width: 960px; height: 640px; }
+#wk { left: 860px; top: 140px; font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#wk small { display: inline; font-size: 26px; font-weight: 600; color: #64748b; margin-left: 14px; }
+/* titan */
+#chat { left: 860px; top: 200px; width: 960px; padding: 0; overflow: hidden; }
+#chat .hd { display: flex; align-items: center; gap: 20px; padding: 26px 34px; border-bottom: 2px solid #e2e6f0; font-size: 28px; }
+#chat .hd b { font-size: 30px; }
+#chat .sw { margin-left: auto; display: flex; border: 2px solid #e2e6f0; border-radius: 14px; overflow: hidden; }
+#chat .sw span { padding: 10px 22px; font-size: 24px; font-weight: 800; color: #64748b; }
+#chat .sw span + span { border-left: 2px solid #e2e6f0; }
+#chat .sw span.on { background: #0c1037; color: #fff; }
+#chat .ms { padding: 34px; display: flex; flex-direction: column; gap: 24px; }
+#chat .me { align-self: flex-end; background: #f0f2ff; border: 2px solid #e2e6f0; border-radius: 24px 24px 8px 24px; padding: 18px 26px; font-size: 30px; }
+#chat .re b { display: block; font-size: 26px; margin-bottom: 6px; }
+#chat .re p { font-size: 32px; line-height: 1.42; color: #1e2a5e; margin: 0; min-height: 150px; }
+/* parents + tutors */
+#email { left: 860px; top: 200px; width: 960px; padding: 40px 46px; font-size: 30px; }
+#email .eh { font-size: 24px; color: #64748b; border-bottom: 2px solid #e2e6f0; padding-bottom: 18px; margin-bottom: 24px; }
+#email .eh b { display: block; font-size: 36px; color: #0c1037; margin-bottom: 4px; }
+#email .nums { display: flex; gap: 70px; margin-bottom: 24px; }
+#email .nums div { font-size: 24px; color: #64748b; }
+#email .nums b { display: block; font-size: 62px; color: #0c1037; letter-spacing: -0.03em; line-height: 1.1; }
+#email .up { color: #047857; font-weight: 800; }
+#consent { left: 860px; top: 720px; display: flex; gap: 16px; align-items: center; background: #fff; border: 2px solid #e2e6f0; border-radius: 999px; padding: 16px 28px; font-size: 26px; font-weight: 700; }
+#consent i { width: 58px; height: 32px; border-radius: 999px; background: #c8cee0; position: relative; display: block; }
+#consent i::after { content: ""; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; }
+#tutor { left: 860px; top: 220px; width: 960px; padding: 0; overflow: hidden; font-size: 28px; }
+#tutor .th { display: flex; justify-content: space-between; padding: 24px 34px; border-bottom: 2px solid #e2e6f0; }
+#tutor .th b { font-size: 32px; }
+#tutor .row { display: grid; grid-template-columns: 1fr 130px 150px 300px; align-items: center; padding: 20px 34px; border-bottom: 2px solid #eef0f5; }
+#tutor .row:last-child { border-bottom: none; }
+#tutor .row.h { font-size: 22px; color: #64748b; font-weight: 700; padding-block: 14px; }
+#tutor .pill { justify-self: start; font-size: 22px; font-weight: 800; padding: 6px 16px; border-radius: 999px; background: #fdf0cc; color: #7a5300; }
+#tutor .g { color: #047857; font-weight: 800; } #tutor .lo { color: #b91c1c; font-weight: 800; }
+/* end */
+#end { left: 0; right: 0; top: 270px; text-align: center; }
+#end .logo { height: 160px; padding: 0 60px; font-size: 82px; }
+#end h2 { font-size: 80px; font-weight: 800; letter-spacing: -0.04em; margin: 56px 0 20px; }
+#end p { font-size: 40px; font-weight: 700; color: #4d5578; margin: 0; }
+#end .btn { display: inline-block; margin-top: 44px; padding: 22px 50px; border-radius: 20px; background: #f1be43; font-size: 36px; font-weight: 800; }
+</style></head>
+<body>
+<div class="ab logo" id="brand"><span class="g">grade</span><span class="f">farm.</span></div>
+
+<div class="ab" id="title"><span class="logo"><span class="g">grade</span><span class="f">farm.</span></span><h1>What is it, exactly?</h1></div>
+
+<div class="ab" id="def">
+  <div class="word"><span class="logo"><span class="g">grade</span><span class="f">farm.</span></span><span>/ˈɡreɪd·fɑːm/</span><i>noun</i></div>
+  <h2>A study app that <span class="hl" id="hl">remembers every question you get wrong</span><span class="rest" id="rest">, and keeps asking until you get it right.</span></h2>
+</div>
+
+<div class="ab card" id="q">
+  <div class="qt"><span><b>Percentages</b> · Year 9</span><span>Question 4</span></div>
+  <div class="stem">A $80 jacket is 15% off. What do you pay?</div>
+  <div class="op" data-i="0"><span class="k">A</span>$12<span class="tg"></span></div>
+  <div class="op" data-i="1"><span class="k">B</span>$65<span class="tg"></span></div>
+  <div class="op" data-i="2"><span class="k">C</span>$68<span class="tg"></span></div>
+  <div class="op" data-i="3"><span class="k">D</span>$92<span class="tg"></span></div>
+  <div id="check">Check</div>
+  <div id="sol"><b>Worked solution</b>15% of $80 is $12. That's the discount, so you pay $80 − $12 = $68.</div>
+</div>
+<svg class="ab" id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 15 L11.5 22 L14.5 20.7 L11.6 14 L18 14 Z" fill="#0c1037" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+
+<div class="ab" id="back">
+  <div id="stops">
+    <div id="rail"><div id="railf"></div></div>
+    <div class="ab" id="sq"></div>
+  </div>
+  <div class="ab" id="notif"><span class="ic">gf.</span><div><b>gradefarm.</b>Your discount question is back. 1 minute.</div></div>
+</div>
+
+<div class="ab" id="fieldwrap"><canvas id="field" width="960" height="640"></canvas></div>
+<div class="ab" id="wk">Week 1<small>Term 3</small></div>
+
+<div class="ab card" id="chat">
+  <div class="hd"><b>Titan</b><span style="color:#64748b">Percentages</span><div class="sw" id="sw"><span>Plain</span><span>Sport</span><span>Gaming</span><span>Music</span></div></div>
+  <div class="ms"><div class="me">Why isn't it $65? I took 15% off.</div><div class="re"><b>Titan</b><p id="ex"></p></div></div>
+</div>
+
+<div class="ab card" id="email">
+  <div class="eh"><b>Mia's week on gradefarm.</b>To: Sarah · Sunday, 6:00 pm</div>
+  <div class="nums"><div><b>61</b>questions</div><div><b>74%</b>correct <span class="up">+8</span></div><div><b>5</b>days</div></div>
+  <div>Percentages went from 40% to 58%. The discount question she kept missing is now right twice in a row. Next up: linear equations.</div>
+</div>
+<div class="ab" id="consent"><i></i>Under 15? Titan stays off until a parent says yes.</div>
+
+<div class="ab card" id="tutor">
+  <div class="th"><b>Your students</b><span style="color:#64748b">Before Saturday's lessons</span></div>
+  <div class="row h"><span>Student</span><span>This week</span><span>Accuracy</span><span>Needs you</span></div>
+  <div class="row"><b>Mia</b><span>61</span><span class="g">74% ↑</span><span class="pill">Linear equations 49%</span></div>
+  <div class="row"><span>Jordan</span><span>12</span><span class="lo">52% ↓</span><span class="pill">3 overdue</span></div>
+  <div class="row"><span>Priya</span><span>88</span><span class="g">81% ↑</span><span></span></div>
+</div>
+
+<div class="ab" id="end"><span class="logo"><span class="g">grade</span><span class="f">farm.</span></span><h2>Start with one subject, free.</h2><p>gradefarm.com.au</p><span class="btn">Start free</span></div>
+
+<div class="ab" id="cap"></div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const cl = (x) => Math.max(0, Math.min(1, x))
+const seg = (t, a, b) => cl((t - a) / (b - a))
+const ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
+const out = (x) => 1 - Math.pow(1 - x, 3)
+const lerp = (a, b, x) => a + (b - a) * x
+// Visible between a and d, fading in over a→b and out over c→d.
+const vis = (t, a, b, c, d) => t < a || t > d ? 0 : t < b ? ease(seg(t, a, b)) : t > c ? 1 - ease(seg(t, c, d)) : 1
+function show(el, o, dy = 0, sc = 1) { el.style.opacity = o; el.style.transform = `translateY(${(1 - o) * dy}px) scale(${sc})`; el.style.visibility = o > 0.001 ? 'visible' : 'hidden' }
+
+const CAPS = [
+  [12.4, 21.4, 'Get one wrong, and you see the working.', 'Every question has a worked solution.'],
+  [21.6, 31, 'Then it comes back until you get it right.', 'An hour later, then days, then weeks.'],
+  [31.2, 38, 'Every question is a square in your field.', 'Gold means you can do it every time.'],
+  [38.2, 46, 'Stuck? Titan, the AI tutor, explains it your way.', ''],
+  [46.2, 52, 'Parents get the week, every Sunday.', ''],
+  [52.2, 57.6, 'Tutors see every answer before the lesson.', 'And their students get gradefarm. free.'],
+]
+const EX = [
+  ['Plain', '15% off means you pay 85% of the price. 15% of $80 is $12, so you pay $80 − $12 = $68.'],
+  ['Sport', 'A team loses 15% of its 80 points to a penalty. The penalty is 12 points and the team keeps 68. The $12 is the penalty, not what you pay.'],
+  ['Gaming', 'A 15% hit on 80 HP takes 12 HP, leaving you on 68. The $12 is the hit; what you pay is what\'s left.'],
+  ['Music', 'Cut 15% from an 80-second track and you lose 12 seconds, leaving 68. The 12 is the cut, the 68 is what you hear.'],
+]
+const STOPS = [['Miss', 'Tue 4:12 pm', ''], ['1 hour', 'Tue 5:12 pm', '✓'], ['4 days', 'Saturday', '✓'], ['3 weeks', 'Later in term', '✓'], ['Gold', 'In the bag', '']]
+const stopsEl = $('stops')
+STOPS.forEach((s, i) => { const d = document.createElement('div'); d.className = 'stop'; d.style.left = `calc(80px + (100% - 160px) * ${i / 4})`; d.innerHTML = `<div class="dot"></div><div class="lab">${s[0]}</div><div class="sub">${s[1]}</div><div class="ok">${s[2]}</div>`; stopsEl.appendChild(d) })
+const stopEls = [...stopsEl.querySelectorAll('.stop')]
+
+// field cells (deterministic)
+let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+const COLS = 36, ROWS = 12, CELL = 30, GAP = 8
+const cells = []
+for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+  const start = 1 + Math.floor((c / COLS) * 8.5 + rnd() * 1.6 + (r % 6) * 0.25)
+  const wrong = rnd() < 0.26
+  const right = start + (wrong ? Math.floor(rnd() * 2) + (rnd() < 0.5 ? 0 : 1) : 0)
+  cells.push({ r, c, start, wrong, right, bag: right + 1 + Math.floor(rnd() * 3.5), tried: rnd() > 0.04 })
+}
+const fctx = $('field').getContext('2d')
+const W0 = COLS * (CELL + GAP) - GAP, H0 = ROWS * (CELL + GAP) - GAP
+function rr(x, y, w, h, r) { fctx.beginPath(); fctx.moveTo(x + r, y); fctx.arcTo(x + w, y, x + w, y + h, r); fctx.arcTo(x + w, y + h, x, y + h, r); fctx.arcTo(x, y + h, x, y, r); fctx.arcTo(x, y, x + w, y, r); fctx.closePath() }
+function drawField(week, zoom, focusAlpha) {
+  fctx.clearRect(0, 0, 960, 640)
+  const cx = 480, cy = 300
+  const fx = 17, fy = 5 // the jacket question's square
+  fctx.save(); fctx.translate(cx, cy); fctx.scale(zoom, zoom)
+  const ox = -((fx * (CELL + GAP)) + CELL / 2), oy = -((fy * (CELL + GAP)) + CELL / 2)
+  const span = Math.max(0, (1 - (zoom - 1) / 2.6))
+  cells.forEach(x => {
+    const isF = x.c === fx && x.r === fy
+    let s = !x.tried || x.start > week ? 0 : x.wrong && x.right > week ? 1 : x.bag > week ? 2 : 3
+    if (isF) s = 3
+    const a = isF ? 1 : focusAlpha
+    if (a <= 0.01) return
+    fctx.globalAlpha = a
+    const px = ox + x.c * (CELL + GAP), py = oy + x.r * (CELL + GAP)
+    rr(px, py, CELL, CELL, 7)
+    fctx.fillStyle = ['#e3e6f0', '#ffffff', '#f7dc93', '#e0a91f'][s]; fctx.fill()
+    if (s === 1) { fctx.lineWidth = 3; fctx.strokeStyle = '#0c1037'; fctx.stroke(); fctx.beginPath(); fctx.arc(px + CELL / 2, py + CELL / 2, 5, 0, 7); fctx.fillStyle = '#0c1037'; fctx.fill() }
+    if (isF && zoom < 1.2) { fctx.lineWidth = 3; fctx.strokeStyle = '#0c1037'; rr(px - 5, py - 5, CELL + 10, CELL + 10, 10); fctx.stroke() }
+  })
+  fctx.restore(); fctx.globalAlpha = 1
+}
+
+const ops = [...document.querySelectorAll('#q .op')]
+function render(t) {
+  // brand mark stays top right except on title/end cards
+  show($('brand'), vis(t, 4.2, 4.8, 57.2, 57.7))
+
+  // 1 · title 0–4.5
+  show($('title'), vis(t, 0.2, 1.2, 3.8, 4.5), 30)
+  // 2 · definition 4.5–12
+  show($('def'), vis(t, 4.6, 5.4, 11.4, 12.1), 30)
+  $('hl').style.backgroundSize = `${ease(seg(t, 6.0, 7.6)) * 100}% 34%`
+  $('rest').style.opacity = ease(seg(t, 8.0, 8.8))
+
+  // 3 · question 12–21.5
+  const qv = vis(t, 12.2, 13.0, 21.2, 21.9)
+  show($('q'), qv, 40)
+  const selB = t >= 14.35, checked = t >= 15.75
+  ops.forEach((o, i) => {
+    o.className = 'op' + (checked ? (i === 2 ? ' r' : i === 1 ? ' w' : ' d') : (selB && i === 1 ? ' sel' : ''))
+    o.querySelector('.tg').textContent = checked ? (i === 2 ? 'Answer' : i === 1 ? 'Your answer' : '') : ''
+  })
+  $('check').style.opacity = checked ? 0 : 1
+  $('check').style.display = checked ? 'none' : 'block'
+  const sv = ease(seg(t, 15.9, 16.6))
+  $('sol').style.opacity = sv; $('sol').style.maxHeight = (checked ? 200 * sv : 0) + 'px'; $('sol').style.paddingTop = (checked ? 18 * sv : 0) + 'px'; $('sol').style.borderTopWidth = checked ? '2px' : '0'
+  // cursor path: in from right → option B → Check → away
+  const qr = $('q').getBoundingClientRect()
+  const bR = ops[1].getBoundingClientRect(), cR = $('check').getBoundingClientRect()
+  let cx = 1700, cy = 900, co = 0
+  if (t > 12.8 && t < 17.2) {
+    co = vis(t, 12.8, 13.2, 16.6, 17.2)
+    const p1 = ease(seg(t, 13.0, 14.2)), p2 = ease(seg(t, 14.7, 15.6))
+    const bx = bR.left + 260, by = bR.top + bR.height / 2
+    const kx = cR.left + 90 || bx, ky = cR.top + cR.height / 2 || by + 200
+    cx = lerp(lerp(1700, bx, p1), kx, p2); cy = lerp(lerp(900, by, p1), ky, p2)
+  }
+  const press = (t > 14.25 && t < 14.45) || (t > 15.65 && t < 15.85) ? 0.86 : 1
+  $('cursor').style.opacity = co; $('cursor').style.left = cx + 'px'; $('cursor').style.top = cy + 'px'; $('cursor').style.transform = `scale(${press})`
+
+  // 4 · comes back 21.5–31
+  const bv = vis(t, 21.6, 22.4, 30.6, 31.2)
+  show($('back'), bv, 30)
+  const prog = ease(seg(t, 23.0, 29.2))
+  $('railf').style.width = (prog * 100) + '%'
+  const stopT = [22.6, 24.6, 26.4, 28.0, 29.2]
+  stopEls.forEach((s, i) => {
+    const reached = t >= stopT[i]
+    s.querySelector('.dot').style.borderColor = reached ? (i === 4 ? '#e0a91f' : i === 0 ? '#dc2626' : '#0c1037') : '#c8cee0'
+    s.querySelector('.dot').style.background = reached ? (i === 4 ? '#e0a91f' : '#fff') : '#fff'
+    s.querySelector('.ok').style.opacity = reached ? 1 : 0
+  })
+  const sqEl = $('sq'), railW = $('stops').getBoundingClientRect().width - 160
+  sqEl.style.left = (80 + railW * prog) + 'px'
+  const stage = t < stopT[1] ? 1 : t < stopT[4] ? 2 : 3
+  sqEl.style.background = ['#e3e6f0', '#ffffff', '#f7dc93', '#e0a91f'][stage]
+  sqEl.style.boxShadow = stage === 1 ? 'inset 0 0 0 6px #0c1037' : 'none'
+  sqEl.style.backgroundImage = stage === 1 ? 'radial-gradient(circle, #0c1037 0 16%, transparent 18%)' : 'none'
+  const pop = t > 29.2 && t < 29.8 ? 1 + 0.18 * Math.sin(seg(t, 29.2, 29.8) * Math.PI) : 1
+  sqEl.style.transform = `scale(${pop})`
+  show($('notif'), vis(t, 23.4, 24.0, 25.4, 26.0), -30)
+
+  // 5 · field 31–38
+  const fv = vis(t, 31.0, 31.4, 37.6, 38.2)
+  $('fieldwrap').style.opacity = fv
+  if (fv > 0) {
+    const zoom = lerp(3.0, 0.68, ease(seg(t, 31.2, 33.0)))
+    const around = ease(seg(t, 31.8, 33.2))
+    const week = Math.round(lerp(1, 10, seg(t, 33.4, 37.0)))
+    drawField(t < 33.4 ? 1 : week, zoom, around)
+    $('wk').firstChild.textContent = `Week ${t < 33.4 ? 1 : week} `
+  }
+  show($('wk'), vis(t, 33.0, 33.4, 37.6, 38.2))
+
+  // 6 · Titan 38–46
+  show($('chat'), vis(t, 38.3, 39.0, 45.6, 46.2), 40)
+  const si = t < 40.2 ? 0 : t < 42.0 ? 1 : t < 43.8 ? 2 : 3
+  ;[...$('sw').children].forEach((s, i) => s.className = i === si ? 'on' : '')
+  const swT = [38.3, 40.2, 42.0, 43.8][si]
+  $('ex').textContent = EX[si][1]; $('ex').style.opacity = ease(seg(t, swT + 0.05, swT + 0.5))
+
+  // 7 · parents 46–52
+  show($('email'), vis(t, 46.3, 47.0, 51.6, 52.2), 40)
+  show($('consent'), vis(t, 48.2, 48.8, 51.6, 52.2), 20)
+
+  // 8 · tutors 52–57.5
+  show($('tutor'), vis(t, 52.3, 53.0, 57.1, 57.7), 40)
+
+  // 9 · end 57.6–63
+  show($('end'), vis(t, 57.8, 58.8, 64, 65), 30)
+
+  // captions
+  const c = CAPS.find(x => t >= x[0] && t <= x[1])
+  const capEl = $('cap')
+  if (c) { capEl.innerHTML = c[2] + (c[3] ? `<small>${c[3]}</small>` : ''); show(capEl, vis(t, c[0], c[0] + 0.5, c[1] - 0.4, c[1]), 20) } else show(capEl, 0)
+}
+window.render = render
+window.DURATION = 63
+render(0)
+</script>
+</body></html>
