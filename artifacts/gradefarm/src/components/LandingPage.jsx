@@ -144,11 +144,6 @@ const CSS = `
 .lp-em .nums div { font-size: 12px; color: var(--lp-muted); }
 .lp-em .nums b { display: block; font-size: 22px; color: var(--lp-ink); letter-spacing: -0.02em; line-height: 1.25; }
 .lp-up { color: var(--lp-ok); font-weight: 700; }
-.lp-tt { overflow: hidden; }
-.lp-tt table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.lp-tt th { text-align: left; font-size: 11.5px; color: var(--lp-muted); font-weight: 700; padding: 9px 14px; border-bottom: 1px solid var(--lp-line); }
-.lp-tt td { padding: 9px 14px; border-bottom: 1px solid var(--lp-line); color: var(--lp-ink-2); }
-.lp-tt tr:last-child td { border-bottom: none; }
 .lp-pill { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--lp-sel-row); color: var(--lp-gold-text); white-space: nowrap; border: 1px solid var(--lp-line); }
 .lp-ok { color: var(--lp-ok); font-weight: 700; } .lp-lo { color: var(--lp-bad); font-weight: 700; }
 
@@ -315,40 +310,21 @@ function SundayEmail() {
   )
 }
 
-function TutorTable() {
-  return (
-    <div className="lp-card lp-tt">
-      <table>
-        <thead><tr><th>Student</th><th>This week</th><th>Accuracy</th><th>Needs you</th></tr></thead>
-        <tbody>
-          <tr><td><b>Mia</b></td><td>61</td><td className="lp-ok">74% ↑</td><td><span className="lp-pill">Linear eq. 49%</span></td></tr>
-          <tr><td>Jordan</td><td>12</td><td className="lp-lo">52% ↓</td><td><span className="lp-pill">3 overdue</span></td></tr>
-          <tr><td>Priya</td><td>88</td><td className="lp-ok">81% ↑</td><td /></tr>
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 /* ─── 1 · And? ─────────────────────────────────────────────────────────── */
 
 const CLAUSES = [
   'gradefarm. is practice questions ',
   'that remember what you got wrong, ',
   'and bring each one back until you get it right. ',
-  'When you\'re stuck, Titan explains it your way. ',
-  'Every Sunday, your parents get the week in one email. ',
-  'And your tutor sees every answer before the lesson.',
+  'When you\'re stuck, Titan explains it your way.',
 ]
-// The sentence gets a little smaller as it grows, so all six clauses fit.
-const SIZES = [54, 54, 50, 44, 40, 37]
+// The sentence gets a little smaller as it grows, so every clause fits.
+const SIZES = [54, 54, 50, 46]
 const CAPTIONS = [
   'Practice questions in your subjects. Try this one.',
   'A wrong answer is planted',
   'It comes back until it turns gold',
   'Titan, the AI tutor',
-  'The Sunday email, for parents',
-  'The tutor\'s Students page',
 ]
 
 function AndHero({ onStart }) {
@@ -388,8 +364,6 @@ function AndHero({ onStart }) {
         {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === JACKET.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}>{planted}</p></div>}
         {n === 3 && <><Grow /><p className="lp-muted" style={{ fontSize: 15, maxWidth: '40ch', marginTop: 6 }}>Each time you get it right, the gap gets longer. Right every time, and it turns gold.</p></>}
         {n === 4 && <TitanCard />}
-        {n === 5 && <SundayEmail />}
-        {n === 6 && <TutorTable />}
       </div>
     </section>
   )
