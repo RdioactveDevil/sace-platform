@@ -1705,7 +1705,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
-          : <TutorSignupScreen />
+          : <TutorSignupScreen {...commonProps} />
       } />
 
       {/* Onboarding — students only (tutors use /onboarding/tutor) */}
@@ -1738,7 +1738,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : user?.user_metadata?.signup_path !== 'tutor'
             ? <Navigate to="/onboarding" replace />
-          : <TutorOnboardingScreen profile={profile} userEmail={user?.email} onDone={() => {
+          : <TutorOnboardingScreen profile={profile} userEmail={user?.email} pendingApplication={user?.user_metadata?.tutor_application} onDone={() => {
               setProfile(prev => ({ ...prev, onboarding_completed: true }))
               navigate('/subject-picker', { replace: true })
             }} />

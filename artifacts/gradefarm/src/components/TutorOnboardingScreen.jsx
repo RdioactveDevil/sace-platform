@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { completeOnboarding } from '../lib/db'
+import { completeOnboarding, sendTutorApplication } from '../lib/db'
 import { GraduationCap } from 'lucide-react'
 
 const GOLD = '#f1be43'
@@ -8,7 +8,12 @@ const NAVYD = '#080d28'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-export default function TutorOnboardingScreen({ profile, userEmail, onDone }) {
+/**
+ * `pendingApplication`: details from the tutor sign-up page, kept with the
+ * account when it needed its email confirmed before signing in. They're sent
+ * here, on the first sign-in, unless the application has already gone.
+ */
+export default function TutorOnboardingScreen({ profile, userEmail, onDone, pendingApplication = null }) {
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -18,6 +23,11 @@ export default function TutorOnboardingScreen({ profile, userEmail, onDone }) {
     const t = setTimeout(() => setMounted(true), 40)
     return () => clearTimeout(t)
   }, [])
+  useEffect(() => {
+    const status = profile?.tutor_application_status
+    if (!pendingApplication || !profile?.id || status === 'pending' || status === 'approved') return
+    sendTutorApplication(profile.id, pendingApplication).catch(e => console.error('Tutor application send error:', e))
+  }, [profile?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const next = () => setStep(s => s + 1)
   const back = () => setStep(s => Math.max(0, s - 1))

@@ -36,14 +36,27 @@ export async function signUp(email, password, displayName, school, applyForTutor
 }
 
 /** Tutor signup entry: tags auth metadata so the post-auth tutorial can tailor copy. */
-export async function signUpAsTutorAccount(email, password, displayName) {
+/**
+ * Create a tutor's account. `application` (profile fields such as
+ * tutor_organization) is stored with the account too, so it can still be
+ * sent after the email is confirmed if sign-up doesn't sign them in.
+ */
+export async function signUpAsTutorAccount(email, password, displayName, application = null) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName, signup_path: 'tutor' } }
+    options: { data: { display_name: displayName, signup_path: 'tutor', ...(application ? { tutor_application: application } : {}) } }
   })
   if (error) throw error
   return data
+}
+
+/** Save a tutor's application details to their profile and send the application. */
+export async function sendTutorApplication(userId, application) {
+  const allowed = ['display_name', 'school', 'tutor_organization', 'tutor_phone', 'tutor_subjects_offered', 'tutor_qualifications', 'tutor_experience_years', 'tutor_bio']
+  const updates = Object.fromEntries(Object.entries(application || {}).filter(([k]) => allowed.includes(k)))
+  if (Object.keys(updates).length) await updateProfile(userId, updates)
+  await applyForTutor()
 }
 
 export async function applyForTutor() {

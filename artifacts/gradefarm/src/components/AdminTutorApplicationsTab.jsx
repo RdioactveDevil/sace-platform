@@ -54,7 +54,7 @@ export default function AdminTutorApplicationsTab({ onChange }) {
             const busy = busyId === a.id
             return (
               <div key={a.id} style={{
-                display: 'flex', alignItems: 'center', gap: 16,
+                display: 'flex', alignItems: 'flex-start', gap: 16,
                 padding: '13px 16px', flexWrap: 'wrap',
                 borderBottom: '1px solid var(--t-border)',
               }}>
@@ -66,10 +66,11 @@ export default function AdminTutorApplicationsTab({ onChange }) {
                     {a.email || '—'}{a.school ? ` · ${a.school}` : ''}
                   </div>
                   {a.applied_at && (
-                    <div style={{ fontSize: 11, color: 'var(--t-textMuted)', marginTop: 2 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--t-textMuted)', marginTop: 2 }}>
                       Applied {new Date(a.applied_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </div>
                   )}
+                  <ApplicationDetails a={a} />
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
@@ -89,6 +90,29 @@ export default function AdminTutorApplicationsTab({ onChange }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** What they told us on the tutor sign-up page, when they gave it. */
+function ApplicationDetails({ a }) {
+  const rows = [
+    ['Organisation', a.organization && a.organization !== a.school ? a.organization : null],
+    ['Phone', a.phone],
+    ['Teaches', a.subjects],
+    ['Experience', a.experience_years == null ? null : a.experience_years === 0 ? 'Under 1 year' : `${a.experience_years}+ years`],
+    ['Qualifications', a.qualifications],
+    ['How they work', a.bio],
+  ].filter(([, v]) => v)
+  if (!rows.length) return null
+  return (
+    <dl style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, max-content) 1fr', gap: '4px 14px', margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5 }}>
+      {rows.map(([k, v]) => (
+        <div key={k} style={{ display: 'contents' }}>
+          <dt style={{ color: 'var(--t-textMuted)' }}>{k}</dt>
+          <dd style={{ margin: 0, color: 'var(--t-textSub)', whiteSpace: 'pre-wrap', minWidth: 0, overflowWrap: 'anywhere' }}>{v}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 

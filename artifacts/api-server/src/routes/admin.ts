@@ -133,7 +133,7 @@ router.get("/admin/tutor-applications", async (req, res) => {
 
     const { data: pending, error: pendErr } = await admin
       .from("profiles")
-      .select("id, display_name, school, tutor_application_at")
+      .select("id, display_name, school, tutor_application_at, tutor_organization, tutor_phone, tutor_subjects_offered, tutor_experience_years, tutor_qualifications, tutor_bio")
       .eq("tutor_application_status", "pending")
       .order("tutor_application_at", { ascending: true });
 
@@ -160,6 +160,13 @@ router.get("/admin/tutor-applications", async (req, res) => {
       school: p.school,
       email: emailById.get(p.id) || null,
       applied_at: p.tutor_application_at,
+      // What they told us on the tutor sign-up page.
+      organization: p.tutor_organization ?? null,
+      phone: p.tutor_phone ?? null,
+      subjects: p.tutor_subjects_offered ?? null,
+      experience_years: p.tutor_experience_years ?? null,
+      qualifications: p.tutor_qualifications ?? null,
+      bio: p.tutor_bio ?? null,
     }));
 
     return res.json({ applications });
