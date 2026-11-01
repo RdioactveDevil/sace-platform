@@ -379,7 +379,7 @@ const CHAPTERS = [
   ['Practice', 'Students', 'Questions on the topics you pick.', 'Tick what you\'re studying, then choose new questions, the ones you got wrong, or a mix. Everything follows the Australian Curriculum, SACE or VCE.'],
   ['Worked solutions', 'Students', 'Every question shows the working.', 'Not just the answer: the steps, and the slip most people make, so you know what went wrong.'],
   ['Titan', 'Students', 'Stuck? Ask Titan.', 'The AI tutor explains it again, as many times as you need, plainly or with sport, gaming or music. Guided lessons take you through a whole topic.'],
-  ['Comes back', 'Students', 'Get it wrong and it comes back.', 'An hour later, then after a few days, then weeks later, until you get it right every time. When a topic runs out, new questions are written for it.'],
+  ['Comes back', 'Students', 'Get it wrong and it comes back.', 'Every session starts with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. When a topic runs out, new questions are written for it.'],
   ['Progress', 'Students and parents', 'See yourself improving.', 'Accuracy by week, what\'s coming up, and a plan for this week: the reviews that are due, lessons in progress and your weakest topics.'],
   ['Parents and tutors', 'Parents and tutors', 'Everyone sees the same week.', 'Parents get it every Sunday at 6 pm. For under-15s, the AI features stay off until a parent says yes. Tutors see every answer before the lesson.'],
 ]
@@ -420,9 +420,15 @@ function PhoneScreen({ i }) {
   )
   if (i === 3) return (
     <>
-      <div className="lp-ph-top"><span>10:44</span><span /></div>
-      <div className="lp-notif"><span className="ic">gf.</span><span><b>gradefarm.</b>Your discount question is back. 1 minute.</span></div>
-      <div style={{ marginTop: 14 }}><Grow size={34} /></div>
+      <div className="lp-ph-top"><span>Next session</span><span>Year 9 Maths</span></div>
+      <div className="lp-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <b style={{ fontSize: 13 }}>Your session</b>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-gold-text)' }}>3 questions due back for review come first</span>
+        <div className="lp-goldbar">Start</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Percentages</b><span className="lp-pill">Due back</span></div>
+      <b style={{ fontSize: 14.5 }}>{JACKET.stem}</b>
+      <div style={{ marginTop: 6 }}><Grow size={34} /></div>
       <span className="lp-muted" style={{ fontSize: 12.5 }}>Right again? Next time it's in 4 days.</span>
     </>
   )

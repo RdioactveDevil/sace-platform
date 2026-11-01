@@ -168,7 +168,8 @@ export const STARTING_DIFFICULTY = 2
  *
  * mode:
  *   'new'    — only unseen questions (attempts === 0). Returns null if all done.
- *   'wrong'  — only questions answered wrong at least once
+ *   'wrong'  — questions answered wrong that are still being learned (see
+ *              stillLearning); once learned they come back only when due
  *   'all'    — all questions including already-seen
  *
  * targetDifficulty (1–5 or null): when provided, biases selection towards
@@ -195,10 +196,7 @@ export function selectNextQuestion(questions, struggleMap, sessionAnsweredIds, m
       !isSeen(q) && !sessionAnsweredIds.includes(q.id) && !answeredKeys.has(questionContentKey(q)),
     )
   } else if (mode === 'wrong') {
-    pool = questionPool.filter(q => {
-      const s = struggleMap[q.id]
-      return s && s.wrong > 0 && !sessionAnsweredIds.includes(q.id)
-    })
+    pool = questionPool.filter(q => stillLearning(struggleMap[q.id]) && !sessionAnsweredIds.includes(q.id))
   } else {
     pool = questionPool.filter(q => !sessionAnsweredIds.includes(q.id))
   }
@@ -269,9 +267,47 @@ export function getQuestionCounts(questions, struggleMap, subtopics = []) {
   // Duplicates of one unseen question only count once.
   const unseenKeys = new Set(pool.filter(q => !isSeen(q)).map(q => questionContentKey(q) || q.id))
   const unseen = unseenKeys.size
-  const wrong = pool.filter(q => struggleMap[q.id]?.wrong > 0).length
+  const wrong = pool.filter(q => stillLearning(struggleMap[q.id])).length
 
   return { unseen, wrong, total: pool.length }
+}
+
+// ─── SPACED REVIEW ───────────────────────────────────────────────────────────
+// Every answer sets a question's next_review (nextReviewTime below). When that
+// time has passed the question is "due back": practice sessions open with up
+// to DUE_PER_SESSION of them before carrying on with the chosen mode.
+
+/** How many due questions open a practice session. */
+export const DUE_PER_SESSION = 5
+
+/** True when an answered question's review time has passed. */
+export function isDue(s, now = Date.now()) {
+  return !!(s && s.attempts > 0 && s.next_review && new Date(s.next_review).getTime() <= now)
+}
+
+/**
+ * Ids of the questions due back, most overdue first. `subtopics` limits them
+ * to the ticked topics; `exclude` skips ids already answered this session.
+ */
+export function dueQuestionIds(questions, struggleMap, { subtopics = [], exclude = [], now = Date.now(), limit = Infinity } = {}) {
+  const skip = new Set(exclude)
+  return questions
+    .filter(q => !skip.has(q.id) && (subtopics.length === 0 || subtopics.includes(q.subtopic)) && isDue(struggleMap[q.id], now))
+    .sort((a, b) => new Date(struggleMap[a.id].next_review) - new Date(struggleMap[b.id].next_review))
+    .slice(0, limit)
+    .map(q => q.id)
+}
+
+/**
+ * A question answered wrong is "still being learned" until it has been right
+ * at least twice and more often right than wrong: the point where its review
+ * moves from the hour and 1–2 day steps to 4 days or more. Until then it's in
+ * "Got wrong"; after, it leaves that list and comes back only when it's due.
+ */
+export function stillLearning(s) {
+  if (!s || !(s.wrong > 0)) return false
+  const correct = s.attempts - s.wrong
+  return correct < 2 || s.wrong >= s.attempts * 0.5
 }
 
 /**
