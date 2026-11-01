@@ -238,6 +238,8 @@ export default function QuizScreen({
   quizSubtopics: _quizSubtopics,
   // 'review' mode: the questions to go back over (a finished session's wrong answers).
   reviewIds: _reviewIds, setReviewIds,
+  // This session's sessions row, recorded with each answer so History can group them.
+  sessionId: _sessionId, setSessionId,
   remediationMode: _remediationMode, setRemediationMode,
   remediationStreak: _remediationStreak, setRemediationStreak,
   remediationTarget: _remediationTarget, setRemediationTarget,
@@ -385,6 +387,7 @@ export default function QuizScreen({
   const quizMode = _quizMode ?? 'new'
   const quizSubtopics = Array.isArray(_quizSubtopics) ? _quizSubtopics : []
   const reviewIds = Array.isArray(_reviewIds) ? _reviewIds : []
+  const sessionId = _sessionId ?? null
   const effectiveSubtopics = consolidation ? consolidation.subtopics : quizSubtopics
   const round = consolidation ? consolidationRound(sessionResults) : null
   const remediationMode = _remediationMode ?? false
@@ -621,12 +624,19 @@ export default function QuizScreen({
     ],
   )
 
+  // Start a sessions row for the answers that follow. Cleared first, so a
+  // failed insert can't leave them filed under the previous session.
+  const beginSession = async () => {
+    setSessionId?.(null)
+    try {
+      const row = await createSession(profile.id, subjectTile?.name || questions[0]?.subject || 'Unknown')
+      setSessionId?.(row?.id ?? null)
+    } catch {}
+  }
+
   useEffect(() => {
-    async function init() {
-      try { await createSession(profile.id, subjectTile?.name || questions[0]?.subject || 'Unknown') } catch {}
-    }
     if (!_currentQ) {
-      init()
+      beginSession()
       if (examRun) startExam()
       else loadNext([], struggleMap, quizMode, effectiveSubtopics)
     }
@@ -1109,7 +1119,7 @@ export default function QuizScreen({
       null
     if (trackId) {
       try {
-        await recordAnswerCounted(profile.id, trackId, isCorrect, selectedIndex ?? null, null, timeTakenMs)
+        await recordAnswerCounted(profile.id, trackId, isCorrect, selectedIndex ?? null, sessionId, timeTakenMs)
       } catch (recErr) {
         console.warn('[gradefarm] failed to record variant answer:', recErr?.message || recErr)
       }
@@ -1225,7 +1235,7 @@ export default function QuizScreen({
       }
     })
 
-    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, null, timeTakenMs)
+    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, sessionId, timeTakenMs)
       .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
 
     if (examRun) {
@@ -1316,7 +1326,7 @@ export default function QuizScreen({
       }
     })
 
-    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, null, timeTakenMs).catch(() => {})
+    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, sessionId, timeTakenMs).catch(() => {})
 
     if (examRun) {
       advanceExam()
@@ -1545,7 +1555,7 @@ export default function QuizScreen({
     for (const g of graded) {
       if (!g.answered) continue
       const t = times[g.q.id] || null
-      await recordAnswerCounted(profile.id, g.q.id, g.ok, getQuestionType(g.q) === 'mcq' ? g.r : null, null, t)
+      await recordAnswerCounted(profile.id, g.q.id, g.ok, getQuestionType(g.q) === 'mcq' ? g.r : null, sessionId, t)
         .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
       await awardAnswerXP(g.xp, g.streakAfter, g.ok)
       countAssignmentAnswer(g.ok, g.r, t, g.q.id)
@@ -1621,6 +1631,7 @@ export default function QuizScreen({
       setSessionTipLoading(false)
       clearRemediation()
       setFinished(false)
+      beginSession()
       loadNext([], struggleMap, mode, effectiveSubtopics, null, ids)
     }
 

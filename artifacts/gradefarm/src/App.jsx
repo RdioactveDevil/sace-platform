@@ -841,6 +841,7 @@ function AppShellScreens({
       </div>
       {wasOpened('history') && <div style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} subject={subject} questions={questions} embedded
+          active={screen === 'history'} onStartSession={onStartSession}
           onOpenChat={(id) => openInLearn({ type: 'chat', id })}
           onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
@@ -1109,6 +1110,7 @@ function AppInner() {
   const [quizMode,        setQuizMode]        = useState('new')
   const [quizSubtopics,   setQuizSubtopics]   = useState([])
   const [quizReviewIds,   setQuizReviewIds]   = useState([])
+  const [quizSessionId,   setQuizSessionId]   = useState(null)
   const [quizRemediationMode,      setQuizRemediationMode]      = useState(false)
   const [quizRemediationStreak,    setQuizRemediationStreak]    = useState(0)
   const [quizRemediationTarget,    setQuizRemediationTarget]    = useState(3)
@@ -1382,6 +1384,7 @@ function AppInner() {
     quizMode,                  setQuizMode,
     quizSubtopics,             setQuizSubtopics,
     reviewIds: quizReviewIds,  setReviewIds: setQuizReviewIds,
+    sessionId: quizSessionId,  setSessionId: setQuizSessionId,
     aiTip: quizAiTip,          setAiTip: setQuizAiTip,
     loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
     remediationMode: quizRemediationMode,           setRemediationMode: setQuizRemediationMode,
@@ -1456,7 +1459,7 @@ function AppInner() {
     q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
     earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
     results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
-    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit,
+    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit,
     assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
     remediation: {
       mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
@@ -1482,6 +1485,7 @@ function AppInner() {
     setQuizMode(saved.mode)
     setQuizSubtopics(saved.subtopics)
     setQuizReviewIds(saved.reviewIds || [])
+    setQuizSessionId(saved.sessionId ?? null)
     setQuizExamMode(saved.examMode)
     setQuizTimerSeconds(saved.timerSeconds)
     setQuizQuestionLimit(saved.questionLimit || 0)

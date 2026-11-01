@@ -5,11 +5,10 @@ import MathText from './MathText'
 import { supabase } from '../lib/supabase'
 import { fetchMyExamAttempts } from '../lib/db'
 import { fetchLessons } from '../lib/learnStore'
+import { groupAnswersIntoSessions } from '../lib/sessionHistory'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-// Answers less than this far apart count as one practice session.
-const SESSION_GAP_MS = 30 * 60 * 1000
 
 function dayLabel(ms) {
   const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(ms).setHours(0, 0, 0, 0)) / 86400000)
@@ -23,8 +22,9 @@ const timeOf = (ms) => new Date(ms).toLocaleTimeString('en-AU', { hour: 'numeric
 /**
  * Everything the student has done, newest first and grouped by day: practice
  * sessions (from their answers), timed papers, guided lessons and Titan chats.
+ * A practice session can be done again: all its questions, or the ones missed.
  */
-export default function HistoryScreen({ profile, subject, questions = [], theme, embedded, onOpenChat, onOpenLesson }) {
+export default function HistoryScreen({ profile, subject, questions = [], theme, embedded, active = true, onStartSession, onOpenChat, onOpenLesson }) {
   const t = THEMES[theme]
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,12 +33,14 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
   const subjectName = subject?.name || ''
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
 
+  // Reload each time History is opened, so a session just finished is listed.
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     const load = async () => {
       setLoading(true)
       const [answersRes, chatsRes, lessons, exams] = await Promise.all([
-        supabase.from('answer_log').select('answered_at, correct, question_id').eq('user_id', profile.id).order('answered_at', { ascending: false }).limit(400),
+        supabase.from('answer_log').select('answered_at, correct, question_id, session_id').eq('user_id', profile.id).order('answered_at', { ascending: false }).limit(400),
         supabase.from('learn_sessions').select('*').eq('user_id', profile.id).order('updated_at', { ascending: false }).limit(30),
         fetchLessons(profile.id, subjectName),
         fetchMyExamAttempts(profile.id, 20).catch(() => []),
@@ -53,28 +55,24 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
         ;(qs || []).forEach(q => { questionMap[q.id] = q })
       }
 
-      // Group answers into sessions: a new session starts after a 30-minute gap.
-      const sessions = []
-      answers.forEach(a => {
-        const at = Date.parse(a.answered_at)
+      // Answers grouped into sessions (by session, or by gaps for older answers).
+      const withText = answers.map(a => {
         const q = questionMap[a.question_id]
-        const last = sessions[sessions.length - 1]
-        if (!last || last.start - at > SESSION_GAP_MS) sessions.push({ start: at, end: at, answers: [] })
-        const s = sessions[sessions.length - 1]
-        s.start = at
-        s.answers.push({ ...a, question: q?.question, subtopic: q?.subtopic || q?.topic })
+        return { ...a, question: q?.question, subtopic: q?.subtopic || q?.topic }
       })
-      const practice = sessions.map(s => {
+      const practice = groupAnswersIntoSessions(withText).map(s => {
         const counts = {}
         s.answers.forEach(a => { if (a.subtopic) counts[a.subtopic] = (counts[a.subtopic] || 0) + 1 })
         const topics = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k]) => k)
-        const correct = s.answers.filter(a => a.correct).length
-        const minutes = Math.max(1, Math.round((s.end - s.start) / 60000))
+        const start = Date.parse(s.date)
+        const end = Date.parse(s.answers[s.answers.length - 1].answered_at)
+        const minutes = Math.max(1, Math.round((end - start) / 60000))
         return {
-          key: `practice-${s.start}`, kind: 'Practice', group: 'practice', at: s.end,
+          key: `practice-${s.id}`, kind: 'Practice', group: 'practice', at: end,
           title: topics.length ? `${topics[0]}${topics.length > 1 ? ` + ${topics.length - 1} more` : ''}` : 'Practice',
-          sub: `${s.answers.length} question${s.answers.length !== 1 ? 's' : ''} · ${minutes} min`,
-          score: { correct, total: s.answers.length }, answers: [...s.answers].reverse(),
+          sub: `${s.total} question${s.total !== 1 ? 's' : ''} · ${minutes} min`,
+          score: { correct: s.correct, total: s.total }, answers: [...s.answers].reverse(),
+          allIds: s.allIds, wrongIds: s.wrongIds,
         }
       })
       const examItems = (exams || []).map(e => ({
@@ -106,7 +104,7 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
     }
     load().catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [profile.id, subjectName, questionIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile.id, subjectName, questionIds, active]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = items.filter(i => filter === 'all' || i.group === filter)
   const byDay = []
@@ -115,6 +113,9 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
     if (!byDay.length || byDay[byDay.length - 1].label !== label) byDay.push({ label, items: [] })
     byDay[byDay.length - 1].items.push(i)
   })
+
+  // Go back over a past session's questions as practice (the 'review' mode).
+  const redo = (ids) => onStartSession({ mode: 'review', subtopics: [], subject: subjectName || undefined, reviewIds: ids })
 
   const toneOf = (pct) => (pct < 40 ? t.danger : pct < 70 ? t.goldText : t.success)
   const segOn = theme === 'dark' ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
@@ -170,8 +171,22 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
                   </div>
                   {open && (
                     <div style={{ borderTop: `1px solid ${t.border}`, padding: '4px 14px 10px' }}>
+                      {onStartSession && item.allIds?.length > 0 && (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 0 8px' }}>
+                          {item.wrongIds.length > 0 && (
+                            <button type="button" onClick={() => redo(item.wrongIds)}
+                              style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: GOLD, color: '#0c1037', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
+                              Redo the {item.wrongIds.length} you got wrong
+                            </button>
+                          )}
+                          <button type="button" onClick={() => redo(item.allIds)}
+                            style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                            Redo all {item.allIds.length}
+                          </button>
+                        </div>
+                      )}
                       {item.answers.map((a, j) => (
-                        <div key={j} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr)', gap: 10, padding: '8px 0', borderTop: j > 0 ? `1px solid ${t.border}` : 'none', alignItems: 'start' }}>
+                        <div key={j} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr)', gap: 10, padding: '8px 0', borderTop: j > 0 || (onStartSession && item.allIds?.length) ? `1px solid ${t.border}` : 'none', alignItems: 'start' }}>
                           <span aria-label={a.correct ? 'Correct' : 'Wrong'} style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, background: a.correct ? t.successBg : t.dangerBg, color: a.correct ? t.success : t.danger }}>{a.correct ? '✓' : '✗'}</span>
                           <span style={{ minWidth: 0 }}>
                             <span style={{ display: 'block', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.question ? <MathText text={a.question} /> : 'Question no longer available'}</span>
