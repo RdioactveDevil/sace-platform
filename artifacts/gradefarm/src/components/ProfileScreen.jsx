@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getLevelProgress, nextRankHint, rankAccuracy, RANKS } from '../lib/engine'
+import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
+import RankIcon from './RankIcon'
 import { X } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogSince, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
@@ -51,6 +52,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const recentAccuracy = rankAccuracy(profile)
   const { level } = getLevelProgress(profile.xp, recentAccuracy)
   const rank = RANKS[level]
+  const [showRanks, setShowRanks] = useState(false)
 
   // ── Weekly numbers (this subject's questions only) ────────────────────────
   const questionIds = useMemo(() => new Set(questions.map(q => q.id)), [questions])
@@ -221,8 +223,39 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           </div>
           <div style={{ fontSize: 12.5, color: t.textMuted }}>
             <strong style={{ color: t.text }}>{rank}</strong> · {profile.xp.toLocaleString()} XP · {nextRankHint(profile.xp, recentAccuracy)}
+            {' · '}
+            <button type="button" onClick={() => setShowRanks(v => !v)} aria-expanded={showRanks}
+              style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textDecorationThickness: 2, textUnderlineOffset: 3 }}>
+              {showRanks ? 'Hide ranks' : 'All ranks'}
+            </button>
           </div>
         </div>
+
+        {/* Every rank: XP and, from Silver up, accuracy over recent answers. */}
+        {showRanks && (
+          <div style={{ ...card, padding: '14px 16px' }}>
+            <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55, marginBottom: 12 }}>
+              Each rank needs its XP and, from Silver up, a minimum accuracy over your recent answers. Yours is <strong style={{ color: t.text }}>{profile.recent_answers > 0 ? `${Math.round(recentAccuracy * 100)}%` : 'not set yet'}</strong>.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+              {RANK_TIERS.map((tier, i) => {
+                const current = i === level
+                const unlocked = i <= level
+                return (
+                  <div key={tier.name} style={{ padding: '9px 11px', borderRadius: 10, border: `1px solid ${current ? t.text : t.border}`, boxShadow: current ? `0 0 0 1px ${t.text}` : 'none', opacity: unlocked ? 1 : 0.5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <RankIcon level={i} size={15} color={unlocked ? t.goldText : t.textMuted} />
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{tier.name}</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: t.textMuted, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
+                      {tier.xp.toLocaleString('en-AU')} XP{tier.accuracy > 0 && ` · ${Math.round(tier.accuracy * 100)}%`}{current ? ' · you' : ''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="po-row">
           {/* Accuracy by week */}
