@@ -10,8 +10,9 @@ import { Logo } from './AuthLayout'
 //
 // 1. "And?": what gradefarm. is, said one clause at a time. Each click adds a
 //    part of the product to the sentence and shows it working beside it.
-//    The hero fills the first screen, and nothing below it shows until the
-//    sentence is finished (remembered for the session), or a nav link asks.
+//    The hero fills the first screen. Everything below it is in the page but
+//    hidden until the sentence is finished (remembered for the session), or a
+//    nav link asks. The newest clause ends in pulsing dots until then.
 // 2. "What's inside": a phone stays put while six short chapters scroll past,
 //    and its screen changes to match. On phones each chapter shows its own
 //    screen instead.
@@ -90,6 +91,9 @@ const CSS = `
 .lp-and-s { font-size: var(--lp-and-size, clamp(32px, 4.3vw, 54px)); font-weight: 800; line-height: 1.12; letter-spacing: -0.035em; }
 .lp-and-s span { transition: color 0.35s; }
 .lp-and-s span.old { color: var(--lp-faded); }
+/* The dots after an unfinished sentence: there's more, press And? */
+.lp-dots { color: var(--lp-gold-text); animation: lpDots 1.6s ease-in-out infinite; }
+@keyframes lpDots { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
 .lp-and-ctl { display: flex; gap: 16px; align-items: center; margin-top: 28px; flex-wrap: wrap; }
 .lp-and-ctl .n { font-size: 13px; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
 .lp-and-vis { min-height: 380px; display: flex; flex-direction: column; justify-content: center; gap: 10px; animation: lpIn 0.3s ease; }
@@ -344,7 +348,10 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
         {/* The whole definition for screen readers and search; the sentence below builds it on screen. */}
         <h1 id="lp-def" className="lp-sr">{CLAUSES.join('')}</h1>
         <div className="lp-and-s" aria-hidden="true" style={{ '--lp-and-size': `clamp(28px, ${SIZES[n - 1] / 14.4}vw, ${SIZES[n - 1]}px)` }}>
-          {CLAUSES.slice(0, n).map((c, i) => <span key={i} className={i < n - 1 ? 'old' : ''}>{c}</span>)}
+          {CLAUSES.slice(0, n).map((c, i) => (i === n - 1 && !last
+            // The newest clause ends in dots until the sentence is finished.
+            ? <span key={i}>{c.replace(/[\s.,]+$/, '')}<span className="lp-dots">…</span></span>
+            : <span key={i} className={i < n - 1 ? 'old' : ''}>{c}</span>))}
         </div>
         <div className="lp-and-ctl">
           {last
@@ -559,7 +566,8 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
       <main>
         <AndHero onStart={start} onDone={finish} onSeeInside={() => go('how')} done={done} />
-        {done && <>
+        {/* In the page for search engines, but invisible until the hero is finished. */}
+        <div hidden={!done}>
         <Inside />
 
         <section id="questions" className="lp-in lp-sec" aria-labelledby="lp-faq">
@@ -598,10 +606,10 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
             </div>
           </div>
         </section>
-        </>}
+        </div>
       </main>
 
-      {done && <footer className="lp-foot">
+      <footer className="lp-foot" hidden={!done}>
         <div className="lp-in">
           <Logo />
           <div className="lp-foot-links">
@@ -614,7 +622,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
           </div>
           <span className="lp-copy">© 2026 Titanium Tutoring · Adelaide, SA</span>
         </div>
-      </footer>}
+      </footer>
     </div>
   )
 }
