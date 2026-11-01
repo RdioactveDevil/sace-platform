@@ -1588,6 +1588,12 @@ export default function QuizScreen({
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  // The first wrong answer that offers extra practice asks for its page tip (App's PageTips).
+  const offersExtraPractice = !examRun && showAns && !correct && remediationMode && !currentQ?.is_variant && remediationOriginalQ?.id === currentQ?.id
+  useEffect(() => {
+    if (offersExtraPractice) window.dispatchEvent(new CustomEvent('gf-page-tip', { detail: { page: 'quiz-wrong' } }))
+  }, [offersExtraPractice])
+
   // A new question closes the report menu and its thank-you.
   useEffect(() => { setReportMenuOpen(false); setReportThanks(false) }, [currentQ?.id])
 
@@ -2033,7 +2039,7 @@ export default function QuizScreen({
             </>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
+        <div data-tutorial-target={examRun ? undefined : 'quiz-bar'} style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
           {!examRun && sessionTotal > 0 && (
             <span style={{ whiteSpace: 'nowrap' }}><strong style={{ color: t.success }}>{sessionCorrect}</strong>{isMobile ? ' · ' : ' right · '}<strong style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</strong>{isMobile ? '' : ' wrong'}</span>
           )}
@@ -2112,7 +2118,7 @@ export default function QuizScreen({
               />
             )}
 
-            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
               {currentQ.passage && !sidePassage && <PassageView passage={currentQ.passage} theme={theme} />}
               {currentQ.graph && <GraphView graph={currentQ.graph} theme={theme} />}
               {currentQ.table_data && <TableView table={currentQ.table_data} theme={theme} />}
@@ -2210,7 +2216,7 @@ export default function QuizScreen({
                   )}
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, position: 'relative' }}>
-                    <button type="button" onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), ...(isMobile ? { flex: 1 } : {}) }}>
+                    <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), ...(isMobile ? { flex: 1 } : {}) }}>
                       {nextButtonLabel}
                     </button>
                     {onOpenLearn && !examMode && (

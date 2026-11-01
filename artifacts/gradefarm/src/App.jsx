@@ -8,7 +8,7 @@ import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import { takePendingCheckout, startCheckout, subjectTileFor } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, markTutorialComplete, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
@@ -19,13 +19,12 @@ import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, 
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
-import PortalWelcome, { PORTAL_TOUR_STEPS } from './components/PortalWelcome'
-import WebsiteTutorialOverlay from './components/WebsiteTutorialOverlay'
+import PageTips from './components/PageTips'
+import { PAGE_TIPS, tipPageFor, seenTips, markTipsSeen, resetTips } from './lib/pageTips'
 import ParentConsentBanner from './components/ParentConsentBanner'
 import FamilySwitcher from './components/FamilySwitcher'
 import { appZoom } from './lib/appZoom'
 import { TUTOR_NAV, ADMIN_NAV, workspaceForPath, sectionForPortalPath, PORTAL_BADGES_EVENT } from './lib/portalNav'
-import GradeFarmWelcomeCelebration from './components/GradeFarmWelcomeCelebration'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
 
@@ -645,39 +644,48 @@ function LiveLessonBanner({ profile, theme }) {
   )
 }
 
-function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, tutorialOverlay = null, onProfileUpdated }) {
+function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, onProfileUpdated }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
   const navigate = useNavigate()
   const location = useLocation()
 
-  // The first time a student has a tutor, announce the Student Portal and
-  // offer a tour. Remembered per browser.
-  const hasTutoring = useHasTutoring(profile?.id)
-  const portalWelcomeKey = `gf-portal-welcome-${profile?.id}`
-  const [portalWelcome, setPortalWelcome] = useState(false)
-  const [portalTour, setPortalTour] = useState(false)
+  // Page tips: the first time someone opens a page, show that page's tips
+  // (lib/pageTips). Pages can also ask for theirs at a moment that suits them
+  // (the question screen at the first wrong answer) with a gf-page-tip event.
+  const [tips, setTips] = useState(null) // { page, steps }
+  const tipsRef = useRef(null)
+  tipsRef.current = tips
+  const showTipsFor = useCallback((page) => {
+    if (!page || !profile?.id || !profile.onboarding_completed || tipsRef.current) return false
+    if (seenTips(profile)[page]) return false
+    const mobile = window.innerWidth < 860
+    // Only what's on screen now: a hidden screen's elements don't count.
+    const steps = (PAGE_TIPS[page]?.steps || []).filter(st => {
+      if (st.sidebar && mobile) return false
+      const el = document.querySelector(`[data-tutorial-target="${st.target}"]`)
+      return !!el && el.getClientRects().length > 0
+    })
+    if (!steps.length) return false
+    setTips({ page, steps })
+    markTipsSeen(profile, page).then(next => onProfileUpdated?.({ tours_seen: next }))
+    return true
+  }, [profile, onProfileUpdated])
   useEffect(() => {
-    if (!hasTutoring || tutorialOverlay || location.pathname === '/quiz') return
-    try { if (!localStorage.getItem(portalWelcomeKey)) setPortalWelcome(true) } catch {}
-  }, [hasTutoring, tutorialOverlay, location.pathname, portalWelcomeKey])
-  const closePortalWelcome = (tour) => {
-    try { localStorage.setItem(portalWelcomeKey, new Date().toISOString()) } catch {}
-    setPortalWelcome(false)
-    if (tour) { navigate('/portal'); setPortalTour(true) }
-  }
+    setTips(null)
+    const page = tipPageFor(location.pathname)
+    if (!page) return
+    // Give the page a moment to load what the tips point at.
+    const timer = setTimeout(() => showTipsFor(page), 900)
+    return () => clearTimeout(timer)
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onTip = (e) => { setTimeout(() => showTipsFor(e.detail?.page), 250) }
+    window.addEventListener('gf-page-tip', onTip)
+    return () => window.removeEventListener('gf-page-tip', onTip)
+  }, [showTipsFor])
 
-  useEffect(() => {
-    const open = () => setMenuOpen(true)
-    const close = () => setMenuOpen(false)
-    window.addEventListener('gf-tutorial-open-sidebar', open)
-    window.addEventListener('gf-tutorial-close-sidebar', close)
-    return () => {
-      window.removeEventListener('gf-tutorial-open-sidebar', open)
-      window.removeEventListener('gf-tutorial-close-sidebar', close)
-    }
-  }, [])
 
   const [zoom, setZoom] = useState(appZoom)
   useEffect(() => {
@@ -745,10 +753,8 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
         </div>
       </div>
     </div>
-    {/* Outside the zoom: the walkthrough lines its highlight up with on-screen positions. */}
-    {tutorialOverlay && <WebsiteTutorialOverlay {...tutorialOverlay} />}
-    {portalWelcome && <PortalWelcome theme={theme} onTour={() => closePortalWelcome(true)} onClose={() => closePortalWelcome(false)} />}
-    {portalTour && <WebsiteTutorialOverlay theme={theme} steps={PORTAL_TOUR_STEPS} onFinish={() => setPortalTour(false)} />}
+    {/* Outside the zoom: the tips line their highlight up with on-screen positions. */}
+    {tips && <PageTips key={tips.page} steps={tips.steps} theme={theme} onClose={() => setTips(null)} />}
     </>
   )
 }
@@ -762,7 +768,6 @@ function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
   onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
-  tutorialOverlay,
   onReplayFeatureTour,
   onProfileUpdated,
   // learn state
@@ -777,7 +782,7 @@ function AppShellScreens({
   const commonProps = { theme, onToggleTheme }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate, learnRequest, setLearnRequest }
   const openInLearn = (request) => { setLearnRequest({ ...request, at: Date.now() }); navigate('/learn') }
-  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, tutorialOverlay, onProfileUpdated }
+  const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, onProfileUpdated }
   const GOLD = '#f1be43'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -934,11 +939,6 @@ function AppInner() {
   }, [theme])
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
-  const [welcomeCelebration, setWelcomeCelebration] = useState(false)
-  // The first-run feature tour. Latched open: onSeen records it as seen the
-  // moment it mounts (so it never shows twice), which would otherwise make
-  // tourDue false and close it before the student saw anything.
-  const [tourOpen, setTourOpen] = useState(false)
 
   const refreshSubscriptions = async () => {
     try {
@@ -1247,22 +1247,15 @@ function AppInner() {
     navigate('/home')
   }
 
+  // Account › Show page tips again: every page shows its tips again.
   const handleReplayFeatureTour = useCallback(async () => {
     if (!profile?.id) return
-    const uid = profile.id
-    try {
-      localStorage.removeItem(gfTutorialStorageKey(uid))
-      await updateProfile(uid, { app_tutorial_completed_at: null })
-    } catch (e) {
-      console.error('[replay tutorial]', e)
-    }
-    setProfile(prev => (prev ? { ...prev, app_tutorial_completed_at: null } : prev))
+    await resetTips(profile)
+    setProfile(prev => (prev ? { ...prev, tours_seen: {} } : prev))
     navigate('/question-bank')
-  }, [profile?.id, navigate])
+  }, [profile, navigate])
 
   const handleSignOut = async () => {
-    setWelcomeCelebration(false)
-    setTourOpen(false)
     await signOut()
     setMyDiagnostics([])
     setDiagnosticsLoaded(false)
@@ -1555,13 +1548,6 @@ function AppInner() {
     else resetQuizSession()
   }
 
-  // A student's tour waits for their diagnostics to load and for any due on
-  // this subject to be done: the tour lives in the app shell, which the
-  // check-in screen replaces, and it counts as seen the moment it opens.
-  const tourDue = !!(user && profile && profile.onboarding_completed && !profile.app_tutorial_completed_at && selectedSubject &&
-    (!isStudent || (diagnosticsLoaded && !diagnosticDue)))
-  useEffect(() => { if (tourDue) setTourOpen(true) }, [tourDue])
-
   // Also while a just-signed-in user's profile loads, so the landing or sign-in
   // page doesn't flash before the redirect into the app.
   if (((!bootstrapped || (user && !profile)) && loading) || openingCheckout) return (
@@ -1582,34 +1568,6 @@ function AppInner() {
     </div>
   )
 
-  const tutorialOverlay =
-    tourOpen && user && profile
-      ? {
-          isTutor: !!profile.is_tutor,
-          theme,
-          // Called as soon as the overlay mounts — prevents re-showing if the user
-          // closes the tab or navigates away before explicitly skipping/finishing.
-          onSeen: async () => {
-            const uid = profile.id
-            const ts = new Date().toISOString()
-            try {
-              localStorage.setItem(gfTutorialStorageKey(uid), ts)
-            } catch (_) {}
-            setProfile(prev => ({ ...prev, app_tutorial_completed_at: ts }))
-            try {
-              await markTutorialComplete(uid)
-            } catch (e) {
-              console.error('[tutorial seen]', e)
-            }
-          },
-          // Skip and Done both end here.
-          onFinish: () => {
-            setTourOpen(false)
-            setWelcomeCelebration(true)
-          },
-        }
-      : null
-
   const shellProps = {
     ...commonProps,
     profile,
@@ -1619,7 +1577,6 @@ function AppInner() {
     subscriptions,
     fullAccess: hasFullAccess,
     onSignOut: handleSignOut,
-    tutorialOverlay,
     onProfileUpdated: (updates) => setProfile(prev => (prev ? { ...prev, ...updates } : prev)),
   }
 
@@ -1969,9 +1926,6 @@ function AppInner() {
     </Routes>
     </Suspense>
     </ErrorBoundary>
-    {welcomeCelebration && (
-      <GradeFarmWelcomeCelebration theme={theme} onDismiss={() => setWelcomeCelebration(false)} />
-    )}
     </>
   )
 }

@@ -162,7 +162,7 @@ export default function TutorToday({ theme, roster, assignments, sessions, onNav
       </div>
 
       <div className="tt-cols">
-        <div style={card}>
+        <div data-tutorial-target="tutor-needs" style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
             <span style={cardTitle}>Needs you</span>
             {needs.length > 0 && <span style={{ fontSize: 12, color: t.textFaint }}>{needs.length} thing{needs.length !== 1 ? 's' : ''}</span>}

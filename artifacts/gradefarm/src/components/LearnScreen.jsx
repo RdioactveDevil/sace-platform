@@ -1001,12 +1001,12 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>
             Ask Titan about {subject?.name || 'your subject'}
           </h1>
-          {composer({ big: true, placeholder: 'Ask a question, paste a problem, or add a photo of your working', onSend: sendFromStart })}
+          <div data-tutorial-target="learn-composer">{composer({ big: true, placeholder: 'Ask a question, paste a problem, or add a photo of your working', onSend: sendFromStart })}</div>
           {quotaLine}
         </div>
 
         {lessonCards.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div data-tutorial-target="learn-lessons" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800 }}>Guided lessons</div>

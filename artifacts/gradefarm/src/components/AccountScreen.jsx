@@ -780,8 +780,8 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
           action={<RowLink t={t} onClick={onChangeSubject}>Change subject</RowLink>} />
       )}
       {typeof onReplayFeatureTour === 'function' && (
-        <Row t={t} label="Feature tour" note="The guided walk through the sidebar: Question Bank, Learn, History, Study Plan and more."
-          action={<RowLink t={t} onClick={handleReplayFeatureTour} disabled={replayTourBusy}>{replayTourBusy ? 'Preparing…' : 'Replay'}</RowLink>} />
+        <Row t={t} label="Page tips" note="Each page shows a few tips the first time you open it. Show them again takes you to Practice to start."
+          action={<RowLink t={t} onClick={handleReplayFeatureTour} disabled={replayTourBusy}>Show them again</RowLink>} />
       )}
     </Section>
   )

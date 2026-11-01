@@ -215,7 +215,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       <div className="po-inner">
 
         {/* This week, and rank */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <div data-tutorial-target="progress-week" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
             {fact(now.pct == null ? '—' : `${now.pct}%`, now.pct == null ? 'correct this week' : delta == null ? 'correct this week' : `correct this week, ${delta >= 0 ? 'up' : 'down'} from ${prev.pct}%`)}
             {fact(now.total, 'answered this week')}
@@ -346,7 +346,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
 
         <div className="po-row even">
           {/* This week's plan */}
-          <div id="plan" style={{ ...card, padding: '12px 16px' }}>
+          <div id="plan" data-tutorial-target="progress-plan" style={{ ...card, padding: '12px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
               <span style={cardTitle}>This week's plan</span>
               {plan.length > 0 && <span style={{ fontSize: 12, color: t.textFaint }}>{doneCount} of {plan.length} done</span>}

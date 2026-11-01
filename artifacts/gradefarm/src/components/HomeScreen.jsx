@@ -251,7 +251,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
       </div>
 
-      <div>
+      <div data-tutorial-target="practice-session">
         <span style={fieldLabel}>Questions</span>
         {segment([
           { value: 'new', label: 'New' },
@@ -295,7 +295,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
       )}
 
-      <button type="button" onClick={startSession} disabled={!canStart}
+      <button type="button" data-tutorial-target="practice-start" onClick={startSession} disabled={!canStart}
         style={{
           width: '100%', padding: '13px', borderRadius: 10, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
           background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed',
