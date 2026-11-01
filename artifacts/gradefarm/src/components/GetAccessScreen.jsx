@@ -17,7 +17,7 @@ const shortDate = (d) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 
  * weekly or monthly, their choice), otherwise added straight onto their plan.
  * Without a free subject yet, the free option comes first.
  */
-export default function GetAccessScreen({ subscriptions = [], onAccessChanged, theme = 'dark', onToggleTheme }) {
+export default function GetAccessScreen({ subscriptions = [], onAccessChanged, onStartSubject, theme = 'dark', onToggleTheme }) {
   const t = THEMES[theme]
   const { state } = useLocation()
   const navigate  = useNavigate()
@@ -51,13 +51,20 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged, t
   // Opened from the free subject's daily limit: only the paid option applies.
   const isFreeSubject = subjectAccess(subscriptions, subj) === 'free'
 
+  // Straight into the subject once they have it, not back to the picker.
+  const openSubject = () => {
+    const { questionCount, ...tile } = subj // eslint-disable-line no-unused-vars
+    if (onStartSubject) onStartSubject(tile)
+    else navigate('/subject-picker', { replace: true })
+  }
+
   const handleFree = async () => {
     setBusy('free'); setError(null)
     try {
       await chooseFreeSubject(curriculumId)
       await onAccessChanged?.()
       notify.success(`${formatSubjectLabel(subj)} is now your free subject.`)
-      navigate('/subject-picker', { replace: true })
+      openSubject()
     } catch (e) {
       setError(e.message || "That didn't go through. Try again.")
       setBusy(null)
@@ -71,7 +78,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged, t
       if (result.url) { window.location.assign(result.url); return }
       await onAccessChanged?.()
       notify.success(`${formatSubjectLabel(subj)} added. Your plan is now $${money(result.total)}/${result.interval ?? interval}.`)
-      navigate('/subject-picker', { replace: true })
+      openSubject()
     } catch (e) {
       setError(e.message || "That didn't go through. Try again.")
       setBusy(null)
@@ -147,11 +154,6 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged, t
       <button type="button" className="af-btn" onClick={handlePaid} disabled={payDisabled} style={authBtn(t, freeFirst ? 'secondary' : 'primary', { disabled: payDisabled, full: true })}>
         {payLabel}
       </button>
-      <p style={{ ...p, fontSize: 12, textAlign: 'center' }}>
-        {trialDays > 0
-          ? `Card required. Nothing is charged until ${firstBill}; cancel before then in Account. Payments by Stripe.`
-          : `Billed ${interval}ly. Cancel any time in Account. Payments by Stripe.`}
-      </p>
     </section>
   )
 

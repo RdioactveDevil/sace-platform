@@ -1768,7 +1768,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <GetAccessScreen {...commonProps} subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} />
+          : <GetAccessScreen {...commonProps} subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} onStartSubject={handleSelectSubject} />
       } />
 
       {/* Quiz — wrapped in AppShell so the shared sidebar appears */}
