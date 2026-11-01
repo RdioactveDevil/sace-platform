@@ -1642,7 +1642,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
-          : <LandingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} />
+          : <LandingPage {...commonProps} onSignIn={() => navigate('/auth')} />
       } />
 
       {/* Auth — public */}

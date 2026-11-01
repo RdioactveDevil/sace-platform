@@ -1,305 +1,384 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GraduationCap, Medal, Zap, Flame, Target, ChartColumn, FileText, Folder, Utensils, RefreshCw, Moon, TrendingUp, Hash, Brain, Repeat, Map as MapIcon, ClipboardList, PenLine, Star, Infinity as InfinityIcon, Sparkles, ShieldCheck, Gauge } from 'lucide-react'
+import { SquareCheckBig, GraduationCap, ChartLine, ChevronDown, Sun, Moon, Menu, X } from 'lucide-react'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { SubjectIconByName } from './SubjectIcons'
 import { formatSubjectLabel } from '../lib/subjects'
 import { getPlatformSettings } from '../lib/db'
 import { studentTiers, extraLadder } from '../lib/pricing'
+import { THEMES } from '../lib/theme'
+import { Logo } from './AuthLayout'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
-const NAVY   = '#0c1037'
-const NAVYD  = '#080d28'
-const PURPLE = '#a78bfa'
-const GREEN  = '#10b981'
-const FONT_D = "'Sifonn Pro', sans-serif"
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const MUTED  = '#94a3b8'
+// The public homepage (/home). It uses the app's own look so a visitor sees
+// the product they'll sign into: the window colour behind, content on plain
+// bordered cards, sentence-case headings, gold only on the main button, light
+// and dark from the saved theme. The previews are drawn from the real
+// Practice, question, Learn and Progress screens with a sample student.
 
-/* ─── helpers ─────────────────────────────────────────────────────────── */
+const FONT_B = "'Plus Jakarta Sans', 'Segoe UI', sans-serif"
+const NAVY = '#0c1037'
 
-function Counter({ target, suffix = '', duration = 2000, delay = 0 }) {
-  const [count, setCount] = useState(0)
-  const ref = useRef(null)
-  const started = useRef(false)
-  useEffect(() => {
-    let timerId = null
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !started.current) {
-        started.current = true
-        timerId = setTimeout(() => {
-          const t0 = Date.now()
-          const tick = () => {
-            const p = Math.min((Date.now() - t0) / duration, 1)
-            setCount(Math.round((1 - Math.pow(1 - p, 3)) * target))
-            if (p < 1) requestAnimationFrame(tick)
-          }
-          requestAnimationFrame(tick)
-        }, delay)
-      }
-    }, { threshold: 0.5 })
-    if (ref.current) obs.observe(ref.current)
-    return () => { obs.disconnect(); if (timerId !== null) clearTimeout(timerId) }
-  }, [target, duration, delay])
-  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>
+// The app shell's window colour (shellColors in App.jsx): the sidebar sits on
+// it and the page is a sheet on top.
+const WINDOW = { light: { bg: '#eef0f7', icon: '#b07d0c' }, dark: { bg: '#111113', icon: '#e2b54c' } }
+
+/** CSS variables for this page from the theme tokens. */
+function themeVars(theme) {
+  const t = THEMES[theme]
+  const w = WINDOW[theme]
+  const dark = theme === 'dark'
+  return {
+    '--lp-win': w.bg, '--lp-page': t.bg, '--lp-card': t.bgCard, '--lp-subtle': t.bgSubtle,
+    '--lp-line': t.border, '--lp-line-2': t.borderMid,
+    '--lp-ink': t.text, '--lp-ink-2': t.textSub, '--lp-muted': t.textMuted, '--lp-faint': t.textFaint,
+    '--lp-gold': t.accent, '--lp-gold-text': t.goldText, '--lp-icon': w.icon,
+    '--lp-ok': t.success, '--lp-ok-bg': t.successBg, '--lp-bad': t.danger, '--lp-bad-bg': t.dangerBg,
+    // Selected choices are ink, as on the Practice page.
+    '--lp-on-bg': dark ? t.text : NAVY, '--lp-on-fg': dark ? t.bg : '#ffffff',
+    '--lp-sel-row': dark ? 'rgba(255,255,255,0.05)' : '#fdf6e1',
+    '--lp-float': dark ? '0 12px 32px rgba(0,0,0,0.5)' : '0 12px 32px rgba(12,16,55,0.12)',
+  }
 }
 
-function useFadeUp() {
-  const ref = useRef(null)
-  const [v, setV] = useState(false)
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setV(true); obs.disconnect() } }, { threshold: 0.08 })
-    if (ref.current) obs.observe(ref.current)
-    return () => obs.disconnect()
-  }, [])
-  return { ref, visible: v }
+const CSS = `
+.lp { min-height: 100vh; background: var(--lp-win); color: var(--lp-ink); font-family: ${FONT_B}; font-size: 15px; line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+.lp *, .lp *::before, .lp *::after { box-sizing: border-box; }
+.lp h1, .lp h2, .lp h3 { margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+.lp p { margin: 0; }
+.lp button { font-family: inherit; }
+.lp :focus-visible { outline: 2px solid var(--lp-gold); outline-offset: 2px; }
+.lp-in { max-width: 1160px; margin: 0 auto; padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+
+/* buttons and links: the same as sign-in (authBtn, linkStyle) */
+.lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 800; white-space: nowrap; cursor: pointer; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); }
+.lp-btn:hover { border-color: var(--lp-line-2); }
+.lp-btn.gold { border: none; background: var(--lp-gold); color: ${NAVY}; }
+.lp-btn.gold:hover { filter: brightness(1.04); }
+.lp-btn.sm { min-height: 34px; padding: 0 13px; font-size: 13px; border-radius: 9px; }
+.lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.lp-icon-btn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-muted); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.lp-card { background: var(--lp-card); border: 1px solid var(--lp-line); border-radius: 12px; }
+
+/* nav */
+.lp-nav { position: sticky; top: 0; z-index: 50; background: var(--lp-win); border-bottom: 1px solid transparent; transition: border-color 0.15s; }
+.lp-nav[data-scrolled="true"] { border-bottom-color: var(--lp-line); }
+.lp-nav .lp-in { display: flex; align-items: center; gap: 24px; height: 62px; }
+.lp-nav-links { display: flex; gap: 22px; }
+.lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 13.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
+.lp-nav-links button:hover { color: var(--lp-ink); }
+.lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.lp-menu-btn { display: none; }
+.lp-menu { border-top: 1px solid var(--lp-line); padding: 6px 0 12px; }
+.lp-menu button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 12px 0; font-size: 15px; font-weight: 700; color: var(--lp-ink); cursor: pointer; border-bottom: 1px solid var(--lp-line); }
+.lp-menu button:last-child { border-bottom: none; }
+
+/* hero */
+.lp-hero { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); gap: 48px; align-items: center; padding-top: 44px; padding-bottom: 64px; }
+.lp-hero h1 { font-size: clamp(34px, 4.4vw, 52px); font-weight: 800; line-height: 1.07; }
+.lp-sub { margin-top: 18px !important; font-size: 17px; color: var(--lp-muted); max-width: 46ch; }
+.lp-ctas { display: flex; align-items: center; gap: 20px; margin-top: 28px; flex-wrap: wrap; }
+.lp-facts { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--lp-line); font-size: 13px; color: var(--lp-muted); }
+.lp-facts b { color: var(--lp-ink); font-weight: 700; }
+
+/* the Practice screen in the hero */
+.lp-app { display: grid; grid-template-columns: 150px minmax(0, 1fr); background: var(--lp-win); border: 1px solid var(--lp-line); border-radius: 14px; overflow: hidden; box-shadow: var(--lp-float); font-size: 12.5px; min-width: 0; }
+.lp-sb { padding: 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+.lp-sb-logo { display: flex; justify-content: center; align-items: center; height: 30px; border-radius: 8px; background: ${NAVY}; font-family: 'Sifonn Pro', sans-serif; font-size: 12px; letter-spacing: 1px; margin-bottom: 6px; }
+.lp-sbrow { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; color: var(--lp-muted); font-weight: 600; white-space: nowrap; overflow: hidden; }
+.lp-sbrow.subj { justify-content: space-between; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); font-weight: 700; margin-bottom: 6px; }
+.lp-sbrow.on { background: var(--lp-card); color: var(--lp-ink); box-shadow: 0 0 0 1px var(--lp-line); }
+.lp-sbrow.on svg { color: var(--lp-icon); }
+.lp-sb-acct { margin-top: auto; padding: 8px 9px 2px; border-top: 1px solid var(--lp-line); font-size: 11.5px; color: var(--lp-muted); }
+.lp-sb-acct b { display: block; color: var(--lp-ink); font-size: 12px; }
+.lp-pg { background: var(--lp-page); margin: 6px 6px 6px 0; border: 1px solid var(--lp-line); border-radius: 10px; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) 158px; gap: 12px; align-items: start; min-width: 0; }
+.lp-pg > * { min-width: 0; }
+.lp-pg-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: flex-end; gap: 6px 12px; flex-wrap: wrap; }
+.lp-pg-head h3 { font-size: 18px; font-weight: 800; }
+.lp-pg-head small { font-size: 11.5px; color: var(--lp-muted); }
+.lp-pg-head small b { color: var(--lp-ink); }
+.lp-tree { padding: 4px 0; }
+.lp-trow { display: flex; align-items: center; gap: 8px; padding: 6px 12px; }
+.lp-trow.top { border-bottom: 1px solid var(--lp-line); }
+.lp-trow.sub { padding-left: 30px; }
+.lp-trow.sel { background: var(--lp-sel-row); }
+.lp-trow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-trow.top .nm, .lp-trow.grp .nm { font-weight: 800; }
+.lp-trow .num { color: var(--lp-faint); margin-right: 5px; }
+.lp-trow .cnt { color: var(--lp-faint); font-size: 11px; }
+.lp-trow .pct { font-size: 11px; font-weight: 700; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.lp-cb { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--lp-faint); flex-shrink: 0; display: inline-grid; place-items: center; font-size: 9px; font-weight: 800; line-height: 1; }
+.lp-cb.on { background: var(--lp-on-bg); border-color: var(--lp-on-bg); color: var(--lp-on-fg); }
+.lp-cb.part { border-color: var(--lp-on-bg); color: var(--lp-on-bg); }
+.lp .good { color: var(--lp-ok); } .lp .mid { color: var(--lp-gold-text); } .lp .low { color: var(--lp-bad); } .lp .new { color: var(--lp-faint); }
+.lp-builder { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.lp-builder .lbl { font-size: 11px; color: var(--lp-muted); font-weight: 600; margin-bottom: 4px; }
+.lp-seg { display: flex; border: 1px solid var(--lp-line); border-radius: 8px; overflow: hidden; }
+.lp-seg span { flex: 1; text-align: center; padding: 5px 2px; font-size: 10.5px; font-weight: 700; color: var(--lp-muted); white-space: nowrap; }
+.lp-seg span + span { border-left: 1px solid var(--lp-line); }
+.lp-seg span.on { background: var(--lp-on-bg); color: var(--lp-on-fg); }
+.lp-exam { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--lp-subtle); border: 1px solid var(--lp-line); font-weight: 700; font-size: 11.5px; }
+.lp-tog { width: 28px; height: 16px; border-radius: 999px; background: var(--lp-line-2); position: relative; flex-shrink: 0; }
+.lp-tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.lp-start { text-align: center; padding: 9px; border-radius: 8px; background: var(--lp-gold); color: ${NAVY}; font-weight: 800; }
+
+/* sections */
+.lp-sec { padding-top: 64px; padding-bottom: 64px; border-top: 1px solid var(--lp-line); display: flex; flex-direction: column; gap: 32px; }
+.lp-sec-head h2 { font-size: clamp(25px, 3vw, 32px); font-weight: 800; line-height: 1.15; }
+.lp-sec-head p { color: var(--lp-muted); margin-top: 8px; max-width: 60ch; }
+.lp-row { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 48px; align-items: start; }
+.lp-row + .lp-row { padding-top: 32px; border-top: 1px solid var(--lp-line); }
+.lp-row h3 { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
+.lp-row h3 svg { color: var(--lp-icon); flex-shrink: 0; }
+.lp-row p { color: var(--lp-muted); margin-top: 8px; }
+.lp-row ul { margin: 16px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14.5px; color: var(--lp-ink-2); }
+.lp-row li { padding-left: 18px; position: relative; }
+.lp-row li::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 6px; border-radius: 2px; background: var(--lp-line-2); }
+
+/* the question card */
+.lp-qtop { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--lp-line); font-size: 12.5px; color: var(--lp-muted); flex-wrap: wrap; }
+.lp-qtop b { color: var(--lp-ink); }
+.lp-qbody { padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.lp-qtext { font-size: 16.5px; font-weight: 700; margin-bottom: 4px; }
+.lp-opt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); font-size: 14.5px; font-weight: 600; cursor: pointer; }
+.lp-opt:hover:not(:disabled) { border-color: var(--lp-line-2); }
+.lp-opt:disabled { cursor: default; }
+.lp-opt .k { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--lp-line); display: grid; place-items: center; font-size: 11.5px; font-weight: 800; color: var(--lp-muted); flex-shrink: 0; }
+.lp-opt .tag { margin-left: auto; font-size: 12px; font-weight: 700; }
+.lp-opt[aria-pressed="true"] { border-color: var(--lp-ink); box-shadow: 0 0 0 1px var(--lp-ink); }
+.lp-opt.right { border-color: var(--lp-ok); background: var(--lp-ok-bg); }
+.lp-opt.right .k, .lp-opt.right .tag { border-color: var(--lp-ok); color: var(--lp-ok); }
+.lp-opt.wrong { border-color: var(--lp-bad); background: var(--lp-bad-bg); }
+.lp-opt.wrong .k, .lp-opt.wrong .tag { border-color: var(--lp-bad); color: var(--lp-bad); }
+.lp-opt.dim { color: var(--lp-faint); }
+.lp-sol { border-top: 1px solid var(--lp-line); padding-top: 12px; margin-top: 4px; font-size: 14px; color: var(--lp-ink-2); }
+.lp-sol b { display: block; font-size: 13px; color: var(--lp-ink); margin-bottom: 2px; }
+.lp-qact { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 4px; font-size: 13px; color: var(--lp-muted); }
+
+/* Titan chat */
+.lp-chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--lp-line); font-size: 12.5px; flex-wrap: wrap; }
+.lp-chat-head .lp-seg { width: 120px; }
+.lp-chat-head .s { margin-left: auto; color: var(--lp-muted); }
+.lp-msgs { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.lp-bubble { align-self: flex-end; max-width: 80%; background: var(--lp-subtle); border: 1px solid var(--lp-line); border-radius: 12px 12px 4px 12px; padding: 8px 12px; }
+.lp-reply { max-width: 94%; color: var(--lp-ink-2); }
+.lp-reply b { display: block; font-size: 12.5px; color: var(--lp-ink); margin-bottom: 2px; }
+.lp-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+.lp-quick span { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--lp-line); color: var(--lp-ink-2); }
+.lp-composer { display: flex; align-items: center; gap: 8px; margin: 0 14px 14px; padding: 8px 10px; border: 1px solid var(--lp-line); border-radius: 10px; color: var(--lp-faint); font-size: 13px; }
+.lp-composer span { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--lp-line); display: grid; place-items: center; color: var(--lp-muted); flex-shrink: 0; }
+
+/* Progress */
+.lp-prog { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.lp-week { display: flex; gap: 28px; flex-wrap: wrap; }
+.lp-week div { font-size: 12.5px; color: var(--lp-muted); }
+.lp-week b { display: block; font-size: 24px; font-weight: 800; color: var(--lp-ink); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.lp-week .up { color: var(--lp-ok); font-weight: 700; }
+.lp-chart { width: 100%; height: auto; display: block; }
+.lp-plan { border-top: 1px solid var(--lp-line); padding-top: 6px; }
+.lp-plan div { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13.5px; }
+.lp-plan div + div { border-top: 1px solid var(--lp-line); }
+.lp-plan span.t { flex: 1; min-width: 0; }
+.lp-plan small { color: var(--lp-muted); font-size: 12px; white-space: nowrap; }
+
+/* who it's for, subjects, pricing */
+.lp-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.lp-aud { padding: 22px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.lp-aud h3 { font-size: 18px; font-weight: 800; }
+.lp-aud p { color: var(--lp-muted); font-size: 14.5px; }
+.lp-aud .lp-link { margin-top: 6px; font-size: 14.5px; }
+.lp-subjects { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; }
+.lp-subject { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border: none; border-bottom: 1px solid var(--lp-line); border-right: 1px solid var(--lp-line); margin: 0 -1px -1px 0; background: transparent; color: var(--lp-ink); font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; min-width: 0; }
+.lp-subject:hover { background: var(--lp-subtle); }
+.lp-subject span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-prices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; }
+.lp-prices > div { padding: 22px; display: flex; flex-direction: column; gap: 4px; }
+.lp-prices > div + div { border-left: 1px solid var(--lp-line); }
+.lp-prices .nm { font-size: 13px; font-weight: 700; color: var(--lp-muted); }
+.lp-prices .amt { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.lp-prices .amt small { font-size: 14px; font-weight: 600; color: var(--lp-muted); letter-spacing: 0; }
+.lp-prices p { font-size: 14px; color: var(--lp-muted); }
+.lp-prices .pick { box-shadow: inset 0 2px 0 var(--lp-gold); }
+.lp-end { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.lp-foot { border-top: 1px solid var(--lp-line); }
+.lp-foot .lp-in { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 22px; padding-bottom: 22px; font-size: 12.5px; color: var(--lp-muted); }
+.lp-foot-links { display: flex; gap: 18px; flex-wrap: wrap; }
+.lp-foot-links button { border: none; background: none; padding: 0; font-size: 12.5px; color: var(--lp-muted); cursor: pointer; }
+.lp-foot-links button:hover { color: var(--lp-ink); }
+.lp-copy { margin-left: auto; }
+
+@media (max-width: 960px) {
+  .lp-hero { grid-template-columns: 1fr; gap: 36px; padding-top: 28px; }
+  .lp-row { grid-template-columns: 1fr; gap: 18px; }
 }
-
-function FadeUp({ children, delay = 0, style = {}, className = '' }) {
-  const { ref, visible } = useFadeUp()
-  return (
-    <div ref={ref} className={className} style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(32px)', transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms`, ...style }}>
-      {children}
-    </div>
-  )
+@media (max-width: 760px) {
+  .lp-in { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .lp-nav-links, .lp-nav-signin { display: none; }
+  .lp-menu-btn { display: grid; }
+  .lp-app { grid-template-columns: 1fr; }
+  .lp-sb { display: none; }
+  .lp-pg { margin: 6px; grid-template-columns: 1fr; padding: 12px; }
+  .lp-sec { padding-top: 48px; padding-bottom: 48px; }
+  .lp-two, .lp-prices { grid-template-columns: 1fr; }
+  .lp-subjects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-prices > div + div { border-left: none; border-top: 1px solid var(--lp-line); }
+  .lp-copy { margin-left: 0; }
 }
-
-/* ─── mini UI mockups ──────────────────────────────────────────────────── */
-
-function TopicGrid() {
-  const topics = [
-    { name: 'Place Value', s: 91 }, { name: 'Decimals', s: 78 },  { name: 'Percentages', s: 45 },
-    { name: 'Probability', s: 19 }, { name: 'Fractions', s: 67 }, { name: 'Algebra', s: 34 },
-    { name: 'Geometry', s: 58 },    { name: 'Measurement', s: 82 }, { name: 'Statistics', s: 23 },
-  ]
-  const col = s => s > 75 ? GREEN : s > 48 ? GOLD : '#ef4444'
-  const bg  = s => s > 75 ? 'rgba(16,185,129,0.12)' : s > 48 ? 'rgba(241,190,67,0.12)' : 'rgba(239,68,68,0.12)'
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 7 }}>
-      {topics.map(t => (
-        <div key={t.name} style={{ background: bg(t.s), border: `1px solid ${col(t.s)}33`, borderRadius: 8, padding: '8px 9px' }}>
-          <div style={{ fontSize: 9, color: MUTED, marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
-              <div style={{ width: `${t.s}%`, height: '100%', background: col(t.s), borderRadius: 2 }} />
-            </div>
-            <span style={{ fontSize: 9, fontWeight: 800, color: col(t.s) }}>{t.s}%</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+@media (max-width: 420px) {
+  .lp-subjects { grid-template-columns: 1fr; }
+  .lp-nav-right .lp-btn.gold { padding: 0 11px; }
 }
+@media (prefers-reduced-motion: reduce) { .lp * { transition: none !important; } }
+`
 
-function TitanChat() {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.22)', borderRadius: '14px 14px 4px 14px', padding: '10px 14px', maxWidth: '82%' }}>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.55 }}>I don't get dividing by a fraction at all</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 0 16px rgba(167,139,250,0.4)' }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
-        <div style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.22)', borderRadius: '4px 14px 14px 14px', padding: '10px 14px', maxWidth: '88%' }}>
-          <div style={{ fontSize: 10, color: PURPLE, fontWeight: 800, letterSpacing: '0.08em', marginBottom: 6 }}>TITAN AI</div>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.65 }}>Think pizza — 3 pizzas ÷ ½ asks "how many half-slices are in 3 pizzas?" That's <span style={{ color: GOLD, fontWeight: 700 }}>6</span>. Dividing by ½ doubles it, which is why you flip and multiply.</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#a78bfa,#6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
-        <div style={{ display: 'flex', gap: 5, padding: '12px 16px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '4px 14px 14px 14px' }}>
-          {[0,1,2].map(i => <div key={i} className={`tdot td${i}`} style={{ width: 6, height: 6, borderRadius: '50%', background: PURPLE }} />)}
-        </div>
-      </div>
-    </div>
-  )
-}
+/* ─── previews of the app's screens ─────────────────────────────────────── */
 
-function LeaderboardMini() {
+const pctClass = (p) => (p === null ? 'new' : p >= 70 ? 'good' : p >= 50 ? 'mid' : 'low')
+
+/** The Practice page: topic tree and session builder, inside the app shell. */
+function PracticePreview() {
   const rows = [
-    { medal: '#fbbf24', name: 'Alex K.', xp: 2450, pct: 100, you: false },
-    { medal: '#cbd5e1', name: 'You',     xp: 2180, pct: 89,  you: true  },
-    { medal: '#d97706', name: 'Sam L.', xp: 1920, pct: 78,  you: false },
+    { kind: 'grp', num: '1', name: 'Number', cb: 'part', pct: 81 },
+    { kind: 'sub', name: '1.1 Fractions', cb: 'on', pct: 62, sel: true },
+    { kind: 'sub', name: '1.2 Percentages', cb: 'on', pct: 43, sel: true },
+    { kind: 'sub', name: '1.3 Index laws', cb: null, pct: 88 },
+    { kind: 'grp', num: '2', name: 'Algebra', cb: null, pct: 76 },
+    { kind: 'sub', name: '2.1 Linear equations', cb: null, pct: null },
   ]
+  const box = (state) => <span className={`lp-cb${state ? ` ${state}` : ''}`}>{state === 'on' ? '✓' : state === 'part' ? '−' : ''}</span>
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: r.you ? 'rgba(241,190,67,0.1)' : 'rgba(255,255,255,0.03)', border: r.you ? `1px solid rgba(241,190,67,0.3)` : '1px solid rgba(255,255,255,0.06)' }}>
-          <Medal size={20} color={r.medal} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 13, fontWeight: r.you ? 800 : 500, color: r.you ? GOLD : '#e2e8f0' }}>{r.name}</span>
-              <span style={{ fontSize: 11, color: MUTED }}>{r.xp.toLocaleString()} XP</span>
-            </div>
-            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
-              <div style={{ width: `${r.pct}%`, height: '100%', borderRadius: 2, background: r.you ? `linear-gradient(90deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.18)' }} />
-            </div>
-          </div>
+    <div className="lp-app" role="img" aria-label="The Practice page: a list of topics with how many you've answered and your accuracy, and a session builder with a Start button.">
+      <div className="lp-sb" aria-hidden="true">
+        <div className="lp-sb-logo"><span style={{ color: '#fff' }}>grade</span><span style={{ color: '#f1be43' }}>farm.</span></div>
+        <div className="lp-sbrow subj"><span>Year 9 Mathematics</span><ChevronDown size={13} /></div>
+        <div className="lp-sbrow on"><SquareCheckBig size={15} />Practice</div>
+        <div className="lp-sbrow"><GraduationCap size={15} />Learn</div>
+        <div className="lp-sbrow"><ChartLine size={15} />Progress</div>
+        <div className="lp-sb-acct" style={{ marginTop: 'auto' }}><b>Mia</b>Silver II · 1,240 XP</div>
+      </div>
+      <div className="lp-pg" aria-hidden="true">
+        <div className="lp-pg-head">
+          <div><h3>Practice</h3><small>6 topics · 412 questions</small></div>
+          <small><b>38</b> answered this week · <b>74%</b> correct</small>
         </div>
-      ))}
-      <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', paddingTop: 4 }}>Weekly · Your class</div>
-    </div>
-  )
-}
-
-function GapsMini() {
-  const topics = [
-    { name: 'Probability', pct: 19, color: '#ef4444', label: 'Priority', icon: Zap },
-    { name: 'Algebra', pct: 41, color: '#f97316', label: 'Needs work' },
-    { name: 'Fractions', pct: 67, color: GOLD, label: 'Improving' },
-    { name: 'Place Value', pct: 91, color: GREEN, label: 'Strong' },
-  ]
-  const r = 26, C = 2 * Math.PI * r
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 14px', background: 'rgba(241,190,67,0.07)', border: '1px solid rgba(241,190,67,0.18)', borderRadius: 12 }}>
-        <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
-          <svg viewBox="0 0 64 64" style={{ width: 64, height: 64, transform: 'rotate(-90deg)' }}>
-            <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-            <circle cx="32" cy="32" r={r} fill="none" stroke={GOLD} strokeWidth="8" strokeDasharray={`${C * 0.58} ${C}`} strokeLinecap="round" />
-          </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: GOLD }}>58%</div>
-          </div>
+        <div className="lp-card lp-tree">
+          <div className="lp-trow top">{box('part')}<span className="nm">All topics</span><span className="cnt">146 answered</span></div>
+          {rows.map(r => (
+            <div key={r.name} className={`lp-trow ${r.kind}${r.sel ? ' sel' : ''}`}>
+              {box(r.cb)}
+              <span className="nm">{r.num && <span className="num">{r.num}</span>}{r.name}</span>
+              <span className={`pct ${pctClass(r.pct)}`}>{r.pct === null ? 'New' : `${r.pct}%`}</span>
+            </div>
+          ))}
         </div>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Exam Readiness</div>
-          <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>4 topics flagged</div>
-          <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Review Probability next</div>
+        <div className="lp-card lp-builder">
+          <div><div style={{ fontSize: 13, fontWeight: 800 }}>Your session</div><div style={{ fontSize: 11, color: 'var(--lp-muted)' }}>2 topics ticked</div></div>
+          <div><div className="lbl">Questions</div><div className="lp-seg"><span>New</span><span className="on">Got wrong</span><span>Mixed</span></div></div>
+          <div className="lp-exam">Exam mode<span className="lp-tog" /></div>
+          <div className="lp-start">Start</div>
         </div>
       </div>
-      {topics.map(t => (
-        <div key={t.name}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-            <span style={{ fontSize: 12, color: '#e2e8f0' }}>{t.name}</span>
-            <span style={{ fontSize: 10, color: t.color, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}>{t.icon && <t.icon size={11} aria-hidden="true" />}{t.label}</span>
-          </div>
-          <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)' }}>
-            <div style={{ width: `${t.pct}%`, height: '100%', borderRadius: 3, background: t.color }} />
-          </div>
-        </div>
-      ))}
     </div>
   )
 }
 
-/* ─── DemoCard ─────────────────────────────────────────────────────────── */
-
-function DemoCard() {
-  const [selected, setSelected] = useState(null)
-  const [showAns, setShowAns]   = useState(false)
-  const opts    = ['36', '32', '24', '12']
+/** A question to answer: pick an option, then check it, as in the app. */
+function QuestionDemo() {
+  const options = ['36', '32', '24', '12']
   const correct = 0
-  const handle  = i => { if (showAns) return; setSelected(i); setShowAns(true) }
-
+  const [picked, setPicked] = useState(null)
+  const [checked, setChecked] = useState(false)
+  const reset = () => { setPicked(null); setChecked(false) }
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, height: 380, borderRadius: '50%', background: `radial-gradient(circle,rgba(241,190,67,0.32) 0%,transparent 70%)`, filter: 'blur(32px)', pointerEvents: 'none', zIndex: 0 }} />
-      {/* floating badges */}
-      <div style={{ position: 'absolute', top: -16, left: -20, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(241,190,67,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GOLD, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 5s ease-in-out infinite', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Zap size={14} aria-hidden="true" />Priority topic</div>
-      <div style={{ position: 'absolute', bottom: 24, right: -24, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: GREEN, whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 6s ease-in-out infinite 1s' }}>✓ Correct! +24 XP</div>
-      <div style={{ position: 'absolute', top: '40%', right: -32, background: 'rgba(12,16,55,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap', zIndex: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', animation: 'float 7s ease-in-out infinite 0.5s', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Flame size={14} aria-hidden="true" />3 day streak</div>
-      <div style={{ position: 'relative', zIndex: 1, background: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>Fractions</span>
-          <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fef2f2', padding: '3px 9px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Zap size={12} aria-hidden="true" />Priority</span>
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#0c1037', lineHeight: 1.65, marginBottom: 16 }}>What is ¾ of 48?</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {opts.map((opt, i) => {
-            let bg = '#f5f6ff', border = '1px solid #e2e5f0', color = '#334155', lBg = '#e2e5f0', lC = '#0c1037'
-            if (showAns) {
-              if (i === correct)       { bg = '#f0fdf4'; border = '1px solid #86efac'; color = '#166534'; lBg = '#bbf7d0'; lC = '#166534' }
-              else if (i === selected) { bg = '#fef2f2'; border = '1px solid #fca5a5'; color = '#991b1b'; lBg = '#fecaca'; lC = '#991b1b' }
-              else                     { bg = '#fafafa'; border = '1px solid #f0f0f0'; color = '#9ca3af'; lBg = '#f0f0f0'; lC = '#9ca3af' }
-            } else if (selected === i) { bg = '#fefce8'; border = `1px solid ${GOLD}`; color = '#78350f'; lBg = '#fef3c7'; lC = '#92400e' }
+    <div className="lp-card">
+      <div className="lp-qtop"><span><b>Fractions</b> · Level 2</span><span>Sample question</span></div>
+      <div className="lp-qbody">
+        <div className="lp-qtext" id="lp-demo-q">What is ¾ of 48?</div>
+        <div role="group" aria-labelledby="lp-demo-q" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {options.map((o, i) => {
+            const state = !checked ? '' : i === correct ? 'right' : i === picked ? 'wrong' : 'dim'
             return (
-              <button key={i} onClick={() => handle(i)} style={{ background: bg, border, color, padding: '11px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textAlign: 'left', cursor: showAns ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
-                onMouseEnter={e => { if (!showAns) e.currentTarget.style.borderColor = GOLD }}
-                onMouseLeave={e => { if (!showAns && selected !== i) e.currentTarget.style.borderColor = '#e2e5f0' }}>
-                <span style={{ width: 26, height: 26, borderRadius: '50%', background: lBg, color: lC, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                  {showAns && i === correct ? '✓' : showAns && i === selected ? '✗' : String.fromCharCode(65+i)}
-                </span>
-                {opt}
+              <button key={o} type="button" className={`lp-opt ${state}`} disabled={checked}
+                aria-pressed={checked ? undefined : picked === i} onClick={() => setPicked(i)}>
+                <span className="k">{String.fromCharCode(65 + i)}</span>{o}
+                <span className="tag">{state === 'right' ? 'Answer' : state === 'wrong' ? 'Your answer' : ''}</span>
               </button>
             )
           })}
         </div>
-        {showAns && (
-          <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10 }}>
-            <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginBottom: 3 }}>✓ Correct! +24 XP · <Flame size={13} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Streak extended</div>
-            <div style={{ fontSize: 12, color: '#4b7a5a', lineHeight: 1.6 }}>Find a quarter first: 48 ÷ 4 = 12. Three quarters is 3 × 12 = 36.</div>
+        {checked && (
+          <div className="lp-sol" role="status">
+            <b>{picked === correct ? 'Correct' : 'Not quite'}</b>
+            Find a quarter first: 48 ÷ 4 = 12. Three quarters is 3 × 12 = 36.
           </div>
         )}
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>gradefarm. · by Titanium Tutoring</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: '#fef3c7', padding: '2px 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={12} aria-hidden="true" />3 streak</span>
+        <div className="lp-qact">
+          {checked
+            ? <button type="button" className="lp-btn sm" onClick={reset}>Try again</button>
+            : <button type="button" className="lp-btn sm gold" disabled={picked === null} onClick={() => setChecked(true)} style={{ opacity: picked === null ? 0.55 : 1, cursor: picked === null ? 'default' : 'pointer' }}>Check</button>}
+          {!checked && <span>Pick an answer, then check it.</span>}
         </div>
       </div>
     </div>
   )
 }
 
-/* ─── MobileMenu ───────────────────────────────────────────────────────── */
-
-function MobileMenu({ open, onClose, onNavigate }) {
-  const NAV_LINKS = [['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']]
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = e => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
+function ChatPreview() {
   return (
-    <>
-      {open && (
-        <div
-          onClick={onClose}
-          style={{ position:'fixed', inset:0, zIndex:98, background:'transparent' }}
-        />
-      )}
-      <div style={{
-        position: 'fixed', top: 64, left: 0, right: 0, zIndex: 99,
-        background: 'rgba(8,13,40,0.98)', backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(241,190,67,0.15)',
-        overflow: 'hidden',
-        maxHeight: open ? 280 : 0,
-        visibility: open ? 'visible' : 'hidden',
-        transition: 'max-height 0.35s cubic-bezier(0.4,0,0.2,1), visibility 0s linear ' + (open ? '0s' : '0.35s'),
-      }}>
-        <div style={{ padding: '12px 24px 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {NAV_LINKS.map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => onNavigate(id)}
-              style={{
-                background: 'none', border: 'none',
-                color: '#94a3b8', fontSize: 16, fontWeight: 600,
-                fontFamily: "'Plus Jakarta Sans', sans-serif",
-                textAlign: 'left', cursor: 'pointer',
-                padding: '14px 8px',
-                borderBottom: '1px solid rgba(255,255,255,0.05)',
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#f1f5f9' }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8' }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+    <div className="lp-card" role="img" aria-label="A chat with Titan about dividing fractions, explained with a running example.">
+      <div className="lp-chat-head" aria-hidden="true">
+        <div className="lp-seg"><span className="on">Chat</span><span>Lesson</span></div>
+        <span style={{ fontWeight: 800 }}>Dividing fractions</span>
+        <span className="s">Explain with: Sport</span>
       </div>
-    </>
+      <div className="lp-msgs" aria-hidden="true">
+        <div className="lp-bubble">I don't get why you flip the second fraction</div>
+        <div className="lp-reply"><b>Titan</b>A 3 km run split into ½ km laps is 6 laps. Dividing by ½ asks how many halves fit in 3, and there are two in every kilometre. That's why 3 ÷ ½ is the same as 3 × 2.</div>
+        <div className="lp-quick"><span>Show me another</span><span>I'm still stuck</span><span>Practise this topic</span></div>
+      </div>
+      <div className="lp-composer" aria-hidden="true"><span>+</span>Ask Titan about Year 9 Mathematics</div>
+    </div>
   )
 }
 
-/* ─── main component ───────────────────────────────────────────────────── */
+function ProgressPreview() {
+  // Accuracy by week (line, 0–100%) over questions answered (bars), as on Progress.
+  const acc = [52, 54, 50, 59, 60, 63, 68, 74]
+  const qs = [14, 20, 9, 26, 22, 31, 27, 38]
+  const x = (i) => 50 + i * 50
+  const y = (p) => 100 - p * 0.9
+  return (
+    <div className="lp-card lp-prog" role="img" aria-label="Progress: 74% correct this week, up 6 points, with accuracy rising from 52% to 74% over 8 weeks and three items in this week's plan.">
+      <div className="lp-week" aria-hidden="true">
+        <div><b>74%</b>correct this week <span className="up">+6</span></div>
+        <div><b>38</b>questions</div>
+        <div><b>4</b>days active</div>
+      </div>
+      <svg className="lp-chart" viewBox="0 0 430 120" aria-hidden="true">
+        {[100, 50, 0].map(p => (
+          <g key={p}>
+            <line x1="34" x2="425" y1={y(p)} y2={y(p)} stroke={p === 0 ? 'var(--lp-line-2)' : 'var(--lp-line)'} strokeWidth="1" />
+            <text x="28" y={y(p) + 3.5} fontSize="10" textAnchor="end" fill="var(--lp-faint)">{p}%</text>
+          </g>
+        ))}
+        {qs.map((q, i) => <rect key={i} x={x(i) - 11} y={100 - q * 0.6} width="22" height={q * 0.6} rx="3" fill={i === qs.length - 1 ? 'var(--lp-line-2)' : 'var(--lp-line)'} />)}
+        <polyline fill="none" stroke="var(--lp-ink)" strokeWidth="2" strokeLinejoin="round" points={acc.map((p, i) => `${x(i)},${y(p)}`).join(' ')} />
+        <circle cx={x(7)} cy={y(74)} r="4" fill="var(--lp-gold)" stroke="var(--lp-card)" strokeWidth="2" />
+        <text x={x(7) + 9} y={y(74) - 6} fontSize="11" fontWeight="700" fill="var(--lp-ink)">74%</text>
+        <text x={x(0)} y="116" fontSize="10" textAnchor="middle" fill="var(--lp-faint)">8 weeks ago</text>
+        <text x={x(7)} y="116" fontSize="10" textAnchor="middle" fill="var(--lp-faint)">This week</text>
+      </svg>
+      <div className="lp-plan" aria-hidden="true">
+        <div><span className="lp-cb" /><span className="t">Review 6 Fractions questions</span><small>Due tomorrow</small></div>
+        <div><span className="lp-cb" /><span className="t">Finish lesson: Percentage change</span><small>Step 3 of 6</small></div>
+        <div><span className="lp-cb on">✓</span><span className="t" style={{ color: 'var(--lp-muted)', textDecoration: 'line-through' }}>Practise Percentages</span><small>Done</small></div>
+      </div>
+    </div>
+  )
+}
 
-export default function LandingPage({ onGetStarted, onSignIn }) {
+/* ─── page ──────────────────────────────────────────────────────────────── */
+
+export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }) {
   const navigate = useNavigate()
   const subjects = usePublicSubjects()
   const [scrolled, setScrolled] = useState(false)
@@ -311,697 +390,195 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
   const trialDays = Math.max(0, Math.floor(Number(pricing?.student_trial_days ?? 7)) || 0)
   const tutorPrices = (pricing?.tutor_plans ?? []).map(p => Number(p.price)).filter(n => n > 0)
   const tutorFrom = tutorPrices.length ? Math.min(...tutorPrices) : 29
+
   useEffect(() => {
-    const h = () => setScrolled(window.scrollY > 40)
-    window.addEventListener('scroll', h)
-    return () => window.removeEventListener('scroll', h)
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
-  const scroll = id => {
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
+  // "Start learning" goes to Pricing, where a student picks free or paid.
+  const start = () => navigate('/pricing')
+  const go = (id) => {
+    setMenuOpen(false)
     if (id === 'pricing') { navigate('/pricing'); return }
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
-  const handleMobileNav = id => { scroll(id); setMenuOpen(false) }
+  const NAV = [['how', 'How it works'], ['subjects', 'Subjects'], ['tutors', 'Tutors and parents'], ['pricing', 'Pricing']]
 
   return (
-    <div style={{ minHeight: '100vh', background: NAVYD, color: '#f1f5f9', fontFamily: FONT_B, overflowX: 'hidden' }}>
-      <style>{`
-        @font-face { font-family:'Sifonn Pro'; src:url('/SIFONN_PRO.otf') format('opentype'); font-display:swap; }
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes float   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
-        @keyframes glow    { 0%,100%{opacity:0.25} 50%{opacity:0.65} }
-        @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
-        @keyframes spin    { to{transform:rotate(360deg)} }
-        @keyframes typing  { 0%,100%{opacity:0.25;transform:scale(0.9)} 50%{opacity:1;transform:scale(1.1)} }
-        @keyframes scan    { 0%{top:-40%} 100%{top:110%} }
-        .tdot { animation:typing 1.4s ease-in-out infinite; }
-        .td0  { animation-delay:0ms; }
-        .td1  { animation-delay:220ms; }
-        .td2  { animation-delay:440ms; }
-        .nl:hover { color:#f1f5f9 !important; }
-        .ctab { transition:transform 0.15s,box-shadow 0.15s; }
-        .ctab:hover { transform:translateY(-2px); box-shadow:0 14px 40px rgba(241,190,67,0.45) !important; }
-        .bc { transition:transform 0.25s,box-shadow 0.25s,border-color 0.25s; }
-        .bc:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(0,0,0,0.55) !important; }
-        .bc-gold:hover { transform:translateY(-4px); box-shadow:0 28px 64px rgba(241,190,67,0.2) !important; }
-        .dot-grid { background-image: linear-gradient(rgba(241,190,67,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(241,190,67,0.045) 1px, transparent 1px); background-size: 48px 48px; }
-        .grad-text { background:linear-gradient(135deg,${GOLD} 0%,${GOLDL} 50%,#fff 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
-        .shimmer-btn { background:linear-gradient(90deg,${GOLD} 0%,${GOLDL} 30%,#fff8e1 50%,${GOLDL} 70%,${GOLD} 100%); background-size:200% auto; animation:shimmer 3s linear infinite; }
-        .scan-line { position:absolute; left:0; right:0; height:40%; background:linear-gradient(to bottom,transparent,rgba(241,190,67,0.04),transparent); animation:scan 4s ease-in-out infinite; pointer-events:none; }
-        * { box-sizing:border-box; }
-        .bento-span-2 { grid-column:span 2; }
-        .bento-span-3 { grid-column:span 3; }
-        @media(max-width:900px) {
-          .hmenu { display:block !important; }
-          .dnav { display:none !important; }
-          .hero-grid { flex-direction:column !important; }
-          .demo-wrap { display:none !important; }
-          .bento-grid { grid-template-columns:1fr !important; }
-          .bento-span-2, .bento-span-3, .bc-gold, .bento-span { grid-column:span 1 !important; }
-          .spotlight-row { flex-direction:column !important; }
-          .spotlight-visual { display:none !important; }
-          .steps-grid { grid-template-columns:1fr !important; }
-          .unl-grid { grid-template-columns:1fr !important; }
-          .tgrid { flex-direction:column !important; }
-          .subjects-grid { grid-template-columns:repeat(2,1fr) !important; }
-          .pricing-grid { grid-template-columns:1fr !important; }
-          .footer-row { flex-direction:column !important; gap:12px !important; }
-        }
-        @media(max-width:560px) {
-          /* tighten gutters on every section to avoid mobile horizontal overflow */
-          .lp-pad { padding-left:16px !important; padding-right:16px !important; }
-          .lp-nav { padding-left:14px !important; padding-right:14px !important; }
-          .lp-pad-hero { padding-top:88px !important; padding-bottom:48px !important; }
-          .lp-pad-cta { padding-top:72px !important; padding-bottom:72px !important; }
-          .lp-pad-section { padding-top:60px !important; padding-bottom:60px !important; }
-          .unl-card { padding:28px 20px !important; }
-          /* hide the "by Titanium Tutoring" tagline in the nav so the hamburger fits */
-          .lp-tag { display:none !important; }
-          /* drop forced line breaks inside display headlines so words can wrap naturally */
-          .lp-hbr { display:none !important; }
-          /* allow long all-caps display words to wrap inside their container */
-          .lp-display { overflow-wrap:anywhere; word-break:break-word; }
-          .lp-h1 { font-size:clamp(30px,9vw,40px) !important; letter-spacing:0.5px !important; }
-          .lp-h2 { font-size:clamp(24px,7vw,32px) !important; letter-spacing:0.5px !important; }
-          .lp-h2-cta { font-size:clamp(22px,6.5vw,30px) !important; letter-spacing:0.5px !important; }
-          /* keep stats rows wrapping cleanly inside their containers */
-          .lp-stats { gap:14px !important; justify-content:flex-start !important; }
-          /* footer copyright wraps instead of pushing the row */
-          .lp-copy { text-align:center; width:100%; line-height:1.5; }
-          .footer-row { gap:14px !important; }
-          .lp-footer-links { gap:14px !important; }
-          /* stats banner: stack to single column with smaller numbers/padding so they fit */
-          .lp-stats-grid { grid-template-columns:1fr !important; gap:8px !important; }
-          .lp-stats-grid > div > div { border-radius:14px !important; padding:24px 16px !important; }
-          .lp-stats-num { font-size:44px !important; }
-          /* SACE/Curriculum bento banner: tighten padding, drop forced min-width, shrink stat numbers so 3-up row fits */
-          .lp-sace-banner { padding:22px 18px !important; gap:20px !important; }
-          .lp-sace-text { min-width:0 !important; flex-basis:100% !important; }
-          .lp-sace-stats { width:100% !important; gap:10px !important; flex-shrink:1 !important; justify-content:space-between !important; }
-          .lp-sace-num { font-size:22px !important; letter-spacing:0.5px !important; }
-          /* let icon+heading row fill the banner width and wrap if needed instead of overflowing */
-          .lp-sace-head { width:100% !important; min-width:0 !important; flex:1 1 100% !important; gap:12px !important; }
-          .lp-sace-icon { width:44px !important; height:44px !important; font-size:22px !important; }
-          .lp-sace-title { flex:1 1 auto !important; }
-          .lp-sace-title > div:last-child { font-size:16px !important; line-height:1.3 !important; overflow-wrap:anywhere; }
-        }
-        @media(max-width:380px) {
-          .subjects-grid { grid-template-columns:1fr !important; }
-        }
-      `}</style>
+    <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
+      <style>{`@font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }${CSS}`}</style>
 
-      {/* ── NAV ── */}
-      <nav className="lp-nav" style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, padding:'0 32px', height:64, display:'flex', alignItems:'center', justifyContent:'space-between', background: scrolled ? 'rgba(8,13,40,0.96)' : 'transparent', borderBottom: scrolled ? '1px solid rgba(241,190,67,0.1)' : 'none', backdropFilter: scrolled ? 'blur(20px)' : 'none', transition:'all 0.3s ease' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontFamily:FONT_D, fontSize:20, letterSpacing:1 }}>
-            <span style={{ color:'#fff' }}>grade</span><span style={{ color:GOLD }}>farm.</span>
-          </span>
-          <span className="lp-tag" style={{ fontSize:10, color:'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
-        </div>
-        <div className="dnav" style={{ display:'flex', alignItems:'center', gap:28 }}>
-          {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id, label]) => (
-            <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.55)', fontSize:13.5, fontWeight:500, cursor:'pointer', fontFamily:FONT_B, transition:'color 0.15s' }}>{label}</button>
-          ))}
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <button onClick={onSignIn} className="dnav" style={{ padding:'8px 16px', borderRadius:8, border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.65)', fontSize:13, cursor:'pointer', fontFamily:FONT_B, transition:'all 0.2s' }}>Sign in</button>
-          <button onClick={onGetStarted} className="ctab shimmer-btn dnav" style={{ padding:'9px 20px', borderRadius:9, border:'none', color:NAVYD, fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 4px 16px rgba(241,190,67,0.35)` }}>Get started free</button>
-          {/* hamburger — mobile only */}
-          <button
-            className="hmenu"
-            onClick={() => setMenuOpen(o => !o)}
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-            style={{ display:'none', background:'none', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, color:'#f1f5f9', fontSize:22, lineHeight:1, cursor:'pointer', padding:'6px 10px', fontFamily:'monospace' }}
-          >
-            {menuOpen ? '✕' : '☰'}
-          </button>
-        </div>
-      </nav>
-      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={handleMobileNav} />
-
-      {/* ── HERO ── */}
-      <section className="dot-grid lp-pad lp-pad-hero" style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'100px 32px 60px', position:'relative', overflow:'hidden' }}>
-        <div style={{ position:'absolute', top:'15%', left:'50%', transform:'translateX(-50%)', width:800, height:800, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.08) 0%,transparent 65%)`, animation:'glow 6s ease-in-out infinite', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', top:'60%', left:'10%', width:400, height:400, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.06) 0%,transparent 65%)`, animation:'glow 8s ease-in-out infinite 2s', pointerEvents:'none' }} />
-        <div className="scan-line" />
-
-        <div className="hero-grid" style={{ maxWidth:1160, width:'100%', display:'flex', alignItems:'center', gap:80, position:'relative', zIndex:1 }}>
-          {/* left */}
-          <div style={{ flex:1, animation:'fadeUp 0.6s ease' }}>
-            <h1 className="lp-display lp-h1" style={{ fontFamily:FONT_D, fontSize:'clamp(36px,5.5vw,68px)', lineHeight:1.02, margin:'0 0 24px', color:'#fff', letterSpacing:1 }}>
-              THE STUDY PLATFORM<br className="lp-hbr" />
-              {' '}THAT <span className="grad-text">ADAPTS</span><br className="lp-hbr" />
-              {' '}TO YOU.
-            </h1>
-
-            <p style={{ fontSize:18, color:MUTED, lineHeight:1.75, margin:'0 0 36px', maxWidth:500 }}>
-              gradefarm. tracks every question you get wrong and keeps drilling until you nail it — then moves to your next weakness. And you'll never run out: when you've worked through the bank, Titan writes fresh questions on the spot.
-            </p>
-
-            <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:40 }}>
-              <button onClick={() => navigate('/pricing')} className="ctab shimmer-btn" style={{ padding:'15px 36px', borderRadius:12, border:'none', color:NAVYD, fontSize:15, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 10px 36px rgba(241,190,67,0.4)` }}>
-                Start learning →
+      <nav className="lp-nav" data-scrolled={scrolled || menuOpen} aria-label="Main">
+        <div className="lp-in">
+          <Logo onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
+          <div className="lp-nav-links">
+            {NAV.map(([id, label]) => <button key={id} type="button" onClick={() => go(id)}>{label}</button>)}
+          </div>
+          <div className="lp-nav-right">
+            <button type="button" className="lp-btn sm lp-nav-signin" onClick={onSignIn}>Sign in</button>
+            <button type="button" className="lp-btn sm gold" onClick={start}>Start learning</button>
+            {onToggleTheme && (
+              <button type="button" className="lp-icon-btn" onClick={onToggleTheme}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
+                {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
               </button>
-              <button onClick={() => scroll('features')} className="ctab" style={{ padding:'15px 28px', borderRadius:12, border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.03)', color:MUTED, fontSize:15, fontWeight:600, cursor:'pointer', fontFamily:FONT_B }}>
-                See all features
-              </button>
-            </div>
-
-            {/* trust row */}
-            <div style={{ display:'flex', alignItems:'center', gap:16, paddingTop:28, borderTop:'1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display:'flex' }}>
-                {[['A',GOLD,NAVYD],['J',PURPLE,'#0a0620'],['M',GREEN,'#03180e'],['S',GOLD,NAVYD],['P',PURPLE,'#0a0620'],['R',GREEN,'#03180e']].map(([l,bg,fg],i) => (
-                  <div key={i} style={{ width:34, height:34, borderRadius:'50%', background:`linear-gradient(135deg,${bg},${bg}bb)`, border:'2px solid #080d28', marginLeft:i>0?-10:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:fg, flexShrink:0 }}>{l}</div>
-                ))}
-              </div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:'#e2e8f0' }}>Built for Australian students, primary to ATAR</div>
-                <div style={{ fontSize:12, color:MUTED }}>Free plan · No credit card · Cancel anytime</div>
-              </div>
-            </div>
-          </div>
-
-          {/* right — DemoCard */}
-          <div className="demo-wrap" style={{ flexShrink:0, animation:'fadeUp 0.8s ease 0.25s both' }}>
-            <div style={{ animation:'float 6s ease-in-out infinite' }}>
-              <DemoCard />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── SEPARATOR ── */}
-      <div style={{ height:1, background:'linear-gradient(90deg,transparent 0%,rgba(241,190,67,0.3) 30%,rgba(241,190,67,0.5) 50%,rgba(241,190,67,0.3) 70%,transparent 100%)' }} />
-
-      {/* ── STATS ── */}
-      <section className="lp-pad" style={{ padding:'56px 32px' }}>
-        <div className="lp-stats-grid" style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
-          {[
-            { text:'∞',        label:'Questions',     sub:'Fresh AI questions — never run out', hi:true },
-            { val:100, suf:'%', label:'Adaptive',      sub:'Tracks your exact weaknesses', hi:false },
-            { text:'$0',       label:'Cost to Start', sub:'Free plan · no credit card', hi:false },
-          ].map((s,i) => (
-            <FadeUp key={i} delay={i * 70}>
-              <div style={{ textAlign:'center', padding:'40px 24px', background: s.hi ? 'rgba(241,190,67,0.07)' : 'rgba(255,255,255,0.02)', borderRadius: i===0?'16px 0 0 16px':i===2?'0 16px 16px 0':0, border:`1px solid ${s.hi?'rgba(241,190,67,0.22)':'rgba(255,255,255,0.05)'}` }}>
-                <div className="lp-stats-num" style={{ fontFamily:FONT_D, fontSize:62, color: s.hi ? GOLD : '#f1f5f9', lineHeight:1, letterSpacing:1 }}>{s.text ?? <Counter target={s.val} suffix={s.suf} delay={i * 70 + 400} />}</div>
-                <div style={{ fontSize:15, fontWeight:700, color:'#e2e8f0', marginTop:10 }}>{s.label}</div>
-                <div style={{ fontSize:12, color:MUTED, marginTop:4 }}>{s.sub}</div>
-              </div>
-            </FadeUp>
-          ))}
-        </div>
-      </section>
-
-      {/* ── UNLIMITED QUESTIONS ── */}
-      <section className="lp-pad lp-pad-section" style={{ padding:'64px 32px 24px' }}>
-        <div style={{ maxWidth:1160, margin:'0 auto' }}>
-          <FadeUp>
-            <div className="unl-card" style={{ background:'linear-gradient(135deg,rgba(241,190,67,0.08),rgba(167,139,250,0.05))', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:24, padding:'44px 40px', position:'relative', overflow:'hidden' }}>
-              <div style={{ position:'absolute', top:-60, right:-40, fontFamily:FONT_D, fontSize:320, lineHeight:1, color:'rgba(241,190,67,0.05)', pointerEvents:'none', userSelect:'none' }} aria-hidden="true">∞</div>
-              <div style={{ position:'relative', maxWidth:640, marginBottom:32 }}>
-                <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><InfinityIcon size={16} aria-hidden="true" />Unlimited questions</div>
-                <h2 className="lp-display lp-h2" style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.8vw,46px)', margin:'0 0 16px', color:'#fff', letterSpacing:1, lineHeight:1.08 }}>
-                  YOU WILL <span style={{ color:GOLD }}>NEVER</span> RUN OUT OF QUESTIONS.
-                </h2>
-                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, margin:0 }}>Most study apps give you a fixed bank — once you've seen every question, you're memorising answers, not learning. On gradefarm., when you work through the bank, Titan writes brand-new questions on the topics you're weakest in.</p>
-              </div>
-              <div className="unl-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, position:'relative' }}>
-                {[
-                  { icon:Sparkles,    color:GOLD,   rgb:'241,190,67',  title:'Fresh on demand',      desc:'New questions are written the moment you need them, so practice never turns into memorising.' },
-                  { icon:Gauge,       color:PURPLE, rgb:'167,139,250', title:'Pitched at your level', desc:'Each new question targets your weak topics at the difficulty you\'re ready for.' },
-                  { icon:ShieldCheck, color:GREEN,  rgb:'16,185,129',  title:'Checked before you see it', desc:'Every generated question is mapped to the curriculum and verified for a correct answer first.' },
-                ].map(f => (
-                  <div key={f.title} style={{ background:'rgba(8,13,40,0.55)', border:`1px solid rgba(${f.rgb},0.2)`, borderRadius:16, padding:'20px 20px 22px' }}>
-                    <div style={{ width:40, height:40, borderRadius:12, background:`rgba(${f.rgb},0.12)`, border:`1px solid rgba(${f.rgb},0.3)`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:14 }}><f.icon size={20} color={f.color} aria-hidden="true" /></div>
-                    <div style={{ fontSize:15, fontWeight:800, color:'#fff', marginBottom:6 }}>{f.title}</div>
-                    <div style={{ fontSize:13, color:MUTED, lineHeight:1.65 }}>{f.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </FadeUp>
-        </div>
-      </section>
-
-      {/* ── BENTO FEATURES ── */}
-      <section id="features" className="lp-pad lp-pad-section" style={{ padding:'80px 32px' }}>
-        <div style={{ maxWidth:1160, margin:'0 auto' }}>
-          <FadeUp>
-            <div style={{ textAlign:'center', marginBottom:60 }}>
-              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Everything you need</div>
-              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,50px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>BUILT FOR AUSTRALIAN STUDENTS.</h2>
-              <p style={{ fontSize:17, color:MUTED, maxWidth:560, margin:'0 auto', lineHeight:1.7 }}>Six next-generation capabilities working together — so you stop guessing what to study and start making real progress.</p>
-            </div>
-          </FadeUp>
-
-          <div className="bento-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
-
-            {/* CARD 1 — Adaptive (span 2, tall) */}
-            <FadeUp delay={0} className="bento-span-2">
-              <div className="bc-gold" style={{ background:'rgba(241,190,67,0.04)', border:'1.5px solid rgba(241,190,67,0.28)', borderRadius:20, padding:32, overflow:'hidden', position:'relative', minHeight:320, height:'100%' }}>
-                <div style={{ position:'absolute', top:0, right:0, width:200, height:200, borderRadius:'50%', background:`radial-gradient(circle,rgba(241,190,67,0.12) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
-                  <div style={{ width:48, height:48, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 4px 18px rgba(241,190,67,0.22)', flexShrink:0 }}><Target size={24} color={GOLD} aria-hidden="true" /></div>
-                  <div>
-                    <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Core Technology</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Adaptive Intelligence Engine</div>
-                  </div>
-                </div>
-                <p style={{ fontSize:14, color:MUTED, lineHeight:1.7, marginBottom:24, maxWidth:420 }}>Every session is different. The algorithm tracks your error rate per topic and difficulty tier — always serving questions where you're weakest. It learns you, not just from you.</p>
-                <TopicGrid />
-                <div style={{ marginTop:14, display:'flex', gap:8, flexWrap:'wrap' }}>
-                  {['Error-rate tracking','Difficulty weighting','Priority queue','Per-topic analysis'].map(t => (
-                    <span key={t} style={{ fontSize:11, background:'rgba(241,190,67,0.1)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:20, padding:'4px 10px', color:GOLD, fontWeight:700 }}>{t}</span>
-                  ))}
-                </div>
-              </div>
-            </FadeUp>
-
-            {/* CARD 2 — Titan AI (span 1, tall) */}
-            <FadeUp delay={70}>
-              <div className="bc" style={{ background:'rgba(167,139,250,0.04)', border:'1px solid rgba(167,139,250,0.22)', borderRadius:20, padding:28, position:'relative', overflow:'hidden', height:'100%' }}>
-                <div style={{ position:'absolute', top:0, right:0, width:140, height:140, borderRadius:'50%', background:`radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)`, filter:'blur(16px)', pointerEvents:'none' }} />
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(167,139,250,0.22),rgba(167,139,250,0.08))', border:'1px solid rgba(167,139,250,0.35)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(167,139,250,0.18)', flexShrink:0 }}><GraduationCap size={22} color={PURPLE} aria-hidden="true" /></div>
-                  <div>
-                    <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>AI Tutor</div>
-                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Titan AI</div>
-                  </div>
-                </div>
-                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:20 }}>Explains using sport, gaming, and everyday life. Doesn't just check answers — understands how you think.</p>
-                <TitanChat />
-              </div>
-            </FadeUp>
-
-            {/* CARD 3 — XP & Leaderboards */}
-            <FadeUp delay={140}>
-              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(241,190,67,0.22),rgba(241,190,67,0.08))', border:'1px solid rgba(241,190,67,0.32)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(241,190,67,0.18)', flexShrink:0 }}><Zap size={22} color={GOLD} aria-hidden="true" /></div>
-                  <div>
-                    <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gamification</div>
-                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>XP & Leaderboards</div>
-                  </div>
-                </div>
-                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:18 }}>Earn XP for every correct answer. Streak multipliers, rank progression, and weekly leaderboards make studying feel less like studying.</p>
-                <LeaderboardMini />
-              </div>
-            </FadeUp>
-
-            {/* CARD 4 — Know Your Gaps */}
-            <FadeUp delay={210}>
-              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))', border:'1px solid rgba(16,185,129,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(16,185,129,0.16)', flexShrink:0 }}><ChartColumn size={22} color={GREEN} aria-hidden="true" /></div>
-                  <div>
-                    <div style={{ fontSize:10, color:GREEN, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Gap Analysis</div>
-                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Know Your Gaps</div>
-                  </div>
-                </div>
-                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:18 }}>After every session, see exactly which topics are holding your ATAR back. Real-time readiness score. No more guessing what to revise.</p>
-                <GapsMini />
-              </div>
-            </FadeUp>
-
-            {/* CARD 5 — Your Notes */}
-            <FadeUp delay={280}>
-              <div className="bc" style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:28, overflow:'hidden', position:'relative', height:'100%' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,rgba(249,216,122,0.22),rgba(249,216,122,0.08))', border:'1px solid rgba(249,216,122,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, boxShadow:'0 4px 18px rgba(249,216,122,0.16)', flexShrink:0 }}><FileText size={22} color={GOLDL} aria-hidden="true" /></div>
-                  <div>
-                    <div style={{ fontSize:10, color:GOLDL, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase' }}>Smart Upload</div>
-                    <div style={{ fontSize:16, fontWeight:800, color:'#fff' }}>Your Notes, Your Tutor</div>
-                  </div>
-                </div>
-                <p style={{ fontSize:13, color:MUTED, lineHeight:1.65, marginBottom:24 }}>Upload your teacher's slides or class notes. Titan AI reads them and teaches from your exact school content — not a textbook you've never seen.</p>
-                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:10 }}>
-                    <Folder size={24} color={GOLD} aria-hidden="true" style={{ flexShrink:0 }} />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#e2e8f0' }}>Term3_Fractions_Notes.pdf</div>
-                      <div style={{ fontSize:10, color:MUTED }}>Uploading... 84%</div>
-                      <div style={{ height:3, borderRadius:2, background:'rgba(255,255,255,0.08)', marginTop:5 }}>
-                        <div style={{ width:'84%', height:'100%', borderRadius:2, background:`linear-gradient(90deg,${GOLD},${GOLDL})` }} />
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(167,139,250,0.07)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:10 }}>
-                    <GraduationCap size={20} color={PURPLE} aria-hidden="true" style={{ flexShrink:0 }} />
-                    <div style={{ fontSize:12, color:'#e2e8f0' }}>Titan has read your notes — ready to teach from <span style={{ color:GOLD, fontWeight:700 }}>your content</span></div>
-                  </div>
-                </div>
-              </div>
-            </FadeUp>
-
-            {/* CARD 6 — SACE Content (full width banner) */}
-            <FadeUp delay={350} className="bento-span-3">
-              <div className="bc lp-sace-banner" style={{ background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:20, padding:'28px 36px', display:'flex', alignItems:'center', gap:40, flexWrap:'wrap', position:'relative', overflow:'hidden' }}>
-                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, borderRadius:'20px 0 0 20px', background:`linear-gradient(to bottom,${GOLD},${GOLDL})` }} />
-                <div className="lp-sace-head" style={{ display:'flex', alignItems:'center', gap:14, flex:'0 0 auto' }}>
-                  <div className="lp-sace-icon" style={{ width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,rgba(241,190,67,0.24),rgba(241,190,67,0.1))', border:'1px solid rgba(241,190,67,0.38)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 6px 22px rgba(241,190,67,0.22)', flexShrink:0 }}><Star size={26} color={GOLD} aria-hidden="true" /></div>
-                  <div className="lp-sace-title" style={{ minWidth:0 }}>
-                    <div style={{ fontSize:10, color:GOLD, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:4 }}>Curriculum</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Backed by Titanium Tutoring</div>
-                  </div>
-                </div>
-                <div className="lp-sace-text" style={{ flex:1, minWidth:240 }}>
-                  <p style={{ fontSize:14, color:MUTED, lineHeight:1.65, margin:0 }}>Subjects are built by Titanium Tutoring from the Australian Curriculum, SACE and VCE. Every question is mapped to your syllabus — nothing off-syllabus, nothing wasted — and the bank keeps growing as you practise.</p>
-                </div>
-                <div className="lp-stats lp-sace-stats" style={{ display:'flex', gap:20, minWidth:0, flexWrap:'wrap' }}>
-                  {[['∞','Questions'],['100%','Curriculum-aligned'],['24/7','AI tutor']].map(([n,l]) => (
-                    <div key={l} style={{ textAlign:'center' }}>
-                      <div className="lp-sace-num" style={{ fontFamily:FONT_D, fontSize:28, color:GOLD, letterSpacing:1 }}>{n}</div>
-                      <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>{l}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </FadeUp>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ── SPOTLIGHT 1: TITAN AI ── */}
-      <FadeUp>
-        <section className="lp-pad lp-pad-section" style={{ padding:'80px 32px', background:'rgba(167,139,250,0.03)', borderTop:'1px solid rgba(167,139,250,0.08)', borderBottom:'1px solid rgba(167,139,250,0.08)' }}>
-          <div style={{ maxWidth:1160, margin:'0 auto' }}>
-            <div className="spotlight-row" style={{ display:'flex', alignItems:'center', gap:80 }}>
-              {/* text */}
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:11, color:PURPLE, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:16 }}>Deep dive</div>
-                <h2 className="lp-display lp-h2" style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.5vw,44px)', margin:'0 0 20px', color:'#fff', letterSpacing:1, lineHeight:1.1 }}>
-                  MEET TITAN AI.<br className="lp-hbr" />
-                  {' '}<span style={{ color:PURPLE }}>YOUR TUTOR THAT</span><br className="lp-hbr" />
-                  {' '}ACTUALLY GETS YOU.
-                </h2>
-                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most tutors explain things once and move on. Titan explains it differently — using sport, gaming, pop culture — until your brain actually clicks. Then it checks you actually got it.</p>
-                <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
-                  {[
-                    { icon:Utensils, text:'Explains with sport, gaming, and everyday analogies — whatever makes it stick for you' },
-                    { icon:Folder, text:'Upload your class notes — Titan reads them and teaches from your exact school content' },
-                    { icon:RefreshCw, text:'Real-time comprehension checks after every concept — no passive reading' },
-                    { icon:Moon, text:'Available 24/7 — no scheduling, no waiting, no minimum booking' },
-                  ].map((f,i) => (
-                    <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.07))', border:'1px solid rgba(167,139,250,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(167,139,250,0.15)' }}><f.icon size={20} color={PURPLE} aria-hidden="true" /></div>
-                      <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={onGetStarted} className="ctab" style={{ padding:'14px 32px', borderRadius:12, border:'none', background:`linear-gradient(135deg,${PURPLE},#6d28d9)`, color:'#fff', fontSize:14, fontWeight:800, cursor:'pointer', fontFamily:FONT_B, boxShadow:'0 8px 28px rgba(167,139,250,0.35)' }}>
-                  Try Titan AI free →
-                </button>
-              </div>
-              {/* visual */}
-              <div className="spotlight-visual" style={{ flex:1, maxWidth:480 }}>
-                <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(167,139,250,0.25)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)', position:'relative' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20, paddingBottom:16, borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 0 20px rgba(167,139,250,0.4)' }}><GraduationCap size={18} color="#fff" aria-hidden="true" /></div>
-                    <div>
-                      <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>Titan AI</div>
-                      <div style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }} /><span style={{ fontSize:11, color:GREEN }}>Online · Mathematics</span></div>
-                    </div>
-                    <div style={{ marginLeft:'auto', fontSize:11, color:MUTED }}>From your notes ✓</div>
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                    <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>Why do I need a common denominator to add fractions?</div>
-                    </div>
-                    <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
-                      <div style={{ background:'rgba(167,139,250,0.1)', border:'1px solid rgba(167,139,250,0.2)', borderRadius:'4px 14px 14px 14px', padding:'10px 14px', maxWidth:'88%' }}>
-                        <div style={{ fontSize:10, color:PURPLE, fontWeight:800, letterSpacing:'0.08em', marginBottom:6 }}>TITAN AI</div>
-                        <div style={{ fontSize:13, color:'#e2e8f0', lineHeight:1.65 }}>Picture two pizzas — one cut into quarters, one into thirds. A quarter and a third aren't the same size slice, so you can't just count them. Cut both into twelfths and now you can: <span style={{ color:GOLD, fontWeight:700 }}>3/12 + 4/12 = 7/12.</span></div>
-                      </div>
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                      <div style={{ background:'rgba(241,190,67,0.12)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:'14px 14px 4px 14px', padding:'10px 14px', maxWidth:'80%', fontSize:14, color:'#e2e8f0', lineHeight:1.55 }}>So how do I find the common denominator?</div>
-                    </div>
-                    <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                      <div style={{ width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#a78bfa,#6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}><GraduationCap size={16} color="#fff" aria-hidden="true" /></div>
-                      <div style={{ display:'flex', gap:5, padding:'12px 16px', background:'rgba(167,139,250,0.07)', border:'1px solid rgba(167,139,250,0.15)', borderRadius:'4px 14px 14px 14px' }}>
-                        {[0,1,2].map(i => <div key={i} className={`tdot td${i}`} style={{ width:6, height:6, borderRadius:'50%', background:PURPLE }} />)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </FadeUp>
-
-      {/* ── SPOTLIGHT 2: ADAPTIVE ALGORITHM ── */}
-      <FadeUp>
-        <section className="lp-pad lp-pad-section" style={{ padding:'80px 32px' }}>
-          <div style={{ maxWidth:1160, margin:'0 auto' }}>
-            <div className="spotlight-row" style={{ display:'flex', alignItems:'center', gap:80 }}>
-              {/* visual */}
-              <div className="spotlight-visual" style={{ flex:1, maxWidth:500 }}>
-                <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(241,190,67,0.2)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)' }}>
-                  <div style={{ fontSize:12, fontWeight:800, color:GOLD, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:16 }}>Your topic mastery map</div>
-                  <TopicGrid />
-                  <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
-                    <Zap size={24} color="#fca5a5" aria-hidden="true" style={{ flexShrink:0 }} />
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:700, color:'#fca5a5' }}>Priority queue: Probability (19%)</div>
-                      <div style={{ fontSize:12, color:MUTED }}>Next 8 questions will target this topic</div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop:10, padding:'14px 16px', background:'rgba(241,190,67,0.06)', border:'1px solid rgba(241,190,67,0.15)', borderRadius:12, display:'flex', gap:12, alignItems:'center' }}>
-                    <TrendingUp size={24} color={GOLD} aria-hidden="true" style={{ flexShrink:0 }} />
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:700, color:GOLD }}>Session progress: +12% on Algebra</div>
-                      <div style={{ fontSize:12, color:MUTED }}>Difficulty unlocked: Level 3 questions</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* text */}
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:16 }}>Deep dive</div>
-                <h2 className="lp-display lp-h2" style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.5vw,44px)', margin:'0 0 20px', color:'#fff', letterSpacing:1, lineHeight:1.1 }}>
-                  AN ALGORITHM THAT<br className="lp-hbr" />
-                  {' '}<span style={{ color:GOLD }}>LEARNS YOU.</span><br className="lp-hbr" />
-                  {' '}NOT JUST FROM YOU.
-                </h2>
-                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>Most study apps give you a fixed bank of questions. gradefarm. tracks your error rate at the topic-and-difficulty level — so every session zeros in on exactly what your exam will punish you for.</p>
-                <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
-                  {[
-                    { icon:ChartColumn, text:'Error rate tracked per topic and per difficulty tier — not just "right or wrong"' },
-                    { icon:Hash, text:'Weighted priority queue updates in real time after every answer you give' },
-                    { icon:Brain, text:'Difficulty scales automatically — easier when you\'re struggling, harder when you\'re confident' },
-                    { icon:Repeat, text:'Questions you\'ve missed come back in spaced intervals until they stick permanently' },
-                    { icon:InfinityIcon, text:'Never runs dry — new questions are generated for your weak topics as you go' },
-                  ].map((f,i) => (
-                    <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(241,190,67,0.2),rgba(241,190,67,0.07))', border:'1px solid rgba(241,190,67,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(241,190,67,0.15)' }}><f.icon size={20} color={GOLD} aria-hidden="true" /></div>
-                      <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={onGetStarted} className="ctab shimmer-btn" style={{ padding:'14px 32px', borderRadius:12, border:'none', color:NAVYD, fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 8px 28px rgba(241,190,67,0.4)` }}>
-                  See it in action →
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </FadeUp>
-
-      {/* ── SPOTLIGHT 3: PROGRESS & GAPS ── */}
-      <FadeUp>
-        <section className="lp-pad lp-pad-section" style={{ padding:'80px 32px', background:'rgba(16,185,129,0.02)', borderTop:'1px solid rgba(16,185,129,0.07)', borderBottom:'1px solid rgba(16,185,129,0.07)' }}>
-          <div style={{ maxWidth:1160, margin:'0 auto' }}>
-            <div className="spotlight-row" style={{ display:'flex', alignItems:'center', gap:80 }}>
-              {/* text */}
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:11, color:GREEN, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:16 }}>Deep dive</div>
-                <h2 className="lp-display lp-h2" style={{ fontFamily:FONT_D, fontSize:'clamp(26px,3.5vw,44px)', margin:'0 0 20px', color:'#fff', letterSpacing:1, lineHeight:1.1 }}>
-                  SEE EXACTLY<br className="lp-hbr" />
-                  {' '}<span style={{ color:GREEN }}>WHERE YOU STAND.</span><br className="lp-hbr" />
-                  {' '}FIX WHAT'S BROKEN.
-                </h2>
-                <p style={{ fontSize:16, color:MUTED, lineHeight:1.75, marginBottom:32, maxWidth:480 }}>After every session, your struggle profile updates. You get a real-time exam readiness score, a topic-by-topic breakdown, and a personalised action plan — not a vague "keep studying" message.</p>
-                <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom:36 }}>
-                  {[
-                    { icon:Target, text:'Exam readiness score shows you the honest number — not a feel-good estimate' },
-                    { icon:MapIcon, text:'Topic heatmap shows which areas are red (danger), yellow (watch), and green (solid)' },
-                    { icon:ClipboardList, text:'Personalised study plan generated after every session with specific next steps' },
-                    { icon:TrendingUp, text:'Progress tracking over time so you can see the gaps actually closing' },
-                  ].map((f,i) => (
-                    <div key={i} style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-                      <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,rgba(16,185,129,0.2),rgba(16,185,129,0.07))', border:'1px solid rgba(16,185,129,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0, boxShadow:'0 3px 14px rgba(16,185,129,0.15)' }}><f.icon size={20} color={GREEN} aria-hidden="true" /></div>
-                      <div style={{ fontSize:14, color:'#e2e8f0', lineHeight:1.65, paddingTop:8 }}>{f.text}</div>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={onGetStarted} className="ctab" style={{ padding:'14px 32px', borderRadius:12, border:'none', background:`linear-gradient(135deg,${GREEN},#059669)`, color:'#fff', fontSize:14, fontWeight:800, cursor:'pointer', fontFamily:FONT_B, boxShadow:'0 8px 28px rgba(16,185,129,0.35)' }}>
-                  Track my progress →
-                </button>
-              </div>
-              {/* visual */}
-              <div className="spotlight-visual" style={{ flex:1, maxWidth:460 }}>
-                <div style={{ background:'rgba(8,13,40,0.9)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:20, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)' }}>
-                  <div style={{ fontSize:12, fontWeight:800, color:GREEN, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:20 }}>Session summary · Oct 28</div>
-                  <GapsMini />
-                  <div style={{ marginTop:20, padding:'14px 16px', background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:12 }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:GREEN, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><ClipboardList size={14} aria-hidden="true" />Your action plan</div>
-                    {['Review probability with Titan — it can walk you through it', '3 more sessions on Algebra needed', 'Fractions are improving — keep momentum'].map((a,i) => (
-                      <div key={i} style={{ display:'flex', gap:8, fontSize:12, color:MUTED, lineHeight:1.55, marginBottom: i<2?6:0 }}>
-                        <span style={{ color:GREEN, flexShrink:0 }}>→</span>{a}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </FadeUp>
-
-      {/* ── HOW IT WORKS ── */}
-      <section id="how" className="lp-pad lp-pad-section" style={{ padding:'80px 32px' }}>
-        <div style={{ maxWidth:1100, margin:'0 auto' }}>
-          <FadeUp>
-            <div style={{ textAlign:'center', marginBottom:64 }}>
-              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>How it works</div>
-              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(28px,4vw,48px)', margin:'0 0 16px', color:'#fff', letterSpacing:1 }}>FROM SIGN-UP TO RESULTS.</h2>
-              <p style={{ fontSize:16, color:MUTED, maxWidth:480, margin:'0 auto', lineHeight:1.7 }}>Four steps. One outcome: fewer gaps, more confidence, better exam performance.</p>
-            </div>
-          </FadeUp>
-          <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
-            {[
-              { num:'01', icon:PenLine, color:GOLD,   rgb:'241,190,67',  title:'Sign up free',        desc:'30 seconds. Pick your subject. No credit card, no commitment. You\'re in.' },
-              { num:'02', icon:Zap, color:GOLD,   rgb:'241,190,67',  title:'Do a session',         desc:'Answer adaptive questions. The algorithm starts learning your weak spots from question one.' },
-              { num:'03', icon:GraduationCap, color:PURPLE, rgb:'167,139,250', title:'Learn with Titan',     desc:'Stuck on a topic? Switch to Learn mode. Titan teaches it from your class notes using analogies that actually land.' },
-              { num:'04', icon:TrendingUp, color:GREEN,  rgb:'16,185,129',  title:'Watch gaps close',     desc:'Your readiness score updates live. Priority Queue shows the exact next thing to fix. Repeat until exam.' },
-            ].map((s,i) => (
-              <FadeUp key={i} delay={i * 80}>
-                <div style={{ background:'rgba(255,255,255,0.02)', border:`1px solid rgba(${s.rgb},0.14)`, borderLeft:`3px solid ${s.color}`, borderRadius:18, padding:28, position:'relative', height:'100%', overflow:'hidden' }}>
-                  <div style={{ position:'absolute', top:-8, right:-4, fontFamily:FONT_D, fontSize:88, color:`rgba(${s.rgb},0.05)`, letterSpacing:2, lineHeight:1, userSelect:'none', pointerEvents:'none' }}>{s.num}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
-                    <div style={{ width:48, height:48, borderRadius:14, background:`linear-gradient(135deg,rgba(${s.rgb},0.2),rgba(${s.rgb},0.07))`, border:`1px solid rgba(${s.rgb},0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:`0 4px 16px rgba(${s.rgb},0.18)`, flexShrink:0 }}><s.icon size={24} color={s.color} aria-hidden="true" /></div>
-                    <div style={{ fontFamily:FONT_D, fontSize:12, color:s.color, letterSpacing:'0.1em' }}>STEP {s.num}</div>
-                  </div>
-                  <div style={{ fontFamily:FONT_D, fontSize:16, color:'#fff', marginBottom:10, letterSpacing:0.5, lineHeight:1.2 }}>{s.title.toUpperCase()}</div>
-                  <div style={{ fontSize:13.5, color:MUTED, lineHeight:1.7 }}>{s.desc}</div>
-                  {i < 3 && <div style={{ position:'absolute', top:'50%', right:-9, transform:'translateY(-50%)', width:18, height:18, borderRadius:'50%', background:NAVYD, border:`1px solid rgba(241,190,67,0.3)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:GOLD, zIndex:1 }}>→</div>}
-                </div>
-              </FadeUp>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── YEAR 6 SELECTIVE-ENTRY ── */}
-      <section className="lp-pad" style={{ padding:'0 32px 80px' }}>
-        <FadeUp>
-          <div style={{ maxWidth:1100, margin:'0 auto', borderRadius:22, border:'1px solid rgba(241,190,67,0.28)', background:'linear-gradient(135deg,rgba(241,190,67,0.10),rgba(167,139,250,0.06))', padding:'36px 36px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:28, flexWrap:'wrap' }}>
-            <div style={{ flex:'1 1 420px', minWidth:0 }}>
-              <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:12 }}>For parents · Year 6</div>
-              <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(22px,3.2vw,36px)', margin:'0 0 12px', color:'#fff', letterSpacing:1, lineHeight:1.15 }}>SELECTIVE-ENTRY PREP FOR ADVANCED YEAR 6 STUDENTS.</h2>
-              <p style={{ margin:0, color:MUTED, fontSize:15, lineHeight:1.7 }}>Maths and English pitched above the Year 6 curriculum, a progress email to you every Sunday, and parent sign-off before any AI features switch on.</p>
-            </div>
-            <button onClick={() => navigate('/year-6')} className="ctab shimmer-btn" style={{ padding:'14px 26px', borderRadius:11, border:'none', color:NAVYD, fontSize:15, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:'0 6px 22px rgba(241,190,67,0.32)', flexShrink:0 }}>
-              See Year 6 prep →
+            )}
+            <button type="button" className="lp-icon-btn lp-menu-btn" onClick={() => setMenuOpen(o => !o)}
+              aria-expanded={menuOpen} aria-controls="lp-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'}>
+              {menuOpen ? <X size={16} aria-hidden="true" /> : <Menu size={16} aria-hidden="true" />}
             </button>
           </div>
-        </FadeUp>
-      </section>
+        </div>
+        {menuOpen && (
+          <div id="lp-menu" className="lp-in">
+            <div className="lp-menu">
+              {NAV.map(([id, label]) => <button key={id} type="button" onClick={() => go(id)}>{label}</button>)}
+              <button type="button" onClick={() => { setMenuOpen(false); onSignIn() }}>Sign in</button>
+            </div>
+          </div>
+        )}
+      </nav>
 
-      {/* ── SUBJECTS ── */}
-      <FadeUp>
-        <section id="subjects" className="lp-pad lp-pad-section" style={{ padding:'80px 32px', background:'rgba(255,255,255,0.015)', borderTop:'1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ maxWidth:960, margin:'0 auto', textAlign:'center' }}>
-            <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Subjects</div>
-            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>PICK YOUR SUBJECT.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:44, lineHeight:1.7 }}>Every subject comes with unlimited questions, Titan AI and your readiness score. New subjects are added all the time.</p>
-            {subjects === null ? (
-              <div style={{ fontSize:13, color:MUTED }}>Loading subjects…</div>
-            ) : subjects.length === 0 ? (
-              <button onClick={onGetStarted} className="ctab" style={{ padding:'13px 28px', borderRadius:11, border:'1px solid rgba(241,190,67,0.3)', background:'rgba(241,190,67,0.06)', color:GOLD, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:FONT_B }}>
-                Sign up to see every subject →
-              </button>
-            ) : (
-              <div className="subjects-grid" style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(subjects.length, 3)},minmax(0,1fr))`, gap:12, maxWidth: subjects.length < 3 ? subjects.length * 320 : undefined, margin:'0 auto' }}>
-                {subjects.map(s => (
-                  <button key={s.name} onClick={onGetStarted} className="ctab" style={{ padding:'24px 18px', borderRadius:16, border:'1px solid rgba(241,190,67,0.32)', background:'rgba(241,190,67,0.06)', textAlign:'center', cursor:'pointer', boxShadow:'0 4px 24px rgba(241,190,67,0.12)', fontFamily:FONT_B, color:'inherit' }}>
-                    <div style={{ marginBottom:10, display:'flex', justifyContent:'center' }}><SubjectIconByName name={s.name} color={GOLD} size={30} /></div>
-                    <div style={{ fontSize:13, fontWeight:800, color:'#f1f5f9', marginBottom:4 }}>{formatSubjectLabel({ name: s.name, stage: s.level })}</div>
-                    <div style={{ fontSize:11, color:GOLD, display:'inline-flex', alignItems:'center', gap:4 }}><InfinityIcon size={12} aria-hidden="true" />Unlimited questions</div>
-                  </button>
-                ))}
-              </div>
-            )}
+      <main>
+        <section className="lp-in lp-hero">
+          <div>
+            <h1>Practice that goes back to what you got wrong.</h1>
+            <p className="lp-sub">gradefarm. records every answer. Each session leans on the topics you miss until you get them right, and when you've done every question on a topic, Titan writes new ones.</p>
+            <div className="lp-ctas">
+              <button type="button" className="lp-btn gold" onClick={start} style={{ minHeight: 46, padding: '0 22px', fontSize: 15 }}>Start learning</button>
+              <button type="button" className="lp-link" onClick={() => go('how')}>See how it works</button>
+            </div>
+            <div className="lp-facts">
+              <span><b>1 subject free</b>, {freeDaily} questions a day</span>
+              <span>Australian Curriculum, SACE and VCE</span>
+              <span>Primary to ATAR</span>
+            </div>
+          </div>
+          <PracticePreview />
+        </section>
+
+        <section id="how" className="lp-in lp-sec" aria-labelledby="lp-how">
+          <div className="lp-sec-head">
+            <h2 id="lp-how">Three places to work</h2>
+            <p>They're the three pages in the app's sidebar. Pick a subject, then move between them.</p>
+          </div>
+
+          <div className="lp-row">
+            <div>
+              <h3><SquareCheckBig size={19} aria-hidden="true" />Practice</h3>
+              <p>Tick the topics you want, then choose new questions, the ones you got wrong, or a mix.</p>
+              <ul>
+                <li>Every question has a worked solution.</li>
+                <li>Miss one and you're offered a few more like it straight away.</li>
+                <li>Exam mode holds back the answers and runs a timer.</li>
+                <li>When a topic runs out, new questions are written for it and checked before you see them.</li>
+              </ul>
+            </div>
+            <QuestionDemo />
+          </div>
+
+          <div className="lp-row">
+            <div>
+              <h3><GraduationCap size={19} aria-hidden="true" />Learn with Titan</h3>
+              <p>Ask Titan, the AI tutor, about anything in your subject. Choose what it explains with, like sport, cooking or games.</p>
+              <ul>
+                <li>Add a photo of a question or your class notes.</li>
+                <li>Guided lessons: four key ideas, a worked example and three check questions.</li>
+                <li>Chats and lessons are saved, so you can pick up on another device.</li>
+              </ul>
+            </div>
+            <ChatPreview />
+          </div>
+
+          <div className="lp-row">
+            <div>
+              <h3><ChartLine size={19} aria-hidden="true" />Progress</h3>
+              <p>See whether you're improving, what's coming up, and what to do this week.</p>
+              <ul>
+                <li>Accuracy by week, next to how many questions you answered.</li>
+                <li>Questions you got wrong come back for review a few days later.</li>
+                <li>Add your tests and exams to count down to them.</li>
+              </ul>
+            </div>
+            <ProgressPreview />
           </div>
         </section>
-      </FadeUp>
 
-      {/* ── PRICING ── */}
-      <FadeUp>
-        <section id="pricing" className="lp-pad lp-pad-section" style={{ padding:'80px 32px' }}>
-          <div style={{ maxWidth:820, margin:'0 auto', textAlign:'center' }}>
-            <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:14 }}>Pricing</div>
-            <h2 style={{ fontFamily:FONT_D, fontSize:'clamp(26px,4vw,44px)', margin:'0 0 14px', color:'#fff', letterSpacing:1 }}>SIMPLE, TRANSPARENT PRICING.</h2>
-            <p style={{ fontSize:16, color:MUTED, marginBottom:48, maxWidth:480, margin:'0 auto 48px', lineHeight:1.7 }}>Students get <strong style={{ color:'#f1f5f9' }}>one subject free</strong> ({freeDaily} questions a day) or go unlimited — every question, no daily cap — from <strong style={{ color:'#f1f5f9' }}>${tiers[0]}/week</strong>{trialDays > 0 ? <>, with a <strong style={{ color:'#f1f5f9' }}>{trialDays}-day free trial</strong></> : null} — extra subjects cost less. Tutors choose a plan that fits their roster.</p>
-            <div className="pricing-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:820, margin:'0 auto 36px' }}>
-              {[
-                { label:'Free', price:'$0', desc:`1 subject · ${freeDaily} questions/day`, color:'rgba(255,255,255,0.28)', bg:'rgba(255,255,255,0.02)', border:'rgba(255,255,255,0.06)' },
-                { label:'Student', price:`$${tiers[0]}`, desc:`/week · ${trialDays > 0 ? `${trialDays} days free · ` : ''}unlimited questions · extra subjects $${extraLadder(tiers)}`, color:GOLD, bg:'rgba(241,190,67,0.06)', border:'rgba(241,190,67,0.32)', hi:true },
-                { label:'Tutor', price:`From $${tutorFrom}`, desc:'/month · roster & session tools', color:PURPLE, bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.28)' },
-              ].map(p => (
-                <div key={p.label} style={{ background:p.bg, border:`1px solid ${p.border}`, borderTop: p.hi?`3px solid ${GOLD}`:`1px solid ${p.border}`, borderRadius:18, padding:'28px 20px', textAlign:'left' }}>
-                  <div style={{ fontSize:10, fontWeight:800, color:p.color, marginBottom:8, letterSpacing:'0.12em', textTransform:'uppercase' }}>{p.label}</div>
-                  <div style={{ fontFamily:FONT_D, fontSize:36, color: p.hi?'#fff':'rgba(255,255,255,0.5)', letterSpacing:1, lineHeight:1, marginBottom:6 }}>{p.price}</div>
-                  <div style={{ fontSize:12, color:MUTED, lineHeight:1.5 }}>{p.desc}</div>
-                </div>
+        <section id="tutors" className="lp-in lp-sec" aria-labelledby="lp-who">
+          <div className="lp-sec-head"><h2 id="lp-who">For tutors and parents</h2></div>
+          <div className="lp-two">
+            <div className="lp-card lp-aud">
+              <h3>Tutors</h3>
+              <p>Set work for a student or a class, see every answer they give, run lessons and message families. Plans from ${tutorFrom} a month.</p>
+              <button type="button" className="lp-link" onClick={() => navigate('/auth/tutor')}>Apply as a tutor</button>
+            </div>
+            <div className="lp-card lp-aud">
+              <h3>Parents of Year 6 students</h3>
+              <p>Selective-entry prep in maths and English, a progress email every Sunday, and your sign-off before any AI feature turns on.</p>
+              <button type="button" className="lp-link" onClick={() => navigate('/year-6')}>See Year 6 prep</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="subjects" className="lp-in lp-sec" aria-labelledby="lp-subjects">
+          <div className="lp-sec-head">
+            <h2 id="lp-subjects">Subjects</h2>
+            <p>Each one comes with Titan, and new questions when you run out. More are added through the year.</p>
+          </div>
+          {subjects === null ? (
+            <div style={{ fontSize: 13.5, color: 'var(--lp-muted)' }}>Loading subjects…</div>
+          ) : subjects.length === 0 ? (
+            <div><button type="button" className="lp-link" onClick={onSignIn}>Sign in to see every subject</button></div>
+          ) : (
+            <div className="lp-card lp-subjects">
+              {subjects.map(s => (
+                <button key={s.id || s.name} type="button" className="lp-subject" onClick={start}>
+                  <SubjectIconByName name={s.name} color="var(--lp-icon)" size={20} />
+                  <span>{formatSubjectLabel({ name: s.name, stage: s.level })}</span>
+                </button>
               ))}
             </div>
-            <button onClick={() => navigate('/pricing')} className="ctab" style={{ padding:'13px 32px', borderRadius:11, border:`1px solid rgba(241,190,67,0.3)`, background:'rgba(241,190,67,0.06)', color:GOLD, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:FONT_B }}>
-              See full pricing →
-            </button>
-          </div>
+          )}
         </section>
-      </FadeUp>
 
-      {/* ── FINAL CTA ── */}
-      <FadeUp>
-        <section className="lp-pad lp-pad-cta" style={{ padding:'100px 32px', position:'relative', overflow:'hidden' }}>
-          <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:700, height:400, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.1) 0%,transparent 70%)`, filter:'blur(40px)', pointerEvents:'none' }} />
-          <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:400, height:200, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.15) 0%,transparent 60%)`, filter:'blur(20px)', pointerEvents:'none' }} />
-          <div style={{ maxWidth:680, margin:'0 auto', textAlign:'center', position:'relative', zIndex:1 }}>
-            <div style={{ fontSize:11, color:GOLD, fontWeight:800, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:20 }}>Ready?</div>
-            <h2 className="lp-display lp-h2-cta" style={{ fontFamily:FONT_D, fontSize:'clamp(24px,4.5vw,52px)', margin:'0 0 20px', color:'#fff', lineHeight:1.1, letterSpacing:1 }}>
-              YOUR ATAR DOESN'T CARE HOW GOOD <span style={{ color:GOLD }}>YOUR TEACHER IS AT EXPLAINING.</span> GRADEFARM. DOES.
-            </h2>
-            <p style={{ fontSize:17, color:MUTED, marginBottom:40, lineHeight:1.75, maxWidth:520, margin:'0 auto 40px' }}>
-              Start free today. No credit card, no commitment. The algorithm gets to work on your first question — and the questions never run out.
-            </p>
-            <div style={{ position:'relative', display:'inline-block' }}>
-              <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:300, height:120, borderRadius:'50%', background:`radial-gradient(ellipse,rgba(241,190,67,0.45) 0%,transparent 70%)`, filter:'blur(20px)', pointerEvents:'none' }} />
-              <button onClick={() => navigate('/pricing')} className="ctab shimmer-btn" style={{ position:'relative', padding:'18px 56px', borderRadius:14, border:'none', color:NAVYD, fontSize:17, fontWeight:900, cursor:'pointer', fontFamily:FONT_B, boxShadow:`0 12px 40px rgba(241,190,67,0.5)` }}>
-                Start learning →
-              </button>
+        <section className="lp-in lp-sec" aria-labelledby="lp-pricing">
+          <div className="lp-sec-head"><h2 id="lp-pricing">Pricing</h2></div>
+          <div className="lp-card lp-prices">
+            <div><span className="nm">Free</span><span className="amt">$0</span><p>One subject, {freeDaily} questions a day.</p></div>
+            <div className="pick">
+              <span className="nm">Student</span>
+              <span className="amt">${tiers[0]} <small>a week</small></span>
+              <p>Every question, no daily cap.{trialDays > 0 ? ` ${trialDays} days free.` : ''} Extra subjects ${extraLadder(tiers)}.</p>
             </div>
-            <div style={{ marginTop:20, fontSize:13, color:MUTED }}>No credit card · No commitment · Free plan available</div>
+            <div><span className="nm">Tutor</span><span className="amt">${tutorFrom} <small>a month and up</small></span><p>Your students, their results, lessons and messages.</p></div>
+          </div>
+          <div className="lp-end">
+            <button type="button" className="lp-link" onClick={() => navigate('/pricing')}>See full pricing</button>
+            <button type="button" className="lp-btn gold" onClick={start}>Start learning</button>
           </div>
         </section>
-      </FadeUp>
+      </main>
 
-      {/* ── FOOTER ── */}
-      <footer className="lp-pad" style={{ borderTop:'1px solid rgba(241,190,67,0.1)', padding:'28px 32px' }}>
-        <div className="footer-row" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:16 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <span style={{ fontFamily:FONT_D, fontSize:16, letterSpacing:1 }}><span style={{ color:'#f1f5f9' }}>grade</span><span style={{ color:GOLD }}>farm.</span></span>
-            <span style={{ fontSize:11, color:'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
+      <footer className="lp-foot">
+        <div className="lp-in">
+          <Logo />
+          <div className="lp-foot-links">
+            <button type="button" onClick={() => go('how')}>How it works</button>
+            <button type="button" onClick={() => go('subjects')}>Subjects</button>
+            <button type="button" onClick={() => navigate('/pricing')}>Pricing</button>
+            <button type="button" onClick={() => navigate('/privacy')}>Privacy</button>
+            <button type="button" onClick={() => navigate('/terms')}>Terms</button>
           </div>
-          <div className="lp-footer-links" style={{ display:'flex', gap:24, flexWrap:'wrap', justifyContent:'center' }}>
-            {[['features','Features'],['how','How It Works'],['subjects','Subjects'],['pricing','Pricing']].map(([id,l]) => (
-              <button key={id} className="nl" onClick={() => scroll(id)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.35)', fontSize:12, cursor:'pointer', fontFamily:FONT_B, transition:'color 0.15s' }}>{l}</button>
-            ))}
-          </div>
-          <div className="lp-copy" style={{ fontSize:12, color:'rgba(255,255,255,0.25)' }}>© 2026 Titanium Tutoring · Adelaide, SA · Per aspera ad astra</div>
+          <span className="lp-copy">© 2026 Titanium Tutoring · Adelaide, SA</span>
         </div>
       </footer>
     </div>
