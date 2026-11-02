@@ -49,8 +49,10 @@ async function countForCurriculum(
   const err = linked.error || unlinked.error || linkedDrafts.error || unlinkedDrafts.error;
   if (err) throw new Error(err.message);
   const borrowed = await countBorrowed(admin, curriculumId);
+  // Questions kept out of this subject (off its course) don't count.
+  const { count: hidden } = await admin.from("curriculum_hidden_questions").select("*", head).eq("curriculum_id", curriculumId);
   return {
-    live: (linked.count ?? 0) + (unlinked.count ?? 0) + borrowed,
+    live: Math.max(0, (linked.count ?? 0) + (unlinked.count ?? 0) + borrowed - (hidden ?? 0)),
     pendingDrafts: (linkedDrafts.count ?? 0) + (unlinkedDrafts.count ?? 0),
   };
 }

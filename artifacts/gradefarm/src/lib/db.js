@@ -392,7 +392,9 @@ export async function getQuestionsForSubjectTile(subjectTile) {
         : []
       const own = [...linked, ...unlinked]
       const borrowed = await fetchBorrowedQuestions(curriculumId, cols, keys[0] || subjectTile.name, own.map(q => q.id))
-      return mapAndDedupeQuestions([...own, ...borrowed], keys[0] || subjectTile.name)
+      // Questions an admin kept out of this subject (off its course), without deleting them.
+      const hidden = await fetchHiddenQuestionIds(curriculumId)
+      return mapAndDedupeQuestions([...own, ...borrowed].filter(q => !hidden.has(q.id)), keys[0] || subjectTile.name)
     } catch {
       // curriculum_id not migrated yet — fall through to spelling match
     }
@@ -403,6 +405,32 @@ export async function getQuestionsForSubjectTile(subjectTile) {
   const data = await fetchAllRows(() =>
     supabase.from('questions').select('*').in('subject', keys))
   return mapAndDedupeQuestions(data, keys[0])
+}
+
+/** Ids of questions hidden from this subject (curriculum_hidden_questions); none if that can't be read. */
+async function fetchHiddenQuestionIds(curriculumId) {
+  try {
+    const rows = await fetchAllRows(() =>
+      supabase.from('curriculum_hidden_questions').select('question_id').eq('curriculum_id', curriculumId), 'question_id')
+    return new Set(rows.map(r => r.question_id))
+  } catch {
+    return new Set()
+  }
+}
+
+/** A student says this question isn't in their course; it goes to the subject's review list in Admin. */
+export async function reportOffCourse(questionId, curriculumId) {
+  const session = await getSession()
+  const res = await fetch('/api/report-off-course', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ questionId, curriculumId }),
+  })
+  if (!res.ok) throw new Error(`Report failed (${res.status})`)
+  return res.json()
 }
 
 /**

@@ -27,7 +27,7 @@ import {
   fetchAndPersistMoreQuestions,
   incrementQuestionVariantUsage,
   flagQuestion,
-  reportQuestion,
+  reportQuestion, reportOffCourse,
   flagTopicForStudyPlan,
   completeAssignment,
   recordAssignmentAnswer,
@@ -441,6 +441,19 @@ export default function QuizScreen({
       })
     } catch {}
     setFlagging(null)
+  }
+
+  // "It's not in my course" goes to the subject's course review in Admin (curriculum subjects only).
+  const curriculumIdForReports = typeof subjectTile?.id === 'string' && subjectTile.id.startsWith('curriculum_') ? subjectTile.id.slice('curriculum_'.length) : null
+  // Question ids reported as not in the student's course this session.
+  const [offCourseIds, setOffCourseIds] = useState(() => new Set())
+  const handleOffCourse = async () => {
+    if (!currentQ || !curriculumIdForReports) return
+    const backendId = currentQ.is_variant ? (currentQ.parent_question_id || currentQ.id) : currentQ.id
+    try {
+      await reportOffCourse(backendId, curriculumIdForReports)
+      setOffCourseIds(prev => new Set([...prev, currentQ.id]))
+    } catch {}
   }
 
   const handleReport = async () => {
@@ -1958,6 +1971,7 @@ export default function QuizScreen({
   const alreadyReported = !!currentQ?.id && reportedIds.has(currentQ.id)
   const REPORT_OPTIONS = [
     ['wrong', 'The answer is wrong'],
+    ...(curriculumIdForReports ? [['offcourse', "It's not in my course"]] : []),
     ['Typo', "There's a typo"],
     ['Confusing', "It's confusing"],
     ['Too hard', 'Too hard for my level'],
@@ -1965,6 +1979,7 @@ export default function QuizScreen({
   ]
   const sendReport = async (kind) => {
     if (kind === 'wrong') await handleReport()
+    else if (kind === 'offcourse') await handleOffCourse()
     else await handleFlag(kind)
     setReportThanks(true)
   }
@@ -2298,7 +2313,7 @@ export default function QuizScreen({
             <div role="menu" aria-label="What's wrong with it?" style={{ position: 'absolute', right: isMobile ? 'auto' : 0, left: isMobile ? 0 : 'auto', bottom: 'calc(100% + 6px)', zIndex: 51, width: 240, padding: 6, borderRadius: 10, background: t.bgCard, border: `1px solid ${t.border}`, boxShadow: t.shadowModal, display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '6px 9px 4px', fontSize: 13, fontWeight: 800, color: t.text }}>What's wrong?</div>
               {REPORT_OPTIONS.map(([kind, label]) => {
-                const done = kind === 'wrong' ? alreadyReported : myFlags.has(kind)
+                const done = kind === 'wrong' ? alreadyReported : kind === 'offcourse' ? offCourseIds.has(currentQ?.id) : myFlags.has(kind)
                 return (
                   <button key={kind} type="button" role="menuitem" disabled={done || reporting || !!flagging}
                     onClick={async () => { setReportMenuOpen(false); await sendReport(kind) }}

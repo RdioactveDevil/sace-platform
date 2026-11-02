@@ -4,6 +4,7 @@ import { CLAUDE_MODEL, CLAUDE_THINKING, CLAUDE_EXAM_MODEL, CLAUDE_EXAM_EFFORT } 
 import { logger } from "../lib/logger";
 import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
+import { scopeForSubtopic, scopePromptLines, filterInScope } from "../lib/course-scope";
 import { extractJsonArray } from "../lib/json-latex";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { latexPromptRule } from "../lib/math-prompt";
@@ -331,7 +332,7 @@ export async function generateForTopic(opts: {
     return { status: 400, body: { error: `Topic T${topicIdx + 1} not found in ${normalizedSubject}` } };
   }
   const { data: sRows } = await adminDb
-    .from("curriculum_subtopics").select("name").eq("topic_id", tRow.id).order("order_index");
+    .from("curriculum_subtopics").select("id, name").eq("topic_id", tRow.id).order("order_index");
   const sRow = (sRows ?? [])[subtopicIdx];
   if (!sRow) {
     return { status: 400, body: { error: `Subtopic ${topicCode} not found in ${normalizedSubject}` } };
@@ -381,6 +382,7 @@ export async function generateForTopic(opts: {
         sets: Math.max(1, Math.round(count / QUESTIONS_PER_PASSAGE)),
         examContext: typeof meta.exam_context === "string" ? meta.exam_context.trim().slice(0, 3000) : "",
         difficultyInstruction,
+        extraSystemLines: scopePromptLines(await scopeForSubtopic(adminDb, (subIdRow as { id?: string } | null)?.id)),
       });
       const rows = await insertPassageSets(adminDb, sets, {
         table: autoApprove ? "questions" : "draft_questions",
@@ -416,6 +418,8 @@ export async function generateForTopic(opts: {
   // exams, practice tests). Injected into every generation so the bank matches
   // the real material. Topic-scoped first, subject-wide as fallback.
   const exemplarContext = await fetchExemplarContext(adminDb, normalizedSubject, topicName);
+  // The course scope for this subtopic: in the prompt, and checked before saving.
+  const courseScope = await scopeForSubtopic(adminDb, (sRow as { id?: string }).id);
   // Graphs are enabled by the curriculum's generation flag OR when the caller
   // explicitly asks for them (e.g. the live quiz top-up, which wants visual
   // questions to appear). The prompt still only emits a graph when the question
@@ -505,6 +509,7 @@ export async function generateForTopic(opts: {
       examContext,
     ] : []),
     ...exemplarSystemLines(curriculumLabel, exemplarContext),
+    ...scopePromptLines(courseScope),
     "Do not repeat the same scenario across questions.",
     SACE_DIFFICULTY_ANCHOR,
     difficultyInstruction,
@@ -601,8 +606,10 @@ export async function generateForTopic(opts: {
   // ── Verify answer keys BEFORE anything enters the bank ────────────────────────
   // Fact-check each generated question: drop unsalvageable ones and fix any
   // mislabelled answer_index so a wrong answer key can't reach students.
-  const { kept: verifiedQuestions, dropped, fixed, errored } =
+  const { kept: checkedQuestions, dropped, fixed, errored } =
     await filterVerifiedQuestions(questions, { context: { topicCode }, strict: examGrade });
+  // Then the course check: questions that need anything outside the course go.
+  const { kept: verifiedQuestions } = await filterInScope(checkedQuestions, courseScope, { topicCode, route: "generate-questions" });
   if (dropped || fixed || errored) {
     logger.info(
       { topicCode, generated: questions.length, kept: verifiedQuestions.length, dropped, fixed, errored },
