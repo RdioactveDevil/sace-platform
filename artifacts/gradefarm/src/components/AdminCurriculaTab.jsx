@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listCurricula, createCurriculum, deleteCurriculum, setCurriculumArchived } from '../lib/curriculaDb'
+import { listCurricula, createCurriculum, setCurriculumArchived } from '../lib/curriculaDb'
 import { fetchSubjectBankCounts } from '../lib/db'
 import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
@@ -126,15 +126,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
     }
   }
 
-  const handleDelete = async (e, c) => {
+  // Delete opens a dialog that shows what goes with it, then deletes it all (DeleteSubjectDialog).
+  const [deleting, setDeleting] = useState(null)
+  const handleDelete = (e, c) => {
     e.stopPropagation()
-    if (!window.confirm(`Permanently delete "${c.name}"?\n\nThis removes its topics, subtopics and uploaded resources and cannot be undone. Its questions stay in the database but are no longer attached to any subject.\n\nTo just hide it from students, use Archive instead.`)) return
-    try {
-      await deleteCurriculum(c.id)
-      setCurricula(prev => prev.filter(x => x.id !== c.id))
-    } catch (err) {
-      setError(err.message)
-    }
+    setDeleting(c)
   }
 
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -235,6 +231,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
         </div>
       )}
 
+      {deleting && (
+        <DeleteSubjectDialog subject={deleting} onClose={() => setDeleting(null)}
+          onDeleted={() => { setCurricula(prev => prev.filter(x => x.id !== deleting.id)); setDeleting(null) }} />
+      )}
+
       {/* New subject */}
       {showModal && (
         <>
@@ -330,4 +331,87 @@ const modal = {
   background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
   borderRadius: 14, padding: 24, boxShadow: 'var(--t-shadowModal)',
   fontFamily: FONT_B,
+}
+
+/**
+ * Deleting a subject with everything in it: its questions, drafts, passages,
+ * students' answers and review history for them, uploaded files and free or
+ * granted access (api-server routes/curriculum-delete.ts). It first shows how
+ * much goes, and the admin types the subject's name to confirm.
+ */
+function DeleteSubjectDialog({ subject, onClose, onDeleted }) {
+  const [info, setInfo] = useState(null)
+  const [error, setError] = useState('')
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    adminApiPost('/api/admin/curriculum-delete-preview', { curriculumId: subject.id })
+      .then(d => { if (!cancelled) setInfo(d) })
+      .catch(e => { if (!cancelled) setError(e.message) })
+    return () => { cancelled = true }
+  }, [subject.id])
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
+
+  const n = (v, one, many = `${one}s`) => `${(v || 0).toLocaleString()} ${v === 1 ? one : many}`
+  const blocked = info?.paidSubscriptions > 0
+  const ready = info && !blocked && typed.trim() === subject.name && !busy
+
+  const run = async () => {
+    if (!ready) return
+    setBusy(true); setError('')
+    try {
+      await adminApiPost('/api/admin/curriculum-delete', { curriculumId: subject.id, confirmName: typed.trim() })
+      onDeleted()
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div onClick={() => !busy && onClose()} style={backdrop} />
+      <div role="dialog" aria-modal="true" aria-labelledby="cu-del-title" style={{ ...modal, maxWidth: 480 }}>
+        <h3 id="cu-del-title" style={{ margin: '0 0 6px', color: 'var(--t-text)', fontSize: 17, fontWeight: 800 }}>Delete {subject.name}?</h3>
+        <p style={{ ...ui.hint, fontSize: 13, margin: '0 0 14px' }}>
+          This deletes the subject and everything in it, for good. To hide it from students and keep everything, use Archive instead.
+        </p>
+        {!info && !error && <div style={{ fontSize: 13, color: 'var(--t-textMuted)' }} role="status">Counting what goes with it…</div>}
+        {info && (
+          <ul style={{ margin: '0 0 14px', paddingLeft: 18, fontSize: 13.5, color: 'var(--t-text)', lineHeight: 1.8 }}>
+            <li>{n(info.questions, 'question')}{info.drafts ? `, plus ${n(info.drafts, 'draft')}` : ''}{info.passages ? ` and ${n(info.passages, 'reading passage')}` : ''}</li>
+            <li>{info.answers ? `${n(info.answers, 'answer record')} from ${n(info.students, 'student')}` : 'No student answers'}</li>
+            <li>Its topics, subtopics{info.resources ? ` and ${n(info.resources, 'uploaded file')}` : ''}</li>
+            {info.accessRows > 0 && <li>Free, trial and tutor access to it ({info.accessRows.toLocaleString()})</li>}
+          </ul>
+        )}
+        {blocked && (
+          <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>
+            {n(info.paidSubscriptions, 'student')} {info.paidSubscriptions === 1 ? 'pays' : 'pay'} for this subject. Cancel {info.paidSubscriptions === 1 ? 'their subscription' : 'those subscriptions'} first (Admin → Students), then delete it.
+          </div>
+        )}
+        {info && !blocked && (
+          <div style={{ marginBottom: 14 }}>
+            <label htmlFor="cu-del-name" style={ui.label}>Type <b style={{ color: 'var(--t-text)' }}>{subject.name}</b> to confirm</label>
+            <input id="cu-del-name" type="text" value={typed} onChange={e => setTyped(e.target.value)} autoComplete="off" autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') run() }} style={{ ...ui.input, width: '100%' }} />
+          </div>
+        )}
+        {error && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{error}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" onClick={onClose} disabled={busy} style={btn('secondary', busy)}>Cancel</button>
+          <button type="button" onClick={run} disabled={!ready}
+            style={{ ...btn('danger', !ready), ...(ready ? { background: 'var(--t-danger)', color: '#fff' } : {}) }}>
+            {busy ? 'Deleting…' : 'Delete everything'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
 }
