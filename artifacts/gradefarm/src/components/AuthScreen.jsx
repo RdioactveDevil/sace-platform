@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { signIn, signUp, sendPasswordReset } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, PasswordInput, Note, authBtn, linkStyle, FONT_B } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 /** Sign in, create an account (as a student or for a child), or reset a password. */
 export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleTheme }) {
@@ -80,7 +81,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
     : (mode === 'signin' ? 'Sign in' : mode === 'reset' ? 'Send reset link' : 'Create account')
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={onBack}
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={onBack} backdrop={<CalmBackground theme={theme} />}
       right={onBack && <button type="button" className="af-link" onClick={onBack} style={{ ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back to home</button>}>
       <div className="af-in" style={{ width: '100%', maxWidth: 400, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box' }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{title}</h1>
