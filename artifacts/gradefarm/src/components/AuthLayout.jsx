@@ -12,13 +12,14 @@ const FONT_D = "'Sifonn Pro', sans-serif"
 const GOLD = '#f1be43'
 const NAVY = '#0c1037'
 
-/** The logo in the brand's colours, in the navy box the sidebar uses. */
-export function Logo({ onClick }) {
+/** The wordmark as on the homepage: no box, navy and gold on light, white and gold on dark. */
+export function Logo({ onClick, theme = 'dark' }) {
   const Tag = onClick ? 'button' : 'span'
+  const dark = theme === 'dark'
   return (
     <Tag type={onClick ? 'button' : undefined} onClick={onClick} aria-label={onClick ? 'gradefarm home' : undefined} className="af-logo"
-      style={{ display: 'inline-flex', alignItems: 'center', height: 34, padding: '0 12px', borderRadius: 8, border: 'none', background: NAVY, cursor: onClick ? 'pointer' : 'default', fontFamily: FONT_D, fontSize: 15, letterSpacing: 1.2, lineHeight: 1 }}>
-      <span style={{ color: '#ffffff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+      style={{ display: 'inline-flex', alignItems: 'baseline', border: 'none', background: 'none', padding: 0, cursor: onClick ? 'pointer' : 'default', fontFamily: FONT_D, fontSize: 28, letterSpacing: '0.08em', lineHeight: 1, whiteSpace: 'nowrap' }}>
+      <span style={{ color: dark ? '#ffffff' : NAVY }}>grade</span><span style={{ color: dark ? GOLD : '#e8ac1c' }}>farm.</span>
     </Tag>
   )
 }
@@ -26,12 +27,13 @@ export function Logo({ onClick }) {
 /**
  * Page frame: logo on the left, `right` (links, progress) and the light/dark
  * switch on the right, then `children` centred (or from the top with
- * `align="top"`).
+ * `align="top"`). `backdrop` is drawn behind it all (e.g. <CalmBackground />).
  */
-export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', children }) {
+export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', backdrop, children }) {
   const t = THEMES[theme]
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light', position: 'relative', isolation: 'isolate' }}>
+      {backdrop}
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         @keyframes afIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
@@ -46,8 +48,8 @@ export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, 
         .af-chip { transition: border-color 0.12s, background 0.12s; }
         .af-chip:hover { border-color: ${t.textMuted} !important; }
       `}</style>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px clamp(16px, 4vw, 28px)', flexShrink: 0 }}>
-        <Logo onClick={onLogoClick} />
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px clamp(16px, 4vw, 28px)', flexShrink: 0, position: 'relative', zIndex: 1 }}>
+        <Logo onClick={onLogoClick} theme={theme} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>{center}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 13, color: t.textMuted }}>
           {right}
@@ -59,7 +61,7 @@ export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, 
           )}
         </div>
       </header>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', padding: '12px 16px 56px' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', padding: '12px 16px 56px', position: 'relative', zIndex: 1 }}>
         {children}
       </main>
     </div>
