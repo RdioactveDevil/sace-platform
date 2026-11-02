@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, Moon, Menu, X } from 'lucide-react'
 import { getPlatformSettings } from '../lib/db'
@@ -123,6 +123,13 @@ const CSS = `
 .lp-grow b { font-size: 12.5px; color: var(--lp-ink); }
 
 /* question card */
+/* Hand-drawn hints: "Try this question!" over the sample question, then "Now click And?" */
+.lp-q-wrap { position: relative; margin-top: 40px; }
+.lp-hint { font-family: 'Caveat', 'Segoe Print', cursive; font-weight: 700; font-size: 25px; line-height: 1; color: var(--lp-gold-text); white-space: nowrap; animation: lpIn 0.4s ease; }
+.lp-hint-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.lp-hint-top { position: absolute; right: 52px; top: -36px; transform: rotate(-3deg); }
+.lp-hint-svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.lp-hint-inline { display: inline-flex; align-items: center; gap: 6px; transform: rotate(-2deg); }
 .lp-q { padding: 18px; display: flex; flex-direction: column; gap: 9px; }
 .lp-qt { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--lp-muted); }
 .lp-qt b { color: var(--lp-ink); }
@@ -288,31 +295,73 @@ const CSS = `
 // Maths is written in LaTeX between $…$ and drawn with KaTeX (MathText).
 const SAMPLE = { topic: 'Further differentiation', level: 'Level 3', stem: 'Differentiate $y = (2x - 5)^3$.', options: ['$3(2x-5)^2$', '$6(2x-5)^2$', '$6x(2x-5)^2$', '$(2x-5)^2$'], answer: 1, working: 'Chain rule: differentiate the outside, $3(2x-5)^2$, then multiply by the derivative of the inside, $2$. So $\\frac{dy}{dx} = 6(2x-5)^2$.' }
 
-/** Pick an answer, then check it, as on the question screen. */
-function QuestionCard({ onResult }) {
+/** A dotted, hand-drawn arrow ending at (x2, y2), with a head pointing along its last stretch. */
+function HintArrow({ d, x2, y2, fromX, fromY }) {
+  const a = Math.atan2(y2 - fromY, x2 - fromX), L = 11
+  const head = [a + Math.PI - 0.5, a + Math.PI + 0.5].map(t => `M${x2},${y2} l${(Math.cos(t) * L).toFixed(1)},${(Math.sin(t) * L).toFixed(1)}`).join(' ')
+  return (
+    <>
+      <path d={d} fill="none" stroke="var(--lp-gold-text)" strokeWidth="2.5" strokeDasharray="1 7" strokeLinecap="round" />
+      <path d={head} fill="none" stroke="var(--lp-gold-text)" strokeWidth="2.5" strokeLinecap="round" />
+    </>
+  )
+}
+
+/** Pick an answer, then check it, as on the question screen. `hint` points at the options until one is picked. */
+function QuestionCard({ onResult, hint = false }) {
   const q = SAMPLE
   const [picked, setPicked] = useState(null)
   const [checked, setChecked] = useState(false)
   const check = () => { setChecked(true); onResult?.(picked) }
+  // Where the first option is, so the arrow lands on it whatever the screen size.
+  const wrap = useRef(null), firstOpt = useRef(null)
+  const [geo, setGeo] = useState(null)
+  const showHint = hint && picked === null && !checked
+  useLayoutEffect(() => {
+    if (!showHint || !wrap.current || !firstOpt.current) return undefined
+    const measure = () => {
+      const w = wrap.current.getBoundingClientRect(), o = firstOpt.current.getBoundingClientRect()
+      setGeo({ w: w.width, ox: o.right - w.left, oy: o.top - w.top + o.height / 2 })
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(measure)
+    ro.observe(wrap.current)
+    return () => ro.disconnect()
+  }, [showHint])
   return (
-    <div className="lp-card lp-q">
-      <div className="lp-qt"><span><b>{q.topic}</b> · {q.level}</span><span>Try it</span></div>
-      <div className="lp-stem" id="lp-q-stem"><MathText text={q.stem} /></div>
-      <div role="group" aria-labelledby="lp-q-stem" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {q.options.map((o, i) => {
-          const st = !checked ? '' : i === q.answer ? 'r' : i === picked ? 'w' : 'd'
-          return (
-            <button key={o} type="button" className={`lp-opt ${st}`} disabled={checked} aria-pressed={checked ? undefined : picked === i} onClick={() => setPicked(i)}>
-              <span className="k">{'ABCD'[i]}</span><MathText text={o} /><span className="tg">{st === 'r' ? 'Answer' : st === 'w' ? 'Your answer' : ''}</span>
-            </button>
-          )
-        })}
-      </div>
-      {checked && <div className="lp-sol" role="status"><b>{picked === q.answer ? 'Correct' : 'Not quite'}</b><MathText text={q.working} /></div>}
-      <div className="lp-qact">
-        {checked
-          ? <button type="button" className="lp-btn sm" onClick={() => { setPicked(null); setChecked(false); onResult?.(null) }}>Try again</button>
-          : <><button type="button" className="lp-btn sm gold" disabled={picked === null} onClick={check}>Check</button><span>Pick one, then check it.</span></>}
+    <div className="lp-q-wrap" ref={wrap}>
+      {showHint && (
+        <div className="lp-hint-layer" aria-hidden="true">
+          <span className="lp-hint lp-hint-top">Try this question!</span>
+          {geo && (
+            <svg className="lp-hint-svg" width={geo.w} height={geo.oy + 10}>
+              <HintArrow
+                d={`M${geo.w - 48},-4 C${geo.w - 8},${geo.oy * 0.25} ${geo.w - 6},${geo.oy * 0.75} ${geo.ox - 30},${geo.oy}`}
+                fromX={geo.w - 6} fromY={geo.oy * 0.75} x2={geo.ox - 30} y2={geo.oy} />
+            </svg>
+          )}
+        </div>
+      )}
+      <div className="lp-card lp-q">
+        <div className="lp-qt"><span><b>{q.topic}</b> · {q.level}</span></div>
+        <div className="lp-stem" id="lp-q-stem"><MathText text={q.stem} /></div>
+        <div role="group" aria-labelledby="lp-q-stem" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {q.options.map((o, i) => {
+            const st = !checked ? '' : i === q.answer ? 'r' : i === picked ? 'w' : 'd'
+            return (
+              <button key={o} ref={i === 0 ? firstOpt : undefined} type="button" className={`lp-opt ${st}`} disabled={checked} aria-pressed={checked ? undefined : picked === i} onClick={() => setPicked(i)}>
+                <span className="k">{'ABCD'[i]}</span><MathText text={o} /><span className="tg">{st === 'r' ? 'Answer' : st === 'w' ? 'Your answer' : ''}</span>
+              </button>
+            )
+          })}
+        </div>
+        {checked && <div className="lp-sol" role="status"><b>{picked === q.answer ? 'Correct' : 'Not quite'}</b><MathText text={q.working} /></div>}
+        <div className="lp-qact">
+          {checked
+            ? <button type="button" className="lp-btn sm" onClick={() => { setPicked(null); setChecked(false); onResult?.(null) }}>Try again</button>
+            : <button type="button" className="lp-btn sm gold" disabled={picked === null} onClick={check}>Check</button>}
+        </div>
       </div>
     </div>
   )
@@ -389,13 +438,22 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
           {last
             ? <><button type="button" className="lp-btn gold lg" onClick={onStart}>Start free</button><button type="button" className="lp-btn lg" onClick={onSeeInside}>How it works ↓</button></>
             : <button type="button" className="lp-btn gold lg" onClick={() => setN(n + 1)} aria-label="And? Show the next part">And?</button>}
+          {/* Once they've answered the sample question, point them at And? */}
+          {n === 1 && picked !== null && (
+            <span className="lp-hint lp-hint-inline" aria-hidden="true">
+              <svg width="54" height="30" viewBox="0 0 54 30" style={{ overflow: 'visible' }}>
+                <HintArrow d="M52,24 C38,30 18,26 6,12" fromX={18} fromY={26} x2={6} y2={12} />
+              </svg>
+              Now click And?
+            </span>
+          )}
           <span className="n" aria-live="polite">{n} of {CLAUSES.length}</span>
           {last && <button type="button" className="lp-link" onClick={() => setN(1)}>Start again</button>}
           {!last && n > 1 && <button type="button" className="lp-link" onClick={() => setN(CLAUSES.length)}>Show it all</button>}
         </div>
       </div>
       <div className="lp-and-vis" key={n} aria-live="polite">
-        {n === 1 && <QuestionCard onResult={setPicked} />}
+        {n === 1 && <QuestionCard onResult={setPicked} hint />}
         {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === SAMPLE.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}><MathText text={planted} /></p></div>}
         {n === 3 && <><Grow /><p className="lp-muted" style={{ fontSize: 15, maxWidth: '40ch', marginTop: 6 }}>Each time you get it right, the gap gets longer. Right every time, and it turns gold.</p></>}
         {n === 4 && <TitanCard />}
@@ -753,7 +811,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
   return (
     <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
-      <style>{`@font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }${CSS}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');\n@font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }${CSS}`}</style>
 
       <nav className="lp-nav" data-scrolled={scrolled || menuOpen} aria-label="Main">
         <div className="lp-in">
