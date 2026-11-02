@@ -12,6 +12,7 @@ import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
 import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import SharedQuestionsPanel from './SharedQuestionsPanel'
+import CourseScopePanel from './CourseScopePanel'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
@@ -830,6 +831,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
       {/* Reference resources — textbooks/exams distilled into generation exemplars */}
       {!generating && <CurriculumResourcesPanel curriculumId={curriculumId} />}
+
+      {/* Course scope, and checking the bank against it */}
+      {!generating && <CourseScopePanel curriculumId={curriculumId} />}
 
       {/* Borrow questions from another subject, subtopic by subtopic */}
       {!generating && <SharedQuestionsPanel curriculumId={curriculumId} />}

@@ -11,6 +11,7 @@ import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exe
 import { latexPromptRule } from "../lib/math-prompt";
 import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireAdmin } from "../lib/auth";
+import { scopeForSubtopic, scopePromptLines, filterInScope } from "../lib/course-scope";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -27,7 +28,7 @@ function getAdmin() {
 // small file. Downloads the PDF as base64 and deletes the temporary upload.
 const CURRICULUM_DOC_PREFIX = "curriculum-docs/";
 
-async function loadCurriculumDoc(storagePath: unknown): Promise<{ base64?: string; error?: string }> {
+export async function loadCurriculumDoc(storagePath: unknown): Promise<{ base64?: string; error?: string }> {
   if (typeof storagePath !== "string" || !storagePath.startsWith(CURRICULUM_DOC_PREFIX) || storagePath.includes("..")) {
     return { error: "Invalid document path" };
   }
@@ -441,6 +442,9 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   // Exemplar packs distilled from this subject's reference resources, so the
   // generated bank questions match the uploaded textbooks/exams for this subtopic.
   const exemplarContext = await fetchExemplarContext(admin, subjectName, subtopicName);
+  // The course scope for this subtopic (official key ideas, what the course
+  // leaves out): in the prompt, and checked before questions are saved.
+  const courseScope = await scopeForSubtopic(admin, subtopicId);
 
   // Reading-comprehension topics get passage sets (one passage + several
   // questions) instead of standalone questions.
@@ -459,7 +463,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
         subtopicName,
         sets: Math.max(1, Math.round(Number(count) / QUESTIONS_PER_PASSAGE)),
         examContext,
-        extraSystemLines: exemplarSystemLines(subjectName, exemplarContext),
+        extraSystemLines: [...exemplarSystemLines(subjectName, exemplarContext), ...scopePromptLines(courseScope)],
       });
       const inserted = await insertPassageSets(admin, sets, {
         table: "questions",
@@ -497,6 +501,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
       examContext,
     ] : []),
     ...exemplarSystemLines(subjectName, exemplarContext),
+    ...scopePromptLines(courseScope),
     "Vary difficulty: include easy (1–2), medium (3), and hard (4–5) questions.",
     "Do not repeat the same scenario across questions.",
   ].join("\n");
@@ -578,9 +583,12 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     );
   }
   questions = verify.kept;
+  // Then the course check: questions that need anything outside the course go.
+  const onCourse = await filterInScope(questions, courseScope, { subtopicId, route: "curriculum-generate" });
+  questions = onCourse.kept;
   if (!questions.length) {
     await admin.from("curriculum_subtopics").update({ gen_status: "done", questions_generated: 0 }).eq("id", subtopicId);
-    res.status(200).json({ inserted: 0, message: "No questions passed verification" });
+    res.status(200).json({ inserted: 0, message: onCourse.dropped ? "No questions passed the course check" : "No questions passed verification" });
     return;
   }
 
