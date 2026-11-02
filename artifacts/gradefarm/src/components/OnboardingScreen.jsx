@@ -3,6 +3,7 @@ import { completeOnboarding, saveParentDetails } from '../lib/db'
 import { needsParentConsent } from '../lib/parentConsent'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, Note, authBtn, linkStyle, choiceChip } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 const YEAR_LEVELS = [6, 7, 8, 9, 10, 11, 12]
 
@@ -244,7 +245,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
 
   const optionalScreen = screen === 'school'
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top"
+    <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} align="top"
       center={(
         <div role="progressbar" aria-label="Setting up your account" aria-valuemin={1} aria-valuemax={screens.length} aria-valuenow={at + 1} style={{ display: 'flex', gap: 5 }}>
           {screens.map((s, i) => <span key={s} style={{ width: 22, height: 3, borderRadius: 3, background: i <= at ? t.text : t.border }} />)}

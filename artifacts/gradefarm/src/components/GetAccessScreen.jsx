@@ -8,6 +8,7 @@ import { Check } from 'lucide-react'
 import { SubjectIconByName } from './SubjectIcons'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Note, authBtn, linkStyle } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 const shortDate = (d) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 
@@ -158,7 +159,7 @@ export default function GetAccessScreen({ subscriptions = [], onAccessChanged, o
   )
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top"
+    <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} align="top"
       right={<button type="button" className="af-link" onClick={() => navigate('/subject-picker')} style={{ ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back to subjects</button>}>
       <div className="af-in" style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 'clamp(8px, 5vh, 48px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
