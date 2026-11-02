@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { completeOnboarding, sendTutorApplication } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Note, authBtn, linkStyle } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 const NEXT_STEPS = [
   ['We review your application', 'We check the details you sent. You keep the same account the whole way through.'],
@@ -47,7 +48,7 @@ export default function TutorOnboardingScreen({ profile, userEmail, onDone, pend
   const org = profile?.tutor_organization || pendingApplication?.tutor_organization
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top">
+    <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} align="top">
       <form className="af-in" onSubmit={finish} noValidate
         style={{ width: '100%', maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 18, padding: 'clamp(16px, 10vh, 100px) 0 0' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

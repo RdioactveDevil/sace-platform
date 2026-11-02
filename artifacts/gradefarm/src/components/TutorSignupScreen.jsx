@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { signUpAsTutorAccount, sendTutorApplication } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, PasswordInput, Note, authBtn, linkStyle, choiceChip } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 const XP_YEARS = [0, 1, 2, 3, 5, 8, 10, 15]
 const xpLabel = (y) => (y === 0 ? 'Under 1' : `${y}+`)
@@ -93,7 +94,7 @@ export default function TutorSignupScreen({ theme = 'dark', onToggleTheme }) {
   const quietLink = { ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')}
+    <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')}
       right={<button type="button" className="af-link" onClick={() => navigate('/auth', { state: { mode: 'signup' } })} style={quietLink}>Student sign-up</button>}>
 
       {sentTo ? (

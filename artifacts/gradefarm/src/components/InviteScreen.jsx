@@ -5,6 +5,7 @@ import { fetchInvite, respondToInvite, switchToChild } from '../lib/db'
 import { clearPendingInvite, inviteAcceptPath, pendingInvite, rememberPendingInvite } from '../lib/pendingInvite'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Note, authBtn } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 const STATUS_TEXT = {
   accepted:  'This invite has already been accepted.',
@@ -175,7 +176,7 @@ export default function InviteScreen({ signedIn, theme = 'dark', onToggleTheme }
   }
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')}>
+    <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')}>
       <div className="af-in" style={{ width: '100%', maxWidth: 440, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {body}
       </div>
