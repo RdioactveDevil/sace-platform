@@ -73,6 +73,7 @@ const CSS = `
 .lp-btn:disabled { opacity: 0.5; cursor: default; }
 .lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 /* The logo keeps its own font (Sifonn Pro) and spacing; the .lp prefix puts it above the rule that gives buttons the body font. */
+.lp-brand { white-space: nowrap; } .lp-brand .g { color: var(--lp-logo-g); } .lp-brand .f { color: var(--lp-logo-f); }
 .lp .lp-wordmark { display: inline-flex; align-items: baseline; border: none; background: none; padding: 0; font-family: 'Sifonn Pro', sans-serif; letter-spacing: 0.08em; line-height: 1; white-space: nowrap; cursor: pointer; }
 .lp-wordmark .g { color: var(--lp-logo-g); } .lp-wordmark .f { color: var(--lp-logo-f); }
 .lp-icon-btn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-muted); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
@@ -108,7 +109,6 @@ const CSS = `
 .lp-and-ctl { display: flex; gap: 16px; align-items: center; margin-top: 28px; flex-wrap: wrap; }
 .lp-and-ctl .n { font-size: 13px; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
 .lp-and-vis { min-height: 380px; display: flex; flex-direction: column; justify-content: center; gap: 10px; animation: lpIn 0.3s ease; }
-.lp-and-vis .cap { font-size: 12.5px; font-weight: 700; color: var(--lp-gold-text); }
 @keyframes lpIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 
 /* squares */
@@ -157,8 +157,10 @@ const CSS = `
 
 /* 2 · What's inside: the scrolling phone */
 .lp-sec { padding-top: 72px; padding-bottom: 72px; border-top: 1px solid var(--lp-line); scroll-margin-top: 62px; }
-.lp-sec-head h2 { font-size: clamp(27px, 3.3vw, 38px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
-.lp-sec-head p { color: var(--lp-muted); margin-top: 8px; max-width: 58ch; font-size: 16px; }
+/* Section headings are centred, like "This is spaced repetition." */
+.lp-sec-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.lp-sec-head h2 { font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; max-width: 26ch; }
+.lp-sec-head p { color: var(--lp-muted); max-width: 58ch; font-size: 16px; }
 .lp-stk { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 64px; margin-top: 24px; }
 .lp-ph-col { position: sticky; top: 90px; align-self: start; }
 .lp-ph { background: #0c0d14; border-radius: 40px; padding: 10px; box-shadow: var(--lp-float), 0 0 0 1px var(--lp-line-2); width: 320px; max-width: 100%; }
@@ -168,7 +170,6 @@ const CSS = `
 .lp-ph-s h4 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
 .lp-chap { min-height: 62vh; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding-block: 24px; opacity: 0.35; transition: opacity 0.3s; }
 .lp-chap.on { opacity: 1; }
-.lp-chap .k { font-size: 13px; font-weight: 800; color: var(--lp-gold-text); }
 .lp-chap h3 { font-size: clamp(25px, 3vw, 36px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
 .lp-chap p { color: var(--lp-muted); font-size: 16.5px; max-width: 46ch; }
 .lp-chap .who { font-size: 12.5px; font-weight: 700; color: var(--lp-muted); }
@@ -229,8 +230,8 @@ const CSS = `
 .lp-prices .amt small { font-size: 14px; font-weight: 600; color: var(--lp-muted); letter-spacing: 0; }
 .lp-prices p { font-size: 14px; color: var(--lp-muted); }
 .lp-prices .pick { box-shadow: inset 0 3px 0 var(--lp-gold); }
-.lp-end { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
-.lp-end h2 { font-size: clamp(26px, 3.2vw, 36px); font-weight: 800; letter-spacing: -0.03em; }
+.lp-end { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px; }
+.lp-end h2 { font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; letter-spacing: -0.03em; }
 .lp-foot { border-top: 1px solid var(--lp-line); }
 .lp-foot .lp-in { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 22px; padding-bottom: 22px; font-size: 12.5px; color: var(--lp-muted); }
 .lp-foot-links { display: flex; gap: 18px; flex-wrap: wrap; }
@@ -361,12 +362,6 @@ const CLAUSES = [
 ]
 // The sentence gets a little smaller as it grows, so every clause fits.
 const SIZES = [52, 50, 46, 42]
-const CAPTIONS = [
-  'Year 11 Methods. Try this one.',
-  'A wrong answer is planted',
-  'It comes back until it turns gold',
-  'Titan, the AI tutor',
-]
 
 function AndHero({ onStart, onDone, onSeeInside, done }) {
   // Someone who finished it earlier this session starts at the end.
@@ -400,7 +395,6 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
         </div>
       </div>
       <div className="lp-and-vis" key={n} aria-live="polite">
-        <span className="cap">{CAPTIONS[n - 1]}</span>
         {n === 1 && <QuestionCard onResult={setPicked} />}
         {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === SAMPLE.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}><MathText text={planted} /></p></div>}
         {n === 3 && <><Grow /><p className="lp-muted" style={{ fontSize: 15, maxWidth: '40ch', marginTop: 6 }}>Each time you get it right, the gap gets longer. Right every time, and it turns gold.</p></>}
@@ -629,7 +623,6 @@ function Inside() {
         <div>
           {CHAPTERS.map(([k, h, p], i) => (
             <div key={k} ref={el => { refs.current[i] = el }} data-i={i} className={`lp-chap${active === i ? ' on' : ''}`}>
-              <span className="k">{k}</span>
               <h3>{h}</h3>
               <p>{p}</p>
               <div className="lp-chap-screen" aria-hidden="true"><div className="lp-ph-s"><PhoneScreen i={i} /></div></div>
@@ -639,6 +632,11 @@ function Inside() {
       </div>
     </section>
   )
+}
+
+/** "gradefarm." in its brand colours inside running text (the heading's own font). */
+function Brand() {
+  return <span className="lp-brand"><span className="g">grade</span><span className="f">farm.</span></span>
 }
 
 /* ─── Where it fits: textbook, tutor, gradefarm. ─────────────────────────── */
@@ -655,12 +653,12 @@ function WhereItFits({ weekly }) {
   return (
     <section id="fits" className="lp-in lp-sec" aria-labelledby="lp-fits">
       <div className="lp-sec-head">
-        <h2 id="lp-fits">Your textbook has the questions. Your tutor has an hour a week. gradefarm. is the rest.</h2>
+        <h2 id="lp-fits" style={{ maxWidth: '32ch' }}>Your textbook has the questions. Your tutor has an hour a week. <span style={{ display: 'block' }}><Brand /> is the rest.</span></h2>
         <p>It doesn't replace your tutor. It's the practice between lessons.</p>
       </div>
       <div className="lp-card lp-cmp">
         <table>
-          <thead><tr><th><span className="lp-sr">What</span></th><th>Textbook</th><th>Tutor</th><th className="gf">gradefarm.</th></tr></thead>
+          <thead><tr><th><span className="lp-sr">What</span></th><th>Textbook</th><th>Tutor</th><th className="gf"><Brand /></th></tr></thead>
           <tbody>
             {rows.map(([what, book, tutor, gf]) => (
               <tr key={what}><th scope="row">{what}</th><td className={/^No\b|^Not/.test(book) ? 'no' : ''}>{book}</td><td className={/^No\b|^Not/.test(tutor) ? 'no' : ''}>{tutor}</td><td className="gf">{gf}</td></tr>
@@ -811,7 +809,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         </section>
 
         <section className="lp-in lp-sec" aria-labelledby="lp-pricing">
-          <div className="lp-sec-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 16, flexWrap: 'wrap' }}>
+          <div className="lp-sec-head">
             <h2 id="lp-pricing">Pricing</h2>
             <button type="button" className="lp-link" onClick={() => navigate('/pricing')}>See full pricing</button>
           </div>
