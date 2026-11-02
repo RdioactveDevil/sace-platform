@@ -5,7 +5,7 @@ import { getPlatformSettings } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { studentTiers, extraLadder } from '../lib/pricing'
 import { THEMES } from '../lib/theme'
-import { Logo } from './AuthLayout'
+import MathText from './MathText'
 
 // The public homepage (/home).
 //
@@ -47,6 +47,8 @@ function themeVars(theme) {
     // The field's squares: not tried, coming back, right once, in the bag.
     '--lp-sq0': dark ? '#2a2a30' : '#e3e6f0', '--lp-sq2': dark ? 'rgba(226,181,76,0.38)' : '#f7dc93', '--lp-sq3': dark ? '#e2b54c' : '#e0a91f',
     '--lp-faded': dark ? '#5d5d66' : '#a3a9c2',
+    // The wordmark: navy and gold on light, white and gold on dark.
+    '--lp-logo-g': dark ? '#ffffff' : NAVY, '--lp-logo-f': dark ? '#f1be43' : '#e8ac1c',
     '--lp-float': dark ? '0 14px 36px rgba(0,0,0,0.5)' : '0 14px 36px rgba(12,16,55,0.12)',
   }
 }
@@ -69,6 +71,8 @@ const CSS = `
 .lp-btn.lg { min-height: 50px; padding: 0 26px; font-size: 16px; border-radius: 12px; }
 .lp-btn:disabled { opacity: 0.5; cursor: default; }
 .lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.lp-wordmark { display: inline-flex; align-items: baseline; border: none; background: none; padding: 0; font-family: 'Sifonn Pro', sans-serif; letter-spacing: 0.06em; line-height: 1; white-space: nowrap; cursor: pointer; }
+.lp-wordmark .g { color: var(--lp-logo-g); } .lp-wordmark .f { color: var(--lp-logo-f); }
 .lp-icon-btn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-muted); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
 .lp-card { background: var(--lp-card); border: 1px solid var(--lp-line); border-radius: 14px; }
 .lp-muted { color: var(--lp-muted); }
@@ -194,8 +198,18 @@ const CSS = `
 .lp-faq details[open] summary::after { content: "−"; }
 .lp-faq details p { padding: 0 0 17px; color: var(--lp-muted); max-width: 70ch; }
 .lp-prices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; margin-top: 22px; }
-.lp-subjs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.lp-subjs { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; align-items: start; }
 .lp-subj { overflow: hidden; }
+.lp-cmp { overflow-x: auto; margin-top: 24px; }
+.lp-cmp table { width: 100%; border-collapse: collapse; min-width: 640px; font-size: 14.5px; }
+.lp-cmp th, .lp-cmp td { text-align: left; padding: 13px 18px; border-bottom: 1px solid var(--lp-line); vertical-align: top; }
+.lp-cmp thead th { font-size: 13px; color: var(--lp-muted); font-weight: 700; }
+.lp-cmp tbody tr:last-child th, .lp-cmp tbody tr:last-child td { border-bottom: none; }
+.lp-cmp tbody th { font-weight: 700; color: var(--lp-ink); }
+.lp-cmp td { color: var(--lp-ink-2); }
+.lp-cmp td.no { color: var(--lp-faint); }
+.lp-cmp .gf { background: var(--lp-sel-row); color: var(--lp-ink); font-weight: 700; }
+.lp-cmp thead .gf { color: var(--lp-ink); }
 .lp-subj .hd { display: flex; align-items: baseline; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--lp-line); }
 .lp-subj .hd b { font-size: 17px; }
 .lp-subj .hd span { font-size: 13px; color: var(--lp-muted); }
@@ -235,7 +249,7 @@ const CSS = `
   .lp-nav-links, .lp-nav-signin { display: none; }
   .lp-menu-btn { display: grid; }
   .lp-sec { padding-top: 52px; padding-bottom: 52px; }
-  .lp-prices, .lp-subjs { grid-template-columns: 1fr; }
+  .lp-prices { grid-template-columns: 1fr; }
   .lp-prices > div + div { border-left: none; border-top: 1px solid var(--lp-line); }
   .lp-copy { margin-left: 0; }
 }
@@ -245,7 +259,8 @@ const CSS = `
 /* ─── pieces of the app, with a sample student ─────────────────────────── */
 
 // A Year 12 Methods question (VCE Units 3 & 4, SACE Stage 2) with the slip most people make.
-const SAMPLE = { topic: 'Differential Calculus', level: 'Level 3', stem: 'Differentiate y = (2x − 5)³.', options: ['3(2x − 5)²', '6(2x − 5)²', '6x(2x − 5)²', '(2x − 5)²'], answer: 1, working: 'Chain rule: differentiate the outside, 3(2x − 5)², then multiply by the derivative of the inside, 2. So dy/dx = 6(2x − 5)².' }
+// Maths is written in LaTeX between $…$ and drawn with KaTeX (MathText).
+const SAMPLE = { topic: 'Differential Calculus', level: 'Level 3', stem: 'Differentiate $y = (2x - 5)^3$.', options: ['$3(2x-5)^2$', '$6(2x-5)^2$', '$6x(2x-5)^2$', '$(2x-5)^2$'], answer: 1, working: 'Chain rule: differentiate the outside, $3(2x-5)^2$, then multiply by the derivative of the inside, $2$. So $\\frac{dy}{dx} = 6(2x-5)^2$.' }
 
 /** Pick an answer, then check it, as on the question screen. */
 function QuestionCard({ onResult }) {
@@ -256,18 +271,18 @@ function QuestionCard({ onResult }) {
   return (
     <div className="lp-card lp-q">
       <div className="lp-qt"><span><b>{q.topic}</b> · {q.level}</span><span>Try it</span></div>
-      <div className="lp-stem" id="lp-q-stem">{q.stem}</div>
+      <div className="lp-stem" id="lp-q-stem"><MathText text={q.stem} /></div>
       <div role="group" aria-labelledby="lp-q-stem" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {q.options.map((o, i) => {
           const st = !checked ? '' : i === q.answer ? 'r' : i === picked ? 'w' : 'd'
           return (
             <button key={o} type="button" className={`lp-opt ${st}`} disabled={checked} aria-pressed={checked ? undefined : picked === i} onClick={() => setPicked(i)}>
-              <span className="k">{'ABCD'[i]}</span>{o}<span className="tg">{st === 'r' ? 'Answer' : st === 'w' ? 'Your answer' : ''}</span>
+              <span className="k">{'ABCD'[i]}</span><MathText text={o} /><span className="tg">{st === 'r' ? 'Answer' : st === 'w' ? 'Your answer' : ''}</span>
             </button>
           )
         })}
       </div>
-      {checked && <div className="lp-sol" role="status"><b>{picked === q.answer ? 'Correct' : 'Not quite'}</b>{q.working}</div>}
+      {checked && <div className="lp-sol" role="status"><b>{picked === q.answer ? 'Correct' : 'Not quite'}</b><MathText text={q.working} /></div>}
       <div className="lp-qact">
         {checked
           ? <button type="button" className="lp-btn sm" onClick={() => { setPicked(null); setChecked(false); onResult?.(null) }}>Try again</button>
@@ -278,10 +293,10 @@ function QuestionCard({ onResult }) {
 }
 
 const EXPLAIN = {
-  Plain: 'It\'s a function inside a function. Differentiate the outside and leave the inside alone: 3(2x − 5)². Then multiply by the derivative of the inside, which is 2. So it\'s 6(2x − 5)².',
-  Sport: 'Think relay. The outside function runs its leg, 3(2x − 5)², then hands the baton to the inside one, which runs 2. You multiply the legs: 6(2x − 5)².',
-  Gaming: 'It\'s stacking multipliers. The outer power gives 3(2x − 5)², the inner one is ×2, and multipliers stack by multiplying: 6(2x − 5)².',
-  Music: 'Speed up a track that\'s already sped up. The inside changes twice as fast as x, so every change on the outside happens twice as fast too: 3(2x − 5)² × 2 = 6(2x − 5)².',
+  Plain: 'It\'s a function inside a function. Differentiate the outside and leave the inside alone: $3(2x-5)^2$. Then multiply by the derivative of the inside, which is $2$. So it\'s $6(2x-5)^2$.',
+  Sport: 'Think relay. The outside function runs its leg, $3(2x-5)^2$, then hands the baton to the inside one, which runs $2$. You multiply the legs: $6(2x-5)^2$.',
+  Gaming: 'It\'s stacking multipliers. The outer power gives $3(2x-5)^2$, the inner one is $\\times 2$, and multipliers stack by multiplying: $6(2x-5)^2$.',
+  Music: 'Speed up a track that\'s already sped up. The inside changes twice as fast as $x$, so every change on the outside happens twice as fast too: $3(2x-5)^2 \\times 2 = 6(2x-5)^2$.',
 }
 
 function TitanCard() {
@@ -295,8 +310,8 @@ function TitanCard() {
         </span>
       </div>
       <div className="lp-ti-m">
-        <div className="lp-me">Why isn't it 3(2x − 5)²? I brought the power down.</div>
-        <div className="lp-re" aria-live="polite"><b>Titan</b>{EXPLAIN[style]}</div>
+        <div className="lp-me"><MathText text="Why isn't it $3(2x-5)^2$? I brought the power down." /></div>
+        <div className="lp-re" aria-live="polite"><b>Titan</b><MathText text={EXPLAIN[style]} /></div>
       </div>
     </div>
   )
@@ -314,9 +329,9 @@ function Grow({ size = 48 }) {
 /* ─── 1 · And? ─────────────────────────────────────────────────────────── */
 
 const CLAUSES = [
-  'gradefarm. is VCE and SACE practice questions ',
-  'that remember what you got wrong, ',
-  'and bring each one back until you get it right. ',
+  'gradefarm. is a question bank for Australian school students ',
+  'that remembers what you got wrong, ',
+  'and brings each one back until you get it right. ',
   'When you\'re stuck, Titan explains it your way.',
 ]
 // The sentence gets a little smaller as it grows, so every clause fits.
@@ -335,7 +350,7 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
   const last = n >= CLAUSES.length
   useEffect(() => { if (last) onDone() }, [last]) // eslint-disable-line react-hooks/exhaustive-deps
   const planted = picked === null
-    ? 'Say you answered 3(2x − 5)². It\'s planted, and comes back in an hour.'
+    ? 'Say you answered $3(2x-5)^2$. It\'s planted, and comes back in an hour.'
     : picked === SAMPLE.answer
       ? 'You got it right, so it skips planting: it comes back in 2 days to check it stuck.'
       : `You said ${SAMPLE.options[picked]}. It's planted, and comes back in an hour.`
@@ -362,7 +377,7 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
       <div className="lp-and-vis" key={n} aria-live="polite">
         <span className="cap">{CAPTIONS[n - 1]}</span>
         {n === 1 && <QuestionCard onResult={setPicked} />}
-        {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === SAMPLE.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}>{planted}</p></div>}
+        {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === SAMPLE.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}><MathText text={planted} /></p></div>}
         {n === 3 && <><Grow /><p className="lp-muted" style={{ fontSize: 15, maxWidth: '40ch', marginTop: 6 }}>Each time you get it right, the gap gets longer. Right every time, and it turns gold.</p></>}
         {n === 4 && <TitanCard />}
       </div>
@@ -398,11 +413,11 @@ function PhoneScreen({ i }) {
   if (i === 1) return (
     <>
       <div className="lp-ph-top"><span>9:43</span><span>Question 3 of 14</span></div>
-      <b style={{ fontSize: 15.5 }}>{SAMPLE.stem}</b>
-      <span className="lp-chip w">A · 3(2x − 5)² · Your answer</span>
-      <span className="lp-chip r">B · 6(2x − 5)² · Answer</span>
-      <span className="lp-chip">C · 6x(2x − 5)²</span>
-      <div style={{ borderTop: '1px solid var(--lp-line)', paddingTop: 8, color: 'var(--lp-ink-2)' }}><b style={{ color: 'var(--lp-ink)' }}>Worked solution</b><br />Differentiate the outside: 3(2x − 5)². Multiply by the inside's derivative, 2: 6(2x − 5)².<br /><span className="lp-muted" style={{ fontSize: 12 }}>Common slip: forgetting the ×2 from the inside.</span></div>
+      <b style={{ fontSize: 15.5 }}><MathText text={SAMPLE.stem} /></b>
+      <span className="lp-chip w">A · <MathText text="$3(2x-5)^2$" /> · Your answer</span>
+      <span className="lp-chip r">B · <MathText text="$6(2x-5)^2$" /> · Answer</span>
+      <span className="lp-chip">C · <MathText text="$6x(2x-5)^2$" /></span>
+      <div style={{ borderTop: '1px solid var(--lp-line)', paddingTop: 8, color: 'var(--lp-ink-2)' }}><b style={{ color: 'var(--lp-ink)' }}>Worked solution</b><br /><MathText text="Differentiate the outside: $3(2x-5)^2$. Multiply by the inside's derivative, $2$: $6(2x-5)^2$." /><br /><span className="lp-muted" style={{ fontSize: 12 }}><MathText text="Common slip: forgetting the $\times 2$ from the inside." /></span></div>
       <div className="lp-goldbar" style={{ marginTop: 'auto' }}>Practise 3 like this</div>
     </>
   )
@@ -410,8 +425,8 @@ function PhoneScreen({ i }) {
     <>
       <div className="lp-ph-top"><span>11:04 pm</span><span>Learn</span></div>
       <div className="lp-seg"><span>Plain</span><span className="on">Sport</span><span>Gaming</span><span>Music</span></div>
-      <div className="lp-me">Why isn't it 3(2x − 5)²?</div>
-      <div className="lp-re"><b>Titan</b>{EXPLAIN.Sport}</div>
+      <div className="lp-me"><MathText text="Why isn't it $3(2x-5)^2$?" /></div>
+      <div className="lp-re"><b>Titan</b><MathText text={EXPLAIN.Sport} /></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}><span className="lp-chip">Show me another</span><span className="lp-chip">I'm still stuck</span></div>
     </>
   )
@@ -424,7 +439,7 @@ function PhoneScreen({ i }) {
         <div className="lp-goldbar">Start</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Differential Calculus</b><span className="lp-pill">Due back</span></div>
-      <b style={{ fontSize: 14.5 }}>{SAMPLE.stem}</b>
+      <b style={{ fontSize: 14.5 }}><MathText text={SAMPLE.stem} /></b>
       <div style={{ marginTop: 6 }}><Grow size={34} /></div>
       <span className="lp-muted" style={{ fontSize: 12.5 }}>Right again? Next time it's in 4 days.</span>
     </>
@@ -455,10 +470,10 @@ function PhoneScreen({ i }) {
             border: `1.5px solid ${k === 6 ? 'var(--lp-ink)' : k === 3 ? 'var(--lp-gold)' : 'var(--lp-line)'}` }}>{k + 1}</span>
         ))}
       </div>
-      <b style={{ fontSize: 14.5 }}>X is normally distributed with mean 50 and standard deviation 4. Find Pr(X &gt; 56), correct to three decimal places.</b>
-      <span className="lp-chip">A · 0.067</span>
-      <span className="lp-chip">B · 0.933</span>
-      <span className="lp-chip">C · 0.159</span>
+      <b style={{ fontSize: 14.5 }}><MathText text="$X \sim N(50, 4^2)$. Find $\Pr(X > 56)$, correct to three decimal places." /></b>
+      <span className="lp-chip">A · <MathText text="$0.067$" /></span>
+      <span className="lp-chip">B · <MathText text="$0.933$" /></span>
+      <span className="lp-chip">C · <MathText text="$0.159$" /></span>
       <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}><span className="lp-chip" style={{ flex: 1, textAlign: 'center' }}>Flag for review</span><span className="lp-goldbar" style={{ flex: 1, padding: 8 }}>Next</span></div>
     </>
   )
@@ -498,17 +513,49 @@ function Inside() {
   )
 }
 
+/* ─── Where it fits: textbook, tutor, gradefarm. ─────────────────────────── */
+
+function WhereItFits({ weekly }) {
+  const rows = [
+    ['Practice questions', 'One exercise per topic', 'Whatever they bring', 'Every topic, and new ones when you run out'],
+    ['Shows the working', 'Answers only', 'Yes', 'Yes, on every question'],
+    ['Remembers what you got wrong', 'No', 'In their notes', 'Every one'],
+    ['Brings it back until you get it', 'No', "When there's time", 'Yes: an hour, days, then weeks later'],
+    ['Help at 11 pm', 'No', 'Not usually', 'Titan, any time'],
+    ['Cost', 'Bought once', 'Per lesson', `Free for one subject; $${weekly} a week for everything`],
+  ]
+  return (
+    <section id="fits" className="lp-in lp-sec" aria-labelledby="lp-fits">
+      <div className="lp-sec-head">
+        <h2 id="lp-fits">Your textbook has the questions. Your tutor has an hour a week. gradefarm. is the rest.</h2>
+        <p>It doesn't replace your tutor. It's the practice between lessons.</p>
+      </div>
+      <div className="lp-card lp-cmp">
+        <table>
+          <thead><tr><th><span className="lp-sr">What</span></th><th>Textbook</th><th>Tutor</th><th className="gf">gradefarm.</th></tr></thead>
+          <tbody>
+            {rows.map(([what, book, tutor, gf]) => (
+              <tr key={what}><th scope="row">{what}</th><td className={/^No\b|^Not/.test(book) ? 'no' : ''}>{book}</td><td className={/^No\b|^Not/.test(tutor) ? 'no' : ''}>{tutor}</td><td className="gf">{gf}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 /* ─── 3 · Subjects ─────────────────────────────────────────────────────── */
 
 // Used until the live list loads, or if it can't be reached.
 const FALLBACK_SUBJECTS = {
   vce: [['Mathematical Methods', 'Units 1 & 2'], ['Mathematical Methods', 'Units 3 & 4'], ['Chemistry', 'Units 3 & 4'], ['Biology', 'Units 3 & 4'], ['Physics', 'Units 3 & 4']],
   sace: [['Mathematical Methods', 'Stage 2'], ['Chemistry', 'Stage 1'], ['Chemistry', 'Stage 2']],
+  middle: [['English', 'Year 6'], ['Mathematics', 'Year 6']],
 }
 
-/** The live Year 11 and 12 subjects, split into VCE and SACE, as [name, level] pairs. */
+/** The live subjects for the homepage, as [name, level] pairs: VCE and SACE (Year 11 and 12) and Year 6 for selective entry. */
 function seniorSubjects(list) {
-  const vce = [], sace = []
+  const vce = [], sace = [], middle = []
   for (const s of list || []) {
     const name = String(s.name || '')
     const level = String(s.level || '')
@@ -517,15 +564,17 @@ function seniorSubjects(list) {
       vce.push([name.replace(/^VCE\s+/i, '').replace(/\s*Units?\s*\d\s*(and|&)\s*\d\s*$/i, ''), units])
     } else if (/^stage\s*[12]$/i.test(level)) {
       sace.push([name.replace(/\s*Stage\s*[12]\s*$/i, ''), level.replace(/^stage/i, 'Stage')])
+    } else if (/^year\s*6$/i.test(level)) {
+      middle.push([name.replace(/^year\s*6\s+/i, ''), 'Year 6'])
     }
   }
   const sort = (a) => a.sort((x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]))
-  return vce.length + sace.length ? { vce: sort(vce), sace: sort(sace) } : FALLBACK_SUBJECTS
+  return vce.length + sace.length + middle.length ? { vce: sort(vce), sace: sort(sace), middle: sort(middle) } : FALLBACK_SUBJECTS
 }
 
 function Subjects({ onPick }) {
   const live = usePublicSubjects()
-  const { vce, sace } = seniorSubjects(live)
+  const { vce, sace, middle } = seniorSubjects(live)
   const col = (title, note, rows) => (
     <div className="lp-card lp-subj">
       <div className="hd"><b>{title}</b><span>{note}</span></div>
@@ -538,11 +587,12 @@ function Subjects({ onPick }) {
     <section id="subjects" className="lp-in lp-sec" aria-labelledby="lp-subjects">
       <div className="lp-sec-head">
         <h2 id="lp-subjects">Subjects</h2>
-        <p>For Year 11 and 12 in Victoria and South Australia. More are being added, and every subject gets new questions as you practise.</p>
+        <p>VCE and SACE for Year 11 and 12, and Year 6 for selective entry. More are being added, and every subject gets new questions as you practise.</p>
       </div>
       <div className="lp-subjs">
         {col('VCE', 'Victoria', vce)}
         {col('SACE', 'South Australia', sace)}
+        {col('Middle School', 'Selective Entry', middle)}
       </div>
     </section>
   )
@@ -595,7 +645,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
       <nav className="lp-nav" data-scrolled={scrolled || menuOpen} aria-label="Main">
         <div className="lp-in">
-          <Logo onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
+          <button type="button" className="lp-wordmark" style={{ fontSize: 28 }} aria-label="gradefarm. home" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><span className="g">grade</span><span className="f">farm.</span></button>
           <div className="lp-nav-links">
             {NAV.map(([id, label]) => <button key={id} type="button" onClick={() => go(id)}>{label}</button>)}
           </div>
@@ -629,6 +679,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         {/* In the page for search engines, but invisible until the hero is finished. */}
         <div hidden={!done}>
         <Inside />
+        <WhereItFits weekly={tiers[0]} />
 
         <Subjects onPick={start} />
 
@@ -670,7 +721,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
       <footer className="lp-foot" hidden={!done}>
         <div className="lp-in">
-          <Logo />
+          <span className="lp-wordmark" style={{ fontSize: 21, cursor: 'default' }}><span className="g">grade</span><span className="f">farm.</span></span>
           <div className="lp-foot-links">
             <button type="button" onClick={() => go('how')}>How it works</button>
             <button type="button" onClick={() => go('subjects')}>Subjects</button>
