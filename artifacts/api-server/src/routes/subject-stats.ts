@@ -48,10 +48,28 @@ async function countForCurriculum(
   ]);
   const err = linked.error || unlinked.error || linkedDrafts.error || unlinkedDrafts.error;
   if (err) throw new Error(err.message);
+  const borrowed = await countBorrowed(admin, curriculumId);
   return {
-    live: (linked.count ?? 0) + (unlinked.count ?? 0),
+    live: (linked.count ?? 0) + (unlinked.count ?? 0) + borrowed,
     pendingDrafts: (linkedDrafts.count ?? 0) + (unlinkedDrafts.count ?? 0),
   };
+}
+
+/** Questions a curriculum borrows through subtopic_links (0 if the table isn't there yet). */
+async function countBorrowed(admin: SupabaseClient, curriculumId: string): Promise<number> {
+  const { data: subs, error: sErr } = await admin.from("curriculum_subtopics").select("id").eq("curriculum_id", curriculumId);
+  if (sErr || !subs?.length) return 0;
+  const { data: links, error: lErr } = await admin
+    .from("subtopic_links").select("source_subtopic_id").in("subtopic_id", subs.map((r) => r.id as string));
+  if (lErr || !links?.length) return 0;
+  const sources = [...new Set(links.map((l) => l.source_subtopic_id as string))];
+  let total = 0;
+  for (let i = 0; i < sources.length; i += 100) {
+    const { count, error } = await admin.from("questions").select("*", { count: "exact", head: true }).in("subtopic_id", sources.slice(i, i + 100));
+    if (error) return total;
+    total += count ?? 0;
+  }
+  return total;
 }
 
 type InItem = string | { name?: string; subject?: string; levelLabel?: string; curriculumId?: string };

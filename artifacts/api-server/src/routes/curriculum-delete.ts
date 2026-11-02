@@ -102,18 +102,42 @@ async function accessRows(admin: SupabaseClient, cur: Curriculum, shared: boolea
   };
 }
 
+/** Other subjects whose subtopics borrow this one's questions (subtopic_links), with how many subtopics each. */
+async function borrowedBy(admin: SupabaseClient, cur: Curriculum): Promise<{ name: string; subtopics: number }[]> {
+  const { data: subs, error } = await admin.from("curriculum_subtopics").select("id").eq("curriculum_id", cur.id);
+  if (error || !subs?.length) return [];
+  const ids = subs.map(r => String(r.id));
+  const targets: string[] = [];
+  for (const part of chunks(ids)) {
+    const { data, error: lErr } = await admin.from("subtopic_links").select("subtopic_id").in("source_subtopic_id", part);
+    if (lErr) return [];
+    for (const l of data || []) targets.push(String((l as { subtopic_id: string }).subtopic_id));
+  }
+  if (!targets.length) return [];
+  const byName = new Map<string, number>();
+  for (const part of chunks([...new Set(targets)])) {
+    const { data } = await admin.from("curriculum_subtopics").select("id, curricula(name)").in("id", part);
+    for (const r of (data || []) as { curricula: { name: string } | { name: string }[] | null }[]) {
+      const c = Array.isArray(r.curricula) ? r.curricula[0] : r.curricula;
+      if (c?.name && c.name !== cur.name) byName.set(c.name, (byName.get(c.name) || 0) + 1);
+    }
+  }
+  return [...byName].map(([name, subtopics]) => ({ name, subtopics }));
+}
+
 async function preview(admin: SupabaseClient, cur: Curriculum) {
   const shared = await nameShared(admin, cur);
   const ids = await questionIds(admin, cur, shared);
-  const [answers, students, drafts, passages, resources, access] = await Promise.all([
+  const [answers, students, drafts, passages, resources, access, sharedWith] = await Promise.all([
     countIn(admin, "struggle_profiles", "question_id", ids),
     studentsWithHistory(admin, ids),
     countEq(admin, "draft_questions", "curriculum_id", cur.id),
     countEq(admin, "passages", "curriculum_id", cur.id),
     countEq(admin, "curriculum_resources", "curriculum_id", cur.id),
     accessRows(admin, cur, shared),
+    borrowedBy(admin, cur),
   ]);
-  return { name: cur.name, questions: ids.length, drafts, passages, resources, students, answers, paidSubscriptions: access.paid, accessRows: access.other, ids };
+  return { name: cur.name, questions: ids.length, drafts, passages, resources, students, answers, paidSubscriptions: access.paid, accessRows: access.other, sharedWith, ids };
 }
 
 router.post("/admin/curriculum-delete-preview", async (req, res) => {

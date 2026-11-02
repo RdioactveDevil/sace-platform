@@ -391,6 +391,11 @@ function DeleteSubjectDialog({ subject, onClose, onDeleted }) {
             {info.accessRows > 0 && <li>Free, trial and tutor access to it ({info.accessRows.toLocaleString()})</li>}
           </ul>
         )}
+        {info?.sharedWith?.length > 0 && (
+          <div role="note" style={{ ...note('info'), marginBottom: 14 }}>
+            {info.sharedWith.map(x => `${x.name} (${x.subtopics} subtopic${x.subtopics === 1 ? '' : 's'})`).join(', ')} {info.sharedWith.length === 1 ? 'borrows' : 'borrow'} questions from this subject. {info.sharedWith.length === 1 ? 'It' : 'They'} will lose them too.
+          </div>
+        )}
         {blocked && (
           <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>
             {n(info.paidSubscriptions, 'student')} {info.paidSubscriptions === 1 ? 'pays' : 'pay'} for this subject. Cancel {info.paidSubscriptions === 1 ? 'their subscription' : 'those subscriptions'} first (Admin → Students), then delete it.

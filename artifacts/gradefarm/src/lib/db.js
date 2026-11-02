@@ -2,6 +2,7 @@ import { supabase, SUPABASE_URL } from './supabase'
 import { currentStreak } from './streak'
 import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
+import { fileBorrowedQuestions } from './sharedQuestions'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /**
@@ -389,7 +390,9 @@ export async function getQuestionsForSubjectTile(subjectTile) {
         ? await fetchAllRows(() =>
             supabase.from('questions').select(cols).is('curriculum_id', null).in('subject', keys))
         : []
-      return mapAndDedupeQuestions([...linked, ...unlinked], keys[0] || subjectTile.name)
+      const own = [...linked, ...unlinked]
+      const borrowed = await fetchBorrowedQuestions(curriculumId, cols, keys[0] || subjectTile.name, own.map(q => q.id))
+      return mapAndDedupeQuestions([...own, ...borrowed], keys[0] || subjectTile.name)
     } catch {
       // curriculum_id not migrated yet — fall through to spelling match
     }
@@ -400,6 +403,38 @@ export async function getQuestionsForSubjectTile(subjectTile) {
   const data = await fetchAllRows(() =>
     supabase.from('questions').select('*').in('subject', keys))
   return mapAndDedupeQuestions(data, keys[0])
+}
+
+/**
+ * Questions this subject borrows from other subjects' subtopics
+ * (subtopic_links), filed under its own subtopics (lib/sharedQuestions.js).
+ * Sharing is extra: if it fails, the subject still loads its own questions.
+ */
+async function fetchBorrowedQuestions(curriculumId, cols, subject, ownIds) {
+  try {
+    const { data: subs, error: sErr } = await supabase
+      .from('curriculum_subtopics')
+      .select('id, name, order_index, topic:curriculum_topics(name, order_index)')
+      .eq('curriculum_id', curriculumId)
+    if (sErr || !subs?.length) return []
+    const targets = subs
+      .map(s => ({ id: s.id, name: s.name, topic: s.topic?.name || '', order: [s.topic?.order_index ?? 0, s.order_index ?? 0] }))
+      .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1])
+    const { data: links, error: lErr } = await supabase
+      .from('subtopic_links')
+      .select('subtopic_id, source_subtopic_id')
+      .in('subtopic_id', targets.map(t => t.id))
+    if (lErr || !links?.length) return []
+    const sources = [...new Set(links.map(l => l.source_subtopic_id))]
+    const rows = []
+    for (let i = 0; i < sources.length; i += 100) {
+      const part = sources.slice(i, i + 100)
+      rows.push(...await fetchAllRows(() => supabase.from('questions').select(cols).in('subtopic_id', part)))
+    }
+    return fileBorrowedQuestions(rows, links, targets, { subject, ownIds })
+  } catch {
+    return []
+  }
 }
 
 function curriculumIdFromTile(tile) {
