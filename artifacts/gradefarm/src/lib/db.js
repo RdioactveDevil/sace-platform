@@ -765,6 +765,11 @@ export async function addPaidSubject(curriculumId, interval = 'week', { endTrial
   return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumId, interval, endTrial }) })
 }
 
+/** Pay for several subjects at once (the pricing page's plan): same answers as addPaidSubject. */
+export async function addPaidSubjects(curriculumIds, interval = 'week', { endTrial = false } = {}) {
+  return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumIds, interval, endTrial }) })
+}
+
 /** Switch the plan to weekly or monthly billing: resolves to { interval, total }. */
 export async function switchBillingInterval(interval) {
   return tutorFetch('/api/billing/interval', { method: 'POST', body: JSON.stringify({ interval }) })

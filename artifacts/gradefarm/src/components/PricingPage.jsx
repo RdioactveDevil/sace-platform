@@ -1,610 +1,348 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getPlatformSettings } from '../lib/db'
-import { Lightbulb, GraduationCap, Menu, X, Infinity as InfinityIcon } from 'lucide-react'
+import { getPlatformSettings, getBillingConfig } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
-import { formatSubjectLabel } from '../lib/subjects'
-import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, extraLadder, planTotal, monthlySaving } from '../lib/pricing'
-import { SubjectIconByName } from './SubjectIcons'
+import { SUBJECT_GROUPS, groupSubject } from '../lib/homeSubjects'
+import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, tierPrice, monthlySaving, money } from '../lib/pricing'
 import { rememberPendingCheckout, startCheckout, subjectTileFor } from '../lib/pendingCheckout'
+import { SITE_CSS, SITE_FONTS, themeVars, Brand, SiteNav, SiteFooter, siteFooterLinks } from './SiteChrome'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
-const NAVY   = '#0c1037'
-const NAVYD  = '#080d28'
-const PURPLE = '#a78bfa'
-const GREEN  = '#10b981'
-const MUTED  = '#94a3b8'
-const FONT_D = "'Sifonn Pro', sans-serif"
-const FONT_B = "'Plus Jakarta Sans', sans-serif"
+// /pricing: "Build your plan". A student ticks the subjects they want and a
+// receipt beside the list adds them up at the real per-subject prices
+// (platform_settings.pricing, Admin → Settings), weekly or monthly.
+//
+// The free trial covers one subject (api-server routes/billing.ts): with one
+// ticked the receipt says "Today $0"; with more, billing starts today.
+// Checkout takes every ticked subject at once. Signed out, the plan is kept
+// (lib/pendingCheckout.js) while they make an account, and App.jsx carries on
+// to Checkout once they're in.
+//
+// Below: Free against Student, questions about paying, a box for tutors, and
+// the homepage's nav and footer (SiteChrome.jsx).
 
-function FadeUp({ children, delay = 0 }) {
-  const ref = useRef(null)
-  const [vis, setVis] = useState(false)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVis(true); obs.disconnect() } }, { threshold: 0.08 })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-  return (
-    <div ref={ref} style={{ opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(28px)', transition: `opacity 0.55s ease ${delay}ms, transform 0.55s ease ${delay}ms` }}>
-      {children}
-    </div>
-  )
+const DEFAULT_PRICING = {
+  student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS,
+  free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7,
+  tutor_plans: [
+    { name: 'Starter', price: 59, students: 3, subjects: 1, recordings: false, parent_reports: false },
+    { name: 'Pro', price: 89, students: 10, subjects: 3, recordings: true, parent_reports: true },
+    { name: 'Agency', price: 129, students: 20, subjects: 999, recordings: true, parent_reports: true },
+  ],
+  annual_discount: 0.15,
 }
 
-const CHECK = ({ gold }) => (
-  <div style={{ width: 18, height: 18, borderRadius: '50%', background: gold ? 'rgba(241,190,67,0.15)' : 'rgba(167,139,250,0.12)', border: `1px solid ${gold ? 'rgba(241,190,67,0.35)' : 'rgba(167,139,250,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-    <span style={{ fontSize: 8, fontWeight: 900, color: gold ? GOLD : PURPLE }}>✓</span>
-  </div>
-)
+const CSS = `${SITE_CSS}
+.pp-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 44px; }
+.pp-head h1 { font-size: clamp(34px, 5vw, 54px); font-weight: 800; line-height: 1.05; letter-spacing: -0.035em; }
+.pp-head p { color: var(--lp-muted); font-size: 17px; max-width: 52ch; }
+.pp-seg { display: inline-flex; border: 1px solid var(--lp-line); border-radius: 10px; overflow: hidden; background: var(--lp-card); margin-top: 4px; }
+.pp-seg button { border: none; background: transparent; color: var(--lp-muted); font-size: 13.5px; font-weight: 800; padding: 9px 18px; cursor: pointer; }
+.pp-seg button + button { border-left: 1px solid var(--lp-line); }
+.pp-seg button[aria-pressed="true"] { background: var(--lp-on-bg); color: var(--lp-on-fg); }
+.pp-seg small { font-size: 12px; font-weight: 700; color: var(--lp-ok); margin-left: 5px; }
+.pp-seg button[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
 
-const DASH = () => (
-  <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-    <span style={{ fontSize: 10, fontWeight: 900, color: '#334155' }}>–</span>
-  </div>
-)
+.pp-build { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 22px; margin-top: 34px; padding-bottom: 64px; align-items: start; }
+.pp-list { overflow: hidden; }
+.pp-list fieldset { border: none; margin: 0; padding: 0; min-width: 0; }
+.pp-list fieldset + fieldset { border-top: 1px solid var(--lp-line); }
+.pp-list legend { float: left; width: 100%; padding: 11px 18px; font-size: 13px; font-weight: 800; color: var(--lp-muted); background: var(--lp-subtle); border-bottom: 1px solid var(--lp-line); }
+.pp-list legend span { font-weight: 600; margin-left: 8px; }
+.pp-list label { clear: both; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--lp-line); cursor: pointer; font-weight: 700; }
+.pp-list fieldset label:last-child { border-bottom: none; }
+.pp-list label:hover { background: var(--lp-subtle); }
+.pp-list label[data-on="true"] { background: var(--lp-sel-row); }
+.pp-list label small { margin-left: auto; font-weight: 600; color: var(--lp-muted); font-size: 13px; white-space: nowrap; }
+.pp-list input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--lp-on-bg); }
+.pp-list .pp-msg { padding: 22px 18px; color: var(--lp-muted); }
 
-// How the three tutor plan cards look; their names, prices and what they include come from settings.
-const TUTOR_PLAN_LOOKS = [
-  { badge: null, hi: false, accentColor: PURPLE },
-  { badge: 'MOST POPULAR', hi: true, accentColor: PURPLE },
-  { badge: null, hi: false, accentColor: GOLD, prioritySupport: true },
-]
+.pp-rcpt { padding: 22px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 76px; }
+.pp-rcpt > b { font-size: 16px; }
+.pp-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.pp-row > span:first-child { min-width: 0; }
+.pp-row .lv { color: var(--lp-muted); }
+.pp-row.tot { border-top: 1px dashed var(--lp-line-2); padding-top: 12px; font-weight: 800; font-size: 17px; }
+.pp-row.free { color: var(--lp-ok); font-weight: 700; }
+.pp-note { font-size: 13px; color: var(--lp-muted); text-align: center; }
+.pp-err { font-size: 13.5px; color: var(--lp-bad); background: var(--lp-bad-bg); border-radius: 9px; padding: 9px 12px; }
+.pp-rcpt .lp-btn { width: 100%; }
 
-const DEFAULT_PRICING = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7, tutor_plans: [
-  { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
-  { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
-  { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
-], annual_discount: 0.15 }
+.pp-cmp { overflow-x: auto; margin: 26px auto 0; max-width: 860px; }
+.pp-cmp table { width: 100%; border-collapse: collapse; min-width: 500px; font-size: 14.5px; }
+.pp-cmp th, .pp-cmp td { padding: 12px 18px; border-bottom: 1px solid var(--lp-line); text-align: left; }
+.pp-cmp thead th { font-size: 13px; color: var(--lp-muted); }
+.pp-cmp tbody th { font-weight: 700; }
+.pp-cmp td { color: var(--lp-ink-2); }
+.pp-cmp .st { background: var(--lp-sel-row); color: var(--lp-ink); font-weight: 700; }
+.pp-cmp .no { color: var(--lp-faint); }
+.pp-cmp tr:last-child th, .pp-cmp tr:last-child td { border-bottom: none; }
+.pp-faq { max-width: 760px; margin-left: auto; margin-right: auto; }
 
-export default function PricingPage({ onGetStarted, onSignIn, signedIn = false }) {
+.pp-tut { max-width: 860px; margin: 0 auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.pp-tut-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.pp-tut-top b { font-size: 16px; display: block; }
+.pp-tut-top span { color: var(--lp-muted); }
+.pp-tplans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--lp-line); padding-top: 16px; gap: 18px; }
+.pp-tplans .nm { font-weight: 800; display: block; }
+.pp-tplans .p { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; display: block; margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
+.pp-tplans .p small { font-size: 13px; font-weight: 600; color: var(--lp-muted); letter-spacing: 0; }
+.pp-tplans ul { margin: 0; padding: 0 0 0 18px; color: var(--lp-ink-2); font-size: 14px; display: grid; gap: 4px; }
+.pp-tut-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pp-tut-foot span { color: var(--lp-muted); font-size: 13.5px; }
+
+.lp-end { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.lp-end h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.03em; }
+
+@media (max-width: 860px) {
+  .pp-build { grid-template-columns: 1fr; }
+  .pp-rcpt { position: static; }
+  .pp-tplans { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .pp-head { padding-top: 28px; }
+  .pp-head p { font-size: 16px; }
+  .pp-build { padding-bottom: 44px; }
+  .pp-cmp table { min-width: 0; font-size: 13.5px; }
+  .pp-cmp th, .pp-cmp td { padding: 10px 12px; }
+}
+`
+
+/** The limit as tutor plans word it: 999 or more (or none) reads as every one. */
+const limitText = (n, one, many, all) => (typeof n === 'number' && n > 0 && n < 999 ? `${n} ${n === 1 ? one : many}` : all)
+
+export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, signedIn = false }) {
   const navigate = useNavigate()
-  const [tab, setTab] = useState('students') // 'students' | 'tutors'
-  const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
-  const [dbPricing, setDbPricing] = useState(DEFAULT_PRICING)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [pricing, setPricing] = useState(DEFAULT_PRICING)
+  const [billing, setBilling] = useState(null) // signed in: /api/billing/config
+  const [interval, setBillInterval] = useState('week')
+  const [picked, setPicked] = useState(null) // ids; null until the first subject is ticked for them
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [showTutors, setShowTutors] = useState(false)
   const subjects = usePublicSubjects()
-  // The subject the Per Subject card's checkout is for (a public subject's id).
-  const [paidSubjectId, setPaidSubjectId] = useState('')
-  const [checkoutBusy, setCheckoutBusy] = useState(false)
-  const [checkoutError, setCheckoutError] = useState('')
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
-
   useEffect(() => {
     getPlatformSettings('pricing').then(val => {
-      if (val) setDbPricing(prev => ({ ...DEFAULT_PRICING, ...val, tutor_plans: val.tutor_plans || DEFAULT_PRICING.tutor_plans }))
+      if (val) setPricing({ ...DEFAULT_PRICING, ...val, tutor_plans: val.tutor_plans?.length ? val.tutor_plans : DEFAULT_PRICING.tutor_plans })
     }).catch(() => {})
   }, [])
+  useEffect(() => {
+    if (!signedIn) { setBilling(null); return }
+    getBillingConfig().then(setBilling).catch(() => {})
+  }, [signedIn])
 
-  const handleGetStarted = onGetStarted || (() => navigate('/auth'))
-  const handleSignIn     = onSignIn     || (() => navigate('/auth'))
-  const handleSignUp     = () => navigate('/auth', { state: { mode: 'signup' } })
+  // The live subjects in their groups, with the first one ticked to start with.
+  const groups = useMemo(() => {
+    const out = SUBJECT_GROUPS.map(g => ({ ...g, items: [] }))
+    for (const s of subjects || []) {
+      const g = groupSubject(s)
+      if (g.name) out.find(x => x.id === g.group).items.push({ ...g, id: s.id, subject: { curriculumId: s.id, name: s.name, level: s.level || '' } })
+    }
+    return out.filter(g => g.items.length)
+  }, [subjects])
+  const all = groups.flatMap(g => g.items)
+  const chosenIds = picked ?? (all[0] ? [all[0].id] : [])
+  const chosen = all.filter(x => chosenIds.includes(x.id))
+  const toggle = (id) => {
+    setError('')
+    setPicked(chosenIds.includes(id) ? chosenIds.filter(x => x !== id) : [...chosenIds, id])
+  }
 
-  // Per Subject: straight to Stripe Checkout for the chosen subject. Signed
-  // out, they create an account first and the app carries on to Checkout
-  // once they're in (App.jsx, lib/pendingCheckout.js).
-  const handlePaid = async () => {
-    // No subject list to choose from (it didn't load): pick one in the app instead.
-    if (subjects?.length === 0) { navigate(signedIn ? '/subject-picker' : '/auth', { state: { mode: 'signup' } }); return }
-    const picked = (subjects || []).find(s => s.id === paidSubjectId)
-    if (!picked) { setCheckoutError('Choose a subject first.'); return }
-    const subject = { curriculumId: picked.id, name: picked.name, level: picked.level }
-    setCheckoutError('')
+  const weekTiers = studentTiers(billing?.tiers || pricing.student_tiers)
+  const monthTiers = studentTiers(billing?.monthlyTiers || pricing.student_monthly_tiers, 'month')
+  // On a plan already: new subjects go on it, at its prices, after the ones it has.
+  const onPlan = !!billing?.hasPlan
+  const tiers = onPlan && billing.planTiers?.length ? billing.planTiers : interval === 'month' ? monthTiers : weekTiers
+  const per = (onPlan ? billing.interval : interval) === 'month' ? 'a month' : 'a week'
+  const already = onPlan ? billing.paidCount || 0 : 0
+  const lines = chosen.map((x, i) => ({ ...x, price: tierPrice(tiers, already + i + 1) }))
+  const total = lines.reduce((a, l) => a + l.price, 0)
+  const saving = monthlySaving(weekTiers[0], monthTiers[0])
+  const freeDaily = billing?.freeDailyQuestions ?? pricing.free_daily_questions ?? 20
+  const freeAi = pricing.free_daily_ai_messages ?? 10
+  // Days free on a first plan: signed in, the server says whether they still get it.
+  const settingTrial = Math.max(0, Math.floor(Number(pricing.student_trial_days ?? 7)) || 0)
+  const trialDays = billing ? billing.trialDays || 0 : settingTrial
+  const trial = !onPlan && chosen.length === 1 && trialDays > 0
+
+  const signUp = () => navigate('/auth', { state: { mode: 'signup' } })
+  const homeSection = (id) => navigate('/home', { state: { scrollTo: id } })
+
+  const checkout = async () => {
+    if (!chosen.length) return
+    const plan = { subjects: chosen.map(x => x.subject), interval }
+    setError('')
     if (!signedIn) {
-      rememberPendingCheckout(subject)
-      navigate('/auth', { state: { mode: 'signup' } })
+      rememberPendingCheckout(plan)
+      signUp()
       return
     }
-    setCheckoutBusy(true)
+    setBusy(true)
     try {
-      const result = await startCheckout(subject)
-      if (result.hasPlan) navigate('/get-access', { state: { subject: subjectTileFor(subject) } })
+      const result = await startCheckout(plan)
+      if (result.hasPlan) navigate('/get-access', { state: { subject: subjectTileFor(plan.subjects[0]) } })
     } catch (e) {
-      setCheckoutError(e.message || 'Something went wrong. Please try again.')
-      setCheckoutBusy(false)
+      setError(e.message || 'Something went wrong. Please try again.')
+      setBusy(false)
     }
   }
 
-  const annualDiscount = dbPricing.annual_discount ?? 0.15
+  const cta = busy ? 'Opening checkout…'
+    : onPlan ? `Add ${chosen.length === 1 ? 'this subject' : `${chosen.length} subjects`}`
+    : trial ? `Start ${trialDays}-day free trial`
+    : chosen.length === 1 ? 'Start 1 subject' : `Start ${chosen.length} subjects`
 
-  const tiers = studentTiers(dbPricing.student_tiers)
-  const studentWeekly = tiers[0]
-  const monthlyTiers = studentTiers(dbPricing.student_monthly_tiers, 'month')
-  const saving = monthlySaving(tiers[0], monthlyTiers[0])
-  const freeDaily = dbPricing.free_daily_questions ?? 20
-  const freeAi = dbPricing.free_daily_ai_messages ?? 10
-  // Free trial on a student's first paid subject (api-server routes/billing.ts); 0 = none.
-  const trialDays = Math.max(0, Math.floor(Number(dbPricing.student_trial_days ?? 7)) || 0)
-  const extraSubjects = `$${extraLadder(tiers)}`
-  const threeSubjects = planTotal(tiers, 3)
-  // Students pay per subject, weekly or monthly; the monthly/annual toggle is for tutor plans.
-  const studentPlans = [
-    {
-      name: 'Free',
-      price: 0,
-      fixed: true,
-      sub: 'No credit card required',
-      badge: null,
-      hi: false,
-      accentColor: MUTED,
-      cta: 'Get started free',
-      onClick: handleSignUp,
-      features: [
-        { text: '1 subject of your choice (swap any time)', included: true },
-        { text: `${freeDaily} questions per day`, included: true },
-        { text: `${freeAi} Titan AI messages per day`, included: true },
-        { text: 'Instant feedback & struggle tracking', included: true },
-        { text: 'Weekly leaderboard', included: true },
-        { text: 'Unlimited questions', included: false },
-        { text: 'Exam Mode', included: false },
-      ],
-    },
-    {
-      name: 'Per Subject',
-      price: studentWeekly,
-      fixed: true,
-      unit: '/Week',
-      sub: `first subject · extra subjects ${extraSubjects}/week each · or monthly from $${monthlyTiers[0]}${saving ? ` (save ${saving}%)` : ''} · AUD`,
-      badge: 'MOST POPULAR',
-      hi: true,
-      accentColor: GOLD,
-      cta: checkoutBusy ? 'Opening checkout…' : trialDays > 0 ? `Start ${trialDays}-day free trial →` : 'Start learning →',
-      trialNote: trialDays > 0 ? `${trialDays} days free on your first subject · card required · cancel before it ends and pay nothing` : null,
-      onClick: handlePaid,
-      pickSubject: true,
-      features: [
-        { text: 'Unlimited questions — fresh AI questions, no daily cap', included: true },
-        { text: 'Exam Mode', included: true },
-        { text: 'Unlimited Titan AI tutoring', included: true },
-        { text: 'Readiness score & study plan', included: true },
-        { text: 'Essay / writing module', included: true },
-        { text: 'Cancel any time', included: true },
-      ],
-    },
-  ]
+  const tutorPlans = (pricing.tutor_plans || []).slice(0, 3).map(p => ({
+    name: p.name,
+    price: p.price,
+    items: [
+      limitText(p.students, 'student', 'students', 'Any number of students'),
+      limitText(p.subjects, 'subject', 'subjects', 'Every subject'),
+      p.recordings !== false && 'Lesson recordings',
+      p.parent_reports !== false && 'Weekly parent reports',
+    ].filter(Boolean),
+  }))
+  const tutorFrom = tutorPlans.length ? Math.min(...tutorPlans.map(p => p.price)) : null
+  const annualPct = Math.round((pricing.annual_discount ?? 0.15) * 100)
 
-  const tutorDbPlans = dbPricing.tutor_plans || DEFAULT_PRICING.tutor_plans
-  // What each plan includes comes from settings and is enforced (api-server
-  // lib/tutor-plan.ts): students and subjects (999 or more reads as
-  // unlimited), lesson recordings and weekly parent reports.
-  const limitText = (n, one, many, all) => (typeof n === 'number' && n > 0 && n < 999 ? (n === 1 ? `1 ${one}` : `Up to ${n} ${many}`) : all)
-  const tutorPlans = TUTOR_PLAN_LOOKS.map((look, i) => {
-    const p = { ...DEFAULT_PRICING.tutor_plans[i], ...(tutorDbPlans[i] || {}) }
-    const students = limitText(p.students, 'student', 'students', 'Unlimited students')
-    const subjects = limitText(p.subjects, 'subject', 'subjects', 'All subjects')
-    return {
-      ...look,
-      name: p.name,
-      price: p.price,
-      sub: 'per month',
-      cta: 'Get started →',
-      limits: `${students} · ${subjects}`,
-      features: [
-        { text: 'Student progress dashboard', included: true },
-        { text: 'Session scheduling', included: true },
-        { text: 'Assignment creation', included: true },
-        { text: 'Student roster management', included: true },
-        { text: students, included: true },
-        { text: subjects !== 'All subjects' && p.subject_swaps === false ? `${subjects} (can’t be swapped)` : subjects, included: true },
-        { text: 'Lesson recordings', included: p.recordings !== false },
-        { text: 'Weekly parent progress reports', included: p.parent_reports !== false },
-        { text: 'Priority support', included: !!look.prioritySupport },
-      ],
-    }
-  }).filter((_, i) => i < Math.max(tutorDbPlans.length, 1))
-
-  const displayPrice = (p, fixed = false) => {
-    if (p === 0) return 'Free'
-    if (fixed) return `$${p}`
-    const monthly = billing === 'annual' ? Math.round(p * (1 - annualDiscount)) : p
-    return `$${monthly}`
-  }
+  const NAV = [['How it works', () => homeSection('how')], ['Subjects', () => homeSection('subjects')], ['Questions', () => homeSection('questions')], ['Pricing', () => window.scrollTo({ top: 0, behavior: 'smooth' }), true]]
 
   return (
-    <div style={{ minHeight: '100vh', background: NAVYD, color: '#f1f5f9', fontFamily: FONT_B, overflowX: 'hidden' }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-        .pp-nl { text-decoration: none !important }
-        .pp-tab-btn { transition: all 0.18s; }
-        .pp-tab-btn:hover { opacity: 0.85; }
-        .pp-card { transition: transform 0.18s, box-shadow 0.18s; }
-        .pp-card:hover { transform: translateY(-3px); }
-        .pp-shimmer { background: linear-gradient(90deg,${GOLD} 0%,${GOLDL} 30%,#fff8e1 50%,${GOLDL} 70%,${GOLD} 100%); background-size: 200% auto; animation: pp-shimmer 3s linear infinite; }
-        @keyframes pp-shimmer { to { background-position: -200% center; } }
-        .pp-shimmer-purple { background: linear-gradient(90deg,${PURPLE} 0%,#c4b5fd 40%,${PURPLE} 100%); background-size: 200% auto; animation: pp-shimmer 3s linear infinite; }
-        .pp-menu-btn { display: none; }
-        @media(max-width:900px) {
-          .pp-plans-grid { grid-template-columns: 1fr !important; max-width: 460px; margin: 0 auto; }
-          .pp-nav-links { display: none !important; }
-          .pp-menu-btn { display: flex; }
-        }
-        @media(max-width:760px) {
-          .pp-student-grid { grid-template-columns: 1fr !important; max-width: 460px; margin: 0 auto; }
-        }
-        @media(max-width:560px) {
-          .pp-pad { padding-left: 16px !important; padding-right: 16px !important; }
-          .pp-nav { padding: 0 14px !important; }
-          .pp-tag, .pp-signin { display: none !important; }
-          .pp-hero { padding-top: 48px !important; padding-bottom: 32px !important; }
-          .pp-hero-p { font-size: 15px !important; margin-bottom: 28px !important; }
-          .pp-tabs { display: flex !important; width: 100%; }
-          .pp-tabs > button { flex: 1; padding: 10px 12px !important; }
-          .pp-card { padding: 32px 20px 24px !important; }
-          .pp-card:hover { transform: none; }
-          .pp-price { font-size: 44px !important; }
-          .pp-note { padding: 16px !important; gap: 12px !important; }
-          .pp-footer { flex-direction: column; text-align: center; }
-        }
-      `}</style>
+    <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
+      <style>{SITE_FONTS + CSS}</style>
+      <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn || (() => navigate('/auth'))} onStart={signUp}
+        onLogo={() => navigate('/home')} links={NAV} />
 
-      {/* ── NAV ── */}
-      <nav className="pp-nav" style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', background: 'rgba(8,13,40,0.88)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 32px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <button onClick={() => navigate('/home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: 1 }}>
-              <span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
-            </span>
-            <span className="pp-tag" style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 2 }}>by Titanium Tutoring</span>
-          </button>
-          <div className="pp-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
-            {[['features', 'Features'], ['how', 'How It Works'], ['subjects', 'Subjects']].map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => navigate(`/home#${id}`)}
-                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'color 0.15s', whiteSpace: 'nowrap' }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#f1f5f9' }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
-              >{label}</button>
-            ))}
-            <button
-              style={{ background: 'none', border: 'none', color: GOLD, fontSize: 13.5, fontWeight: 700, cursor: 'default', fontFamily: FONT_B, whiteSpace: 'nowrap' }}
-            >Pricing</button>
+      <main>
+        <div className="lp-in">
+          <div className="pp-head">
+            <h1>Build your plan.</h1>
+            <p>Pick the subjects you want. The first is ${money(tiers[0])} {per}, and each extra one costs less.</p>
+            {!onPlan && (
+              <div className="pp-seg" role="group" aria-label="Billing">
+                <button type="button" aria-pressed={interval === 'week'} onClick={() => setBillInterval('week')}>Weekly</button>
+                <button type="button" aria-pressed={interval === 'month'} onClick={() => setBillInterval('month')}>Monthly{saving ? <small>save {saving}%</small> : null}</button>
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <button onClick={handleSignIn} className="pp-signin" style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.65)', fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>Sign in</button>
-            <button onClick={handleSignUp} className="pp-shimmer" style={{ padding: '9px 16px', borderRadius: 9, border: 'none', color: NAVYD, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>Get started free</button>
-            <button
-              className="pp-menu-btn"
-              onClick={() => setMenuOpen(o => !o)}
-              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={menuOpen}
-              style={{ alignItems: 'center', justifyContent: 'center', width: 38, height: 38, background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', cursor: 'pointer', padding: 0 }}
-            >
-              {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-            </button>
+
+          <div className="pp-build">
+            <div className="lp-card pp-list">
+              {subjects === null ? <p className="pp-msg">Loading subjects…</p>
+                : !all.length ? <p className="pp-msg">Couldn't load the subjects just now. <button type="button" className="lp-link" onClick={signUp}>Make an account</button> and pick yours inside.</p>
+                : groups.map(g => (
+                  <fieldset key={g.id}>
+                    <legend>{g.title}{g.note ? <span>{g.note}</span> : null}</legend>
+                    {g.items.map(x => {
+                      const on = chosenIds.includes(x.id)
+                      return (
+                        <label key={x.id} data-on={on}>
+                          <input type="checkbox" checked={on} onChange={() => toggle(x.id)} />
+                          {x.name}
+                          {x.level ? <small>{x.level}</small> : null}
+                        </label>
+                      )
+                    })}
+                  </fieldset>
+                ))}
+            </div>
+
+            <div className="lp-card pp-rcpt" aria-live="polite">
+              <b>Your plan</b>
+              {onPlan && <p className="pp-note" style={{ textAlign: 'left' }}>You're on a plan with {already} subject{already === 1 ? '' : 's'}. New ones go on the same bill.</p>}
+              {!chosen.length ? (
+                <p className="pp-note" style={{ textAlign: 'left', fontSize: 14 }}>
+                  {all.length ? 'Pick at least one subject.' : 'Your subjects will show here.'} Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with one subject, {freeDaily} questions a day.
+                </p>
+              ) : (
+                <>
+                  {lines.map(l => (
+                    <div className="pp-row" key={l.id}><span>{l.name}{l.level ? <span className="lv"> · {l.level}</span> : null}</span><span>${money(l.price)}</span></div>
+                  ))}
+                  <div className="pp-row tot"><span>{onPlan ? 'Added to your bill' : 'Total'}</span><span>${money(total)} {per}</span></div>
+                  {trial && <div className="pp-row free"><span>First {trialDays} days</span><span>Free</span></div>}
+                  {!onPlan && <div className="pp-row"><span>Today</span><span><b>${trial ? 0 : money(total)}</b></span></div>}
+                  {error && <p className="pp-err" role="alert">{error}</p>}
+                  <button type="button" className="lp-btn gold lg" onClick={checkout} disabled={busy}>{cta}</button>
+                  {trial ? <p className="pp-note">Card required. Cancel before day {trialDays} and you pay nothing.</p>
+                    : !onPlan && chosen.length > 1 && trialDays > 0 ? <p className="pp-note">The {trialDays}-day free trial is for one subject. Start with one to try it free, and add the rest later.</p>
+                    : <p className="pp-note">Cancel any time from your Account.</p>}
+                  {!onPlan && <p className="pp-note">Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with one subject.</p>}
+                </>
+              )}
+            </div>
           </div>
         </div>
-        {menuOpen && (
-          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '4px 0 14px', display: 'flex', flexDirection: 'column' }}>
-            {[['features', 'Features'], ['how', 'How It Works'], ['subjects', 'Subjects']].map(([id, label]) => (
-              <button key={id} onClick={() => navigate(`/home#${id}`)} style={{ background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8', fontSize: 16, fontWeight: 600, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', padding: '14px 8px' }}>{label}</button>
-            ))}
-            <button onClick={handleSignIn} style={{ background: 'none', border: 'none', color: '#f1f5f9', fontSize: 16, fontWeight: 600, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', padding: '14px 8px' }}>Sign in</button>
+
+        <section className="lp-in lp-sec" aria-labelledby="pp-cmp">
+          <div className="lp-sec-head"><h2 id="pp-cmp">Free and Student, side by side</h2></div>
+          <div className="lp-card pp-cmp">
+            <table>
+              <thead><tr><th><span className="lp-sr">What you get</span></th><th>Free</th><th className="st">Student</th></tr></thead>
+              <tbody>
+                <tr><th>Subjects</th><td>One, swap any time</td><td className="st">Any you add</td></tr>
+                <tr><th>Questions a day</th><td>{freeDaily}</td><td className="st">No limit</td></tr>
+                <tr><th>Titan messages a day</th><td>{freeAi}</td><td className="st">No limit</td></tr>
+                <tr><th>Worked solutions</th><td>Every question</td><td className="st">Every question</td></tr>
+                <tr><th>Wrong answers come back</th><td>Yes</td><td className="st">Yes</td></tr>
+                <tr><th>Exam mode</th><td className="no">No</td><td className="st">Yes</td></tr>
+                <tr><th>Price</th><td>$0</td><td className="st">${money(weekTiers[0])} a week, or ${money(monthTiers[0])} a month</td></tr>
+              </tbody>
+            </table>
           </div>
+        </section>
+
+        <section className="lp-in lp-sec" aria-labelledby="pp-faq">
+          <div className="lp-sec-head"><h2 id="pp-faq">Questions about paying</h2></div>
+          <div className="lp-faq pp-faq">
+            {settingTrial > 0 && <details open><summary>How does the free trial work?</summary><p>Your first paid subject starts with {settingTrial} days free. We take a card when you start, charge nothing for {settingTrial} days, and you can cancel in your Account before then and pay nothing.</p></details>}
+            <details open={settingTrial === 0}><summary>Can I cancel any time?</summary><p>Yes, from your Account, whenever you like. There's no contract.</p></details>
+            <details><summary>What happens after {freeDaily} questions on the free plan?</summary><p>You can carry on tomorrow, or go unlimited on that subject.</p></details>
+            <details><summary>Can I change my free subject?</summary><p>Yes, any time.</p></details>
+            <details><summary>Weekly or monthly?</summary><p>{saving ? `Monthly is about ${saving}% cheaper: ` : 'Either: '}${money(monthTiers[0])} a month for your first subject instead of ${money(weekTiers[0])} a week. Extra subjects are ${monthTiers.slice(1).map(money).join(', then $') || money(monthTiers[0])} a month.</p></details>
+            <details><summary>What if I want more subjects?</summary><p>Each one costs less than the last: ${weekTiers.slice(1).map(money).join(' a week for the second and $')}{weekTiers.length > 2 ? ' for each after that' : ' a week each'}, all on one bill.{settingTrial > 0 ? ' The free trial covers one subject, so adding another during it ends the trial and billing starts that day.' : ''}</p></details>
+          </div>
+        </section>
+
+        {tutorPlans.length > 0 && (
+          <section className="lp-in lp-sec" aria-label="For tutors">
+            <div className="lp-card pp-tut">
+              <div className="pp-tut-top">
+                <div><b>Tutoring?</b><span>Plans for tutors start at ${money(tutorFrom)} a month, and your students get the subjects you teach free.</span></div>
+                <button type="button" className="lp-link" aria-expanded={showTutors} aria-controls="pp-tplans" onClick={() => setShowTutors(v => !v)}>{showTutors ? 'Hide tutor plans' : 'See tutor plans'}</button>
+              </div>
+              {showTutors && (
+                <>
+                  <div className="pp-tplans" id="pp-tplans">
+                    {tutorPlans.map(p => (
+                      <div key={p.name}>
+                        <span className="nm">{p.name}</span>
+                        <span className="p">${money(p.price)}<small> a month</small></span>
+                        <ul>{p.items.map(t => <li key={t}>{t}</li>)}</ul>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pp-tut-foot">
+                    <span>{annualPct > 0 ? `Pay yearly and save ${annualPct}%.` : 'Billed monthly.'}</span>
+                    <button type="button" className="lp-btn" onClick={() => navigate('/auth/tutor')}>Start as a tutor</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
         )}
-      </nav>
 
-      {/* ── HERO ── */}
-      <FadeUp>
-        <section className="pp-pad pp-hero" style={{ padding: '80px 32px 48px', textAlign: 'center' }}>
-          <div style={{ maxWidth: 680, margin: '0 auto' }}>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 14 }}>Pricing</div>
-            <h1 style={{ fontFamily: FONT_D, fontSize: 'clamp(28px,5vw,52px)', margin: '0 0 18px', color: '#fff', letterSpacing: 1, lineHeight: 1.1 }}>
-              PLANS FOR STUDENTS<br /><span style={{ color: GOLD }}>&amp; TUTORS.</span>
-            </h1>
-            <p className="pp-hero-p" style={{ fontSize: 17, color: MUTED, lineHeight: 1.75, margin: '0 0 40px' }}>
-              Students pay only for the subjects they need — and every paid subject comes with unlimited questions. Tutors choose a plan that fits their roster.
-            </p>
-
-            {/* Role tab switcher */}
-            <div className="pp-tabs" style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 4, gap: 4, marginBottom: 20 }}>
-              {[['students', 'For Students'], ['tutors', 'For Tutors']].map(([key, label]) => (
-                <button
-                  key={key}
-                  className="pp-tab-btn"
-                  onClick={() => setTab(key)}
-                  style={{
-                    padding: '10px 28px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT_B,
-                    fontSize: 14, fontWeight: 700,
-                    background: tab === key ? (key === 'students' ? `linear-gradient(135deg,${GOLD},${GOLDL})` : `linear-gradient(135deg,${PURPLE},#7c3aed)`) : 'transparent',
-                    color: tab === key ? (key === 'students' ? NAVYD : '#fff') : MUTED,
-                    boxShadow: tab === key ? '0 4px 14px rgba(0,0,0,0.3)' : 'none',
-                  }}
-                >{label}</button>
-              ))}
-            </div>
-
-            {/* Billing toggle (tutor plans only) */}
-            {tab === 'tutors' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 8 }}>
-              <button onClick={() => setBilling('monthly')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: billing === 'monthly' ? 700 : 400, color: billing === 'monthly' ? '#f1f5f9' : MUTED }}>Monthly</button>
-              <div
-                onClick={() => setBilling(b => b === 'monthly' ? 'annual' : 'monthly')}
-                style={{ width: 44, height: 24, borderRadius: 12, background: billing === 'annual' ? `linear-gradient(90deg,${GOLD},${GOLDL})` : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
-              >
-                <div style={{ position: 'absolute', top: 3, left: billing === 'annual' ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
-              </div>
-              <button onClick={() => setBilling('annual')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: billing === 'annual' ? 700 : 400, color: billing === 'annual' ? '#f1f5f9' : MUTED }}>
-                Annual {annualDiscount > 0 && <span style={{ fontSize: 11, color: GREEN, fontWeight: 800, marginLeft: 4 }}>–{Math.round(annualDiscount * 100)}%</span>}
-              </button>
-            </div>}
+        <section className="lp-in lp-sec">
+          <div className="lp-end">
+            <h2>Start with one subject, free.</h2>
+            <p style={{ color: 'var(--lp-muted)' }}><Brand /> is free for one subject, {freeDaily} questions a day. No card.</p>
+            <button type="button" className="lp-btn gold lg" onClick={signUp}>Start free</button>
           </div>
         </section>
-      </FadeUp>
+      </main>
 
-      {/* ── STUDENT PLANS ── */}
-      {tab === 'students' && (
-        <FadeUp delay={60}>
-          <section className="pp-pad" style={{ padding: '0 32px 80px' }}>
-            <div style={{ maxWidth: 780, margin: '0 auto' }}>
-              <div className="pp-student-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 20 }}>
-                {studentPlans.map((plan) => (
-                  <div
-                    key={plan.name}
-                    className="pp-card"
-                    style={{
-                      background: plan.hi ? 'rgba(241,190,67,0.06)' : 'rgba(255,255,255,0.02)',
-                      border: `1px solid ${plan.hi ? 'rgba(241,190,67,0.32)' : 'rgba(255,255,255,0.07)'}`,
-                      borderTop: plan.hi ? `3px solid ${GOLD}` : `1px solid rgba(255,255,255,0.07)`,
-                      borderRadius: 22,
-                      padding: '40px 32px 36px',
-                      position: 'relative',
-                    }}
-                  >
-                    {plan.badge && (
-                      <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVYD, fontSize: 10, fontWeight: 900, padding: '5px 16px', borderRadius: 20, whiteSpace: 'nowrap', letterSpacing: '0.08em' }}>{plan.badge}</div>
-                    )}
-                    <div style={{ fontSize: 11, fontWeight: 800, color: plan.hi ? GOLD : 'rgba(255,255,255,0.28)', marginBottom: 10, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{plan.name}</div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-                      <div className="pp-price" style={{ fontFamily: FONT_D, fontSize: 52, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.45)', letterSpacing: 1, lineHeight: 1 }}>
-                        {displayPrice(plan.price, plan.fixed)}
-                      </div>
-                      {plan.price > 0 && <span style={{ fontSize: 13, color: MUTED, marginBottom: 2 }}>{plan.unit || '/mo'}</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: MUTED, marginBottom: 28, lineHeight: 1.5 }}>
-                      {billing === 'annual' && plan.price > 0 && !plan.fixed
-                        ? `$${Math.round(plan.price * (1 - annualDiscount) * 12)}/year · billed annually`
-                        : plan.sub}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-                      {plan.features.map(f => (
-                        <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: f.included ? (plan.hi ? '#cbd5e1' : '#94a3b8') : '#334155' }}>
-                          {f.included ? <CHECK gold={true} /> : <DASH />}
-                          {f.text}
-                        </div>
-                      ))}
-                    </div>
-                    {plan.pickSubject && subjects?.length > 0 && (
-                      <select
-                        value={paidSubjectId}
-                        onChange={e => { setPaidSubjectId(e.target.value); setCheckoutError('') }}
-                        aria-label="Subject"
-                        style={{ width: '100%', padding: '12px 14px', marginBottom: 10, borderRadius: 12, border: '1px solid rgba(241,190,67,0.32)', background: NAVYD, color: paidSubjectId ? '#f1f5f9' : MUTED, fontSize: 14, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}
-                      >
-                        <option value="">Choose your subject…</option>
-                        {subjects.map(s => (
-                          <option key={s.id} value={s.id}>{formatSubjectLabel({ name: s.name, stage: s.level })}</option>
-                        ))}
-                      </select>
-                    )}
-                    {plan.pickSubject && checkoutError && (
-                      <div role="alert" style={{ fontSize: 12, color: '#fca5a5', marginBottom: 10 }}>{checkoutError}</div>
-                    )}
-                    <button
-                      onClick={plan.onClick}
-                      disabled={plan.pickSubject && checkoutBusy}
-                      className={plan.hi ? 'pp-shimmer' : ''}
-                      style={{
-                        width: '100%', padding: '14px', borderRadius: 12, border: plan.hi ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                        background: plan.hi ? undefined : 'rgba(255,255,255,0.04)',
-                        color: plan.hi ? NAVYD : MUTED,
-                        fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B,
-                        boxShadow: plan.hi ? `0 6px 20px rgba(241,190,67,0.35)` : 'none',
-                      }}
-                    >{plan.cta}</button>
-                    {plan.trialNote && (
-                      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>{plan.trialNote}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Per-subject note */}
-              <FadeUp delay={120}>
-                <div className="pp-note" style={{ marginTop: 28, background: 'rgba(241,190,67,0.04)', border: '1px solid rgba(241,190,67,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <Lightbulb size={24} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>Mix &amp; match subjects</div>
-                    <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
-                      Each extra subject costs less. Three subjects together are just <strong style={{ color: '#f1f5f9' }}>${threeSubjects}/week</strong> ({tiers.slice(0, 3).map(n => `$${n}`).join(' + ')}). One bill, weekly or monthly{saving ? ` (monthly is about ${saving}% less)` : ''} — add or remove subjects any time.
-                    </div>
-                  </div>
-                </div>
-              </FadeUp>
-
-              {/* Subjects available */}
-              <FadeUp delay={180}>
-                <div style={{ marginTop: 48, textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 20 }}>Available subjects</div>
-                  {subjects === null ? (
-                    <div style={{ fontSize: 13, color: MUTED }}>Loading subjects…</div>
-                  ) : subjects.length === 0 ? (
-                    <div style={{ fontSize: 13, color: MUTED }}>Sign up to see every subject we offer.</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
-                      {subjects.map(s => (
-                        <div key={s.name} style={{ padding: '8px 16px', borderRadius: 20, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.28)', fontSize: 12, fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <SubjectIconByName name={s.name} color={GOLD} size={16} />
-                          {formatSubjectLabel({ name: s.name, stage: s.level })}
-                          <span style={{ fontSize: 10, background: 'rgba(16,185,129,0.15)', color: GREEN, border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, padding: '1px 7px', fontWeight: 800 }}>LIVE</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ marginTop: 14, fontSize: 12, color: MUTED, display: 'inline-flex', alignItems: 'center', gap: 6 }}><InfinityIcon size={14} color={GOLD} aria-hidden="true" />More subjects are added all the time</div>
-                </div>
-              </FadeUp>
-            </div>
-          </section>
-        </FadeUp>
-      )}
-
-      {/* ── TUTOR PLANS ── */}
-      {tab === 'tutors' && (
-        <FadeUp delay={60}>
-          <section className="pp-pad" style={{ padding: '0 32px 80px' }}>
-            <div style={{ maxWidth: 1040, margin: '0 auto' }}>
-              <div className="pp-plans-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18 }}>
-                {tutorPlans.map((plan) => (
-                  <div
-                    key={plan.name}
-                    className="pp-card"
-                    style={{
-                      background: plan.hi ? 'rgba(167,139,250,0.07)' : 'rgba(255,255,255,0.02)',
-                      border: `1px solid ${plan.hi ? 'rgba(167,139,250,0.35)' : 'rgba(255,255,255,0.07)'}`,
-                      borderTop: plan.hi ? `3px solid ${PURPLE}` : `1px solid rgba(255,255,255,0.07)`,
-                      borderRadius: 22,
-                      padding: '40px 28px 36px',
-                      position: 'relative',
-                    }}
-                  >
-                    {plan.badge && (
-                      <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${PURPLE},#7c3aed)`, color: '#fff', fontSize: 10, fontWeight: 900, padding: '5px 16px', borderRadius: 20, whiteSpace: 'nowrap', letterSpacing: '0.08em' }}>{plan.badge}</div>
-                    )}
-                    <div style={{ fontSize: 11, fontWeight: 800, color: plan.hi ? PURPLE : 'rgba(255,255,255,0.28)', marginBottom: 10, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{plan.name}</div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-                      <div className="pp-price" style={{ fontFamily: FONT_D, fontSize: 46, color: plan.hi ? '#fff' : 'rgba(255,255,255,0.55)', letterSpacing: 1, lineHeight: 1 }}>
-                        {displayPrice(plan.price)}
-                      </div>
-                      <span style={{ fontSize: 13, color: MUTED, marginBottom: 2 }}>/mo</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>
-                      {billing === 'annual'
-                        ? `$${Math.round(plan.price * (1 - annualDiscount) * 12)}/year · billed annually`
-                        : plan.sub}
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: plan.hi ? PURPLE : '#475569', marginBottom: 24, padding: '6px 12px', background: plan.hi ? 'rgba(167,139,250,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${plan.hi ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.05)'}`, borderRadius: 8, display: 'inline-block' }}>{plan.limits}</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-                      {plan.features.map(f => (
-                        <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: f.included ? (plan.hi ? '#cbd5e1' : '#94a3b8') : '#334155' }}>
-                          {f.included ? <CHECK gold={false} /> : <DASH />}
-                          {f.text}
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={handleGetStarted}
-                      className={plan.hi ? 'pp-shimmer-purple' : ''}
-                      style={{
-                        width: '100%', padding: '14px', borderRadius: 12, border: plan.hi ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                        background: plan.hi ? undefined : 'rgba(255,255,255,0.04)',
-                        color: '#fff',
-                        fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B,
-                        boxShadow: plan.hi ? '0 6px 20px rgba(167,139,250,0.35)' : 'none',
-                      }}
-                    >{plan.cta}</button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Tutor note */}
-              <FadeUp delay={120}>
-                <div className="pp-note" style={{ marginTop: 28, background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.14)', borderRadius: 16, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <GraduationCap size={24} color={PURPLE} aria-hidden="true" style={{ flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: PURPLE, marginBottom: 6 }}>Already a registered tutor?</div>
-                    <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
-                      If you're part of the Titanium Tutoring network, your account is provisioned directly. <button onClick={handleSignIn} style={{ background: 'none', border: 'none', color: PURPLE, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, padding: 0, textDecoration: 'underline' }}>Sign in here</button> to access your dashboard.
-                    </div>
-                  </div>
-                </div>
-              </FadeUp>
-            </div>
-          </section>
-        </FadeUp>
-      )}
-
-      {/* ── FAQ ── */}
-      <FadeUp>
-        <section className="pp-pad" style={{ padding: '20px 32px 80px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: GOLD, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 14 }}>FAQ</div>
-            <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(22px,3.5vw,36px)', margin: '0 0 44px', color: '#fff', letterSpacing: 1 }}>COMMON QUESTIONS</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
-              {[
-                { q: 'Are the questions really unlimited?', a: `Yes. When you've worked through a topic's question bank, Titan writes brand-new questions for it, pitched at your level and checked before you see them — so you never run out. The free plan is capped at ${freeDaily} questions a day; paid subjects have no cap.` },
-                { q: 'Can I try before I pay?', a: trialDays > 0
-                  ? `Yes, two ways. Your first paid subject starts with a ${trialDays}-day free trial with everything unlocked. We take a card at sign-up but charge nothing until the trial ends, and you can cancel in My Account before then and pay nothing. Or pick any one subject to use free for as long as you like, with ${freeDaily} questions a day and no credit card.`
-                  : `Yes — pick any one subject to use free, with ${freeDaily} questions a day and no credit card. You can swap your free subject any time.` },
-                { q: 'Can I cancel anytime?', a: "Absolutely. Remove a subject from My Account whenever you like — unused time is credited to your next bill. Removing your last paid subject ends your plan at the end of the week you've paid for." },
-                { q: 'Do I pay per subject or for all subjects at once?', a: `Per subject, on one bill, and each extra subject costs less: $${studentWeekly} for the first, then ${extraSubjects}/week. Two subjects are $${planTotal(tiers, 2)}/week.` },
-                { q: 'Can I pay monthly instead of weekly?', a: `Yes. Pick monthly at checkout, or switch any time in My Account: $${monthlyTiers[0]} a month for the first subject, then $${extraLadder(monthlyTiers)}/month for each extra one${saving ? ` — about ${saving}% less than paying weekly` : ''}.` },
-                { q: 'How do tutor plans bill annually?', a: "Annual tutor plans are charged for 12 months upfront at a discount. Student plans are billed weekly or monthly." },
-                { q: "What happens to my tutors' students if I downgrade?", a: "If you downgrade below your current student count, existing students remain active but you can't add new ones until you're within your plan's limit. Pending invites count towards the limit." },
-                { q: 'Do tutors get access to student quiz data?', a: "Yes. Tutors on any plan can see their rostered students' readiness scores, struggle maps, and session history — subject to the student consenting to share." },
-              ].map(({ q, a }, i) => (
-                <FaqItem key={i} q={q} a={a} />
-              ))}
-            </div>
-          </div>
-        </section>
-      </FadeUp>
-
-      {/* ── CTA ── */}
-      <FadeUp>
-        <section className="pp-pad" style={{ padding: '60px 32px 100px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(600px, 100%)', height: 300, borderRadius: '50%', background: `radial-gradient(ellipse,rgba(241,190,67,0.1) 0%,transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none' }} />
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <h2 style={{ fontFamily: FONT_D, fontSize: 'clamp(22px,4vw,44px)', margin: '0 0 18px', color: '#fff', letterSpacing: 1 }}>
-              START FREE TODAY.
-            </h2>
-            <p style={{ fontSize: 16, color: MUTED, marginBottom: 36, lineHeight: 1.75, maxWidth: 400, margin: '0 auto 36px' }}>
-              No credit card. No commitment. The algorithm gets to work on your first question.
-            </p>
-            <button onClick={handleSignUp} className="pp-shimmer" style={{ padding: '16px 48px', borderRadius: 13, border: 'none', color: NAVYD, fontSize: 16, fontWeight: 900, cursor: 'pointer', fontFamily: FONT_B, boxShadow: `0 10px 36px rgba(241,190,67,0.4)` }}>
-              Get started free →
-            </button>
-            <div style={{ marginTop: 16, fontSize: 13, color: MUTED }}>No credit card · No commitment · Free plan available</div>
-          </div>
-        </section>
-      </FadeUp>
-
-      {/* ── FOOTER ── */}
-      <footer className="pp-pad" style={{ borderTop: '1px solid rgba(241,190,67,0.1)', padding: '28px 32px' }}>
-        <div className="pp-footer" style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontFamily: FONT_D, fontSize: 16, letterSpacing: 1 }}><span style={{ color: '#f1f5f9' }}>grade</span><span style={{ color: GOLD }}>farm.</span></span>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>by Titanium Tutoring</span>
-          </div>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Home</button>
-            <button onClick={() => navigate('/terms')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Terms</button>
-            <button onClick={() => navigate('/privacy')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Privacy</button>
-          </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>© 2026 Titanium Tutoring · Adelaide, SA</div>
-        </div>
-      </footer>
-    </div>
-  )
-}
-
-function FaqItem({ q, a }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '18px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, fontFamily: FONT_B, textAlign: 'left' }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>{q}</span>
-        <span style={{ fontSize: 18, color: GOLD, fontWeight: 300, flexShrink: 0, transform: open ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s', lineHeight: 1 }}>+</span>
-      </button>
-      <div style={{ maxHeight: open ? 400 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
-        <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.7, paddingBottom: 18, margin: 0 }}>{a}</p>
-      </div>
+      <SiteFooter links={siteFooterLinks(navigate, homeSection)} />
     </div>
   )
 }

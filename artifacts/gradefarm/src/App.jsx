@@ -1033,14 +1033,15 @@ function AppInner() {
   const [openingCheckout, setOpeningCheckout] = useState(false)
   useEffect(() => {
     if (!user || !profile || profile.is_tutor || user.user_metadata?.signup_path === 'tutor') return
-    const subject = takePendingCheckout()
-    if (!subject) return
+    const plan = takePendingCheckout()
+    if (!plan) return
     setOpeningCheckout(true)
-    startCheckout(subject)
+    startCheckout(plan)
       .then((result) => {
         if (!result.hasPlan) return // the browser is on its way to Stripe
         setOpeningCheckout(false)
-        navigate('/get-access', { state: { subject: subjectTileFor(subject) } })
+        // Already on a plan: Get Access adds subjects one at a time, starting with the first.
+        navigate('/get-access', { state: { subject: subjectTileFor(plan.subjects[0]) } })
       })
       .catch((e) => {
         setOpeningCheckout(false)
@@ -1599,7 +1600,7 @@ function AppInner() {
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
-      <Route path="/pricing" element={<PricingPage onGetStarted={() => navigate('/auth')} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} />} />
+      <Route path="/pricing" element={<PricingPage {...commonProps} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
       <Route path="/selective" element={<Navigate to="/year-6" replace />} />
