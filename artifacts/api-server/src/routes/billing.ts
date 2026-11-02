@@ -259,6 +259,22 @@ async function setQuantity(stripe: Stripe, sub: Stripe.Subscription, quantity: n
   });
 }
 
+/** The curricula a Checkout subscription was bought for, from its metadata. */
+export function checkoutCurriculumIds(metadata: Record<string, string> | null | undefined): string[] {
+  const list = (metadata?.curriculum_ids || metadata?.curriculum_id || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return [...new Set(list)];
+}
+
+/** The subjects a request asks to pay for: `curriculumIds` (a list) or `curriculumId` (one). */
+export function requestedCurriculumIds(body: unknown): string[] {
+  const b = (body ?? {}) as { curriculumIds?: unknown; curriculumId?: unknown };
+  const raw = Array.isArray(b.curriculumIds) ? b.curriculumIds : b.curriculumId != null ? [b.curriculumId] : [];
+  return [...new Set(raw.filter((x): x is string => typeof x === "string" && x.trim() !== "").map((x) => x.trim()))];
+}
+
+/** Most subjects one request can add (also keeps Checkout's metadata under Stripe's 500-character limit). */
+export const MAX_SUBJECTS_PER_REQUEST = 10;
+
 /**
  * Write a Stripe subscription's current state onto the student's rows. Re-reads
  * it from Stripe so out-of-order webhooks can't roll access back. A
@@ -278,8 +294,12 @@ export async function syncSubscription(admin: SupabaseClient, stripe: Stripe, su
   if (live) {
     await admin.from("billing_customers").update({ stripe_subscription_id: sub.id }).eq("user_id", userId);
     if ((await paidRows(admin, sub.id)).length === 0) {
-      const cur = await liveCurriculum(admin, sub.metadata?.curriculum_id);
-      if (cur) await attachPaidSubject(admin, userId, cur, sub);
+      // Checkout records the subjects it was for: curriculum_ids (several,
+      // comma-separated) or, from before that, curriculum_id (one).
+      for (const id of checkoutCurriculumIds(sub.metadata)) {
+        const cur = await liveCurriculum(admin, id);
+        if (cur) await attachPaidSubject(admin, userId, cur, sub);
+      }
     }
   }
   const { error } = await admin.from("user_subscriptions").update(subFields(sub)).eq("stripe_subscription_id", sub.id).eq("source", "stripe");
@@ -368,24 +388,33 @@ router.post("/billing/free-subject", async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// POST /billing/subjects — { curriculumId, interval? }: pay for a subject. The
-// first one returns { url } for Stripe Checkout, billed weekly or monthly
-// (`interval`, default weekly), with a free trial if it's their first plan;
-// later ones are added to the plan and return { added: true, total, interval }.
-// Adding one during the free trial ends it and bills now, so it needs
-// `endTrial: true` (409 { trialing: true } without it).
+// POST /billing/subjects — { curriculumIds | curriculumId, interval? }: pay for
+// one or more subjects. With no plan yet it returns { url } for Stripe Checkout,
+// billed weekly or monthly (`interval`, default weekly) for that many subjects
+// at the graduated price. A first plan for ONE subject starts with a free
+// trial; several subjects bill now, since the trial covers one subject.
+// With a plan already, they're added to it and it returns
+// { added: true, total, interval }. Adding during the free trial ends it and
+// bills now, so it needs `endTrial: true` (409 { trialing: true } without it).
 router.post("/billing/subjects", async (req: Request, res: Response) => {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
   const stripe = getStripe();
   if (!stripe) return notConfigured(res);
   const { admin, userId } = ctx;
-  const cur = await liveCurriculum(admin, req.body?.curriculumId);
-  if (!cur) return fail(res, 404, "Subject not found");
-  const existing = await accessRow(admin, userId, cur);
-  if (existing?.active && existing.source !== "free") return fail(res, 409, "You already have full access to this subject.");
+  const ids = requestedCurriculumIds(req.body);
+  if (ids.length === 0) return fail(res, 400, "Choose a subject.");
+  if (ids.length > MAX_SUBJECTS_PER_REQUEST) return fail(res, 400, `Choose up to ${MAX_SUBJECTS_PER_REQUEST} subjects at a time.`);
+  const curs = await Promise.all(ids.map((id) => liveCurriculum(admin, id)));
+  if (curs.some((c) => !c)) return fail(res, 404, "Subject not found");
+  const subjects = curs as Curriculum[];
+  for (const cur of subjects) {
+    const existing = await accessRow(admin, userId, cur);
+    if (existing?.active && existing.source !== "free") return fail(res, 409, `You already have full access to ${cur.label}.`);
+  }
   const requested = req.body?.interval ?? "week";
   if (!isInterval(requested)) return fail(res, 400, "interval must be week or month");
+  const n = subjects.length;
 
   try {
     const prices = await readTiers(admin);
@@ -396,16 +425,16 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
         return void res.status(409).json({ error: "Your free trial covers one subject. Adding another ends the trial and starts billing today.", trialing: true });
       }
       const before = (await paidRows(admin, sub.id)).length;
-      const updated = await setQuantity(stripe, sub, before + 1, { endTrial });
+      const updated = await setQuantity(stripe, sub, before + n, { endTrial });
       try {
-        await attachPaidSubject(admin, userId, cur, updated);
+        for (const cur of subjects) await attachPaidSubject(admin, userId, cur, updated);
       } catch (err) {
-        await setQuantity(stripe, updated, before).catch(() => {}); // don't bill for a subject we couldn't unlock
+        await setQuantity(stripe, updated, before).catch(() => {}); // don't bill for subjects we couldn't unlock
         throw err;
       }
       await admin.from("user_subscriptions").update(subFields(updated)).eq("stripe_subscription_id", updated.id).eq("source", "stripe");
       const interval = subscriptionInterval(sub);
-      const total = planTotal(subscriptionTiers(sub) ?? prices[interval], before + 1);
+      const total = planTotal(subscriptionTiers(sub) ?? prices[interval], before + n);
       return void res.json({ added: true, total, interval });
     }
 
@@ -413,15 +442,18 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
     const [priceId, customer, days] = await Promise.all([
       planPriceId(stripe, tiers, requested), customerFor(admin, stripe, userId), readTrialDays(admin),
     ]);
-    const trialDays = days > 0 && (await trialEligible(admin, stripe, userId)) ? days : 0;
-    const metadata = { user_id: userId, curriculum_id: cur.id };
-    const more = `Add more subjects later for $${tierPrice(tiers, 2)}${per(requested)}, then $${tierPrice(tiers, 3)}${per(requested)} each.`;
+    // The free trial covers one subject: a first plan for several bills now.
+    const trialDays = n === 1 && days > 0 && (await trialEligible(admin, stripe, userId)) ? days : 0;
+    const metadata = { user_id: userId, curriculum_id: subjects[0].id, curriculum_ids: subjects.map((c) => c.id).join(",") };
+    const more = `Add more subjects later for $${tierPrice(tiers, n + 1)}${per(requested)}${n + 1 < tiers.length ? `, then $${tierPrice(tiers, n + 2)}${per(requested)}` : ""} each.`;
     const firstBill = shortDay(new Date(Date.now() + trialDays * 86_400_000));
+    const names = subjects.map((c) => c.label);
+    const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
       client_reference_id: userId,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: n }],
       allow_promotion_codes: true,
       // A card is taken even for a free trial; it's charged when the trial ends.
       payment_method_collection: "always",
@@ -432,8 +464,8 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
       },
       metadata,
       custom_text: { submit: { message: trialDays > 0
-        ? `${cur.label} free for ${trialDays} days, then $${tierPrice(tiers, 1)}${per(requested)} from ${firstBill}. Cancel before then in My Account and you won't be charged. ${more}`
-        : `Starts with ${cur.label}. ${more}` } },
+        ? `${list} free for ${trialDays} days, then $${tierPrice(tiers, 1)}${per(requested)} from ${firstBill}. Cancel before then in My Account and you won't be charged. ${more}`
+        : `${list}: $${planTotal(tiers, n)}${per(requested)}. ${more}` } },
       success_url: `${appUrl()}/subject-picker?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl()}/subject-picker?checkout=cancelled`,
     });

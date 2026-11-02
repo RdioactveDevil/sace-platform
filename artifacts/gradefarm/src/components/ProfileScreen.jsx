@@ -80,7 +80,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
     questions.forEach(q => {
       const topic = topicOf(q)
       if (!topic) return
-      const s = map[topic] || (map[topic] = { total: 0, attempted: 0, correct: 0, wrong: 0, subtopics: new Set(), due: 0, dueWrong: 0 })
+      const s = map[topic] || (map[topic] = { total: 0, attempted: 0, correct: 0, wrong: 0, subtopics: new Set(), due: 0, dueWrong: 0, dueIds: [] })
       s.total++
       if (q.subtopic) s.subtopics.add(q.subtopic)
       const st = struggleMap[q.id]
@@ -88,7 +88,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
         s.attempted++
         s.correct += st.attempts - st.wrong
         s.wrong += st.wrong
-        if (st.next_review && new Date(st.next_review).getTime() <= Date.now() + 2 * DAY_MS) { s.due++; s.dueWrong += st.wrong }
+        if (st.next_review && new Date(st.next_review).getTime() <= Date.now() + 2 * DAY_MS) { s.due++; s.dueWrong += st.wrong; s.dueIds.push(q.id) }
       }
     })
     return map
@@ -118,7 +118,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       .forEach(([topic, s]) => {
         used.add(topic)
         items.push({ id: `review:${topic}`, label: `Review ${s.due} question${s.due !== 1 ? 's' : ''} due on ${topic}`, note: 'Due for spaced review', action: 'Start',
-          run: () => onStartSession?.({ mode: s.dueWrong > 0 ? 'wrong' : 'all', subtopics: [...s.subtopics] }) })
+          run: () => onStartSession?.({ mode: 'review', reviewIds: [...s.dueIds], subtopics: [] }) })
       })
     // Lessons started in Learn and not finished.
     Object.values(lessons)

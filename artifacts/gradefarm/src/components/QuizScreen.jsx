@@ -2,6 +2,9 @@
 import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag } from 'lucide-react'
 import {
   selectNextQuestion,
+  dueQuestionIds,
+  DUE_PER_SESSION,
+  nextReviewTime,
   calcXP,
   calcRemediationXP,
   getRemediationCompletionBonus,
@@ -280,6 +283,8 @@ export default function QuizScreen({
       .catch(() => {})
 
   const [floatXP, setFloatXP] = useState(null)
+  // The question on screen was served because it was due back for review.
+  const [dueBackId, setDueBackId] = useState(null)
   // Exam mode picks its questions up front so students can move between them,
   // change answers and flag ones to come back to. Everything is graded at the end.
   const [examSet, setExamSet] = useState([])             // the exam's questions, in order
@@ -476,6 +481,19 @@ export default function QuizScreen({
       setFinished(true)
       return
     }
+    // Practice opens with questions due back for review (up to DUE_PER_SESSION),
+    // whatever the mode, then carries on as chosen. Not for reviews, exams
+    // (they pick their set up front), assignments or consolidation rounds.
+    if (mode !== 'review' && !consolidation && !activeAssignment && answered.length < DUE_PER_SESSION) {
+      const [dueId] = dueQuestionIds(questions, map, { subtopics, exclude: answered, limit: 1 })
+      const dueQ = dueId && questions.find(q => q.id === dueId)
+      if (dueQ) {
+        setDueBackId(dueQ.id)
+        setDisplayQuestion(dueQ)
+        return
+      }
+    }
+    setDueBackId(null)
     // Reviewing a session's wrong answers: just those, each once.
     const pool = mode === 'review' ? questions.filter(q => review.includes(q.id)) : questions
     const q = selectNextQuestion(
@@ -487,7 +505,7 @@ export default function QuizScreen({
       return
     }
     setDisplayQuestion(q)
-  }, [questions, setDisplayQuestion, assignmentBand, consolidation, sessionResults, reviewIds])
+  }, [questions, setDisplayQuestion, assignmentBand, consolidation, sessionResults, reviewIds, activeAssignment])
 
   const clearRemediation = useCallback(() => {
     setRemediationMode(false)
@@ -1231,6 +1249,8 @@ export default function QuizScreen({
           attempts: old.attempts + 1,
           wrong: old.wrong + (isCorrect ? 0 : 1),
           last_seen: new Date().toISOString(),
+          // Same schedule the database sets, so a question just answered isn't still "due".
+          next_review: nextReviewTime(old.attempts + 1, old.wrong + (isCorrect ? 0 : 1)).toISOString(),
         },
       }
     })
@@ -1322,6 +1342,8 @@ export default function QuizScreen({
           attempts: old.attempts + 1,
           wrong: old.wrong + (isCorrect ? 0 : 1),
           last_seen: new Date().toISOString(),
+          // Same schedule the database sets, so a question just answered isn't still "due".
+          next_review: nextReviewTime(old.attempts + 1, old.wrong + (isCorrect ? 0 : 1)).toISOString(),
         },
       }
     })
@@ -2040,6 +2062,9 @@ export default function QuizScreen({
             <>
               <span style={{ fontSize: 13, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentQ.subtopic || currentQ.topic}</span>
               {!isMobile && currentQ.difficulty != null && <span style={{ whiteSpace: 'nowrap' }} title="How hard this question is, from 1 to 5">Level {currentQ.difficulty}</span>}
+              {dueBackId === currentQ.id && !remediationMode && (
+                <span title="You answered this before. It's back on its review schedule." style={{ ...chip, color: t.goldText, borderColor: t.borderAccent, whiteSpace: 'nowrap' }}>Due back</span>
+              )}
               {!isMobile && goalDisplay && (
                 <span title="Questions answered toward your tutor's assignment" style={chip}>
                   Assignment {goalDisplay.progress}/{goalDisplay.goal}

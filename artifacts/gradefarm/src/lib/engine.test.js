@@ -264,3 +264,52 @@ test('a wrong answer plus a full remediation still loses XP', () => {
   const remediation = 3 * calcRemediationXP(true) + getRemediationCompletionBonus()
   assert.ok(wrong + remediation < 0)
 })
+
+// ─── spaced review ───────────────────────────────────────────────────────────
+import { isDue, dueQuestionIds, stillLearning, DUE_PER_SESSION } from './engine.js'
+
+const NOW = Date.parse('2026-11-02T09:00:00Z')
+const at = (mins) => new Date(NOW + mins * 60000).toISOString()
+
+test('a question is due once its review time has passed, and only if answered', () => {
+  assert.equal(isDue({ attempts: 1, wrong: 1, next_review: at(-1) }, NOW), true)
+  assert.equal(isDue({ attempts: 1, wrong: 1, next_review: at(30) }, NOW), false)
+  assert.equal(isDue({ attempts: 0, wrong: 0, next_review: at(-60) }, NOW), false)
+  assert.equal(isDue({ attempts: 2, wrong: 0 }, NOW), false)
+  assert.equal(isDue(undefined, NOW), false)
+})
+
+test('due questions come most overdue first, within the ticked topics, skipping answered ones', () => {
+  const qs = [
+    { id: 'a', subtopic: 'Fractions' }, { id: 'b', subtopic: 'Fractions' },
+    { id: 'c', subtopic: 'Percentages' }, { id: 'd', subtopic: 'Fractions' }, { id: 'e', subtopic: 'Fractions' },
+  ]
+  const map = {
+    a: { attempts: 1, wrong: 1, next_review: at(-10) },
+    b: { attempts: 3, wrong: 1, next_review: at(-3000) },
+    c: { attempts: 1, wrong: 1, next_review: at(-50) },
+    d: { attempts: 1, wrong: 0, next_review: at(600) }, // not due yet
+  }
+  assert.deepEqual(dueQuestionIds(qs, map, { now: NOW }), ['b', 'c', 'a'])
+  assert.deepEqual(dueQuestionIds(qs, map, { now: NOW, subtopics: ['Fractions'] }), ['b', 'a'])
+  assert.deepEqual(dueQuestionIds(qs, map, { now: NOW, exclude: ['b'], limit: 1 }), ['c'])
+  assert.ok(DUE_PER_SESSION > 0)
+})
+
+test('a missed question stays in Got wrong until right twice and more often right than wrong', () => {
+  assert.equal(stillLearning({ attempts: 1, wrong: 1 }), true) // just missed
+  assert.equal(stillLearning({ attempts: 2, wrong: 1 }), true) // right once since
+  assert.equal(stillLearning({ attempts: 3, wrong: 1 }), false) // right twice: learned
+  assert.equal(stillLearning({ attempts: 4, wrong: 2 }), true) // two of each: not yet
+  assert.equal(stillLearning({ attempts: 5, wrong: 2 }), false)
+  assert.equal(stillLearning({ attempts: 3, wrong: 0 }), false) // never wrong
+  assert.equal(stillLearning(undefined), false)
+})
+
+test('Got wrong sessions and counts leave out learned questions', () => {
+  const qs = [{ id: 'm', subtopic: 'x', difficulty: 2 }, { id: 'n', subtopic: 'x', difficulty: 2 }]
+  const map = { m: { attempts: 1, wrong: 1, last_seen: at(-5) }, n: { attempts: 3, wrong: 1, last_seen: at(-5) } }
+  assert.equal(getQuestionCounts(qs, map).wrong, 1)
+  for (let i = 0; i < 10; i++) assert.equal(selectNextQuestion(qs, map, [], 'wrong').id, 'm')
+  assert.equal(selectNextQuestion(qs, map, ['m'], 'wrong'), null)
+})
