@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { updatePassword } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, PasswordInput, Note, authBtn } from './AuthLayout'
+import CalmBackground from './CalmBackground'
 
 /**
  * Where the password-reset email lands. Supabase signs the user in from the
@@ -37,7 +38,7 @@ export default function ResetPasswordScreen({ signedIn, theme = 'dark', onToggle
   const para = (text) => <p style={{ margin: '6px 0 18px', fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>{text}</p>
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')}>
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={() => navigate('/home')} backdrop={<CalmBackground theme={theme} />}>
       <div className="af-in" style={{ width: '100%', maxWidth: 400, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box' }}>
         {!signedIn ? (
           <>
