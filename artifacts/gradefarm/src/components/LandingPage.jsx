@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Sun, Moon, Menu, X } from 'lucide-react'
 import { getPlatformSettings } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
+import { SUBJECT_GROUPS as GROUPS, groupSubjects } from '../lib/homeSubjects'
 import { studentTiers, extraLadder } from '../lib/pricing'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
@@ -17,7 +18,7 @@ import MathText from './MathText'
 // 2. "What's inside": a phone stays put while six short chapters scroll past,
 //    and its screen changes to match. On phones each chapter shows its own
 //    screen instead.
-// 3. Subjects (the live VCE and SACE Year 11 and 12 list), questions people
+// 3. Subjects (built from the live subject list, so it follows Admin), questions people
 //    ask, pricing (from platform settings), a last call to action and the
 //    footer. The page speaks to Year 11 and 12 students; parents and tutors
 //    have links in the footer.
@@ -258,9 +259,9 @@ const CSS = `
 
 /* ─── pieces of the app, with a sample student ─────────────────────────── */
 
-// A Year 12 Methods question (VCE Units 3 & 4, SACE Stage 2) with the slip most people make.
+// A Year 11 Methods question (VCE Units 1 & 2, Further differentiation) with the slip most people make.
 // Maths is written in LaTeX between $…$ and drawn with KaTeX (MathText).
-const SAMPLE = { topic: 'Differential Calculus', level: 'Level 3', stem: 'Differentiate $y = (2x - 5)^3$.', options: ['$3(2x-5)^2$', '$6(2x-5)^2$', '$6x(2x-5)^2$', '$(2x-5)^2$'], answer: 1, working: 'Chain rule: differentiate the outside, $3(2x-5)^2$, then multiply by the derivative of the inside, $2$. So $\\frac{dy}{dx} = 6(2x-5)^2$.' }
+const SAMPLE = { topic: 'Further differentiation', level: 'Level 3', stem: 'Differentiate $y = (2x - 5)^3$.', options: ['$3(2x-5)^2$', '$6(2x-5)^2$', '$6x(2x-5)^2$', '$(2x-5)^2$'], answer: 1, working: 'Chain rule: differentiate the outside, $3(2x-5)^2$, then multiply by the derivative of the inside, $2$. So $\\frac{dy}{dx} = 6(2x-5)^2$.' }
 
 /** Pick an answer, then check it, as on the question screen. */
 function QuestionCard({ onResult }) {
@@ -337,7 +338,7 @@ const CLAUSES = [
 // The sentence gets a little smaller as it grows, so every clause fits.
 const SIZES = [54, 54, 50, 46]
 const CAPTIONS = [
-  'Year 12 Methods. Try this one.',
+  'Year 11 Methods. Try this one.',
   'A wrong answer is planted',
   'It comes back until it turns gold',
   'Titan, the AI tutor',
@@ -388,7 +389,7 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
 /* ─── 2 · What's inside: the scrolling phone ───────────────────────────── */
 
 const CHAPTERS = [
-  ['Practice', 'Questions on the topics you\'re doing.', 'Tick what you\'re on this term, then choose new questions, the ones you got wrong, or a mix. Every question is mapped to your VCE study design or SACE subject outline.'],
+  ['Practice', 'Questions on the topics you\'re doing.', 'Tick what you\'re on this term, then choose new questions, the ones you got wrong, or a mix. Every question is mapped to a topic in your course.'],
   ['Worked solutions', 'Every question shows the working.', 'Not just the answer: the steps, and the slip most people make, so you know exactly where it went wrong.'],
   ['Titan', 'Stuck at 11 pm? Ask Titan.', 'The AI tutor explains it again, as many times as you need, plainly or with sport, gaming or music. Add a photo of a question or your class notes, or take a guided lesson on a whole topic.'],
   ['Comes back', 'Get it wrong and it comes back.', 'Every session starts with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. When a topic runs out, new questions are written for it.'],
@@ -399,10 +400,10 @@ const CHAPTERS = [
 function PhoneScreen({ i }) {
   if (i === 0) return (
     <>
-      <div className="lp-ph-top"><span>9:41</span><span>Methods · Stage 2</span></div>
+      <div className="lp-ph-top"><span>9:41</span><span>Methods · Units 1 &amp; 2</span></div>
       <h4>Practice</h4>
       <div className="lp-card" style={{ padding: '4px 0' }}>
-        {[['Differential Calculus', '84%', 'var(--lp-ok)', true], ['Discrete Random Variables', '58%', 'var(--lp-gold-text)', true], ['Integration', '91%', 'var(--lp-ok)', false], ['Continuous Random Variables', '49%', 'var(--lp-bad)', false], ['Sampling and Confidence Intervals', 'New', 'var(--lp-faint)', false]].map(([n, p, c, on]) => (
+        {[['Polynomials', '84%', 'var(--lp-ok)', true], ['Further differentiation', '58%', 'var(--lp-gold-text)', true], ['Functions and relations', '91%', 'var(--lp-ok)', false], ['Circular functions', '49%', 'var(--lp-bad)', false], ['Probability', 'New', 'var(--lp-faint)', false]].map(([n, p, c, on]) => (
           <div key={n} className={`lp-row${on ? ' sel' : ''}`}><span className={`lp-cb${on ? ' on' : ''}`}>{on ? '✓' : ''}</span><span>{n}</span><b style={{ color: c }}>{p}</b></div>
         ))}
       </div>
@@ -438,7 +439,7 @@ function PhoneScreen({ i }) {
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-gold-text)' }}>3 questions due back for review come first</span>
         <div className="lp-goldbar">Start</div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Differential Calculus</b><span className="lp-pill">Due back</span></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Further differentiation</b><span className="lp-pill">Due back</span></div>
       <b style={{ fontSize: 14.5 }}><MathText text={SAMPLE.stem} /></b>
       <div style={{ marginTop: 6 }}><Grow size={34} /></div>
       <span className="lp-muted" style={{ fontSize: 12.5 }}>Right again? Next time it's in 4 days.</span>
@@ -470,10 +471,10 @@ function PhoneScreen({ i }) {
             border: `1.5px solid ${k === 6 ? 'var(--lp-ink)' : k === 3 ? 'var(--lp-gold)' : 'var(--lp-line)'}` }}>{k + 1}</span>
         ))}
       </div>
-      <b style={{ fontSize: 14.5 }}><MathText text="$X \sim N(50, 4^2)$. Find $\Pr(X > 56)$, correct to three decimal places." /></b>
-      <span className="lp-chip">A · <MathText text="$0.067$" /></span>
-      <span className="lp-chip">B · <MathText text="$0.933$" /></span>
-      <span className="lp-chip">C · <MathText text="$0.159$" /></span>
+      <b style={{ fontSize: 14.5 }}><MathText text="Solve $2^{x+1} = 16$ for $x$." /></b>
+      <span className="lp-chip">A · <MathText text="$x = 3$" /></span>
+      <span className="lp-chip">B · <MathText text="$x = 4$" /></span>
+      <span className="lp-chip">C · <MathText text="$x = 8$" /></span>
       <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}><span className="lp-chip" style={{ flex: 1, textAlign: 'center' }}>Flag for review</span><span className="lp-goldbar" style={{ flex: 1, padding: 8 }}>Next</span></div>
     </>
   )
@@ -494,7 +495,7 @@ function Inside() {
     <section id="how" className="lp-in lp-sec" aria-labelledby="lp-inside">
       <div className="lp-sec-head">
         <h2 id="lp-inside">What's inside, one screen at a time</h2>
-        <p>Everything you need for Year 11 and 12, in one app.</p>
+        <p>Everything you need to practise, in one app.</p>
       </div>
       <div className="lp-stk">
         <div className="lp-ph-col" aria-hidden="true"><div className="lp-ph"><div className="lp-ph-s anim" key={active}><PhoneScreen i={active} /></div></div></div>
@@ -546,54 +547,40 @@ function WhereItFits({ weekly }) {
 
 /* ─── 3 · Subjects ─────────────────────────────────────────────────────── */
 
-// Used until the live list loads, or if it can't be reached.
-const FALLBACK_SUBJECTS = {
-  vce: [['Mathematical Methods', 'Units 1 & 2'], ['Mathematical Methods', 'Units 3 & 4'], ['Chemistry', 'Units 3 & 4'], ['Biology', 'Units 3 & 4'], ['Physics', 'Units 3 & 4']],
-  sace: [['Mathematical Methods', 'Stage 2'], ['Chemistry', 'Stage 1'], ['Chemistry', 'Stage 2']],
-  middle: [['English', 'Year 6'], ['Mathematics', 'Year 6']],
-}
-
-/** The live subjects for the homepage, as [name, level] pairs: VCE and SACE (Year 11 and 12) and Year 6 for selective entry. */
-function seniorSubjects(list) {
-  const vce = [], sace = [], middle = []
-  for (const s of list || []) {
-    const name = String(s.name || '')
-    const level = String(s.level || '')
-    if (/^VCE\s/i.test(name)) {
-      const units = /units?\s*1\s*(and|&)\s*2/i.test(name) ? 'Units 1 & 2' : (level.match(/units?\s*\d\s*(and|&)\s*\d/i)?.[0].replace(/\s*and\s*/i, ' & ') || level)
-      vce.push([name.replace(/^VCE\s+/i, '').replace(/\s*Units?\s*\d\s*(and|&)\s*\d\s*$/i, ''), units])
-    } else if (/^stage\s*[12]$/i.test(level)) {
-      sace.push([name.replace(/\s*Stage\s*[12]\s*$/i, ''), level.replace(/^stage/i, 'Stage')])
-    } else if (/^year\s*6$/i.test(level)) {
-      middle.push([name.replace(/^year\s*6\s+/i, ''), 'Year 6'])
-    }
-  }
-  const sort = (a) => a.sort((x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]))
-  return vce.length + sace.length + middle.length ? { vce: sort(vce), sace: sort(sace), middle: sort(middle) } : FALLBACK_SUBJECTS
-}
-
+// Built entirely from the live subject list (GET /api/public-subjects: every
+// live, unarchived curriculum, cached for 5 minutes). Making a subject live
+// in Admin adds it here; archiving it removes it. Each subject goes in a group
+// by its level, and a group with no subjects isn't shown.
 function Subjects({ onPick }) {
-  const live = usePublicSubjects()
-  const { vce, sace, middle } = seniorSubjects(live)
-  const col = (title, note, rows) => (
-    <div className="lp-card lp-subj">
-      <div className="hd"><b>{title}</b><span>{note}</span></div>
-      {rows.map(([n, l]) => (
-        <button key={n + l} type="button" className="lp-subj-row" onClick={onPick}><span>{n}</span><small>{l}</small></button>
-      ))}
-    </div>
-  )
+  const live = usePublicSubjects() // null while loading, [] if it can't be reached
+  const grouped = groupSubjects(live)
+  const shown = GROUPS.filter(g => grouped[g.id].length > 0)
+  const phrases = shown.map(g => g.phrase)
+  const list = phrases.length > 1 ? `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}` : phrases[0]
   return (
     <section id="subjects" className="lp-in lp-sec" aria-labelledby="lp-subjects">
       <div className="lp-sec-head">
         <h2 id="lp-subjects">Subjects</h2>
-        <p>VCE and SACE for Year 11 and 12, and Year 6 for selective entry. More are being added, and every subject gets new questions as you practise.</p>
+        <p>{shown.length
+          ? `Subjects for ${list}. New subjects appear here as soon as they're ready, and every subject gets new questions as you practise.`
+          : 'Every subject gets new questions as you practise.'}</p>
       </div>
-      <div className="lp-subjs">
-        {col('VCE', 'Victoria', vce)}
-        {col('SACE', 'South Australia', sace)}
-        {col('Middle School', 'Selective Entry', middle)}
-      </div>
+      {live === null ? (
+        <p className="lp-muted" style={{ marginTop: 20 }}>Loading subjects…</p>
+      ) : shown.length === 0 ? (
+        <p style={{ marginTop: 20 }}><button type="button" className="lp-link" onClick={onPick}>See the subjects you can start with</button></p>
+      ) : (
+        <div className="lp-subjs">
+          {shown.map(g => (
+            <div key={g.id} className="lp-card lp-subj">
+              <div className="hd"><b>{g.title}</b>{g.note && <span>{g.note}</span>}</div>
+              {grouped[g.id].map(x => (
+                <button key={x.name + x.level} type="button" className="lp-subj-row" onClick={onPick}><span>{x.name}</span><small>{x.level}</small></button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
@@ -687,7 +674,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
           <div className="lp-sec-head"><h2 id="lp-faq">Questions people ask</h2></div>
           <div className="lp-faq">
             <details open><summary>How is this different from past papers?</summary><p>A past paper is the same questions every time, and once you've seen the answers you're memorising, not learning. gradefarm. remembers which questions you got wrong, brings each one back until you can do it, and writes new ones when you run out.</p></details>
-            <details><summary>Does it follow my course?</summary><p>Yes. VCE subjects follow the VCAA study design and SACE subjects follow the SACE subject outline, and every question is mapped to a topic in it, so nothing is off the course.</p></details>
+            <details><summary>Does it follow my course?</summary><p>Yes. Each subject is built from its official course, like the VCAA study design for VCE, and every question is mapped to a topic in it, so nothing is off the course.</p></details>
             <details><summary>Is it actually free?</summary><p>One subject is free, {freeDaily} questions a day, with no card. Every question with no daily cap is ${tiers[0]} a week{trialDays > 0 ? `, and the first ${trialDays} days are free` : ''}.</p></details>
             <details><summary>What's Titan?</summary><p>The AI tutor. Ask it about any question or topic, any time, and it explains it plainly or with sport, gaming or music. You can add a photo of a question or your class notes, or take a guided lesson on a whole topic.</p></details>
             <details><summary>Can I practise under exam conditions?</summary><p>Yes. Exam mode sets a number of questions and a time limit and holds the answers back until you finish. Then you get every question with its working, and the ones you missed come back later.</p></details>
