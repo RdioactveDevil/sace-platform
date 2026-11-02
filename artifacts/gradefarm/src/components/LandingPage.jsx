@@ -236,7 +236,27 @@ const CSS = `
 .lp-foot-links button:hover { color: var(--lp-ink); }
 .lp-copy { margin-left: auto; }
 
+/* How it works: the forgetting curve */
+.lp-why { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); gap: 48px; align-items: center; }
+.lp-why h2 { font-size: clamp(27px, 3.3vw, 38px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
+.lp-why-lead { color: var(--lp-ink-2); font-size: 16.5px; margin-top: 14px !important; max-width: 48ch; }
+.lp-why-pts { display: flex; flex-direction: column; gap: 12px; margin-top: 22px; }
+.lp-why-pts div { padding-left: 14px; border-left: 3px solid var(--lp-sq3); }
+.lp-why-pts b { display: block; font-size: 15px; }
+.lp-why-pts span { font-size: 14.5px; color: var(--lp-muted); }
+.lp-why-src { font-size: 12.5px; color: var(--lp-faint); margin-top: 18px !important; }
+.lp-curve { padding: 16px 16px 12px; min-width: 0; }
+.lp-curve-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.lp-curve-key { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--lp-muted); }
+.lp-curve-key i { display: inline-block; width: 22px; height: 0; border-top: 3px solid var(--lp-sq3); margin-left: 6px; }
+.lp-curve-key i.cram { border-top: 3px dashed var(--lp-faint); }
+.lp-curve svg { display: block; width: 100%; height: auto; }
+.lp-curve .lbl { font-size: 12px; fill: var(--lp-muted); font-family: ${FONT_B}; }
+.lp-curve .lbl.strong { fill: var(--lp-ink); font-weight: 700; }
+.lp-curve-note { font-size: 12px; color: var(--lp-faint); margin-top: 4px !important; }
+
 @media (max-width: 960px) {
+  .lp-why { grid-template-columns: 1fr; gap: 24px; }
   .lp-and { grid-template-columns: 1fr; grid-template-areas: 'txt' 'vis'; row-gap: 24px; align-content: start; padding-top: 28px; }
   .lp-and-vis { min-height: 0; }
   .lp-stk { grid-template-columns: 1fr; gap: 0; }
@@ -369,7 +389,7 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
         </div>
         <div className="lp-and-ctl">
           {last
-            ? <><button type="button" className="lp-btn gold lg" onClick={onStart}>Start free</button><button type="button" className="lp-btn lg" onClick={onSeeInside}>See what's inside ↓</button></>
+            ? <><button type="button" className="lp-btn gold lg" onClick={onStart}>Start free</button><button type="button" className="lp-btn lg" onClick={onSeeInside}>How it works ↓</button></>
             : <button type="button" className="lp-btn gold lg" onClick={() => setN(n + 1)} aria-label="And? Show the next part">And?</button>}
           <span className="n" aria-live="polite">{n} of {CLAUSES.length}</span>
           {last && <button type="button" className="lp-link" onClick={() => setN(1)}>Start again</button>}
@@ -383,6 +403,107 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
         {n === 3 && <><Grow /><p className="lp-muted" style={{ fontSize: 15, maxWidth: '40ch', marginTop: 6 }}>Each time you get it right, the gap gets longer. Right every time, and it turns gold.</p></>}
         {n === 4 && <TitanCard />}
       </div>
+    </section>
+  )
+}
+
+/* ─── How it works: spaced repetition ───────────────────────────────────── */
+
+// The review times the app uses after a miss (lib/engine.js nextReviewTime):
+// about an hour, then 4 days, then 3 weeks, each once it's right again.
+const REVIEWS_H = [1, 96, 504]
+const SPAN_H = 1008 // six weeks
+// An illustration of the forgetting curve, not measured data: memory fades
+// as e^(−t/S), and each review resets it and makes it fade more slowly.
+// Strengths are set so each review lands as you start to forget (about 55%,
+// then 60%), and six weeks on most of it is still there.
+const CRAM_S = 30
+const SPACED_S = [10, 160, 800, 1750]
+
+function curvePoints(reviews, strengths) {
+  const pts = []
+  const starts = [0, ...reviews]
+  starts.forEach((t0, i) => {
+    const t1 = i + 1 < starts.length ? starts[i + 1] : SPAN_H
+    const S = strengths[Math.min(i, strengths.length - 1)]
+    for (let k = 0; k <= 48; k++) {
+      // Sample evenly on the chart's log scale so short gaps get enough points.
+      const t = Math.expm1(Math.log1p(t0) + (Math.log1p(t1) - Math.log1p(t0)) * (k / 48))
+      pts.push([t, Math.exp(-(t - t0) / S)])
+    }
+  })
+  return pts
+}
+
+function ForgettingCurve() {
+  const [focus, setFocus] = useState('both')
+  // A narrow chart on phones, so its labels stay readable.
+  const box = useRef(null)
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    if (!box.current || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 560))
+    ro.observe(box.current)
+    return () => ro.disconnect()
+  }, [])
+  const W = narrow ? 400 : 720, H = narrow ? 280 : 300, L = 44, R = 14, T = 24, B = 46
+  const x = (t) => L + (Math.log1p(t) / Math.log1p(SPAN_H)) * (W - L - R)
+  const y = (r) => T + (1 - r) * (H - T - B)
+  const path = (pts) => pts.map(([t, r], i) => `${i ? 'L' : 'M'}${x(t).toFixed(1)},${y(r).toFixed(1)}`).join('')
+  const cram = curvePoints([], [CRAM_S])
+  const spaced = curvePoints(REVIEWS_H, SPACED_S)
+  const ticks = narrow
+    ? [[0, 'Now'], [24, '1 day'], [168, '1 week'], [1008, '6 weeks']]
+    : [[0, 'Learn it'], [1, '1 hr'], [24, '1 day'], [96, '4 days'], [504, '3 wks'], [1008, '6 wks']]
+  const dim = (k) => (focus === 'both' || focus === k ? 1 : 0.18)
+  const endCram = cram[cram.length - 1][1], endSpaced = spaced[spaced.length - 1][1]
+  return (
+    <div className="lp-card lp-curve" ref={box}>
+      <div className="lp-curve-h">
+        <span className="lp-sw" role="group" aria-label="Show">
+          {[['both', 'Both'], ['cram', 'Cramming'], ['gf', 'gradefarm.']].map(([k, l]) => <button key={k} type="button" aria-pressed={focus === k} onClick={() => setFocus(k)}>{l}</button>)}
+        </span>
+        <span className="lp-curve-key"><i className="gf" />With reviews<i className="cram" />Learnt once</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="How much you remember over six weeks. Learnt once, it drops away within a few days. With reviews after an hour, 4 days and 3 weeks, it goes back up each time and fades more slowly, and is still mostly there at six weeks.">
+        <line x1={L} x2={W - R} y1={y(1)} y2={y(1)} stroke="var(--lp-line)" />
+        <line x1={L} x2={W - R} y1={y(0.5)} y2={y(0.5)} stroke="var(--lp-line)" strokeDasharray="3 5" />
+        <line x1={L} x2={W - R} y1={y(0)} y2={y(0)} stroke="var(--lp-line-2)" />
+        <text x={L - 8} y={y(1) + 4} textAnchor="end" className="lbl">All</text>
+        <text x={L - 8} y={y(0) + 4} textAnchor="end" className="lbl">None</text>
+        {ticks.map(([t, l]) => <g key={l}><line x1={x(t)} x2={x(t)} y1={y(0)} y2={y(0) + 5} stroke="var(--lp-line-2)" /><text x={x(t)} y={H - 18} textAnchor={t === 0 ? 'start' : t === SPAN_H ? 'end' : 'middle'} className="lbl">{l}</text></g>)}
+        <path d={path(cram)} fill="none" stroke="var(--lp-faint)" strokeWidth="3" strokeDasharray="7 6" strokeLinecap="round" opacity={dim('cram')} style={{ transition: 'opacity .25s' }} />
+        <path d={path(spaced)} fill="none" stroke="var(--lp-sq3)" strokeWidth="3.5" strokeLinejoin="round" opacity={dim('gf')} style={{ transition: 'opacity .25s' }} />
+        <g opacity={dim('gf')} style={{ transition: 'opacity .25s' }}>
+          {REVIEWS_H.map((t) => (
+            <g key={t}>
+              <circle cx={x(t)} cy={y(1)} r="6" fill="var(--lp-sq3)" stroke="var(--lp-card)" strokeWidth="2.5" />
+              <text x={x(t)} y={y(1) - 11} textAnchor="middle" className="lbl strong">Back</text>
+            </g>
+          ))}
+          {/* End labels only fit on the wide chart; the key above covers phones. */}
+          {!narrow && <text x={x(SPAN_H)} y={y(endSpaced) + 22} textAnchor="end" className="lbl strong">Still there</text>}
+        </g>
+        {!narrow && <text x={x(SPAN_H)} y={y(endCram) - 10} textAnchor="end" className="lbl" opacity={dim('cram')}>Mostly gone</text>}
+      </svg>
+      <p className="lp-curve-note">An illustration of the forgetting curve, not your data. The review times are the ones gradefarm. uses.</p>
+    </div>
+  )
+}
+
+function SpacedRepetition() {
+  return (
+    <section id="how" className="lp-in lp-sec lp-why" aria-labelledby="lp-why">
+      <div>
+        <h2 id="lp-why">This is spaced repetition.</h2>
+        <p className="lp-why-lead">You forget most of what you learn within days. Answering a question again just as you start to forget is what makes it stick, and each time it lasts longer. gradefarm. works out when that is for every question you answer.</p>
+        <div className="lp-why-pts">
+          <div><b>Active recall</b><span>You answer questions instead of re-reading notes, because getting it out of your head is what builds the memory.</span></div>
+          <div><b>Spaced repetition</b><span>Each question comes back an hour after you miss it, then days, then weeks later, just before you'd forget.</span></div>
+        </div>
+        <p className="lp-why-src">Psychologists have studied the forgetting curve since the 1880s.</p>
+      </div>
+      <ForgettingCurve />
     </section>
   )
 }
@@ -493,7 +614,7 @@ function Inside() {
     return () => obs.disconnect()
   }, [])
   return (
-    <section id="how" className="lp-in lp-sec" aria-labelledby="lp-inside">
+    <section id="inside" className="lp-in lp-sec" aria-labelledby="lp-inside">
       <div className="lp-sec-head">
         <h2 id="lp-inside">What's inside, one screen at a time</h2>
         <p>Everything you need to practise, in one app.</p>
@@ -666,6 +787,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         <AndHero onStart={start} onDone={finish} onSeeInside={() => go('how')} done={done} />
         {/* In the page for search engines, but invisible until the hero is finished. */}
         <div hidden={!done}>
+        <SpacedRepetition />
         <Inside />
         <WhereItFits weekly={tiers[0]} />
 
