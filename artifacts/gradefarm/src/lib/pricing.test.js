@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, tierPrice, planTotal, extraLadder, money, monthlySaving } from './pricing.js'
+import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, tierPrice, planTotal, extraLadder, money, monthlySaving, perDay } from './pricing.js'
 
 test('students pay $7, then $6, then $5 a week by default', () => {
   assert.deepEqual(DEFAULT_STUDENT_TIERS, [7, 6, 5])
@@ -45,4 +45,12 @@ test('the extra-subject ladder reads naturally', () => {
 test('money drops needless cents', () => {
   assert.equal(money(7), '7')
   assert.equal(money(19.5), '19.50')
+})
+
+test('perDay turns a weekly or monthly price into a daily one', () => {
+  assert.equal(perDay(7), '$1')
+  assert.equal(perDay(18), '$2.57')
+  assert.equal(perDay(14), '$2')
+  assert.equal(perDay(27, 'month'), '89c')
+  assert.equal(perDay(69, 'month'), '$2.27')
 })

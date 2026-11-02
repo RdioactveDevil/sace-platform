@@ -31,3 +31,10 @@ export const extraLadder = (tiers) => (tiers.length > 1 ? tiers.slice(1) : tiers
 
 /** Dollars without a needless ".00": 7 → "7", 19.5 → "19.50". */
 export const money = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
+
+/** A weekly or monthly price as a daily one, for "just $1 a day": 7 a week → "$1", 18 → "$2.57", 27 a month → "89c". */
+export function perDay(amount, interval = 'week') {
+  const cents = Math.round((interval === 'month' ? (amount * 12) / 365 : amount / 7) * 100)
+  if (cents < 100) return `${cents}c`
+  return `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`
+}
