@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getPlatformSettings, getBillingConfig } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { SUBJECT_GROUPS, groupSubject } from '../lib/homeSubjects'
-import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, tierPrice, monthlySaving, money } from '../lib/pricing'
+import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, tierPrice, monthlySaving, money, perDay } from '../lib/pricing'
 import { rememberPendingCheckout, startCheckout, subjectTileFor } from '../lib/pendingCheckout'
 import { SITE_CSS, SITE_FONTS, themeVars, Brand, SiteNav, SiteFooter, siteFooterLinks } from './SiteChrome'
 
@@ -63,6 +63,8 @@ const CSS = `${SITE_CSS}
 .pp-row .lv { color: var(--lp-muted); }
 .pp-row.tot { border-top: 1px dashed var(--lp-line-2); padding-top: 12px; font-weight: 800; font-size: 17px; }
 .pp-row.free { color: var(--lp-ok); font-weight: 700; }
+.pp-day { text-align: center; background: var(--lp-sel-row); border-radius: 10px; padding: 9px 12px; font-size: 15px; font-weight: 700; }
+.pp-day b { font-size: 18px; font-weight: 800; color: var(--lp-gold-text); font-variant-numeric: tabular-nums; }
 .pp-note { font-size: 13px; color: var(--lp-muted); text-align: center; }
 .pp-err { font-size: 13.5px; color: var(--lp-bad); background: var(--lp-bad-bg); border-radius: 9px; padding: 9px 12px; }
 .pp-rcpt .lp-btn { width: 100%; }
@@ -261,11 +263,12 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
                     <div className="pp-row" key={l.id}><span>{l.name}{l.level ? <span className="lv"> · {l.level}</span> : null}</span><span>${money(l.price)}</span></div>
                   ))}
                   <div className="pp-row tot"><span>{onPlan ? 'Added to your bill' : 'Total'}</span><span>${money(total)} {per}</span></div>
+                  <p className="pp-day">That's just <b>{perDay(total, per === 'a month' ? 'month' : 'week')}</b> a day.</p>
                   {trial && <div className="pp-row free"><span>First {trialDays} days</span><span>Free</span></div>}
                   {!onPlan && <div className="pp-row"><span>Today</span><span><b>${trial ? 0 : money(total)}</b></span></div>}
                   {error && <p className="pp-err" role="alert">{error}</p>}
                   <button type="button" className="lp-btn gold lg" onClick={checkout} disabled={busy}>{cta}</button>
-                  {trial ? <p className="pp-note">Card required. Cancel before day {trialDays} and you pay nothing.</p>
+                  {trial ? null
                     : !onPlan && chosen.length > 1 && trialDays > 0 ? <p className="pp-note">The {trialDays}-day free trial is for one subject. Start with one to try it free, and add the rest later.</p>
                     : <p className="pp-note">Cancel any time from your Account.</p>}
                   {!onPlan && <p className="pp-note">Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with one subject.</p>}
