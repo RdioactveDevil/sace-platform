@@ -26,12 +26,13 @@ export function Logo({ onClick }) {
 /**
  * Page frame: logo on the left, `right` (links, progress) and the light/dark
  * switch on the right, then `children` centred (or from the top with
- * `align="top"`).
+ * `align="top"`). `backdrop` is drawn behind it all (e.g. <CalmBackground />).
  */
-export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', children }) {
+export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', backdrop, children }) {
   const t = THEMES[theme]
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light', position: 'relative', isolation: 'isolate' }}>
+      {backdrop}
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         @keyframes afIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
@@ -46,7 +47,7 @@ export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, 
         .af-chip { transition: border-color 0.12s, background 0.12s; }
         .af-chip:hover { border-color: ${t.textMuted} !important; }
       `}</style>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px clamp(16px, 4vw, 28px)', flexShrink: 0 }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px clamp(16px, 4vw, 28px)', flexShrink: 0, position: 'relative', zIndex: 1 }}>
         <Logo onClick={onLogoClick} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>{center}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 13, color: t.textMuted }}>
@@ -59,7 +60,7 @@ export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, 
           )}
         </div>
       </header>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', padding: '12px 16px 56px' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', padding: '12px 16px 56px', position: 'relative', zIndex: 1 }}>
         {children}
       </main>
     </div>

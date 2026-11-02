@@ -5,7 +5,9 @@ import { studentTiers } from '../lib/pricing'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIconByName } from './SubjectIcons'
 import { THEMES } from '../lib/theme'
-import { AuthLayout, authBtn, linkStyle } from './AuthLayout'
+import { AuthLayout, authBtn } from './AuthLayout'
+import CalmBackground from './CalmBackground'
+import { groupSubject } from '../lib/homeSubjects'
 
 const COUNTS_CACHE_KEY = 'gradefarm_subject_counts_v1'
 const COUNTS_CACHE_TTL = 5 * 60 * 1000
@@ -26,13 +28,13 @@ function writeCountsCache(counts) {
 
 /* ─── Component ───────────────────────────────────────────── */
 /**
- * Choosing a subject. A new student sees the subjects for their year level
- * first; someone with subjects sees theirs. Every subject is a click away
- * under "See every subject". `fullAccess` (tutors/admins) unlocks them all.
+ * Choosing a subject. One subject gets a big card: the one they used last,
+ * else their own, else the one for their year level. Every other subject is
+ * a list under it. `fullAccess` (tutors/admins) unlocks them all. A calm
+ * moving background (CalmBackground) sits behind the page.
  */
 export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess, theme = 'dark', onToggleTheme }) {
   const t = THEMES[theme]
-  const [showAll, setShowAll]           = useState(false)
   const [liveQuestionCounts, setCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamic]   = useState([])
   const [loadingCurricula, setLoading]  = useState(true)
@@ -90,92 +92,133 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   // Lower years first, so a list reads like a school.
   const byYear = (a, b) => (yearFromStage(a.stage) ?? 99) - (yearFromStage(b.stage) ?? 99) || a.name.localeCompare(b.name)
 
+  // One subject gets the big card: the one they used last, else their own,
+  // else the one for their year. Everything else is a list under it.
   const hasOwn = subscribed.length > 0
-  const primary = hasOwn ? subscribed : forYear.length ? forYear : [...notSubscribed].sort(byYear)
-  const rest = [...(hasOwn ? notSubscribed : notSubscribed.filter(s => !primary.includes(s)))].sort(byYear)
-  const heading = hasOwn
-    ? (subscribed.length === 1 ? 'Your subject' : 'Your subjects')
-    : forYear.length
-      ? `${forYear.length === 1 ? 'A subject' : `${forYear.length === 2 ? 'Two' : forYear.length === 3 ? 'Three' : forYear.length} subjects`} for Year ${year}`
-      : 'Pick your first subject'
-  const sub = hasOwn
-    ? null
-    : !hasFreeSubject
-      ? `Pick one to use free, with ${freeDaily} questions a day. Unlimited questions from $${tiers[0]} a week.`
-      : null
+  const lastId = (() => { try { return JSON.parse(localStorage.getItem('gf-subject') || 'null')?.id } catch { return null } })()
+  const pick = hasOwn
+    ? subscribed.find(s => s.id === lastId) || subscribed[0]
+    : forYear[0] || [...notSubscribed].sort(byYear)[0]
+  const ownOthers = subscribed.filter(s => s !== pick).sort(byYear)
+  const more = notSubscribed.filter(s => s !== pick).sort(byYear)
+  const shortName = pick ? groupSubject({ name: pick.name, level: pick.stage }).name || pick.name : ''
 
-  const tile = (subj) => {
+  const heading = fullAccess ? 'Pick a subject'
+    : hasOwn ? `Welcome back, ${firstName}.`
+    : `Start with ${shortName}.`
+
+  // A price once their free subject is used; before that, the button says "Start free".
+  const statusOf = (subj) => {
     const access = accessOf(subj)
-    const locked = access === 'none'
-    const count = liveQuestionCounts?.[subj.id]
-    const topics = subj.topics?.length || 0
-    const meta = [subj.stage, topics ? `${topics} topic${topics === 1 ? '' : 's'}` : null, count > 0 ? `${count.toLocaleString()} questions` : null].filter(Boolean).join(' · ')
-    // A price once their free subject is used; before that, the button says "Start free".
-    const status = locked
-      ? (hasFreeSubject ? priceLabel : null)
-      : (!fullAccess && access === 'free' ? `Free · ${freeDaily} a day` : null)
-    const action = locked ? (hasFreeSubject ? 'Unlock' : 'Start free') : 'Start'
-    const go = () => (locked ? onGetAccess?.({ ...subj, questionCount: count ?? subj.questionCount }) : onSelect(subj))
-    return (
-      <div key={subj.id} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 9, background: t.bgSubtle, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            <SubjectIconByName name={subj.name} color={t.textMuted} size={20} />
-          </span>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: t.text, lineHeight: 1.3 }}>{subj.name}</div>
-            <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>{meta}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto' }}>
-          {status && (
-            <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: status.startsWith('Free') ? t.successBg : t.bgSubtle, color: status.startsWith('Free') ? t.success : t.textSub }}>{status}</span>
-          )}
-          <button type="button" className="af-btn" onClick={go} aria-label={`${action} ${subj.name}`}
-            style={{ ...authBtn(t, primary[0] === subj ? 'primary' : 'secondary'), minHeight: 34, fontSize: 13, padding: '0 14px', marginLeft: 'auto' }}>
-            {action}
-          </button>
-        </div>
-      </div>
-    )
+    if (access === 'none') return hasFreeSubject ? priceLabel : null
+    return !fullAccess && access === 'free' ? `Free · ${freeDaily} a day` : null
   }
-  const grid = (list) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 12 }}>{list.map(tile)}</div>
+  const actionOf = (subj) => (accessOf(subj) === 'none' ? (hasFreeSubject ? 'Unlock' : 'Start free') : hasOwn && !fullAccess ? 'Continue' : 'Start')
+  const go = (subj) => {
+    const count = liveQuestionCounts?.[subj.id]
+    return accessOf(subj) === 'none' ? onGetAccess?.({ ...subj, questionCount: count ?? subj.questionCount }) : onSelect(subj)
+  }
+  const pill = (status) => status && (
+    <span className="sp-pill" data-free={status.startsWith('Free')}>{status}</span>
   )
 
+  const SHOWN_TOPICS = 6
+  const hero = pick && (
+    <div className="sp-hero">
+      <div className="sp-hero-main">
+        {hasOwn && !fullAccess && <span className="sp-kick">{pick.id === lastId ? 'Pick up where you left off' : 'Your subject'}</span>}
+        <h2>{pick.name}</h2>
+        {pill(statusOf(pick))}
+      </div>
+      <button type="button" className="af-btn sp-go" onClick={() => go(pick)} aria-label={`${actionOf(pick)} ${pick.name}`}
+        style={{ ...authBtn(t, 'primary'), minHeight: 48, fontSize: 15.5, padding: '0 26px', borderRadius: 12 }}>
+        {actionOf(pick)}
+      </button>
+      {pick.topics?.length > 0 && (
+        <div className="sp-topics">
+          {pick.topics.slice(0, SHOWN_TOPICS).map(name => <span key={name}>{name}</span>)}
+          {pick.topics.length > SHOWN_TOPICS && <span>+{pick.topics.length - SHOWN_TOPICS} more</span>}
+        </div>
+      )}
+    </div>
+  )
+
+  const rows = (list) => (
+    <div className="sp-rows">
+      {list.map(subj => {
+        const topics = subj.topics?.length || 0
+        const meta = [subj.stage, topics ? `${topics} topic${topics === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')
+        return (
+          <div key={subj.id} className="sp-row">
+            <span aria-hidden="true" className="sp-ic"><SubjectIconByName name={subj.name} color={t.textMuted} size={20} /></span>
+            <span className="sp-row-w"><b>{subj.name}</b>{meta && <span>{meta}</span>}</span>
+            {pill(statusOf(subj))}
+            <button type="button" className="af-btn" onClick={() => go(subj)} aria-label={`${actionOf(subj)} ${subj.name}`}
+              style={{ ...authBtn(t, 'secondary'), minHeight: 34, fontSize: 13, padding: '0 14px' }}>
+              {actionOf(subj)}
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const css = `
+    .sp-card { background: ${t.bgCard}; border: 1px solid ${t.border}; border-radius: 14px; }
+    .sp-hero { padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: center; }
+    .sp-hero-main { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+    .sp-kick { font-size: 12.5px; font-weight: 700; color: ${t.textMuted}; }
+    .sp-hero h2 { margin: 0; font-size: clamp(20px, 3.4vw, 24px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; color: ${t.text}; text-wrap: balance; }
+    .sp-topics { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+    .sp-topics span { font-size: 12.5px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: ${t.bgSubtle}; color: ${t.textSub}; }
+    .sp-pill { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: ${t.bgSubtle}; color: ${t.textSub}; white-space: nowrap; }
+    .sp-pill[data-free="true"] { background: ${t.successBg}; color: ${t.success}; }
+    .sp-rows { overflow: hidden; }
+    .sp-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid ${t.border}; min-width: 0; }
+    .sp-row:last-child { border-bottom: none; }
+    .sp-ic { width: 36px; height: 36px; border-radius: 9px; background: ${t.bgSubtle}; display: grid; place-items: center; flex-shrink: 0; }
+    .sp-row-w { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+    .sp-row-w b { font-size: 14.5px; color: ${t.text}; line-height: 1.35; }
+    .sp-row-w span { font-size: 12.5px; color: ${t.textMuted}; }
+    .sp-h3 { margin: 8px 0 0; font-size: 16px; font-weight: 800; color: ${t.text}; }
+    @media (max-width: 600px) {
+      .sp-hero { grid-template-columns: 1fr; }
+      .sp-go { width: 100%; }
+      .sp-row { flex-wrap: wrap; }
+      .sp-row .sp-pill { order: 3; }
+    }
+  `
+
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top">
-      <div className="af-in" style={{ width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 'clamp(8px, 5vh, 48px)' }}>
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align="top" backdrop={<CalmBackground theme={theme} />}>
+      <style>{css}</style>
+      <div className="af-in" style={{ width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 'clamp(8px, 5vh, 48px)' }}>
         {loadingCurricula ? (
           <p style={{ margin: 0, fontSize: 14, color: t.textMuted }} role="status">Loading subjects…</p>
-        ) : !allSubjects.length ? (
-          <div style={{ padding: '28px 20px', textAlign: 'center', fontSize: 14, color: t.textMuted, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }}>
+        ) : !allSubjects.length || !pick ? (
+          <div className="sp-card" style={{ padding: '28px 20px', textAlign: 'center', fontSize: 14, color: t.textMuted }}>
             No subjects are open yet. Check back soon.
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {!hasOwn && <span style={{ fontSize: 13, fontWeight: 600, color: t.textFaint }}>Hi {firstName}.</span>}
+              {!hasOwn && !fullAccess && <span style={{ fontSize: 13, fontWeight: 600, color: t.textFaint }}>Hi {firstName}.</span>}
               <h1 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 30px)', fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.2, color: t.text }}>{heading}</h1>
-              {sub && <p style={{ margin: 0, fontSize: 14.5, color: t.textMuted, lineHeight: 1.6, maxWidth: '60ch' }}>{sub}</p>}
             </div>
 
-            {primary.length > 0 && grid(primary)}
+            <div className="sp-card">{hero}</div>
 
-            {rest.length > 0 && (
-              showAll ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
-                  <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: t.text }}>{hasOwn ? 'Add a subject' : 'Every other subject'}</h2>
-                  {grid(rest)}
-                </div>
-              ) : (
-                <div style={{ fontSize: 14 }}>
-                  <button type="button" className="af-link" onClick={() => setShowAll(true)} style={linkStyle(t)}>
-                    {hasOwn ? 'Add a subject' : 'See every subject'}
-                  </button>
-                  <span style={{ color: t.textMuted }}> ({rest.length} more)</span>
-                </div>
-              )
+            {ownOthers.length > 0 && (
+              <>
+                <h3 className="sp-h3">{ownOthers.length === 1 ? 'Your other subject' : 'Your other subjects'}</h3>
+                <div className="sp-card">{rows(ownOthers)}</div>
+              </>
+            )}
+            {more.length > 0 && (
+              <>
+                <h3 className="sp-h3">{hasOwn ? 'Add a subject' : 'Or another subject'}</h3>
+                <div className="sp-card">{rows(more)}</div>
+              </>
             )}
 
             {comingSoon.length > 0 && (
