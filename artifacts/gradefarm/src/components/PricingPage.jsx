@@ -17,7 +17,7 @@ import { SITE_CSS, SITE_FONTS, themeVars, Brand, SiteNav, SiteFooter, siteFooter
 // (lib/pendingCheckout.js) while they make an account, and App.jsx carries on
 // to Checkout once they're in.
 //
-// Below: Free against Student, questions about paying, a box for tutors, and
+// Below: the free plan against the paid one, questions about paying, a box for tutors, and
 // the homepage's nav and footer (SiteChrome.jsx).
 
 const DEFAULT_PRICING = {
@@ -276,10 +276,10 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
         </div>
 
         <section className="lp-in lp-sec" aria-labelledby="pp-cmp">
-          <div className="lp-sec-head"><h2 id="pp-cmp">Free and Student, side by side</h2></div>
+          <div className="lp-sec-head"><h2 id="pp-cmp">Free Plan vs Paid Plan</h2></div>
           <div className="lp-card pp-cmp">
             <table>
-              <thead><tr><th><span className="lp-sr">What you get</span></th><th>Free</th><th className="st">Student</th></tr></thead>
+              <thead><tr><th><span className="lp-sr">What you get</span></th><th>Free</th><th className="st">Paid</th></tr></thead>
               <tbody>
                 <tr><th>Subjects</th><td>One, swap any time</td><td className="st">Any you add</td></tr>
                 <tr><th>Questions a day</th><td>{freeDaily}</td><td className="st">No limit</td></tr>
