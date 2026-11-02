@@ -98,7 +98,9 @@ const CSS = `
 .lp-and-txt { grid-area: txt; }
 .lp-and-vis { grid-area: vis; }
 .lp-and-s { font-size: var(--lp-and-size, clamp(32px, 4.3vw, 54px)); font-weight: 800; line-height: 1.12; letter-spacing: -0.035em; }
-.lp-and-s span { transition: color 0.35s; }
+/* Each clause starts on its own line, so the sentence builds as a short list rather than one block. */
+.lp-and-s > span { display: block; transition: color 0.35s; }
+.lp-and-s > span + span { margin-top: 0.3em; }
 .lp-and-s span.old { color: var(--lp-faded); }
 /* The dots after an unfinished sentence: there's more, press And? */
 .lp-dots { color: var(--lp-gold-text); animation: lpDots 1.6s ease-in-out infinite; }
@@ -237,9 +239,9 @@ const CSS = `
 .lp-copy { margin-left: auto; }
 
 /* How it works: the forgetting curve */
-.lp-why { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); gap: 48px; align-items: center; }
-.lp-why h2 { font-size: clamp(27px, 3.3vw, 38px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
-.lp-why-lead { color: var(--lp-ink-2); font-size: 16.5px; margin-top: 14px !important; max-width: 48ch; }
+.lp-why h2 { text-align: center; font-size: clamp(26px, 4vw, 44px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; white-space: nowrap; margin-bottom: 36px; }
+.lp-why-body { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); gap: 48px; align-items: center; }
+.lp-why-lead { color: var(--lp-ink-2); font-size: 16.5px; max-width: 48ch; }
 .lp-why-pts { display: flex; flex-direction: column; gap: 12px; margin-top: 22px; }
 .lp-why-pts div { padding-left: 14px; border-left: 3px solid var(--lp-sq3); }
 .lp-why-pts b { display: block; font-size: 15px; }
@@ -256,7 +258,8 @@ const CSS = `
 .lp-curve-note { font-size: 12px; color: var(--lp-faint); margin-top: 4px !important; }
 
 @media (max-width: 960px) {
-  .lp-why { grid-template-columns: 1fr; gap: 24px; }
+  .lp-why-body { grid-template-columns: 1fr; gap: 24px; }
+  .lp-why h2 { white-space: normal; margin-bottom: 20px; }
   .lp-and { grid-template-columns: 1fr; grid-template-areas: 'txt' 'vis'; row-gap: 24px; align-content: start; padding-top: 28px; }
   .lp-and-vis { min-height: 0; }
   .lp-stk { grid-template-columns: 1fr; gap: 0; }
@@ -357,7 +360,7 @@ const CLAUSES = [
   'When you\'re stuck, Titan explains it your way.',
 ]
 // The sentence gets a little smaller as it grows, so every clause fits.
-const SIZES = [54, 54, 50, 46]
+const SIZES = [52, 50, 46, 42]
 const CAPTIONS = [
   'Year 11 Methods. Try this one.',
   'A wrong answer is planted',
@@ -494,8 +497,9 @@ function ForgettingCurve() {
 function SpacedRepetition() {
   return (
     <section id="how" className="lp-in lp-sec lp-why" aria-labelledby="lp-why">
+      <h2 id="lp-why">This is spaced repetition.</h2>
+      <div className="lp-why-body">
       <div>
-        <h2 id="lp-why">This is spaced repetition.</h2>
         <p className="lp-why-lead">You forget most of what you learn within days. Answering a question again just as you start to forget is what makes it stick, and each time it lasts longer. gradefarm. works out when that is for every question you answer.</p>
         <div className="lp-why-pts">
           <div><b>Active recall</b><span>You answer questions instead of re-reading notes, because getting it out of your head is what builds the memory.</span></div>
@@ -504,6 +508,7 @@ function SpacedRepetition() {
         <p className="lp-why-src">Psychologists have studied the forgetting curve since the 1880s.</p>
       </div>
       <ForgettingCurve />
+      </div>
     </section>
   )
 }
