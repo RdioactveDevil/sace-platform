@@ -63,12 +63,17 @@ const CSS = `${SITE_CSS}
 
 /* question card */
 /* Hand-drawn hints: "Try this question!" over the sample question, then "Now click And?" */
-.lp-q-wrap { position: relative; margin-top: 40px; }
-.lp-hint { font-family: 'Caveat', 'Segoe Print', cursive; font-weight: 700; font-size: 25px; line-height: 1; color: var(--lp-gold-text); white-space: nowrap; animation: lpIn 0.4s ease; }
+.lp-q-wrap { position: relative; margin-top: 60px; }
+.lp-hint { font-family: 'Caveat', 'Segoe Print', cursive; font-weight: 700; font-size: clamp(30px, 2.9vw, 38px); line-height: 1; color: var(--lp-gold-text); white-space: nowrap; animation: lpIn 0.4s ease; }
 .lp-hint-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
-.lp-hint-top { position: absolute; right: 52px; top: -36px; transform: rotate(-3deg); }
+.lp-hint-top { position: absolute; right: 44px; top: -54px; transform: rotate(-3deg); }
 .lp-hint-svg { position: absolute; left: 0; top: 0; overflow: visible; }
-.lp-hint-inline { display: inline-flex; align-items: center; gap: 6px; transform: rotate(-2deg); }
+.lp-hint-inline { display: inline-flex; align-items: center; gap: 8px; transform: rotate(-2deg); }
+/* The dots run along each arrow towards what it points at, and the small arrow nudges towards And?. */
+.lp-hint-flow { animation: lpFlow 0.9s linear infinite; }
+@keyframes lpFlow { to { stroke-dashoffset: -9; } }
+.lp-hint-inline svg { animation: lpNudge 1.3s ease-in-out infinite; }
+@keyframes lpNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-6px); } }
 .lp-q { padding: 18px; display: flex; flex-direction: column; gap: 9px; }
 .lp-qt { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--lp-muted); }
 .lp-qt b { color: var(--lp-ink); }
@@ -214,12 +219,12 @@ const SAMPLE = { topic: 'Further differentiation', level: 'Level 3', stem: 'Diff
 
 /** A dotted, hand-drawn arrow ending at (x2, y2), with a head pointing along its last stretch. */
 function HintArrow({ d, x2, y2, fromX, fromY }) {
-  const a = Math.atan2(y2 - fromY, x2 - fromX), L = 11
+  const a = Math.atan2(y2 - fromY, x2 - fromX), L = 15
   const head = [a + Math.PI - 0.5, a + Math.PI + 0.5].map(t => `M${x2},${y2} l${(Math.cos(t) * L).toFixed(1)},${(Math.sin(t) * L).toFixed(1)}`).join(' ')
   return (
     <>
-      <path d={d} fill="none" stroke="var(--lp-gold-text)" strokeWidth="2.5" strokeDasharray="1 7" strokeLinecap="round" />
-      <path d={head} fill="none" stroke="var(--lp-gold-text)" strokeWidth="2.5" strokeLinecap="round" />
+      <path className="lp-hint-flow" d={d} fill="none" stroke="var(--lp-gold-text)" strokeWidth="3.5" strokeDasharray="1 8" strokeLinecap="round" />
+      <path d={head} fill="none" stroke="var(--lp-gold-text)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
     </>
   )
 }
@@ -358,8 +363,8 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
           {/* Once they've answered the sample question, point them at And? */}
           {n === 1 && picked !== null && (
             <span className="lp-hint lp-hint-inline" aria-hidden="true">
-              <svg width="54" height="30" viewBox="0 0 54 30" style={{ overflow: 'visible' }}>
-                <HintArrow d="M52,24 C38,30 18,26 6,12" fromX={18} fromY={26} x2={6} y2={12} />
+              <svg width="80" height="44" viewBox="0 0 80 44" style={{ overflow: 'visible' }}>
+                <HintArrow d="M78,36 C57,45 27,39 9,18" fromX={27} fromY={39} x2={9} y2={18} />
               </svg>
               Now click And?
             </span>
