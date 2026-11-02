@@ -72,7 +72,8 @@ const CSS = `
 .lp-btn.lg { min-height: 50px; padding: 0 26px; font-size: 16px; border-radius: 12px; }
 .lp-btn:disabled { opacity: 0.5; cursor: default; }
 .lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.lp-wordmark { display: inline-flex; align-items: baseline; border: none; background: none; padding: 0; font-family: 'Sifonn Pro', sans-serif; letter-spacing: 0.06em; line-height: 1; white-space: nowrap; cursor: pointer; }
+/* The logo keeps its own font (Sifonn Pro) and spacing; the .lp prefix puts it above the rule that gives buttons the body font. */
+.lp .lp-wordmark { display: inline-flex; align-items: baseline; border: none; background: none; padding: 0; font-family: 'Sifonn Pro', sans-serif; letter-spacing: 0.08em; line-height: 1; white-space: nowrap; cursor: pointer; }
 .lp-wordmark .g { color: var(--lp-logo-g); } .lp-wordmark .f { color: var(--lp-logo-f); }
 .lp-icon-btn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-muted); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
 .lp-card { background: var(--lp-card); border: 1px solid var(--lp-line); border-radius: 14px; }
