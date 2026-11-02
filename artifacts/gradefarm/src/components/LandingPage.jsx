@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, Moon, Menu, X } from 'lucide-react'
 import { getPlatformSettings } from '../lib/db'
+import { usePublicSubjects } from '../lib/publicSubjects'
 import { studentTiers, extraLadder } from '../lib/pricing'
 import { THEMES } from '../lib/theme'
 import { Logo } from './AuthLayout'
@@ -16,8 +17,10 @@ import { Logo } from './AuthLayout'
 // 2. "What's inside": a phone stays put while six short chapters scroll past,
 //    and its screen changes to match. On phones each chapter shows its own
 //    screen instead.
-// 3. Questions people ask, pricing (from platform settings), a last call to
-//    action and the footer.
+// 3. Subjects (the live VCE and SACE Year 11 and 12 list), questions people
+//    ask, pricing (from platform settings), a last call to action and the
+//    footer. The page speaks to Year 11 and 12 students; parents and tutors
+//    have links in the footer.
 //
 // It uses the app's look and follows the saved light/dark theme. The screens
 // are drawn from the real Practice, question, Learn and Progress pages with a
@@ -140,13 +143,6 @@ const CSS = `
 .lp-re { color: var(--lp-ink-2); }
 .lp-re b { display: block; font-size: 12.5px; color: var(--lp-ink); }
 
-/* email + tutor */
-.lp-em { padding: 16px; font-size: 13.5px; color: var(--lp-ink-2); }
-.lp-em .eh { font-size: 12px; color: var(--lp-muted); border-bottom: 1px solid var(--lp-line); padding-bottom: 8px; margin-bottom: 10px; }
-.lp-em .eh b { display: block; color: var(--lp-ink); font-size: 14.5px; }
-.lp-em .nums { display: flex; gap: 22px; margin: 4px 0 10px; flex-wrap: wrap; }
-.lp-em .nums div { font-size: 12px; color: var(--lp-muted); }
-.lp-em .nums b { display: block; font-size: 22px; color: var(--lp-ink); letter-spacing: -0.02em; line-height: 1.25; }
 .lp-up { color: var(--lp-ok); font-weight: 700; }
 .lp-pill { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--lp-sel-row); color: var(--lp-gold-text); white-space: nowrap; border: 1px solid var(--lp-line); }
 .lp-ok { color: var(--lp-ok); font-weight: 700; } .lp-lo { color: var(--lp-bad); font-weight: 700; }
@@ -197,7 +193,17 @@ const CSS = `
 .lp-faq summary::after { content: "+"; font-weight: 600; color: var(--lp-muted); }
 .lp-faq details[open] summary::after { content: "−"; }
 .lp-faq details p { padding: 0 0 17px; color: var(--lp-muted); max-width: 70ch; }
-.lp-prices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; margin-top: 22px; }
+.lp-prices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; margin-top: 22px; }
+.lp-subjs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.lp-subj { overflow: hidden; }
+.lp-subj .hd { display: flex; align-items: baseline; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--lp-line); }
+.lp-subj .hd b { font-size: 17px; }
+.lp-subj .hd span { font-size: 13px; color: var(--lp-muted); }
+.lp-subj-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 18px; border: none; border-bottom: 1px solid var(--lp-line); background: transparent; color: var(--lp-ink); font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; }
+.lp-subj-row:last-child { border-bottom: none; }
+.lp-subj-row:hover { background: var(--lp-subtle); }
+.lp-subj-row span { flex: 1; min-width: 0; }
+.lp-subj-row small { font-size: 13px; font-weight: 600; color: var(--lp-muted); white-space: nowrap; }
 .lp-prices > div { padding: 22px; display: flex; flex-direction: column; gap: 4px; }
 .lp-prices > div + div { border-left: 1px solid var(--lp-line); }
 .lp-prices .nm { font-size: 13px; font-weight: 700; color: var(--lp-muted); }
@@ -229,7 +235,7 @@ const CSS = `
   .lp-nav-links, .lp-nav-signin { display: none; }
   .lp-menu-btn { display: grid; }
   .lp-sec { padding-top: 52px; padding-bottom: 52px; }
-  .lp-prices { grid-template-columns: 1fr; }
+  .lp-prices, .lp-subjs { grid-template-columns: 1fr; }
   .lp-prices > div + div { border-left: none; border-top: 1px solid var(--lp-line); }
   .lp-copy { margin-left: 0; }
 }
@@ -238,11 +244,12 @@ const CSS = `
 
 /* ─── pieces of the app, with a sample student ─────────────────────────── */
 
-const JACKET = { topic: 'Percentages', level: 'Level 2', stem: 'A $80 jacket is 15% off. What do you pay?', options: ['$12', '$65', '$68', '$92'], answer: 2, working: '15% of $80 is $12. That\'s the discount, so you pay $80 − $12 = $68.' }
+// A Year 12 Methods question (VCE Units 3 & 4, SACE Stage 2) with the slip most people make.
+const SAMPLE = { topic: 'Differential Calculus', level: 'Level 3', stem: 'Differentiate y = (2x − 5)³.', options: ['3(2x − 5)²', '6(2x − 5)²', '6x(2x − 5)²', '(2x − 5)²'], answer: 1, working: 'Chain rule: differentiate the outside, 3(2x − 5)², then multiply by the derivative of the inside, 2. So dy/dx = 6(2x − 5)².' }
 
 /** Pick an answer, then check it, as on the question screen. */
 function QuestionCard({ onResult }) {
-  const q = JACKET
+  const q = SAMPLE
   const [picked, setPicked] = useState(null)
   const [checked, setChecked] = useState(false)
   const check = () => { setChecked(true); onResult?.(picked) }
@@ -271,10 +278,10 @@ function QuestionCard({ onResult }) {
 }
 
 const EXPLAIN = {
-  Plain: '15% off means you pay 85% of the price. 15% of $80 is $12, so you pay $80 − $12 = $68.',
-  Sport: 'A team loses 15% of its 80 points to a penalty. The penalty is 12 points and the team keeps 68. The $12 is the penalty, not what you pay.',
-  Gaming: 'A 15% hit on 80 HP takes 12 HP, leaving you on 68. The $12 is the hit; what you pay is what\'s left.',
-  Music: 'Cut 15% from an 80-second track and you lose 12 seconds, leaving 68. The 12 is the cut, the 68 is what you hear.',
+  Plain: 'It\'s a function inside a function. Differentiate the outside and leave the inside alone: 3(2x − 5)². Then multiply by the derivative of the inside, which is 2. So it\'s 6(2x − 5)².',
+  Sport: 'Think relay. The outside function runs its leg, 3(2x − 5)², then hands the baton to the inside one, which runs 2. You multiply the legs: 6(2x − 5)².',
+  Gaming: 'It\'s stacking multipliers. The outer power gives 3(2x − 5)², the inner one is ×2, and multipliers stack by multiplying: 6(2x − 5)².',
+  Music: 'Speed up a track that\'s already sped up. The inside changes twice as fast as x, so every change on the outside happens twice as fast too: 3(2x − 5)² × 2 = 6(2x − 5)².',
 }
 
 function TitanCard() {
@@ -282,13 +289,13 @@ function TitanCard() {
   return (
     <div className="lp-card" style={{ overflow: 'hidden' }}>
       <div className="lp-ti-h">
-        <b style={{ fontSize: 13 }}>Titan</b><span className="lp-muted">Percentages</span>
+        <b style={{ fontSize: 13 }}>Titan</b><span className="lp-muted">Chain rule</span>
         <span className="lp-sw" role="group" aria-label="Explain with" style={{ marginLeft: 'auto' }}>
           {Object.keys(EXPLAIN).map(k => <button key={k} type="button" aria-pressed={k === style} onClick={() => setStyle(k)}>{k}</button>)}
         </span>
       </div>
       <div className="lp-ti-m">
-        <div className="lp-me">Why isn't it $65? I took 15% off.</div>
+        <div className="lp-me">Why isn't it 3(2x − 5)²? I brought the power down.</div>
         <div className="lp-re" aria-live="polite"><b>Titan</b>{EXPLAIN[style]}</div>
       </div>
     </div>
@@ -304,20 +311,10 @@ function Grow({ size = 48 }) {
   )
 }
 
-function SundayEmail() {
-  return (
-    <div className="lp-card lp-em">
-      <div className="eh"><b>Mia's week on gradefarm.</b>To: Sarah · Sunday, 6:00 pm</div>
-      <div className="nums"><div><b>61</b>questions</div><div><b>74%</b>correct <span className="lp-up">+8</span></div><div><b>5</b>days</div></div>
-      <div>Percentages went from 40% to 58%. The discount question she kept missing is now right twice in a row. Next up: linear equations.</div>
-    </div>
-  )
-}
-
 /* ─── 1 · And? ─────────────────────────────────────────────────────────── */
 
 const CLAUSES = [
-  'gradefarm. is practice questions ',
+  'gradefarm. is VCE and SACE practice questions ',
   'that remember what you got wrong, ',
   'and bring each one back until you get it right. ',
   'When you\'re stuck, Titan explains it your way.',
@@ -325,7 +322,7 @@ const CLAUSES = [
 // The sentence gets a little smaller as it grows, so every clause fits.
 const SIZES = [54, 54, 50, 46]
 const CAPTIONS = [
-  'Practice questions in your subjects. Try this one.',
+  'Year 12 Methods. Try this one.',
   'A wrong answer is planted',
   'It comes back until it turns gold',
   'Titan, the AI tutor',
@@ -338,10 +335,10 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
   const last = n >= CLAUSES.length
   useEffect(() => { if (last) onDone() }, [last]) // eslint-disable-line react-hooks/exhaustive-deps
   const planted = picked === null
-    ? 'Say you answered $65. It\'s planted, and comes back in an hour.'
-    : picked === JACKET.answer
+    ? 'Say you answered 3(2x − 5)². It\'s planted, and comes back in an hour.'
+    : picked === SAMPLE.answer
       ? 'You got it right, so it skips planting: it comes back in 2 days to check it stuck.'
-      : `You said ${JACKET.options[picked]}. It's planted, and comes back in an hour.`
+      : `You said ${SAMPLE.options[picked]}. It's planted, and comes back in an hour.`
   return (
     <section className="lp-in lp-and" aria-labelledby="lp-def">
       <div className="lp-and-txt">
@@ -365,7 +362,7 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
       <div className="lp-and-vis" key={n} aria-live="polite">
         <span className="cap">{CAPTIONS[n - 1]}</span>
         {n === 1 && <QuestionCard onResult={setPicked} />}
-        {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === JACKET.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}>{planted}</p></div>}
+        {n === 2 && <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><span className={`lp-sq ${picked === SAMPLE.answer ? 's2' : 's1'}`} style={{ width: 72, height: 72 }} /><p style={{ fontSize: 16, color: 'var(--lp-ink-2)', maxWidth: '32ch' }}>{planted}</p></div>}
         {n === 3 && <><Grow /><p className="lp-muted" style={{ fontSize: 15, maxWidth: '40ch', marginTop: 6 }}>Each time you get it right, the gap gets longer. Right every time, and it turns gold.</p></>}
         {n === 4 && <TitanCard />}
       </div>
@@ -376,21 +373,21 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
 /* ─── 2 · What's inside: the scrolling phone ───────────────────────────── */
 
 const CHAPTERS = [
-  ['Practice', 'Students', 'Questions on the topics you pick.', 'Tick what you\'re studying, then choose new questions, the ones you got wrong, or a mix. Everything follows the Australian Curriculum, SACE or VCE.'],
-  ['Worked solutions', 'Students', 'Every question shows the working.', 'Not just the answer: the steps, and the slip most people make, so you know what went wrong.'],
-  ['Titan', 'Students', 'Stuck? Ask Titan.', 'The AI tutor explains it again, as many times as you need, plainly or with sport, gaming or music. Guided lessons take you through a whole topic.'],
-  ['Comes back', 'Students', 'Get it wrong and it comes back.', 'Every session starts with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. When a topic runs out, new questions are written for it.'],
-  ['Progress', 'Students and parents', 'See yourself improving.', 'Accuracy by week, what\'s coming up, and a plan for this week: the reviews that are due, lessons in progress and your weakest topics.'],
-  ['Parents and tutors', 'Parents and tutors', 'Everyone sees the same week.', 'Parents get it every Sunday at 6 pm. For under-15s, the AI features stay off until a parent says yes. Tutors see every answer before the lesson.'],
+  ['Practice', 'Questions on the topics you\'re doing.', 'Tick what you\'re on this term, then choose new questions, the ones you got wrong, or a mix. Every question is mapped to your VCE study design or SACE subject outline.'],
+  ['Worked solutions', 'Every question shows the working.', 'Not just the answer: the steps, and the slip most people make, so you know exactly where it went wrong.'],
+  ['Titan', 'Stuck at 11 pm? Ask Titan.', 'The AI tutor explains it again, as many times as you need, plainly or with sport, gaming or music. Add a photo of a question or your class notes, or take a guided lesson on a whole topic.'],
+  ['Comes back', 'Get it wrong and it comes back.', 'Every session starts with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. When a topic runs out, new questions are written for it.'],
+  ['Progress', 'See yourself improving.', 'Accuracy by week, your next SAC, test or exam counting down, and a plan for this week: the reviews that are due, lessons in progress and your weakest topics.'],
+  ['Exam mode', 'Practise under exam conditions.', 'Pick how many questions and a time limit. Answers stay hidden until you finish, then every question shows the working, and the ones you missed come back like any other.'],
 ]
 
 function PhoneScreen({ i }) {
   if (i === 0) return (
     <>
-      <div className="lp-ph-top"><span>9:41</span><span>Year 9 Maths</span></div>
+      <div className="lp-ph-top"><span>9:41</span><span>Methods · Stage 2</span></div>
       <h4>Practice</h4>
       <div className="lp-card" style={{ padding: '4px 0' }}>
-        {[['Fractions', '84%', 'var(--lp-ok)', true], ['Percentages', '58%', 'var(--lp-gold-text)', true], ['Index laws', '91%', 'var(--lp-ok)', false], ['Linear equations', '49%', 'var(--lp-bad)', false], ['Pythagoras', 'New', 'var(--lp-faint)', false]].map(([n, p, c, on]) => (
+        {[['Differential Calculus', '84%', 'var(--lp-ok)', true], ['Discrete Random Variables', '58%', 'var(--lp-gold-text)', true], ['Integration', '91%', 'var(--lp-ok)', false], ['Continuous Random Variables', '49%', 'var(--lp-bad)', false], ['Sampling and Confidence Intervals', 'New', 'var(--lp-faint)', false]].map(([n, p, c, on]) => (
           <div key={n} className={`lp-row${on ? ' sel' : ''}`}><span className={`lp-cb${on ? ' on' : ''}`}>{on ? '✓' : ''}</span><span>{n}</span><b style={{ color: c }}>{p}</b></div>
         ))}
       </div>
@@ -401,33 +398,33 @@ function PhoneScreen({ i }) {
   if (i === 1) return (
     <>
       <div className="lp-ph-top"><span>9:43</span><span>Question 3 of 14</span></div>
-      <b style={{ fontSize: 15.5 }}>{JACKET.stem}</b>
-      <span className="lp-chip">A · $12</span>
-      <span className="lp-chip w">B · $65 · Your answer</span>
-      <span className="lp-chip r">C · $68 · Answer</span>
-      <div style={{ borderTop: '1px solid var(--lp-line)', paddingTop: 8, color: 'var(--lp-ink-2)' }}><b style={{ color: 'var(--lp-ink)' }}>Worked solution</b><br />15% of $80 is $12. That's the discount, so $80 − $12 = $68.<br /><span className="lp-muted" style={{ fontSize: 12 }}>Common slip: stopping at the 15%.</span></div>
+      <b style={{ fontSize: 15.5 }}>{SAMPLE.stem}</b>
+      <span className="lp-chip w">A · 3(2x − 5)² · Your answer</span>
+      <span className="lp-chip r">B · 6(2x − 5)² · Answer</span>
+      <span className="lp-chip">C · 6x(2x − 5)²</span>
+      <div style={{ borderTop: '1px solid var(--lp-line)', paddingTop: 8, color: 'var(--lp-ink-2)' }}><b style={{ color: 'var(--lp-ink)' }}>Worked solution</b><br />Differentiate the outside: 3(2x − 5)². Multiply by the inside's derivative, 2: 6(2x − 5)².<br /><span className="lp-muted" style={{ fontSize: 12 }}>Common slip: forgetting the ×2 from the inside.</span></div>
       <div className="lp-goldbar" style={{ marginTop: 'auto' }}>Practise 3 like this</div>
     </>
   )
   if (i === 2) return (
     <>
-      <div className="lp-ph-top"><span>9:44</span><span>Learn</span></div>
+      <div className="lp-ph-top"><span>11:04 pm</span><span>Learn</span></div>
       <div className="lp-seg"><span>Plain</span><span className="on">Sport</span><span>Gaming</span><span>Music</span></div>
-      <div className="lp-me">Why isn't it $65?</div>
+      <div className="lp-me">Why isn't it 3(2x − 5)²?</div>
       <div className="lp-re"><b>Titan</b>{EXPLAIN.Sport}</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}><span className="lp-chip">Show me another</span><span className="lp-chip">I'm still stuck</span></div>
     </>
   )
   if (i === 3) return (
     <>
-      <div className="lp-ph-top"><span>Next session</span><span>Year 9 Maths</span></div>
+      <div className="lp-ph-top"><span>Next session</span><span>Methods</span></div>
       <div className="lp-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <b style={{ fontSize: 13 }}>Your session</b>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-gold-text)' }}>3 questions due back for review come first</span>
         <div className="lp-goldbar">Start</div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Percentages</b><span className="lp-pill">Due back</span></div>
-      <b style={{ fontSize: 14.5 }}>{JACKET.stem}</b>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Differential Calculus</b><span className="lp-pill">Due back</span></div>
+      <b style={{ fontSize: 14.5 }}>{SAMPLE.stem}</b>
       <div style={{ marginTop: 6 }}><Grow size={34} /></div>
       <span className="lp-muted" style={{ fontSize: 12.5 }}>Right again? Next time it's in 4 days.</span>
     </>
@@ -440,19 +437,29 @@ function PhoneScreen({ i }) {
         <div><b style={{ fontSize: 24 }}>74%</b><br /><span className="lp-muted" style={{ fontSize: 12 }}>correct <span className="lp-up">+8</span></span></div>
         <div><b style={{ fontSize: 24 }}>61</b><br /><span className="lp-muted" style={{ fontSize: 12 }}>questions</span></div>
       </div>
+      <div className="lp-card" style={{ padding: '4px 0' }}><div className="lp-row"><b style={{ fontSize: 12.5 }}>Coming up</b><span>Methods test</span><small>12 days</small></div></div>
       <div className="lp-card" style={{ padding: '4px 0' }}>
-        <div className="lp-row"><span className="lp-cb" /><span>Review 6 percentages questions</span><small>Tomorrow</small></div>
-        <div className="lp-row"><span className="lp-cb" /><span>Lesson: Percentage change</span><small>Step 3 of 6</small></div>
-        <div className="lp-row"><span className="lp-cb on">✓</span><span>Practise fractions</span><small>Done</small></div>
+        <div className="lp-row"><span className="lp-cb" /><span>Review 6 differentiation questions</span><small>Tomorrow</small></div>
+        <div className="lp-row"><span className="lp-cb" /><span>Lesson: The chain rule</span><small>Step 3 of 6</small></div>
+        <div className="lp-row"><span className="lp-cb on">✓</span><span>Practise integration</span><small>Done</small></div>
       </div>
     </>
   )
   return (
     <>
-      <div className="lp-ph-top"><span>Sun 6:00</span><span>Mail</span></div>
-      <SundayEmail />
-      <span className="lp-muted" style={{ fontSize: 12 }}>And her tutor's Students page:</span>
-      <div className="lp-card" style={{ padding: '4px 0' }}><div className="lp-row"><b style={{ fontSize: 12.5 }}>Mia</b><span /><span className="lp-pill">Linear eq. 49%</span></div></div>
+      <div className="lp-ph-top"><span>Exam · 18:42 left</span><span>Question 7 of 20</span></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4 }}>
+        {Array.from({ length: 20 }, (_, k) => (
+          <span key={k} style={{ aspectRatio: '1', borderRadius: 5, display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 800,
+            background: k < 6 ? 'var(--lp-on-bg)' : 'var(--lp-card)', color: k < 6 ? 'var(--lp-on-fg)' : 'var(--lp-muted)',
+            border: `1.5px solid ${k === 6 ? 'var(--lp-ink)' : k === 3 ? 'var(--lp-gold)' : 'var(--lp-line)'}` }}>{k + 1}</span>
+        ))}
+      </div>
+      <b style={{ fontSize: 14.5 }}>X is normally distributed with mean 50 and standard deviation 4. Find Pr(X &gt; 56), correct to three decimal places.</b>
+      <span className="lp-chip">A · 0.067</span>
+      <span className="lp-chip">B · 0.933</span>
+      <span className="lp-chip">C · 0.159</span>
+      <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}><span className="lp-chip" style={{ flex: 1, textAlign: 'center' }}>Flag for review</span><span className="lp-goldbar" style={{ flex: 1, padding: 8 }}>Next</span></div>
     </>
   )
 }
@@ -472,21 +479,70 @@ function Inside() {
     <section id="how" className="lp-in lp-sec" aria-labelledby="lp-inside">
       <div className="lp-sec-head">
         <h2 id="lp-inside">What's inside, one screen at a time</h2>
-        <p>Everything in one account: students practise, parents see the week, tutors see every answer.</p>
+        <p>Everything you need for Year 11 and 12, in one app.</p>
       </div>
       <div className="lp-stk">
         <div className="lp-ph-col" aria-hidden="true"><div className="lp-ph"><div className="lp-ph-s anim" key={active}><PhoneScreen i={active} /></div></div></div>
         <div>
-          {CHAPTERS.map(([k, who, h, p], i) => (
+          {CHAPTERS.map(([k, h, p], i) => (
             <div key={k} ref={el => { refs.current[i] = el }} data-i={i} className={`lp-chap${active === i ? ' on' : ''}`}>
               <span className="k">{k}</span>
               <h3>{h}</h3>
               <p>{p}</p>
-              <span className="who">For {who.toLowerCase()}</span>
               <div className="lp-chap-screen" aria-hidden="true"><div className="lp-ph-s"><PhoneScreen i={i} /></div></div>
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  )
+}
+
+/* ─── 3 · Subjects ─────────────────────────────────────────────────────── */
+
+// Used until the live list loads, or if it can't be reached.
+const FALLBACK_SUBJECTS = {
+  vce: [['Mathematical Methods', 'Units 1 & 2'], ['Mathematical Methods', 'Units 3 & 4'], ['Chemistry', 'Units 3 & 4'], ['Biology', 'Units 3 & 4'], ['Physics', 'Units 3 & 4']],
+  sace: [['Mathematical Methods', 'Stage 2'], ['Chemistry', 'Stage 1'], ['Chemistry', 'Stage 2']],
+}
+
+/** The live Year 11 and 12 subjects, split into VCE and SACE, as [name, level] pairs. */
+function seniorSubjects(list) {
+  const vce = [], sace = []
+  for (const s of list || []) {
+    const name = String(s.name || '')
+    const level = String(s.level || '')
+    if (/^VCE\s/i.test(name)) {
+      const units = /units?\s*1\s*(and|&)\s*2/i.test(name) ? 'Units 1 & 2' : (level.match(/units?\s*\d\s*(and|&)\s*\d/i)?.[0].replace(/\s*and\s*/i, ' & ') || level)
+      vce.push([name.replace(/^VCE\s+/i, '').replace(/\s*Units?\s*\d\s*(and|&)\s*\d\s*$/i, ''), units])
+    } else if (/^stage\s*[12]$/i.test(level)) {
+      sace.push([name.replace(/\s*Stage\s*[12]\s*$/i, ''), level.replace(/^stage/i, 'Stage')])
+    }
+  }
+  const sort = (a) => a.sort((x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]))
+  return vce.length + sace.length ? { vce: sort(vce), sace: sort(sace) } : FALLBACK_SUBJECTS
+}
+
+function Subjects({ onPick }) {
+  const live = usePublicSubjects()
+  const { vce, sace } = seniorSubjects(live)
+  const col = (title, note, rows) => (
+    <div className="lp-card lp-subj">
+      <div className="hd"><b>{title}</b><span>{note}</span></div>
+      {rows.map(([n, l]) => (
+        <button key={n + l} type="button" className="lp-subj-row" onClick={onPick}><span>{n}</span><small>{l}</small></button>
+      ))}
+    </div>
+  )
+  return (
+    <section id="subjects" className="lp-in lp-sec" aria-labelledby="lp-subjects">
+      <div className="lp-sec-head">
+        <h2 id="lp-subjects">Subjects</h2>
+        <p>For Year 11 and 12 in Victoria and South Australia. More are being added, and every subject gets new questions as you practise.</p>
+      </div>
+      <div className="lp-subjs">
+        {col('VCE', 'Victoria', vce)}
+        {col('SACE', 'South Australia', sace)}
       </div>
     </section>
   )
@@ -506,8 +562,6 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
   const tiers = studentTiers(pricing?.student_tiers)
   const freeDaily = pricing?.free_daily_questions ?? 20
   const trialDays = Math.max(0, Math.floor(Number(pricing?.student_trial_days ?? 7)) || 0)
-  const tutorPrices = (pricing?.tutor_plans ?? []).map(p => Number(p.price)).filter(n => n > 0)
-  const tutorFrom = tutorPrices.length ? Math.min(...tutorPrices) : 29
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -533,7 +587,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
     // Wait a frame so the sections exist before scrolling to them.
     requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })))
   }
-  const NAV = [['how', 'How it works'], ['questions', 'Questions'], ['year6', 'Year 6'], ['tutors', 'Tutors'], ['pricing', 'Pricing']]
+  const NAV = [['how', 'How it works'], ['subjects', 'Subjects'], ['questions', 'Questions'], ['pricing', 'Pricing']]
 
   return (
     <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
@@ -576,14 +630,17 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         <div hidden={!done}>
         <Inside />
 
+        <Subjects onPick={start} />
+
         <section id="questions" className="lp-in lp-sec" aria-labelledby="lp-faq">
           <div className="lp-sec-head"><h2 id="lp-faq">Questions people ask</h2></div>
           <div className="lp-faq">
-            <details open><summary>How is this different from a question bank?</summary><p>A question bank gives you questions. gradefarm. remembers which ones you got wrong, brings them back until you can do them, and writes new ones when you run out.</p></details>
-            <details><summary>Is the AI safe for my child?</summary><p>For students under 15, Titan and the other AI features stay off until a parent confirms by email. Titan explains questions and topics, and you'll see what they practised in the Sunday email.</p></details>
-            <details><summary>What do I get for free?</summary><p>One subject, {freeDaily} questions a day, with no card. Every question in a subject, with no daily cap, is ${tiers[0]} a week{trialDays > 0 ? `, with the first ${trialDays} days free` : ''}.</p></details>
-            <details><summary>I already have a tutor. Do I need this?</summary><p>It's what happens between lessons. If your tutor uses gradefarm., they see every answer you give, and you get the subjects they teach free.</p></details>
-            <details><summary>Does it follow my school's curriculum?</summary><p>Yes. Subjects are built from the Australian Curriculum, SACE and VCE, and every question is mapped to a topic in it.</p></details>
+            <details open><summary>How is this different from past papers?</summary><p>A past paper is the same questions every time, and once you've seen the answers you're memorising, not learning. gradefarm. remembers which questions you got wrong, brings each one back until you can do it, and writes new ones when you run out.</p></details>
+            <details><summary>Does it follow my course?</summary><p>Yes. VCE subjects follow the VCAA study design and SACE subjects follow the SACE subject outline, and every question is mapped to a topic in it, so nothing is off the course.</p></details>
+            <details><summary>Is it actually free?</summary><p>One subject is free, {freeDaily} questions a day, with no card. Every question with no daily cap is ${tiers[0]} a week{trialDays > 0 ? `, and the first ${trialDays} days are free` : ''}.</p></details>
+            <details><summary>What's Titan?</summary><p>The AI tutor. Ask it about any question or topic, any time, and it explains it plainly or with sport, gaming or music. You can add a photo of a question or your class notes, or take a guided lesson on a whole topic.</p></details>
+            <details><summary>Can I practise under exam conditions?</summary><p>Yes. Exam mode sets a number of questions and a time limit and holds the answers back until you finish. Then you get every question with its working, and the ones you missed come back later.</p></details>
+            <details><summary>Does it work on my phone?</summary><p>Yes. It's a website, so it works on your phone, laptop or school computer with nothing to install, and your progress follows you.</p></details>
           </div>
         </section>
 
@@ -599,17 +656,13 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
               <span className="amt">${tiers[0]} <small>a week</small></span>
               <p>Every question, no daily cap.{trialDays > 0 ? ` ${trialDays} days free.` : ''} Extra subjects ${extraLadder(tiers)}.</p>
             </div>
-            <div><span className="nm">Tutor</span><span className="amt">${tutorFrom} <small>a month and up</small></span><p>Your students, their results, lessons and messages. They get your subjects free.</p></div>
           </div>
         </section>
 
         <section className="lp-in lp-sec">
           <div className="lp-end">
             <h2>Start with one subject, free.</h2>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button type="button" className="lp-btn gold lg" onClick={start}>Start free</button>
-              <button type="button" className="lp-btn lg" onClick={() => navigate('/auth/tutor')}>I'm a tutor</button>
-            </div>
+            <button type="button" className="lp-btn gold lg" onClick={start}>Start free</button>
           </div>
         </section>
         </div>
@@ -620,11 +673,12 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
           <Logo />
           <div className="lp-foot-links">
             <button type="button" onClick={() => go('how')}>How it works</button>
-            <button type="button" onClick={() => navigate('/year-6')}>Year 6</button>
-            <button type="button" onClick={() => navigate('/auth/tutor')}>Tutors</button>
+            <button type="button" onClick={() => go('subjects')}>Subjects</button>
             <button type="button" onClick={() => navigate('/pricing')}>Pricing</button>
             <button type="button" onClick={() => navigate('/privacy')}>Privacy</button>
             <button type="button" onClick={() => navigate('/terms')}>Terms</button>
+            <button type="button" onClick={() => navigate('/auth/tutor')}>For tutors</button>
+            <button type="button" onClick={() => navigate('/year-6')}>Year 6 selective</button>
           </div>
           <span className="lp-copy">© 2026 Titanium Tutoring · Adelaide, SA</span>
         </div>
