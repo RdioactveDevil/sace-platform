@@ -69,6 +69,12 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
           )}
         </div>
 
+        {profile.hide_from_leaderboard && !loading && !error && active && (
+          <div role="status" style={{ ...card, padding: '12px 16px', fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
+            You're hidden from leaderboards, so classmates can't see your name or XP. Turn it off in Account → Preferences to join in.
+          </div>
+        )}
+
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} theme={theme} />)}

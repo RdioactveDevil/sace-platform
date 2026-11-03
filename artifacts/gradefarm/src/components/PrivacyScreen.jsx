@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     title: '4. Who Can See Your Information',
-    body: `• Your tutor: if you are on a tutor's student list, they can see your profile, progress, answers, assignments, writing and your messages with them.\n• Your classmates: if you are in a class, other members can see your display name, XP, level and streak on the class leaderboard.\n• Titanium Tutoring staff: our administrators can access account and study data to run the platform and help with support requests.\n• Service providers: the companies listed in section 6 process data on our behalf to provide GradeFarm.`,
+    body: `• Your tutor: if you are on a tutor's student list, they can see your profile, progress, answers, assignments, writing and your messages with them.\n• Your classmates: if you are in a class, other members can see your display name, XP, level and streak on the class leaderboard. You can hide yourself from leaderboards in Account → Preferences.\n• Titanium Tutoring staff: our administrators can access account and study data to run the platform and help with support requests.\n• Service providers: the companies listed in section 6 process data on our behalf to provide GradeFarm.`,
   },
   {
     title: '5. AI Features',

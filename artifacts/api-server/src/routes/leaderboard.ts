@@ -27,7 +27,8 @@ interface ProfileRow {
 // Students get the classes they're in; tutors also get the classes they own
 // or co-teach; admins get every class. Class membership and other students'
 // profiles aren't readable by students directly, so this runs with the
-// service role and returns only public leaderboard fields.
+// service role and returns only public leaderboard fields. Students who turned
+// on "Hide me from leaderboards" are left out entirely.
 router.get("/leaderboard/classes", async (req, res) => {
   try {
     const caller = await requireUser(req, res);
@@ -73,7 +74,9 @@ router.get("/leaderboard/classes", async (req, res) => {
         .from("profiles")
         .select("id, display_name, xp, level, streak, last_active, recent_correct, recent_answers")
         .in("id", studentIds)
-        .is("deactivated_at", null);
+        .is("deactivated_at", null)
+        // Students who opted out in Account → Preferences aren't shown to anyone.
+        .eq("hide_from_leaderboard", false);
       if (pErr) return res.status(500).json({ error: pErr.message });
       for (const p of (profs ?? []) as ProfileRow[]) profiles[p.id] = p;
     }
