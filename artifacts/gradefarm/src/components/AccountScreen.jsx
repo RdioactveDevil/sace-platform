@@ -495,6 +495,9 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const [remindersOn, setRemindersOn]   = useState(!profile.emails_unsubscribed_at)
   const [savingReminders, setSavingReminders] = useState(false)
   const [remindersMsg, setRemindersMsg] = useState('')
+  const [lbHidden, setLbHidden]         = useState(!!profile.hide_from_leaderboard)
+  const [savingLbHidden, setSavingLbHidden] = useState(false)
+  const [lbHiddenMsg, setLbHiddenMsg]   = useState('')
 
   // A plain card, for the parent and family panels.
   const plainCard = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '16px 18px' }
@@ -581,6 +584,22 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
     }
   }
 
+  const handleToggleLeaderboardHidden = async () => {
+    const next = !lbHidden
+    setSavingLbHidden(true); setLbHiddenMsg('')
+    try {
+      const updates = { hide_from_leaderboard: next }
+      await updateProfile(profile.id, updates)
+      onProfileUpdated?.(updates)
+      setLbHidden(next)
+    } catch {
+      setLbHiddenMsg("Couldn't save. Try again.")
+      setTimeout(() => setLbHiddenMsg(''), 3000)
+    } finally {
+      setSavingLbHidden(false)
+    }
+  }
+
   const handleReplayFeatureTour = async () => {
     if (!onReplayFeatureTour || replayTourBusy) return
     setReplayTourBusy(true)
@@ -637,7 +656,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const profileSection = (
     <Section id="profile" title="Profile" t={t}>
       <Row t={t} first label="Name" value={profile.display_name || 'Not set'}
-        note={saved('name') || (isStudent ? 'Shows on class leaderboards.' : 'Shows to students and on class leaderboards.')} noteTone={saved('name') ? 'success' : null}
+        note={saved('name') || (isStudent ? (profile.hide_from_leaderboard ? 'Hidden from class leaderboards.' : 'Shows on class leaderboards.') : 'Shows to students and on class leaderboards.')} noteTone={saved('name') ? 'success' : null}
         action={change('name', { display_name: profile.display_name || '' })}
         editor={editing === 'name' && (
           <>
@@ -774,6 +793,13 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       {typeof onToggleTheme === 'function' && (
         <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Dark mode" note="Saved on this device. Also in the sidebar."
           action={<Toggle on={theme === 'dark'} onClick={onToggleTheme} label="Dark mode" />} />
+      )}
+      {isStudent && 'hide_from_leaderboard' in profile && (
+        <Row t={t} label="Hide me from leaderboards" noteTone={lbHiddenMsg ? 'danger' : null}
+          note={lbHiddenMsg || (lbHidden
+            ? "Classmates can't see your name, XP or streak on the leaderboard. Your tutors and GradeFarm admins still can, and you can still see theirs."
+            : 'Your name, XP and streak show on your class leaderboards.')}
+          action={<Toggle on={lbHidden} onClick={handleToggleLeaderboardHidden} disabled={savingLbHidden} label="Hide me from leaderboards" />} />
       )}
       {!isStudent && (
         <Row t={t} label="Subject" note="Which subject the Question Bank, Learn and Study Plan show."
