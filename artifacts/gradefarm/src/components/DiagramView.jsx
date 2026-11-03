@@ -7,6 +7,7 @@
 //   { svg: "<svg ...>...</svg>", caption?: "..." }   (or a raw SVG string)
 
 import FigureView, { isDrawableFigure } from './FigureView'
+import { StructureList } from './ChemFigure'
 import { THEMES } from '../lib/theme'
 
 function sanitizeSvg(svg) {
@@ -18,13 +19,17 @@ function sanitizeSvg(svg) {
 }
 
 export default function DiagramView({ diagram, theme }) {
-  if (diagram && typeof diagram === 'object' && isDrawableFigure(diagram.figure)) {
+  // Chemistry structures (drawn from SMILES on the server) and/or a structured figure.
+  const structures = diagram && typeof diagram === 'object' && Array.isArray(diagram.structures) ? diagram.structures : []
+  const hasFigure = diagram && typeof diagram === 'object' && isDrawableFigure(diagram.figure)
+  if (structures.length || hasFigure) {
     const t = THEMES[theme] || THEMES.dark
-    const caption = diagram.caption || diagram.figure.caption
+    const caption = diagram.caption || diagram.figure?.caption
     return (
-      <div style={{ margin: '0 0 18px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgSubtle, padding: '12px 12px 10px' }}>
-        <FigureView figure={diagram.figure} theme={theme} />
-        {caption && <div style={{ marginTop: 6, fontSize: 12, color: t.textMuted, textAlign: 'center' }}>{caption}</div>}
+      <div style={{ margin: '0 0 18px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgSubtle, padding: '12px 12px 10px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {structures.length > 0 && <StructureList structures={structures} color={t.text} labelColor={t.text} />}
+        {hasFigure && <FigureView figure={diagram.figure} theme={theme} />}
+        {caption && <div style={{ fontSize: 12, color: t.textMuted, textAlign: 'center' }}>{caption}</div>}
       </div>
     )
   }

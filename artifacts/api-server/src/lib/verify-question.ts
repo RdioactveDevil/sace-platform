@@ -1,6 +1,7 @@
 import { CLAUDE_VERIFY_MODEL } from "./anthropic-model";
 import { logger } from "./logger";
 import { describeGraph } from "./graph-spec";
+import { describeChemDiagram } from "./chem-figures";
 
 /**
  * AI fact-checking for multiple-choice questions.
@@ -153,6 +154,8 @@ export type VerifiableQuestion = {
   solution?: string | null;
   // A function graph shown with the question; described to the verifier.
   graph?: unknown;
+  // Chemistry structures and graphs shown with the question (chem-figures).
+  diagram?: unknown;
 };
 
 /**
@@ -199,9 +202,9 @@ export async function filterVerifiedQuestions<T extends VerifiableQuestion>(
         continue;
       }
       try {
-        const graphText = q.graph ? describeGraph(q.graph) : "";
+        const shown = [q.graph ? describeGraph(q.graph) : "", describeChemDiagram(q.diagram)].filter(Boolean).join("\n\n");
         const verdict = await verifyQuestionPayload({
-          question: withStimulus(graphText ? `${q.question}\n\n${graphText}` : q.question, opts.stimulus),
+          question: withStimulus(shown ? `${q.question}\n\n${shown}` : q.question, opts.stimulus),
           options: q.options,
           answer_index: q.answer_index,
         }, opts.strict ? { maxTokens: 6000, timeoutMs: 120_000 } : {});

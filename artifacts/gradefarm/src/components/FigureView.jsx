@@ -12,8 +12,10 @@
 //     showPointNames: true, hiddenPoints: ['D'] }   // hide helper point names
 //   { type: 'number_line', min, max, step, marks: [{ value, label, open }], jumps: [{ from, to, label }] }
 //   { type: 'bar_chart', title, xLabel, yLabel, bars: [{ label, value }] }
+// Chemistry graphs, TLC plates, flow charts and apparatus are drawn by ChemFigure.jsx.
 
 import { THEMES } from '../lib/theme'
+import { XYPlot, TLCPlate, FlowChart, Apparatus } from './ChemFigure'
 
 const GOLD = '#f1be43'
 const FONT = "'Plus Jakarta Sans', sans-serif"
@@ -243,7 +245,7 @@ function BarChart({ fig, c }) {
 
 /** True when a spec has something FigureView can draw. */
 export function isDrawableFigure(fig) {
-  return !!fig && typeof fig === 'object' && ['geometry', 'number_line', 'bar_chart'].includes(fig.type)
+  return !!fig && typeof fig === 'object' && ['geometry', 'number_line', 'bar_chart', 'xy_plot', 'tlc_plate', 'flow_chart', 'apparatus'].includes(fig.type)
 }
 
 export default function FigureView({ figure, theme = 'dark' }) {
@@ -261,5 +263,9 @@ export default function FigureView({ figure, theme = 'dark' }) {
   }
   if (figure.type === 'geometry') return <Geometry fig={figure} c={c} />
   if (figure.type === 'number_line') return <NumberLine fig={figure} c={c} />
+  if (figure.type === 'xy_plot') return <XYPlot fig={figure} c={c} />
+  if (figure.type === 'tlc_plate') return <TLCPlate fig={figure} c={c} />
+  if (figure.type === 'flow_chart') return <FlowChart fig={figure} c={c} />
+  if (figure.type === 'apparatus') return <Apparatus fig={figure} c={c} />
   return <BarChart fig={figure} c={c} />
 }

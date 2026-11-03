@@ -6,6 +6,7 @@ import { scopeForSubtopic, scopePromptLines } from "./course-scope";
 import { normalizeMathText } from "./normalize-math";
 import { logger } from "./logger";
 import { LEARNING_OBJECTIVES } from "../routes/generate-questions";
+import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, isChemSubject, sanitizeChemFigure } from "./chem-figures";
 
 /**
  * Writing 'marked' questions: SACE-style short-answer questions worth several
@@ -18,7 +19,39 @@ import { LEARNING_OBJECTIVES } from "../routes/generate-questions";
 /** Most questions one request writes: the stronger model plus two checks each must fit in 300 s. */
 export const MARKED_MAX_COUNT = 3;
 
-type Draft = { question: string; total_marks: number; marking_scheme: MarkPoint[]; solution: string; difficulty: number };
+type RawStructure = { smiles: string; label: string; formula: string; style: string };
+type Draft = {
+  question: string; total_marks: number; marking_scheme: MarkPoint[]; solution: string; difficulty: number;
+  structures?: RawStructure[]; figure_json?: string; table_json?: string;
+  diagram?: Record<string, unknown> | null; table_data?: Record<string, unknown> | null;
+};
+
+/** A data table from the model's table_json, or null. */
+function parseTable(raw: unknown): Record<string, unknown> | null {
+  let t: unknown = raw;
+  if (typeof raw === "string") { if (!raw.trim()) return null; try { t = JSON.parse(raw); } catch { return null; } }
+  if (!t || typeof t !== "object") return null;
+  const o = t as { headers?: unknown; rows?: unknown; caption?: unknown };
+  if (!Array.isArray(o.headers) || !Array.isArray(o.rows) || !o.headers.length) return null;
+  const cell = (v: unknown) => normalizeMathText(String(v ?? "").slice(0, 80)) as string;
+  return {
+    headers: o.headers.slice(0, 8).map(cell),
+    rows: o.rows.slice(0, 20).filter(Array.isArray).map((r) => (r as unknown[]).slice(0, 8).map(cell)),
+    ...(o.caption ? { caption: String(o.caption).slice(0, 80) } : {}),
+  };
+}
+
+/** What the question shows besides its text (table, structures, graph), for the checker and the marker. */
+function shownWith(d: Pick<Draft, "diagram" | "table_data">): string {
+  const parts: string[] = [];
+  if (d.table_data) {
+    const t = d.table_data as { headers: string[]; rows: string[][]; caption?: string };
+    parts.push(`${t.caption || "Table"}:\n${[t.headers.join(" | "), ...t.rows.map((r) => r.join(" | "))].join("\n")}`);
+  }
+  const fig = describeChemDiagram(d.diagram);
+  if (fig) parts.push(fig);
+  return parts.join("\n\n");
+}
 
 const GENERATE_SCHEMA = {
   type: "object",
@@ -30,9 +63,25 @@ const GENERATE_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["question", "total_marks", "marking_scheme", "solution", "difficulty"],
+        required: ["question", "total_marks", "marking_scheme", "solution", "difficulty", "structures", "figure_json", "table_json"],
         properties: {
           question: { type: "string" },
+          structures: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["smiles", "label", "formula", "style"],
+              properties: {
+                smiles: { type: "string" },
+                label: { type: "string" },
+                formula: { type: "string" },
+                style: { type: "string", enum: ["skeletal", "full"] },
+              },
+            },
+          },
+          figure_json: { type: "string", description: "A graph or TLC plate as a JSON string, or \"\" for none" },
+          table_json: { type: "string", description: "A data table as a JSON string, or \"\" for none" },
           total_marks: { type: "integer" },
           marking_scheme: {
             type: "array",
@@ -128,6 +177,13 @@ async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | 
     "Write chemical formulae and equations as $\\ce{...}$ (e.g. $\\ce{CaCO3(s) + 2HCl(aq) -> CaCl2(aq) + H2O(l) + CO2(g)}$), quantities and units in $...$ where they contain maths (e.g. $0.0250\\ \\text{mol L}^{-1}$), and never use Unicode subscripts or arrows.",
     "Check every number yourself: solve each question completely before writing its scheme.",
     "difficulty is 1 to 5, calibrated to the real exam: 3 is a mid-paper question, 5 the hardest questions on the paper.",
+    ...(isChemSubject(t.subject)
+      ? chemPromptLines({
+          figureAsJsonString: true,
+          writtenAnswers: true,
+          tableKey: "table_json (a JSON string: { \"caption\": \"Table 1\", \"headers\": [\"Trial 1\", \"Trial 2\"], \"rows\": [[\"17.46\", \"16.93\"]] }, or \"\")",
+        })
+      : ["structures is always [], figure_json is always \"\". Use table_json (a JSON string { \"caption\", \"headers\", \"rows\" }, or \"\") only for a data table the question needs."]),
     ...(t.examContext ? ["Notes from the curriculum admin about the real exam (follow them):", t.examContext] : []),
     ...exemplarSystemLines(t.subject, exemplars),
     ...scopePromptLines(scope),
@@ -164,8 +220,10 @@ async function checkDraft(t: MarkedTarget, d: Draft, scheme: MarkPoint[]): Promi
     `  4. It stays within ${t.subject}${t.levelLabel ? ` (${t.levelLabel})` : ""}.`,
     "Set ok to false for any real error, not for matters of style.",
   ].join("\n");
+  const shown = shownWith(d);
   const user = [
     `QUESTION (${schemeTotal(scheme)} marks):`, d.question, "",
+    ...(shown ? [shown, "Check that what is shown agrees with the question text and that any structure is the substance the question says it is.", ""] : []),
     "MARKING SCHEME:", ...scheme.map((p, i) => `${i + 1}. [${p.marks}] ${p.point}${p.guidance ? ` (Guidance: ${p.guidance})` : ""}`), "",
     "MODEL ANSWER:", d.solution,
   ].join("\n");
@@ -208,11 +266,23 @@ export async function generateMarkedQuestions(
       rejected.push({ question, reason: `Mark points add up to ${total}, not the ${raw.total_marks} the question is worth` });
       return null;
     }
-    const d: Draft = { question, solution, marking_scheme: scheme, total_marks: total, difficulty: Math.min(5, Math.max(1, Math.round(Number(raw.difficulty)) || 3)) };
+    // Structures are drawn from SMILES and checked against their formulas; a wrong one drops the question.
+    const built = buildStructures(raw.structures);
+    if (built.problems.length) {
+      rejected.push({ question, reason: built.problems.join("; ") });
+      return null;
+    }
+    const figure = sanitizeChemFigure(raw.figure_json);
+    const d: Draft = {
+      question, solution, marking_scheme: scheme, total_marks: total,
+      difficulty: Math.min(5, Math.max(1, Math.round(Number(raw.difficulty)) || 3)),
+      diagram: chemDiagramColumn(built.structures, figure),
+      table_data: parseTable(raw.table_json),
+    };
     try {
       const [check, selfMark] = await Promise.all([
         checkDraft(t, d, scheme),
-        markAnswer({ subject: t.subject, question, marking_scheme: scheme, solution }, solution),
+        markAnswer({ subject: t.subject, question, marking_scheme: scheme, solution, diagram: d.diagram, table_data: d.table_data }, solution),
       ]);
       if (!check.ok) {
         rejected.push({ question, reason: `Check found a problem: ${check.problems || "not specified"}` });
@@ -247,6 +317,8 @@ export async function generateMarkedQuestions(
     total_marks: d.total_marks,
     marking_scheme: d.marking_scheme,
     solution: d.solution,
+    diagram: d.diagram ?? null,
+    table_data: d.table_data ?? null,
     tip: null,
     created_at: now,
   }));

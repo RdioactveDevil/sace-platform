@@ -13,6 +13,7 @@ import { requireUser, type Caller } from "../lib/auth";
 import { checkAiQuota } from "../lib/ai-quota";
 import { isMathSubject, topicWantsFigures, figureInstructions, diagramColumn } from "../lib/figure";
 import { sanitizeGraph } from "../lib/graph-spec";
+import { attachChemFigures, chemPromptLines, isChemSubject } from "../lib/chem-figures";
 
 // Exam-grade batches: questions per subtopic per request, kept small so the
 // stronger model's reasoning plus verification fits the 300 s function limit.
@@ -189,6 +190,8 @@ export type GeneratedQuestion = {
   table_data?: Record<string, unknown> | null;
   diagram?: { svg?: string; caption?: string } | null;
   figure?: unknown;
+  // Chemistry: [{ smiles, label, formula, style }], drawn and checked by chem-figures.
+  structures?: unknown;
   question_type?: string;
   answer_indices?: number[];
   answer?: number | string;
@@ -430,6 +433,8 @@ export async function generateForTopic(opts: {
   // Maths gets structured figures (drawn to scale by the app) instead of raw
   // SVG, always offered and required for shape/measurement/data topics.
   const mathFigures = isMathSubject(normalizedSubject);
+  // Chemistry: SACE conventions, structures drawn from SMILES (and checked), graphs and TLC plates.
+  const chemFigures = isChemSubject(normalizedSubject);
   const figuresRequired = mathFigures && topicWantsFigures(topicName, parentTopicName);
 
   const latexExample = flagGraphs
@@ -500,7 +505,9 @@ export async function generateForTopic(opts: {
     "difficulty (integer 1\u20135)",
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
-    ...(mathFigures ? figureInstructions(figuresRequired) : includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
+    ...(chemFigures
+      ? ["  structures (array, [] when none) and figure (object, only when needed), as described below", ...chemPromptLines({ tableKey: flagTables ? "table_data" : undefined })]
+      : mathFigures ? figureInstructions(figuresRequired) : includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
     ...(flagLatex ? [latexPromptRule(latexExample)] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",
     `Use terminology consistent with ${curriculumLabel}. Avoid content from other curricula.`,
@@ -576,7 +583,7 @@ export async function generateForTopic(opts: {
         : {
             model: CLAUDE_MODEL,
             thinking: CLAUDE_THINKING,
-            max_tokens: mathFigures ? 12000 : 8000,
+            max_tokens: mathFigures || chemFigures ? 12000 : 8000,
             system,
             messages: [{ role: "user", content: user }],
           }),
@@ -597,7 +604,13 @@ export async function generateForTopic(opts: {
   if (examGrade && claudeData?.stop_reason !== "end_turn") {
     logger.warn({ topicCode, stop_reason: claudeData?.stop_reason }, "[generate-questions] exam-grade generation did not finish cleanly");
   }
-  const questions = extractJsonArray(rawText) as GeneratedQuestion[];
+  let questions = extractJsonArray(rawText) as GeneratedQuestion[];
+  // Draw and check structures; a structure that fails the check drops its question.
+  if (chemFigures) {
+    const figs = attachChemFigures(questions);
+    if (figs.problems.length) logger.info({ topicCode, problems: figs.problems }, "[generate-questions] structures failed the check");
+    questions = figs.kept;
+  }
 
   if (!questions.length) {
     return { status: 200, body: { inserted: 0, message: "No questions generated" } };
