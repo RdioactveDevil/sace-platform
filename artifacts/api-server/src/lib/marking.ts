@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MARK_MODEL } from "./anthropic-model";
-import { describeChemDiagram } from "./chem-figures";
+import { describeChemDiagram, sacStage } from "./chem-figures";
 
 /**
  * AI marking of written answers ('marked' questions), mark point by mark
@@ -179,7 +179,7 @@ function tableText(table: unknown): string {
 
 function markingSystem(subject: string): string {
   return [
-    `You are an experienced SACE assessor marking a ${subject} exam answer written by a Year 12 student.`,
+    `You are an experienced SACE assessor marking a ${subject} answer written by a Year ${sacStage(subject) === 1 ? 11 : 12} student.`,
     "Mark strictly against the marking scheme you are given, one mark point at a time. For each mark point decide how many of its marks the answer earns (0 up to what the point is worth).",
     "Give a mark only when the answer itself shows it. Do not give marks for what the student probably meant, and do not give marks for anything the scheme doesn't credit.",
     "Accept any correct equivalent wording, notation, rearrangement or method, and anything the point's guidance says to accept.",

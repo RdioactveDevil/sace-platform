@@ -6,7 +6,7 @@ import { scopeForSubtopic, scopePromptLines } from "./course-scope";
 import { normalizeMathText } from "./normalize-math";
 import { logger } from "./logger";
 import { LEARNING_OBJECTIVES } from "../routes/generate-questions";
-import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, isChemSubject, sanitizeChemFigure } from "./chem-figures";
+import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, isChemSubject, sacStage, sanitizeChemFigure } from "./chem-figures";
 
 /**
  * Writing 'marked' questions: SACE-style short-answer questions worth several
@@ -161,9 +161,10 @@ async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | 
   const existingList = ((existing ?? []) as { question: string }[])
     .slice(0, 15).map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 160)}`).join("\n");
   const objective = LEARNING_OBJECTIVES[t.subtopic] || t.subtopic;
+  const stage = sacStage(`${t.subject} ${t.levelLabel}`);
 
   const system = [
-    `You write short-answer exam questions for ${t.subject}${t.levelLabel ? ` (${t.levelLabel})` : ""}, in the style of the SACE end-of-year exam, with a marking scheme of the kind SACE assessors mark to.`,
+    `You write short-answer questions for ${t.subject}${t.levelLabel ? ` (${t.levelLabel})` : ""}, ${stage === 1 ? "pitched at SACE Stage 1 (Year 11) tests, written in the style of SACE exams" : "in the style of the SACE end-of-year exam"}, with a marking scheme of the kind SACE assessors mark to.`,
     "Each question is answered in writing (sentences, working, equations), not multiple choice.",
     "Questions:",
     "  - Worth 2 to 6 marks. Use SACE command words (State, Identify, Describe, Explain, Calculate, Deduce, Justify, Write an equation for) and make the marks fit the command word: State/Identify is 1 mark per item; Explain needs a cause and an effect; Calculate needs working.",
@@ -173,12 +174,13 @@ async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | 
     "  - One entry per mark point, in the order a good answer would reach them, and the marks add up exactly to total_marks.",
     "  - Each point is one thing an assessor can check on its own: a correct substance named, a correct equation, a correct mole ratio used, a correct link between a cause and an effect, a final answer with correct units and significant figures.",
     "  - point says what earns the mark. guidance says what else to accept, what not to accept, and, for calculations, that later method marks follow through from an earlier error.",
-    "Model answer (solution): a full-marks answer, written as a strong Year 12 student would write it in the exam, with working for calculations. Every mark point must be visibly earned by it.",
+    `Model answer (solution): a full-marks answer, written as a strong Year ${stage === 1 ? 11 : 12} student would write it, with working for calculations. Every mark point must be visibly earned by it.`,
     "Write chemical formulae and equations as $\\ce{...}$ (e.g. $\\ce{CaCO3(s) + 2HCl(aq) -> CaCl2(aq) + H2O(l) + CO2(g)}$), quantities and units in $...$ where they contain maths (e.g. $0.0250\\ \\text{mol L}^{-1}$), and never use Unicode subscripts or arrows.",
     "Check every number yourself: solve each question completely before writing its scheme.",
     "difficulty is 1 to 5, calibrated to the real exam: 3 is a mid-paper question, 5 the hardest questions on the paper.",
     ...(isChemSubject(t.subject)
       ? chemPromptLines({
+          subject: `${t.subject} ${t.levelLabel}`,
           figureAsJsonString: true,
           writtenAnswers: true,
           tableKey: "table_json (a JSON string: { \"caption\": \"Table 1\", \"headers\": [\"Trial 1\", \"Trial 2\"], \"rows\": [[\"17.46\", \"16.93\"]] }, or \"\")",

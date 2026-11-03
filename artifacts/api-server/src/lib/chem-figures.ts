@@ -1,4 +1,5 @@
 import { Molecule, type MoleculeToSVGOptions } from "openchemlib";
+import { sanitizeFigure } from "./figure";
 
 /**
  * Chemistry figures for generated questions, in the style of the SACE
@@ -209,11 +210,41 @@ export function sanitizeChemFigure(raw: unknown): Obj | null {
     for (const k of slots) if (given[k] != null && String(given[k]).trim()) labels[k] = String(given[k]).trim().slice(0, 40);
     const out: Obj = { type: "apparatus", kind: f.kind, labels };
     if (f.kind === "galvanic_cell" && ["left_to_right", "right_to_left"].includes(String(f.electronFlow))) out.electronFlow = f.electronFlow;
+    if (f.kind === "distillation" && f.fractional) out.fractional = true;
+    if (f.kind === "glassware") {
+      if (!GLASSWARE.includes(String(f.item))) return null;
+      out.item = f.item;
+    }
     if (caption) out.caption = caption;
     return out;
   }
+  if (f.type === "particles") {
+    const kinds = new Set(PARTICLE_KINDS);
+    const boxes = arr(f.boxes).map(obj).map((b) => ({
+      label: short(b.label, 40) ?? "",
+      particles: arr(b.particles).map(obj)
+        .filter((p) => kinds.has(String(p.kind)) && isNum(p.count) && p.count > 0)
+        .map((p) => ({ kind: String(p.kind), count: Math.min(20, Math.round(p.count as number)) })),
+    })).filter((b) => b.particles.length).slice(0, 3);
+    if (!boxes.length) return null;
+    const keyIn = obj(f.key);
+    const key: Record<string, string> = {};
+    for (const k of PARTICLE_KINDS) if (keyIn[k] != null && String(keyIn[k]).trim()) key[k] = String(keyIn[k]).trim().slice(0, 30);
+    return { type: "particles", boxes, key, ...(caption ? { caption } : {}) };
+  }
+  // Bar charts (e.g. emissions by source) use the maths figure's bar_chart.
+  if (f.type === "bar_chart") return sanitizeFigure(f);
   return null;
 }
+
+/** Single pieces of glassware the app can draw, for "name this equipment" questions. */
+export const GLASSWARE = ["pipette", "volumetric_flask", "measuring_cylinder", "burette", "conical_flask", "beaker"];
+
+/**
+ * Particle diagram kinds: A filled atom, B open atom, C filled–filled
+ * molecule, D open–open molecule, E filled–open molecule, F small filled atom.
+ */
+export const PARTICLE_KINDS = ["A", "B", "C", "D", "E", "F"];
 
 /**
  * Labelled apparatus the app can draw, and the label slots each one has.
@@ -224,6 +255,13 @@ export const APPARATUS_SLOTS: Record<string, string[]> = {
   electrolytic_cell: ["left_electrode", "left_sign", "right_electrode", "right_sign", "electrolyte", "power_supply", "left_product", "right_product"],
   titration: ["burette", "flask", "stand"],
   reflux: ["flask", "condenser", "heat", "water_in", "water_out"],
+  distillation: ["flask", "thermometer", "column", "condenser", "water_in", "water_out", "receiver", "distillate", "heat"],
+  calorimetry: ["thermometer", "can", "water", "burner", "fuel"],
+  gas_collection: ["flask", "reactants", "delivery_tube", "cylinder", "gas", "trough"],
+  gas_syringe: ["flask", "reactants", "syringe", "reading"],
+  separating_funnel: ["funnel", "top_layer", "bottom_layer", "tap", "beaker"],
+  filtration: ["mixture", "funnel", "filter_paper", "residue", "filtrate"],
+  glassware: ["name"],
 };
 
 function safeJson(s: string): unknown {
@@ -265,8 +303,28 @@ export function describeChemDiagram(diagram: unknown): string {
     arr(f.edges).map(obj).forEach((e) => lines.push(`  ${name(e.from)} → ${name(e.to)}${e.label ? ` (arrow labelled "${e.label}")` : ""}`));
   } else if (f.type === "apparatus") {
     const labels = obj(f.labels);
-    const what = { galvanic_cell: "Galvanic cell (two half-cells joined by a salt bridge and a wire through a meter)", electrolytic_cell: "Electrolytic cell (two electrodes in one electrolyte, connected to a DC power supply)", titration: "Titration set-up (burette above a conical flask)", reflux: "Heating under reflux (round-bottom flask with a vertical condenser)" }[String(f.kind)] || "Apparatus";
+    const what = ({
+      galvanic_cell: "Galvanic cell (two half-cells joined by a salt bridge and a wire through a meter)",
+      electrolytic_cell: "Electrolytic cell (two electrodes in one electrolyte, connected to a DC power supply)",
+      titration: "Titration set-up (burette above a conical flask)",
+      reflux: "Heating under reflux (round-bottom flask with a vertical condenser)",
+      distillation: f.fractional ? "Fractional distillation (flask, fractionating column, thermometer at the side arm, sloping condenser, receiver)" : "Simple distillation (flask, thermometer at the side arm, sloping condenser, receiver)",
+      calorimetry: "Calorimetry (a spirit burner heating water in a metal can, with a thermometer in the water)",
+      gas_collection: "Gas collection over water (reaction flask, delivery tube into an upturned measuring cylinder in a trough of water)",
+      gas_syringe: "Gas syringe (reaction flask connected to a gas syringe)",
+      separating_funnel: "Separating funnel with two immiscible layers above a beaker",
+      filtration: "Filtration (filter funnel with filter paper over a flask)",
+      glassware: `A single piece of glassware: ${String(f.item || "").replace(/_/g, " ")}`,
+    } as Record<string, string>)[String(f.kind)] || "Apparatus";
     lines.push(`${what}. Labels: ${Object.entries(labels).map(([k, v]) => `${k.replace(/_/g, " ")} = "${v}"`).join("; ") || "none"}${f.electronFlow ? `; electron flow ${String(f.electronFlow).replace(/_/g, " ")} through the wire` : ""}.`);
+  } else if (f.type === "particles") {
+    const key = obj(f.key);
+    const shape: Record<string, string> = { A: "filled atom", B: "open atom", C: "molecule of two filled atoms", D: "molecule of two open atoms", E: "molecule of one filled and one open atom", F: "small filled atom" };
+    lines.push("Particle diagram:");
+    arr(f.boxes).map(obj).forEach((b) => lines.push(`  Box${b.label ? ` "${b.label}"` : ""}: ${arr(b.particles).map(obj).map((p) => `${p.count} × ${key[String(p.kind)] || shape[String(p.kind)]}`).join(", ")}`));
+    if (Object.keys(key).length) lines.push(`  Key: ${Object.entries(key).map(([k, v]) => `${shape[k]} = ${v}`).join("; ")}`);
+  } else if (f.type === "bar_chart") {
+    lines.push(`Bar chart${f.title ? ` "${f.title}"` : ""}${f.yLabel ? `, y axis "${f.yLabel}"` : ""}: ${arr(f.bars).map(obj).map((b) => `${b.label} = ${b.value}`).join(", ")}`);
   }
   return lines.length ? `The question shows:\n${lines.join("\n")}` : "";
 }
@@ -276,10 +334,13 @@ export function describeChemDiagram(diagram: unknown): string {
  * to describe structures and figures. figureAsJsonString: the figure comes as
  * a JSON string (structured outputs); tableKey: where data tables go, if anywhere.
  */
-export function chemPromptLines(opts: { figureAsJsonString?: boolean; writtenAnswers?: boolean; tableKey?: string } = {}): string[] {
+export function chemPromptLines(opts: { figureAsJsonString?: boolean; writtenAnswers?: boolean; tableKey?: string; subject?: string } = {}): string[] {
   const figureKey = opts.figureAsJsonString ? "figure_json (a JSON string, or \"\" for none)" : "figure (an object, or omit)";
+  const stage = sacStage(opts.subject);
   return [
-    "SACE CHEMISTRY CONVENTIONS (follow the real SACE Stage 2 exam):",
+    stage === 1
+      ? "SACE CHEMISTRY CONVENTIONS (Stage 1, Year 11: school-based tests and tasks, written in the same style and notation as SACE Stage 2 exams):"
+      : "SACE CHEMISTRY CONVENTIONS (follow the real SACE Stage 2 exam):",
     "  - Use only data on the SACE data sheet, or give any other value in the question in square brackets, e.g. [Enthalpy of combustion of methane = −890 kJ mol^-1]. The data sheet has the periodic table (molar masses to 4 significant figures, e.g. H 1.008, C 12.01, O 16.00, Fe 55.85), n = m/M, c = n/V, Q = mcΔT, ΔH = Q/n, pH = −log[H+], the SI prefixes and the metal activity series.",
     "  - Units as SACE writes them: mol L^-1, g mol^-1, kJ mol^-1, ppm, mL, °C. Use IUPAC systematic names (ethyl ethanoate, ethane-1,2-diamine, hexane-1,4-diol).",
     "  - Command words as SACE uses them: State, Identify, Name, Write an equation for, Write the half-equation for, Calculate, Showing your working, calculate…, Give your final answer to the appropriate number of significant figures, Describe, Explain, Explain whether…, With reference to…, Discuss.",
@@ -303,15 +364,33 @@ export function chemPromptLines(opts: { figureAsJsonString?: boolean; writtenAns
     "    \"nodes\": [{ \"id\": \"a\", \"text\": \"2,6-dichloroaniline\", \"kind\": \"text\", \"row\": 0, \"col\": 0 }, { \"id\": \"i1\", \"text\": \"Intermediate 1\", \"kind\": \"box\", \"row\": 1, \"col\": 1 }, { \"id\": \"r\", \"text\": \"CH3I\", \"kind\": \"text\", \"row\": 1, \"col\": 2 }],",
     "    \"edges\": [{ \"from\": \"a\", \"to\": \"i1\" }, { \"from\": \"r\", \"to\": \"i1\" }, { \"from\": \"i1\", \"to\": \"i2\", \"label\": \"Heat under reflux conditions\" }] }",
     "    Boxes (kind box) are substances made in the process; reagents and side products are plain text (kind text). row (0–7, top to bottom) and col (0–4, left to right) place each node on a grid; the main sequence runs down one column, reagents come in from the side, products leave to the side. Arrow labels give conditions.",
-    "  apparatus (labelled laboratory apparatus): { \"type\": \"apparatus\", \"kind\": \"galvanic_cell\" | \"electrolytic_cell\" | \"titration\" | \"reflux\", \"labels\": { ... }, \"electronFlow\": \"left_to_right\" | \"right_to_left\" (galvanic only, optional) }",
+    "  apparatus (labelled laboratory apparatus): { \"type\": \"apparatus\", \"kind\": <one of the kinds below>, \"labels\": { ... }, \"electronFlow\": \"left_to_right\" | \"right_to_left\" (galvanic_cell only, optional), \"fractional\": true (distillation only, optional), \"item\": <glassware only> }",
     "    Label slots (leave any out to show it unlabelled, e.g. when the student must identify it; use neutral names like \"electrode 1\" when the answer is the electrode's identity):",
     "      galvanic_cell: left_electrode, left_solution, left_sign (+ or −), right_electrode, right_solution, right_sign, salt_bridge, meter (e.g. V).",
     "      electrolytic_cell: left_electrode, left_sign, right_electrode, right_sign, electrolyte, power_supply, left_product, right_product.",
     "      titration: burette (its solution), flask (its contents), stand.",
     "      reflux: flask (its contents), condenser, heat, water_in, water_out.",
+    "      distillation: flask (its contents), thermometer, column (fractional only), condenser, water_in, water_out, receiver, distillate, heat.",
+    "      calorimetry (spirit burner under a can of water): thermometer, can, water (e.g. \"200.0 g water\"), burner, fuel.",
+    "      gas_collection (over water, in an upturned measuring cylinder): flask, reactants, delivery_tube, cylinder, gas, trough.",
+    "      gas_syringe (rate of reaction by gas volume): flask, reactants, syringe, reading (e.g. \"45 mL\").",
+    "      separating_funnel (two immiscible liquids): funnel, top_layer, bottom_layer, tap, beaker.",
+    "      filtration: mixture, funnel, filter_paper, residue, filtrate.",
+    "      glassware (one piece, e.g. \"Name the piece of volumetric glassware shown\"): item = pipette | volumetric_flask | measuring_cylinder | burette | conical_flask | beaker; label name (e.g. \"A\", or leave out).",
+    "  particles (particle diagrams: states, mixtures, reactions, equilibrium): { \"type\": \"particles\",",
+    "    \"boxes\": [{ \"label\": \"before\", \"particles\": [{ \"kind\": \"C\", \"count\": 4 }, { \"kind\": \"D\", \"count\": 6 }] }, { \"label\": \"after\", \"particles\": [{ \"kind\": \"E\", \"count\": 8 }] }],",
+    "    \"key\": { \"C\": \"H2\", \"D\": \"Cl2\", \"E\": \"HCl\" } }",
+    "    kinds: A filled atom, B open atom, C two filled atoms bonded, D two open atoms bonded, E one filled + one open atom bonded, F small filled atom. Up to 3 boxes, 20 of a kind per box. Counts must obey conservation of atoms when the boxes show a reaction.",
+    "  bar_chart: { \"type\": \"bar_chart\", \"title\": \"...\", \"xLabel\": \"...\", \"yLabel\": \"...\", \"bars\": [{ \"label\": \"Transport\", \"value\": 18 }] }",
     "  Every value the question relies on must be in the question text or clearly readable from the figure, and the two must agree exactly. Never reveal the answer in the figure.",
     ...(opts.tableKey ? [`  Tables of data (results, Rf values, titres) go in ${opts.tableKey}, captioned like SACE (\"Table 1\"), not in a figure.`] : []),
   ];
+}
+
+/** 1 or 2 for a SACE Stage 1 / Stage 2 subject name, else null. */
+export function sacStage(subject?: string): 1 | 2 | null {
+  const m = String(subject || "").match(/stage\s*([12])/i);
+  return m ? (Number(m[1]) as 1 | 2) : null;
 }
 
 /**

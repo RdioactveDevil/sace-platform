@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildStructures, sameFormula, formulaCounts, sanitizeChemFigure, describeChemDiagram, chemDiagramColumn } from "../src/lib/chem-figures.ts";
+import { buildStructures, sameFormula, formulaCounts, sanitizeChemFigure, describeChemDiagram, chemDiagramColumn, sacStage, chemPromptLines } from "../src/lib/chem-figures.ts";
 
 test("formulas compare by element counts", () => {
   assert.equal(sameFormula("C4H8O2", "C4H8O2"), true);
@@ -62,4 +62,28 @@ test("flow charts and apparatus are sanitised and described", () => {
   assert.deepEqual(cell!.labels, { left_electrode: "Zn", right_electrode: "Cu" });
   assert.match(describeChemDiagram({ figure: cell }), /Galvanic cell.*left electrode = "Zn".*electron flow left to right/);
   assert.equal(sanitizeChemFigure({ type: "apparatus", kind: "spaceship" }), null);
+});
+
+test("more apparatus, glassware, particles and bar charts", () => {
+  const d = sanitizeChemFigure({ type: "apparatus", kind: "distillation", fractional: true, labels: { flask: "crude oil", thermometer: "thermometer" } });
+  assert.equal(d!.fractional, true);
+  assert.match(describeChemDiagram({ figure: d }), /Fractional distillation/);
+  assert.equal(sanitizeChemFigure({ type: "apparatus", kind: "glassware", item: "teapot" }), null);
+  const g = sanitizeChemFigure({ type: "apparatus", kind: "glassware", item: "volumetric_flask", labels: { name: "A" } });
+  assert.equal(g!.item, "volumetric_flask");
+  const p = sanitizeChemFigure({ type: "particles", boxes: [{ label: "before", particles: [{ kind: "C", count: 4 }, { kind: "Z", count: 2 }, { kind: "D", count: 99 }] }], key: { C: "H2", D: "Cl2", Q: "x" } });
+  assert.deepEqual((p!.boxes as any[])[0].particles, [{ kind: "C", count: 4 }, { kind: "D", count: 20 }]);
+  assert.deepEqual(p!.key, { C: "H2", D: "Cl2" });
+  assert.match(describeChemDiagram({ figure: p }), /4 × H2, 20 × Cl2/);
+  const b = sanitizeChemFigure({ type: "bar_chart", bars: [{ label: "Transport", value: 18 }] });
+  assert.equal(b!.type, "bar_chart");
+  assert.match(describeChemDiagram({ figure: b }), /Transport = 18/);
+});
+
+test("stage-aware conventions", () => {
+  assert.equal(sacStage("SACE Chemistry Stage 1"), 1);
+  assert.equal(sacStage("Chemistry Stage 2"), 2);
+  assert.equal(sacStage("Year 10 Science"), null);
+  assert.match(chemPromptLines({ subject: "SACE Chemistry Stage 1" })[0], /Stage 1, Year 11/);
+  assert.match(chemPromptLines({ subject: "SACE Chemistry Stage 2" })[0], /Stage 2 exam/);
 });
