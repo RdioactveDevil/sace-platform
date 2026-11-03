@@ -398,9 +398,17 @@ router.post("/admin/curriculum-subscription-stage", async (req, res) => {
   }
 });
 
+// Most questions one curriculum-generate request writes: one AI call plus
+// answer checks must fit in the 300 s limit. The admin page sends a bigger
+// number for a subtopic as several batches.
+export const CURRICULUM_GEN_MAX_BATCH = 10;
+
 // POST /api/admin/curriculum-generate
-// Body: { subtopicId, curriculumId, subjectName, topicName, subtopicName, count? }
-// Generates `count` draft questions for one subtopic, then marks it done/failed.
+// Body: { subtopicId, curriculumId, subjectName, topicName, subtopicName, count?, batch? }
+// Generates `count` (1–10, default 5) questions for one subtopic, then marks it
+// done/failed. batch { index, of } splits a bigger number into several
+// requests: later batches add to the subtopic's questions_generated, and only
+// the last one marks it done.
 router.post("/admin/curriculum-generate", async (req, res) => {
   const caller = await requireAdmin(req, res);
   if (!caller) return;
@@ -410,8 +418,13 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     subjectName,
     topicName,
     subtopicName,
-    count = 5,
+    count: requested = 5,
+    batch,
   } = req.body || {};
+  const count = Math.max(1, Math.min(CURRICULUM_GEN_MAX_BATCH, Math.round(Number(requested)) || 5));
+  const batchIndex = Math.max(0, Math.round(Number(batch?.index)) || 0);
+  const batchOf = Math.max(batchIndex + 1, Math.round(Number(batch?.of)) || 1);
+  const lastBatch = batchIndex === batchOf - 1;
 
   if (!subtopicId || !subjectName || !topicName || !subtopicName) {
     res.status(400).json({ error: "subtopicId, subjectName, topicName, subtopicName required" });
@@ -422,6 +435,17 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 
   // Mark generating
   await admin.from("curriculum_subtopics").update({ gen_status: "generating" }).eq("id", subtopicId);
+
+  // Questions saved by earlier batches for this subtopic, which this one adds to.
+  let earlier = 0;
+  if (batchIndex > 0) {
+    const { data: prev } = await admin.from("curriculum_subtopics").select("questions_generated").eq("id", subtopicId).maybeSingle();
+    earlier = Number((prev as { questions_generated?: number } | null)?.questions_generated) || 0;
+  }
+  // Record this batch: the running total, and done only after the last batch.
+  const finish = (inserted: number) => admin.from("curriculum_subtopics")
+    .update({ gen_status: lastBatch ? "done" : "generating", questions_generated: earlier + inserted })
+    .eq("id", subtopicId);
 
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey  = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
@@ -473,8 +497,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
         curriculumId: (currRow as { id?: string } | null)?.id ?? curriculumId ?? null,
         subtopicId,
       });
-      await admin.from("curriculum_subtopics")
-        .update({ gen_status: "done", questions_generated: inserted.length }).eq("id", subtopicId);
+      await finish(inserted.length);
       res.json({ inserted: inserted.length, passages: sets.length });
     } catch (err) {
       logger.error({ err, subtopicId }, "[curriculum-generate] passage generation failed");
@@ -506,7 +529,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "Do not repeat the same scenario across questions.",
   ].join("\n");
 
-  const user = [
+  let user = [
     `Generate ${count} multiple-choice questions for the following:`,
     `Subject: ${subjectName}`,
     `Topic: ${topicName}`,
@@ -528,6 +551,12 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   const existingSet = new Set(
     (existing || []).map((r) => (r.question || "").trim().toLowerCase())
   );
+  // Steer away from what's already there (earlier batches, earlier runs).
+  const existingSamples = (existing || []).slice(-20)
+    .map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 140)}`).join("\n");
+  if (existingSamples) {
+    user += `\n\nThese questions already exist for this subtopic. Write ENTIRELY DIFFERENT ones (different scenarios, numbers and ideas):\n${existingSamples}`;
+  }
 
   let claudeRes: Response;
   try {
@@ -541,7 +570,8 @@ router.post("/admin/curriculum-generate", async (req, res) => {
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         thinking: CLAUDE_THINKING,
-        max_tokens: 10500,
+        // About 2,000 tokens a question (stem, options, worked solution).
+        max_tokens: Math.min(32000, 2100 * count + 1000),
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -587,7 +617,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
   const onCourse = await filterInScope(questions, courseScope, { subtopicId, route: "curriculum-generate" });
   questions = onCourse.kept;
   if (!questions.length) {
-    await admin.from("curriculum_subtopics").update({ gen_status: "done", questions_generated: 0 }).eq("id", subtopicId);
+    await finish(0);
     res.status(200).json({ inserted: 0, message: onCourse.dropped ? "No questions passed the course check" : "No questions passed verification" });
     return;
   }
@@ -615,7 +645,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     }));
 
   if (rows.length === 0) {
-    await admin.from("curriculum_subtopics").update({ gen_status: "done", questions_generated: 0 }).eq("id", subtopicId);
+    await finish(0);
     res.status(200).json({ inserted: 0, message: "All questions were duplicates" });
     return;
   }
@@ -627,10 +657,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     return;
   }
 
-  await admin
-    .from("curriculum_subtopics")
-    .update({ gen_status: "done", questions_generated: rows.length })
-    .eq("id", subtopicId);
+  await finish(rows.length);
 
   res.json({ inserted: rows.length });
 });

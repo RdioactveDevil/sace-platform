@@ -23,6 +23,21 @@ import { ui, btn, note, FONT_B } from '../lib/adminUi'
 // Subtopics generated at once. Each is one Claude call plus answer
 // verification (~1 min), so a 125-subtopic curriculum takes ~40 min, not ~2 h.
 const GEN_CONCURRENCY = 3
+// Questions per subtopic: the default, the most the box allows, and the most
+// one request writes (bigger numbers go as several requests, see
+// CURRICULUM_GEN_MAX_BATCH in the API).
+const DEFAULT_PER_SUBTOPIC = 5
+const MAX_PER_SUBTOPIC = 50
+const GEN_BATCH = 10
+const clampPerSubtopic = (value) =>
+  Math.max(1, Math.min(MAX_PER_SUBTOPIC, Math.round(Number(value)) || DEFAULT_PER_SUBTOPIC))
+const perSubtopicKey = (id) => `gf-gen-per-subtopic-${id}`
+function readPerSubtopic(id) {
+  try {
+    const n = Math.round(Number(localStorage.getItem(perSubtopicKey(id))))
+    return n >= 1 && n <= MAX_PER_SUBTOPIC ? n : DEFAULT_PER_SUBTOPIC
+  } catch { return DEFAULT_PER_SUBTOPIC }
+}
 
 // ── Inline editable text node ─────────────────────────────────────────────────
 function EditableText({ value, onSave, style }) {
@@ -90,6 +105,13 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [generating, setGenerating]   = useState(false)
   const [progress, setProgress]       = useState(null)
   const [genError, setGenError]       = useState('')
+  // How many questions "Approve and generate" (and Resume / Retry) writes per subtopic.
+  const [perSubtopic, setPerSubtopic] = useState(() => readPerSubtopic(curriculumId))
+  const choosePerSubtopic = (value) => {
+    const n = clampPerSubtopic(value)
+    setPerSubtopic(n)
+    try { localStorage.setItem(perSubtopicKey(curriculumId), String(n)) } catch {}
+  }
   const [reviseInstruction, setReviseInstruction] = useState('')
   const [reviseSourceText, setReviseSourceText]   = useState('')
   const [showPasteArea, setShowPasteArea]         = useState(false)
@@ -430,7 +452,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const handleApproveAndGenerate = async () => {
     if (runningRef.current) return
     const subtopicCount = topics.flatMap(t => t.subtopics).length
-    if (!window.confirm(`Generate 5 questions for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
+    const n = clampPerSubtopic(perSubtopic)
+    if (!window.confirm(`Generate ${n} question${n === 1 ? '' : 's'} for each of the ${subtopicCount} subtopics (${(n * subtopicCount).toLocaleString()} in all)? This may take several minutes.`)) return
     if (!(curriculum.level_label || '').trim()) {
       setError('Select a Stage / year level before generating questions.')
       return
@@ -489,18 +512,29 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     return generateSubtopic({ ...sub, topicName }, curriculum.name)
   }
 
+  // Writes `perSubtopic` questions, in requests of up to GEN_BATCH each; the
+  // server adds each batch to the subtopic's count and marks it done after the last.
   async function generateSubtopic(sub, subjectName) {
-    setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'generating' } : p))
+    setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'generating', questions_generated: 0 } : p))
+    const wanted = clampPerSubtopic(perSubtopic)
+    const batches = Math.ceil(wanted / GEN_BATCH)
+    let total = 0
     try {
-      const { inserted } = await adminApiPost('/api/admin/curriculum-generate', {
-        subtopicId: sub.id,
-        curriculumId,
-        subjectName,
-        topicName: sub.topicName,
-        subtopicName: sub.name,
-        count: 5,
-      })
-      setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'done', questions_generated: inserted ?? 5 } : p))
+      for (let b = 0; b < batches; b++) {
+        const count = Math.min(GEN_BATCH, wanted - b * GEN_BATCH)
+        const { inserted } = await adminApiPost('/api/admin/curriculum-generate', {
+          subtopicId: sub.id,
+          curriculumId,
+          subjectName,
+          topicName: sub.topicName,
+          subtopicName: sub.name,
+          count,
+          batch: { index: b, of: batches },
+        })
+        total += inserted ?? 0
+        const last = b === batches - 1
+        setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: last ? 'done' : 'generating', questions_generated: total } : p))
+      }
     } catch {
       setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'failed' } : p))
       // A request cut off by the serverless time limit leaves the row at
@@ -594,6 +628,19 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
+          {isDraft && (
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}>
+              Questions per subtopic
+              <input
+                type="number" min={1} max={MAX_PER_SUBTOPIC} step={1}
+                value={perSubtopic}
+                onChange={e => setPerSubtopic(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                onBlur={e => choosePerSubtopic(e.target.value)}
+                disabled={saving || generating}
+                style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
+              />
+            </label>
+          )}
           {isDraft && (
             <button
               onClick={handleApproveAndGenerate}
