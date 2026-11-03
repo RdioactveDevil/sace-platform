@@ -184,8 +184,47 @@ export function sanitizeChemFigure(raw: unknown): Obj | null {
       ...(caption ? { caption } : {}),
     };
   }
+  if (f.type === "flow_chart") {
+    const ids = new Set<string>();
+    const nodes = arr(f.nodes).map(obj).map((n) => ({
+      id: short(n.id, 20) ?? "",
+      text: short(n.text, 50) ?? "",
+      kind: n.kind === "text" ? "text" : "box",
+      row: Math.max(0, Math.min(7, Math.round(Number(n.row)) || 0)),
+      col: Math.max(0, Math.min(4, Math.round(Number(n.col)) || 0)),
+    })).filter((n) => n.id && n.text && !ids.has(n.id) && ids.add(n.id)).slice(0, 14);
+    const has = new Set(nodes.map((n) => n.id));
+    const edges = arr(f.edges).map(obj)
+      .filter((e) => has.has(String(e.from)) && has.has(String(e.to)) && e.from !== e.to)
+      .map((e) => ({ from: String(e.from), to: String(e.to), ...(e.label ? { label: short(e.label, 50) } : {}) }))
+      .slice(0, 20);
+    if (nodes.length < 2 || !edges.length) return null;
+    return { type: "flow_chart", nodes, edges, ...(caption ? { caption } : {}) };
+  }
+  if (f.type === "apparatus") {
+    const slots = APPARATUS_SLOTS[String(f.kind)];
+    if (!slots) return null;
+    const given = obj(f.labels);
+    const labels: Record<string, string> = {};
+    for (const k of slots) if (given[k] != null && String(given[k]).trim()) labels[k] = String(given[k]).trim().slice(0, 40);
+    const out: Obj = { type: "apparatus", kind: f.kind, labels };
+    if (f.kind === "galvanic_cell" && ["left_to_right", "right_to_left"].includes(String(f.electronFlow))) out.electronFlow = f.electronFlow;
+    if (caption) out.caption = caption;
+    return out;
+  }
   return null;
 }
+
+/**
+ * Labelled apparatus the app can draw, and the label slots each one has.
+ * Labels left out are left blank on the drawing (e.g. so the student names them).
+ */
+export const APPARATUS_SLOTS: Record<string, string[]> = {
+  galvanic_cell: ["left_electrode", "left_solution", "left_sign", "right_electrode", "right_solution", "right_sign", "salt_bridge", "meter"],
+  electrolytic_cell: ["left_electrode", "left_sign", "right_electrode", "right_sign", "electrolyte", "power_supply", "left_product", "right_product"],
+  titration: ["burette", "flask", "stand"],
+  reflux: ["flask", "condenser", "heat", "water_in", "water_out"],
+};
 
 function safeJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return null; }
@@ -219,6 +258,15 @@ export function describeChemDiagram(diagram: unknown): string {
   } else if (f.type === "tlc_plate") {
     lines.push(`TLC plate${isNum(f.solventFrontCm) ? `, solvent front ${f.solventFrontCm} cm from the origin` : ""}:`);
     arr(f.lanes).map(obj).forEach((l) => lines.push(`  Lane "${l.label}": spots at Rf ${arr(l.spots).join(", ") || "none"}`));
+  } else if (f.type === "flow_chart") {
+    const nodes = arr(f.nodes).map(obj);
+    const name = (id: unknown) => { const n = nodes.find((x) => x.id === id); return n ? `${n.kind === "box" ? "[" : ""}${n.text}${n.kind === "box" ? "]" : ""}` : String(id); };
+    lines.push("Flow chart (boxes in [ ]):");
+    arr(f.edges).map(obj).forEach((e) => lines.push(`  ${name(e.from)} → ${name(e.to)}${e.label ? ` (arrow labelled "${e.label}")` : ""}`));
+  } else if (f.type === "apparatus") {
+    const labels = obj(f.labels);
+    const what = { galvanic_cell: "Galvanic cell (two half-cells joined by a salt bridge and a wire through a meter)", electrolytic_cell: "Electrolytic cell (two electrodes in one electrolyte, connected to a DC power supply)", titration: "Titration set-up (burette above a conical flask)", reflux: "Heating under reflux (round-bottom flask with a vertical condenser)" }[String(f.kind)] || "Apparatus";
+    lines.push(`${what}. Labels: ${Object.entries(labels).map(([k, v]) => `${k.replace(/_/g, " ")} = "${v}"`).join("; ") || "none"}${f.electronFlow ? `; electron flow ${String(f.electronFlow).replace(/_/g, " ")} through the wire` : ""}.`);
   }
   return lines.length ? `The question shows:\n${lines.join("\n")}` : "";
 }
@@ -244,13 +292,23 @@ export function chemPromptLines(opts: { figureAsJsonString?: boolean; writtenAns
     "    Write SMILES carefully; the app draws the structure from it and checks the formula, and a mismatch rejects the question. Use \"full\" (every atom and bond, every H shown) for small molecules where the bonds matter (up to 8 atoms other than hydrogen); otherwise \"skeletal\".",
     "    The question text should refer to it the way SACE does (\"The structural formula of quinic acid is shown below.\") and must not give away the answer in the label (don't label a structure with the name the student must work out; use \"compound X\" instead).",
     "    Use [] when the question has no structure.",
-    `GRAPHS AND TLC PLATES — ${figureKey}, only when the question needs one:`,
+    `GRAPHS, TLC PLATES, FLOW CHARTS AND APPARATUS — ${figureKey}, one per question, only when the question needs one:`,
     "  xy_plot: { \"type\": \"xy_plot\", \"xLabel\": \"Concentration of Fe2+ (ppm)\", \"yLabel\": \"Absorbance\", \"xRange\": [0, 25], \"yRange\": [0, 0.5], \"xStep\": 5, \"yStep\": 0.1, \"showNumbers\": true, \"grid\": true,",
     "    \"series\": [{ \"kind\": \"points\", \"points\": [[4, 0.14], [8, 0.19]] }, { \"kind\": \"line\", \"points\": [[0, 0], [22.5, 0.5]], \"label\": \"Line of best fit\", \"arrow\": true }],",
     "    \"hlines\": [{ \"y\": 0.3, \"label\": \"reactants\" }], \"vlines\": [], \"arrows\": [{ \"from\": [2, 0.3], \"to\": [2, 0.8], \"text\": \"Ea\", \"both\": true }], \"labels\": [{ \"x\": 5, \"y\": 0.9, \"text\": \"transition state\" }] }",
     "    kind: points (plotted data), line (straight line through its points), curve (smooth curve through its points: titration curves, concentration–time, Maxwell–Boltzmann, energy profiles).",
     "    Calibration graphs, titration curves and rate graphs: give realistic data with numbers on the axes. Qualitative sketches (e.g. concentration against time, energy profile): \"showNumbers\": false, axis titles only.",
     "  tlc_plate: { \"type\": \"tlc_plate\", \"lanes\": [{ \"label\": \"A\", \"spots\": [0.25, 0.70] }], \"solventFrontCm\": 8.0, \"showRuler\": false } (spots are Rf values between 0 and 1).",
+    "  flow_chart (a manufacturing or reaction sequence, as SACE draws them): { \"type\": \"flow_chart\",",
+    "    \"nodes\": [{ \"id\": \"a\", \"text\": \"2,6-dichloroaniline\", \"kind\": \"text\", \"row\": 0, \"col\": 0 }, { \"id\": \"i1\", \"text\": \"Intermediate 1\", \"kind\": \"box\", \"row\": 1, \"col\": 1 }, { \"id\": \"r\", \"text\": \"CH3I\", \"kind\": \"text\", \"row\": 1, \"col\": 2 }],",
+    "    \"edges\": [{ \"from\": \"a\", \"to\": \"i1\" }, { \"from\": \"r\", \"to\": \"i1\" }, { \"from\": \"i1\", \"to\": \"i2\", \"label\": \"Heat under reflux conditions\" }] }",
+    "    Boxes (kind box) are substances made in the process; reagents and side products are plain text (kind text). row (0–7, top to bottom) and col (0–4, left to right) place each node on a grid; the main sequence runs down one column, reagents come in from the side, products leave to the side. Arrow labels give conditions.",
+    "  apparatus (labelled laboratory apparatus): { \"type\": \"apparatus\", \"kind\": \"galvanic_cell\" | \"electrolytic_cell\" | \"titration\" | \"reflux\", \"labels\": { ... }, \"electronFlow\": \"left_to_right\" | \"right_to_left\" (galvanic only, optional) }",
+    "    Label slots (leave any out to show it unlabelled, e.g. when the student must identify it; use neutral names like \"electrode 1\" when the answer is the electrode's identity):",
+    "      galvanic_cell: left_electrode, left_solution, left_sign (+ or −), right_electrode, right_solution, right_sign, salt_bridge, meter (e.g. V).",
+    "      electrolytic_cell: left_electrode, left_sign, right_electrode, right_sign, electrolyte, power_supply, left_product, right_product.",
+    "      titration: burette (its solution), flask (its contents), stand.",
+    "      reflux: flask (its contents), condenser, heat, water_in, water_out.",
     "  Every value the question relies on must be in the question text or clearly readable from the figure, and the two must agree exactly. Never reveal the answer in the figure.",
     ...(opts.tableKey ? [`  Tables of data (results, Rf values, titres) go in ${opts.tableKey}, captioned like SACE (\"Table 1\"), not in a figure.`] : []),
   ];

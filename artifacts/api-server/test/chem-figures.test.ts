@@ -47,3 +47,19 @@ test("chem figures are sanitised and described", () => {
   assert.match(describeChemDiagram(d), /SMILES CCO, molecular formula C2H6O/);
   assert.match(describeChemDiagram(d), /Plotted points/);
 });
+
+test("flow charts and apparatus are sanitised and described", () => {
+  const fc = sanitizeChemFigure({ type: "flow_chart", nodes: [
+    { id: "a", text: "2,6-dichloroaniline", kind: "text", row: 0, col: 0 },
+    { id: "i1", text: "Intermediate 1", kind: "box", row: 1, col: 1 },
+    { id: "i1", text: "duplicate", row: 2, col: 1 },
+    { id: "c", text: "clonidine", kind: "box", row: 2, col: 1 },
+  ], edges: [{ from: "a", to: "i1" }, { from: "i1", to: "c", label: "React at 130 °C" }, { from: "c", to: "missing" }] });
+  assert.equal((fc!.nodes as any[]).length, 3);
+  assert.equal((fc!.edges as any[]).length, 2);
+  assert.match(describeChemDiagram({ figure: fc }), /\[Intermediate 1\] → \[clonidine\] \(arrow labelled "React at 130 °C"\)/);
+  const cell = sanitizeChemFigure({ type: "apparatus", kind: "galvanic_cell", labels: { left_electrode: "Zn", right_electrode: "Cu", junk: "x" }, electronFlow: "left_to_right" });
+  assert.deepEqual(cell!.labels, { left_electrode: "Zn", right_electrode: "Cu" });
+  assert.match(describeChemDiagram({ figure: cell }), /Galvanic cell.*left electrode = "Zn".*electron flow left to right/);
+  assert.equal(sanitizeChemFigure({ type: "apparatus", kind: "spaceship" }), null);
+});

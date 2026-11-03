@@ -241,3 +241,222 @@ export function StructureList({ structures, color, labelColor }) {
     </div>
   )
 }
+
+// ── Flow charts ───────────────────────────────────────────────────────────────
+//   { type: 'flow_chart', nodes: [{ id, text, kind: 'box' | 'text', row, col }], edges: [{ from, to, label? }] }
+// Boxes are substances made in the process; reagents and side products are plain text.
+
+const approxWidth = (text, size) => String(text).length * size * 0.6
+
+export function FlowChart({ fig, c }) {
+  const nodes = list(fig.nodes).filter(n => n && n.id && n.text).slice(0, 14)
+  if (nodes.length < 2) return null
+  const cols = [...new Set(nodes.map(n => n.col | 0))].sort((a, b) => a - b)
+  const rows = [...new Set(nodes.map(n => n.row | 0))].sort((a, b) => a - b)
+  const COL_W = 176, ROW_H = 80, PAD = 18, SIZE = 13
+  const W = cols.length * COL_W + PAD * 2, H = rows.length * ROW_H + PAD
+  const at = {}
+  for (const n of nodes) {
+    const w = Math.min(COL_W - 14, approxWidth(n.text, SIZE) + (n.kind === 'text' ? 8 : 26))
+    at[n.id] = { x: PAD + cols.indexOf(n.col | 0) * COL_W + COL_W / 2, y: PAD + rows.indexOf(n.row | 0) * ROW_H + 18, hw: w / 2, hh: n.kind === 'text' ? 10 : 17, n }
+  }
+  // Where a line from a node's centre towards (dx, dy) leaves its box, plus a small gap.
+  const edgePoint = (a, dx, dy, gap) => {
+    const len = Math.hypot(dx, dy) || 1
+    const t = Math.min(dx ? a.hw / Math.abs(dx) : Infinity, dy ? a.hh / Math.abs(dy) : Infinity)
+    return [a.x + dx * t + (dx / len) * gap, a.y + dy * t + (dy / len) * gap]
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 460 }} role="img" aria-label={fig.caption || 'Flow chart'}>
+      {list(fig.edges).map((e, i) => {
+        const a = at[e?.from], b = at[e?.to]
+        if (!a || !b) return null
+        const dx = b.x - a.x, dy = b.y - a.y
+        const p1 = edgePoint(a, dx, dy, 3), p2 = edgePoint(b, -dx, -dy, 4)
+        const vertical = Math.abs(dy) > Math.abs(dx)
+        const mid = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2]
+        return (
+          <g key={`e${i}`}>
+            <line x1={p1[0]} y1={p1[1]} x2={p2[0]} y2={p2[1]} stroke={c.stroke} strokeWidth={1.3} />
+            <Arrowhead at={p2} from={p1} c={c} size={7} />
+            {e.label && (
+              <text x={vertical ? mid[0] + 8 : mid[0]} y={vertical ? mid[1] : mid[1] - 9} textAnchor={vertical ? 'start' : 'middle'} dominantBaseline="central"
+                fontFamily={FONT} fontSize={12} fontStyle="italic" fill={c.text} stroke={c.bg} strokeWidth={3.5} paintOrder="stroke">
+                <ChemString text={str(e.label, 50)} size={12} />
+              </text>
+            )}
+          </g>
+        )
+      })}
+      {nodes.map(n => {
+        const a = at[n.id]
+        return (
+          <g key={n.id}>
+            {n.kind !== 'text' && <rect x={a.x - a.hw} y={a.y - a.hh} width={a.hw * 2} height={a.hh * 2} fill={c.bg} stroke={c.stroke} strokeWidth={1.3} />}
+            <Text chem c={c} x={a.x} y={a.y} size={SIZE} weight={500}>{str(n.text, 50)}</Text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// ── Apparatus ────────────────────────────────────────────────────────────────
+//   { type: 'apparatus', kind: 'galvanic_cell' | 'electrolytic_cell' | 'titration' | 'reflux',
+//     labels: { slot: text }, electronFlow?: 'left_to_right' | 'right_to_left' }
+// A label left out is drawn unlabelled (the student may have to name it).
+
+function Lead({ from, to, c }) {
+  return <line x1={from[0]} y1={from[1]} x2={to[0]} y2={to[1]} stroke={c.muted} strokeWidth={0.9} />
+}
+
+function Sign({ x, y, sign, c }) {
+  if (!sign) return null
+  const s = /^[-−]/.test(sign) ? '−' : /^\+/.test(sign) ? '+' : str(sign, 3)
+  return (
+    <g>
+      <circle cx={x} cy={y} r={9} fill={c.bg} stroke={c.stroke} strokeWidth={1.2} />
+      <text x={x} y={y + 0.5} textAnchor="middle" dominantBaseline="central" fontFamily={FONT} fontSize={13} fontWeight={700} fill={c.text}>{s}</text>
+    </g>
+  )
+}
+
+function Beaker({ x1, x2, top, bottom, liquid, c }) {
+  return (
+    <g>
+      <rect x={x1 + 2} y={liquid} width={x2 - x1 - 4} height={bottom - liquid - 2} fill={c.fill} />
+      <path d={`M ${x1} ${top} V ${bottom} H ${x2} V ${top}`} fill="none" stroke={c.stroke} strokeWidth={2} />
+    </g>
+  )
+}
+
+function Electrode({ x, top, bottom, c }) {
+  return <rect x={x - 9} y={top} width={18} height={bottom - top} fill={c.grid} stroke={c.stroke} strokeWidth={1.3} />
+}
+
+function GalvanicCell({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 520, H = 336
+  const flow = fig.electronFlow
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 360 }} role="img" aria-label={fig.caption || 'Galvanic cell'}>
+      <Beaker x1={60} x2={220} top={150} bottom={290} liquid={185} c={c} />
+      <Beaker x1={300} x2={460} top={150} bottom={290} liquid={185} c={c} />
+      {/* salt bridge: an upside-down U tube dipping into both solutions */}
+      <path d="M 185 245 V 128 H 335 V 245" fill="none" stroke={c.stroke} strokeWidth={18} />
+      <path d="M 185 245 V 128 H 335 V 245" fill="none" stroke={c.bg} strokeWidth={14} />
+      <path d="M 185 245 V 128 H 335 V 245" fill="none" stroke={c.fill} strokeWidth={14} />
+      <Electrode x={120} top={104} bottom={262} c={c} />
+      <Electrode x={400} top={104} bottom={262} c={c} />
+      <path d="M 120 104 V 60 H 400 V 104" fill="none" stroke={c.stroke} strokeWidth={1.6} />
+      <circle cx={260} cy={60} r={19} fill={c.bg} stroke={c.stroke} strokeWidth={1.6} />
+      <Text chem c={c} x={260} y={60} size={14} weight={700}>{str(L.meter || 'V', 6)}</Text>
+      {flow && (
+        <g>
+          <line x1={flow === 'left_to_right' ? 170 : 350} y1={36} x2={flow === 'left_to_right' ? 222 : 298} y2={36} stroke={c.stroke} strokeWidth={1.4} />
+          <Arrowhead at={[flow === 'left_to_right' ? 228 : 292, 36]} from={[flow === 'left_to_right' ? 170 : 350, 36]} c={c} />
+          <Text chem c={c} x={flow === 'left_to_right' ? 196 : 324} y={22} size={13}>e^-</Text>
+        </g>
+      )}
+      {L.salt_bridge && <Text chem c={c} x={260} y={104} size={12.5}>{L.salt_bridge}</Text>}
+      <Sign x={150} y={96} sign={L.left_sign} c={c} />
+      <Sign x={430} y={96} sign={L.right_sign} c={c} />
+      {L.left_electrode && <><Lead from={[96, 128]} to={[110, 140]} c={c} /><Text chem c={c} x={92} y={124} anchor="end" size={12.5}>{L.left_electrode}</Text></>}
+      {L.right_electrode && <><Lead from={[424, 128]} to={[410, 140]} c={c} /><Text chem c={c} x={428} y={124} anchor="start" size={12.5}>{L.right_electrode}</Text></>}
+      {L.left_solution && <Text chem c={c} x={140} y={312} size={12.5}>{L.left_solution}</Text>}
+      {L.right_solution && <Text chem c={c} x={380} y={312} size={12.5}>{L.right_solution}</Text>}
+    </svg>
+  )
+}
+
+function ElectrolyticCell({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 480, H = 336
+  // Long plate = positive terminal; put it on the side the labels say is positive.
+  const leftPositive = !(/^[-−]/.test(L.left_sign || '') || /^\+/.test(L.right_sign || ''))
+  const longX = leftPositive ? 232 : 248, shortX = leftPositive ? 248 : 232
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 360 }} role="img" aria-label={fig.caption || 'Electrolytic cell'}>
+      <Beaker x1={110} x2={370} top={150} bottom={290} liquid={182} c={c} />
+      <Electrode x={180} top={108} bottom={262} c={c} />
+      <Electrode x={300} top={108} bottom={262} c={c} />
+      <path d={`M 180 108 V 52 H 232`} fill="none" stroke={c.stroke} strokeWidth={1.6} />
+      <path d={`M 300 108 V 52 H 248`} fill="none" stroke={c.stroke} strokeWidth={1.6} />
+      {/* DC supply as a cell symbol */}
+      <line x1={longX} y1={34} x2={longX} y2={70} stroke={c.stroke} strokeWidth={1.8} />
+      <line x1={shortX} y1={42} x2={shortX} y2={62} stroke={c.stroke} strokeWidth={4} />
+      <text x={longX + (leftPositive ? -10 : 10)} y={30} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight={700} fill={c.text}>+</text>
+      <text x={shortX + (leftPositive ? 10 : -10)} y={30} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight={700} fill={c.text}>−</text>
+      {L.power_supply && <Text chem c={c} x={240} y={88} size={12}>{L.power_supply}</Text>}
+      <Sign x={210} y={128} sign={L.left_sign} c={c} />
+      <Sign x={330} y={128} sign={L.right_sign} c={c} />
+      {L.left_electrode && <><Lead from={[136, 112]} to={[170, 124]} c={c} /><Text chem c={c} x={132} y={108} anchor="end" size={12.5}>{L.left_electrode}</Text></>}
+      {L.right_electrode && <><Lead from={[344, 104]} to={[310, 118]} c={c} /><Text chem c={c} x={348} y={100} anchor="start" size={12.5}>{L.right_electrode}</Text></>}
+      {L.left_product && <><Lead from={[104, 232]} to={[170, 232]} c={c} /><Text chem c={c} x={100} y={232} anchor="end" size={12.5}>{L.left_product}</Text></>}
+      {L.right_product && <><Lead from={[376, 232]} to={[310, 232]} c={c} /><Text chem c={c} x={380} y={232} anchor="start" size={12.5}>{L.right_product}</Text></>}
+      {L.electrolyte && <Text chem c={c} x={240} y={312} size={12.5}>{L.electrolyte}</Text>}
+    </svg>
+  )
+}
+
+function Titration({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 470, H = 384
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 380 }} role="img" aria-label={fig.caption || 'Titration set-up'}>
+      {/* stand and clamp */}
+      <rect x={58} y={360} width={200} height={10} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <rect x={78} y={36} width={7} height={324} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <line x1={85} y1={118} x2={170} y2={118} stroke={c.stroke} strokeWidth={3} />
+      {/* burette */}
+      <rect x={171} y={62} width={18} height={168} fill={c.fill} />
+      <rect x={170} y={28} width={20} height={203} fill="none" stroke={c.stroke} strokeWidth={1.6} />
+      {Array.from({ length: 12 }, (_, i) => <line key={i} x1={170} y1={42 + i * 15} x2={i % 5 === 0 ? 180 : 176} y2={42 + i * 15} stroke={c.stroke} strokeWidth={0.9} />)}
+      <rect x={163} y={232} width={34} height={7} rx={2} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <path d="M 175 239 V 262 L 180 270 L 185 262 V 239" fill="none" stroke={c.stroke} strokeWidth={1.4} />
+      {/* conical flask */}
+      <polygon points="146,330 219,330 244,354 126,354" fill={c.fill} />
+      <path d="M 170 284 V 306 L 124 356 H 246 L 190 306 V 284" fill="none" stroke={c.stroke} strokeWidth={1.8} strokeLinejoin="round" />
+      {L.burette && <><Lead from={[194, 130]} to={[214, 130]} c={c} /><Text chem c={c} x={218} y={130} anchor="start" size={12.5}>{L.burette}</Text></>}
+      {L.flask && <><Lead from={[232, 338]} to={[252, 326]} c={c} /><Text chem c={c} x={256} y={322} anchor="start" size={12.5}>{L.flask}</Text></>}
+      {L.stand && <Text chem c={c} x={82} y={24} size={12}>{L.stand}</Text>}
+    </svg>
+  )
+}
+
+function Reflux({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 400, H = 400
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 400 }} role="img" aria-label={fig.caption || 'Heating under reflux'}>
+      <defs><clipPath id="rf-flask"><circle cx={170} cy={300} r={46} /></clipPath></defs>
+      {/* round-bottom flask */}
+      <rect x={120} y={304} width={100} height={50} fill={c.fill} clipPath="url(#rf-flask)" />
+      <path d="M 161 214 V 257 A 46 46 0 1 0 179 257 V 214" fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      {/* condenser: inner tube with a water jacket and two side arms */}
+      <rect x={162} y={36} width={16} height={180} fill="none" stroke={c.stroke} strokeWidth={1.5} />
+      <rect x={148} y={58} width={44} height={136} rx={6} fill={c.grid} fillOpacity={0.35} stroke={c.stroke} strokeWidth={1.5} />
+      <rect x={162} y={56} width={16} height={140} fill={c.bg} stroke={c.stroke} strokeWidth={1.2} />
+      <path d="M 192 178 H 226 M 192 74 H 226" stroke={c.stroke} strokeWidth={1.5} />
+      <line x1={252} y1={178} x2={230} y2={178} stroke={c.stroke} strokeWidth={1.3} />
+      <Arrowhead at={[226, 178]} from={[252, 178]} c={c} size={7} />
+      <line x1={230} y1={74} x2={252} y2={74} stroke={c.stroke} strokeWidth={1.3} />
+      <Arrowhead at={[256, 74]} from={[230, 74]} c={c} size={7} />
+      {L.water_in && <Text chem c={c} x={260} y={178} anchor="start" size={12.5}>{L.water_in}</Text>}
+      {L.water_out && <Text chem c={c} x={262} y={74} anchor="start" size={12.5}>{L.water_out}</Text>}
+      {L.condenser && <><Lead from={[146, 126]} to={[118, 126]} c={c} /><Text chem c={c} x={114} y={126} anchor="end" size={12.5}>{L.condenser}</Text></>}
+      {L.flask && <><Lead from={[214, 316]} to={[240, 316]} c={c} /><Text chem c={c} x={244} y={316} anchor="start" size={12.5}>{L.flask}</Text></>}
+      {/* heat */}
+      <path d="M 162 392 Q 154 380 162 368 Q 166 376 170 364 Q 176 376 178 368 Q 186 380 178 392 Z" fill="none" stroke={c.stroke} strokeWidth={1.4} />
+      {L.heat && <Text chem c={c} x={196} y={380} anchor="start" size={12.5}>{L.heat}</Text>}
+    </svg>
+  )
+}
+
+export function Apparatus({ fig, c }) {
+  if (fig.kind === 'galvanic_cell') return <GalvanicCell fig={fig} c={c} />
+  if (fig.kind === 'electrolytic_cell') return <ElectrolyticCell fig={fig} c={c} />
+  if (fig.kind === 'titration') return <Titration fig={fig} c={c} />
+  if (fig.kind === 'reflux') return <Reflux fig={fig} c={c} />
+  return null
+}
