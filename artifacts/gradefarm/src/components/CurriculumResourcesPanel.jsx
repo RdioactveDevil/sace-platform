@@ -3,8 +3,9 @@ import {
   listCurriculumResources,
   uploadCurriculumResource,
   deleteCurriculumResource,
+  MAX_RESOURCE_BYTES,
 } from '../lib/curriculumResources'
-import { FileText } from 'lucide-react'
+import { FileText, X } from 'lucide-react'
 
 import { btn, FONT_B } from '../lib/adminUi'
 
@@ -38,8 +39,9 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
   const [resources, setResources] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  // { fileIndex, fileTotal, name, done, total } while a batch uploads.
   const [progress, setProgress] = useState(null)
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [resourceType, setResourceType] = useState('textbook')
   const [error, setError] = useState(null)
   const fileRef = useRef()
@@ -56,31 +58,55 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const handleFile = (f) => {
-    if (f && f.type === 'application/pdf') { setFile(f); setError(null) }
-    else setError('Please select a PDF file.')
+  // Adds picked files to the selection, skipping non-PDFs, files over the
+  // size limit and files already picked.
+  const handleFiles = (list) => {
+    const picked = Array.from(list || [])
+    if (fileRef.current) fileRef.current.value = ''
+    if (picked.length === 0) return
+    const skipped = []
+    const ok = []
+    for (const f of picked) {
+      if (f.type !== 'application/pdf') skipped.push(`${f.name} (not a PDF)`)
+      else if (f.size > MAX_RESOURCE_BYTES) skipped.push(`${f.name} (over 50 MB)`)
+      else ok.push(f)
+    }
+    setFiles(prev => {
+      const key = f => `${f.name}:${f.size}:${f.lastModified}`
+      const have = new Set(prev.map(key))
+      return [...prev, ...ok.filter(f => !have.has(key(f)))]
+    })
+    setError(skipped.length ? `Skipped ${skipped.join(', ')}.` : null)
   }
 
+  const removeFile = (i) => setFiles(prev => prev.filter((_, j) => j !== i))
+
+  // Uploads one file at a time (each is read by AI, and big books are read in
+  // parts), carrying on past failures so one bad file doesn't stop the rest.
   const handleUpload = async () => {
-    if (!file) return
+    if (files.length === 0) return
+    const batch = files
     setUploading(true)
     setProgress(null)
     setError(null)
-    try {
-      await uploadCurriculumResource(curriculumId, file, {
-        resourceType,
-        onProgress: (done, total) => setProgress(total > 1 ? { done, total } : null),
-      })
-      setFile(null)
-      if (fileRef.current) fileRef.current.value = ''
+    const failed = []
+    for (let i = 0; i < batch.length; i++) {
+      const file = batch[i]
+      setProgress({ fileIndex: i + 1, fileTotal: batch.length, name: file.name, done: 0, total: 1 })
+      try {
+        await uploadCurriculumResource(curriculumId, file, {
+          resourceType,
+          onProgress: (done, total) => setProgress(p => ({ ...p, done, total })),
+        })
+        setFiles(prev => prev.filter(f => f !== file))
+      } catch (err) {
+        failed.push(`${file.name}: ${err.message}`)
+      }
       await refresh()
-    } catch (err) {
-      setError(err.message)
-      await refresh()
-    } finally {
-      setUploading(false)
-      setProgress(null)
     }
+    if (failed.length) setError(`${failed.length} of ${batch.length} didn't upload. ${failed.join(' · ')}`)
+    setUploading(false)
+    setProgress(null)
   }
 
   const handleDelete = async (id) => {
@@ -101,7 +127,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         Reference material
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 12 }}>
-        Textbooks, past exams or practice tests as PDFs, up to 50 MB. Big books are split into page ranges. AI works out which subtopics each covers and keeps example questions and style notes, which shape the questions it writes for this subject.
+        Textbooks, past exams or practice tests as PDFs, up to 50 MB each. Pick several at once to upload them together. Big books are split into page ranges. AI works out which subtopics each covers and keeps example questions and style notes, which shape the questions it writes for this subject.
       </div>
 
       {/* Upload row */}
@@ -119,35 +145,67 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
 
         <button
           onClick={() => fileRef.current?.click()}
+          disabled={uploading}
           style={{
-            padding: '8px 14px', borderRadius: 9, border: file ? '1px solid var(--t-border)' : '1.5px dashed var(--t-borderStrong)',
-            background: 'var(--t-bgCard)', color: file ? 'var(--t-text)' : 'var(--t-textMuted)',
-            fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, maxWidth: 260,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            padding: '8px 14px', borderRadius: 9, border: '1.5px dashed var(--t-borderStrong)',
+            background: 'var(--t-bgCard)', color: 'var(--t-textMuted)',
+            fontSize: 13, fontWeight: 700, cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: FONT_B,
+            opacity: uploading ? 0.6 : 1,
           }}
         >
-          {file ? <><FileText size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 6 }} />{file.name}</> : 'Choose a PDF'}
+          {files.length ? 'Add more PDFs' : 'Choose PDFs'}
         </button>
         <input
           ref={fileRef}
           type="file"
           accept="application/pdf"
+          multiple
           style={{ display: 'none' }}
-          onChange={e => handleFile(e.target.files[0])}
+          onChange={e => handleFiles(e.target.files)}
         />
 
         <button
           onClick={handleUpload}
-          disabled={!file || uploading}
-          style={btn('primary', !file || uploading)}
+          disabled={files.length === 0 || uploading}
+          style={btn('primary', files.length === 0 || uploading)}
         >
-          {uploading ? 'Reading…' : 'Upload and read'}
+          {uploading ? 'Reading…' : files.length > 1 ? `Upload and read ${files.length} files` : 'Upload and read'}
         </button>
       </div>
 
-      {uploading && (
-        <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 10 }}>
-          {progress
+      {/* Picked files, waiting to upload */}
+      {files.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {files.map((f, i) => {
+            const current = uploading && progress?.name === f.name
+            return (
+              <span key={`${f.name}:${f.size}:${f.lastModified}`} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 280, padding: '4px 6px 4px 9px', borderRadius: 999,
+                border: `1px solid ${current ? 'var(--t-borderStrong)' : 'var(--t-border)'}`, background: 'var(--t-bgCard)',
+                fontSize: 12, fontWeight: 600, color: current ? 'var(--t-text)' : 'var(--t-textMuted)',
+              }}>
+                <FileText size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                <span style={{ flexShrink: 0, opacity: 0.75 }}>{fmtSize(f.size)}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  disabled={uploading}
+                  aria-label={`Remove ${f.name}`}
+                  style={{ border: 'none', background: 'transparent', color: 'inherit', padding: 2, display: 'inline-flex', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.4 : 1 }}
+                >
+                  <X size={13} aria-hidden="true" />
+                </button>
+              </span>
+            )
+          })}
+        </div>
+      )}
+
+      {uploading && progress && (
+        <div role="status" style={{ fontSize: 12, color: 'var(--t-textMuted)', marginBottom: 10 }}>
+          {progress.fileTotal > 1 && `File ${progress.fileIndex} of ${progress.fileTotal}: ${progress.name}. `}
+          {progress.total > 1
             ? `Reading part ${progress.done} of ${progress.total}. Keep this tab open for whole textbooks.`
             : 'Reading the document. Large files can take a minute.'}
         </div>
