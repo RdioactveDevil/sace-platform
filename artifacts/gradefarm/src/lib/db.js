@@ -907,6 +907,29 @@ export async function generateMarkedQuestions(subtopicId, { count = 3, difficult
   return tutorFetch('/api/marked/generate', { method: 'POST', body: JSON.stringify({ subtopicId, count, difficulty }) })
 }
 
+/** Most written-answer questions one /api/marked/generate request writes. */
+export const MARKED_PER_REQUEST = 3
+
+/**
+ * Admin: `total` written-answer questions for one subtopic, in requests of up
+ * to MARKED_PER_REQUEST. Stops at the first request that fails.
+ * Resolves to { saved, rejected: [{ question, reason }], error } (error is '' when all went through).
+ */
+export async function generateMarkedForSubtopic(subtopicId, total, { difficulty = 'mixed', shouldStop = () => false } = {}) {
+  let saved = 0
+  const rejected = []
+  for (let left = total; left > 0 && !shouldStop(); left -= MARKED_PER_REQUEST) {
+    try {
+      const res = await generateMarkedQuestions(subtopicId, { count: Math.min(MARKED_PER_REQUEST, left), difficulty })
+      saved += res.saved?.length || 0
+      rejected.push(...(res.rejected || []))
+    } catch (e) {
+      return { saved, rejected, error: e?.message || 'Generating written answers failed.' }
+    }
+  }
+  return { saved, rejected, error: '' }
+}
+
 // â”€â”€â”€ LEADERBOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /**
  * One leaderboard per class the user is in (tutors: also classes they teach;

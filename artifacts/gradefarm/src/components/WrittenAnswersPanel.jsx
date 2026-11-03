@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { generateMarkedQuestions } from '../lib/db'
+import { generateMarkedQuestions, generateMarkedForSubtopic } from '../lib/db'
 import { deleteQuestion } from '../lib/adminDb'
 import { markingScheme, totalMarks } from '../lib/questionTypes'
 import { ui, btn, note, FONT_B } from '../lib/adminUi'
 import MathText from './MathText'
+
+// Subtopics written at once in "Generate for every subtopic".
+const BULK_CONCURRENCY = 2
 
 /**
  * Admin › Curricula › subject: written-answer questions, marked by AI against
@@ -23,16 +26,30 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
   const [error, setError] = useState('')
   const [questions, setQuestions] = useState(null)
   const [openId, setOpenId] = useState(null)
+  // Every subtopic at once: how many each, whether to skip ones that have some, and the run's progress.
+  const [bulkPer, setBulkPer] = useState(3)
+  const [skipExisting, setSkipExisting] = useState(true)
+  const [bulk, setBulk] = useState(null) // { running, total, done, saved, notSaved, failed: [label] }
+  const stopRef = useRef(false)
 
   const load = useCallback(async () => {
     const { data, error: e } = await supabase.from('questions')
-      .select('id, topic, subtopic, question, total_marks, marking_scheme, solution, difficulty, created_at')
+      .select('id, topic, subtopic, subtopic_id, question, total_marks, marking_scheme, solution, difficulty, created_at')
       .eq('curriculum_id', curriculumId).eq('question_type', 'marked')
-      .order('created_at', { ascending: false }).limit(300)
+      .order('created_at', { ascending: false }).limit(1000)
     if (e) { setQuestions([]); setError(e.message); return }
     setQuestions(data || [])
   }, [curriculumId])
   useEffect(() => { load() }, [load])
+
+  // Leaving the page stops a whole-subject run, so ask first.
+  const bulkRunning = !!bulk?.running
+  useEffect(() => {
+    if (!bulkRunning) return
+    const warn = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [bulkRunning])
 
   const generate = async () => {
     if (!subtopicId || busy) return
@@ -45,6 +62,37 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
       setError(e.message || 'Generating the questions failed.')
     }
     setBusy(false)
+  }
+
+  // Written answers already in the bank, by subtopic id.
+  const haveBySubtopic = useMemo(() => {
+    const m = new Map()
+    for (const q of questions || []) if (q.subtopic_id) m.set(q.subtopic_id, (m.get(q.subtopic_id) || 0) + 1)
+    return m
+  }, [questions])
+  const bulkTargets = subtopics.filter(s => !skipExisting || !haveBySubtopic.get(s.id))
+
+  const generateAll = async () => {
+    if (busy || bulk?.running || bulkTargets.length === 0) return
+    const queue = [...bulkTargets]
+    if (!window.confirm(`Write ${bulkPer} written-answer question${bulkPer === 1 ? '' : 's'} for each of ${queue.length} subtopic${queue.length === 1 ? '' : 's'} (${queue.length * bulkPer} in all)? They cost a few cents each and take a minute or more per subtopic. Keep this page open.`)) return
+    stopRef.current = false
+    setError(''); setOutcome(null)
+    setBulk({ running: true, total: queue.length, done: 0, saved: 0, notSaved: 0, failed: [] })
+    let next = 0
+    const worker = async () => {
+      while (!stopRef.current && next < queue.length) {
+        const sub = queue[next++]
+        const r = await generateMarkedForSubtopic(sub.id, bulkPer, { shouldStop: () => stopRef.current })
+        setBulk(b => ({
+          ...b, done: b.done + 1, saved: b.saved + r.saved, notSaved: b.notSaved + r.rejected.length,
+          failed: r.error ? [...b.failed, sub.label] : b.failed,
+        }))
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, queue.length) }, worker))
+    setBulk(b => ({ ...b, running: false, stopped: stopRef.current }))
+    await load()
   }
 
   const remove = async (id) => {
@@ -83,11 +131,37 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
           <option value="mixed">Mixed difficulty</option>
           {[2, 3, 4, 5].map(n => <option key={n} value={n}>Difficulty {n}</option>)}
         </select>
-        <button type="button" onClick={generate} disabled={!subtopicId || busy} style={btn('primary', !subtopicId || busy)}>
+        <button type="button" onClick={generate} disabled={!subtopicId || busy || bulk?.running} style={btn('primary', !subtopicId || busy || bulk?.running)}>
           {busy ? 'Writing and checking…' : 'Generate'}
         </button>
       </div>
       {busy && <div style={{ ...ui.hint, marginTop: 8 }}>This takes one to three minutes. Keep this page open.</div>}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--t-border)' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-text)' }}>Every subtopic</span>
+        <select aria-label="How many per subtopic" value={bulkPer} onChange={e => setBulkPer(Number(e.target.value))} disabled={bulk?.running} style={select}>
+          {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} each</option>)}
+        </select>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={skipExisting} onChange={e => setSkipExisting(e.target.checked)} disabled={bulk?.running} style={{ accentColor: 'var(--t-text)' }} />
+          Skip subtopics that already have some
+        </label>
+        {bulk?.running ? (
+          <button type="button" onClick={() => { stopRef.current = true }} style={btn('secondary')}>Stop</button>
+        ) : (
+          <button type="button" onClick={generateAll} disabled={busy || bulkTargets.length === 0} style={btn('primary', busy || bulkTargets.length === 0)}>
+            Generate for {bulkTargets.length} subtopic{bulkTargets.length === 1 ? '' : 's'}
+          </button>
+        )}
+      </div>
+      {bulk && (
+        <div role="status" style={{ ...note(bulk.running ? 'info' : bulk.failed.length ? 'danger' : 'success'), marginTop: 10 }}>
+          {bulk.running
+            ? `${bulk.done} of ${bulk.total} subtopics done · ${bulk.saved} saved${bulk.notSaved ? ` · ${bulk.notSaved} didn't pass the checks` : ''}. Keep this page open.`
+            : `${bulk.stopped ? 'Stopped. ' : ''}${bulk.saved} saved across ${bulk.done} subtopic${bulk.done === 1 ? '' : 's'}${bulk.notSaved ? `; ${bulk.notSaved} didn't pass the checks` : ''}.`}
+          {bulk.failed.length > 0 && <div style={{ marginTop: 4 }}>Couldn’t finish: {bulk.failed.join(', ')}. Run it again with “Skip subtopics that already have some” to fill gaps.</div>}
+        </div>
+      )}
 
       {outcome && (
         <div style={{ ...note(outcome.saved?.length ? 'success' : 'info'), marginTop: 10 }}>

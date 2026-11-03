@@ -9,6 +9,7 @@ import {
   updateCurriculumFeatures,
 } from '../lib/curriculaDb'
 import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
+import { generateMarkedForSubtopic } from '../lib/db'
 import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import SharedQuestionsPanel from './SharedQuestionsPanel'
@@ -37,6 +38,13 @@ function readPerSubtopic(id) {
     const n = Math.round(Number(localStorage.getItem(perSubtopicKey(id))))
     return n >= 1 && n <= MAX_PER_SUBTOPIC ? n : DEFAULT_PER_SUBTOPIC
   } catch { return DEFAULT_PER_SUBTOPIC }
+}
+// Written-answer (AI-marked) questions per subtopic in the same run: off by default.
+const MAX_WRITTEN_PER_SUBTOPIC = 6
+const clampWritten = (value) => Math.max(0, Math.min(MAX_WRITTEN_PER_SUBTOPIC, Math.round(Number(value)) || 0))
+const writtenKey = (id) => `gf-gen-written-per-subtopic-${id}`
+function readWritten(id) {
+  try { return clampWritten(localStorage.getItem(writtenKey(id))) } catch { return 0 }
 }
 
 // ── Inline editable text node ─────────────────────────────────────────────────
@@ -107,6 +115,17 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const [genError, setGenError]       = useState('')
   // How many questions "Approve and generate" (and Resume / Retry) writes per subtopic.
   const [perSubtopic, setPerSubtopic] = useState(() => readPerSubtopic(curriculumId))
+  const [writtenPer, setWrittenPer] = useState(() => readWritten(curriculumId))
+  const chooseWritten = (value) => {
+    const n = clampWritten(value)
+    setWrittenPer(n)
+    try { localStorage.setItem(writtenKey(curriculumId), String(n)) } catch {}
+  }
+  // Written answers made this run, by subtopic id: { status: 'writing'|'done'|'failed', saved, notSaved }.
+  // Kept apart from `progress`, which the poll replaces from the database.
+  const [writtenProgress, setWrittenProgress] = useState({})
+  // Subtopics whose written answers are already made this visit, so Retry doesn't make them twice.
+  const writtenDoneRef = useRef(new Set())
   const choosePerSubtopic = (value) => {
     const n = clampPerSubtopic(value)
     setPerSubtopic(n)
@@ -453,7 +472,11 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     if (runningRef.current) return
     const subtopicCount = topics.flatMap(t => t.subtopics).length
     const n = clampPerSubtopic(perSubtopic)
-    if (!window.confirm(`Generate ${n} question${n === 1 ? '' : 's'} for each of the ${subtopicCount} subtopics (${(n * subtopicCount).toLocaleString()} in all)? This may take several minutes.`)) return
+    const w = clampWritten(writtenPer)
+    const writtenLine = w
+      ? ` and ${w} written-answer question${w === 1 ? '' : 's'} (${(w * subtopicCount).toLocaleString()} in all, a few cents each, slower to write)`
+      : ''
+    if (!window.confirm(`Generate ${n} multiple-choice question${n === 1 ? '' : 's'} (${(n * subtopicCount).toLocaleString()} in all)${writtenLine} for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
     if (!(curriculum.level_label || '').trim()) {
       setError('Select a Stage / year level before generating questions.')
       return
@@ -516,6 +539,15 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   // server adds each batch to the subtopic's count and marks it done after the last.
   async function generateSubtopic(sub, subjectName) {
     setProgress(prev => prev.map(p => p.id === sub.id ? { ...p, gen_status: 'generating', questions_generated: 0 } : p))
+    // Written answers first, so a subtopic reads as done only once both kinds are.
+    // A failure here is shown on the row but doesn't fail the subtopic.
+    const written = clampWritten(writtenPer)
+    if (written > 0 && !writtenDoneRef.current.has(sub.id)) {
+      setWrittenProgress(prev => ({ ...prev, [sub.id]: { status: 'writing', saved: 0, notSaved: 0 } }))
+      const r = await generateMarkedForSubtopic(sub.id, written)
+      if (!r.error) writtenDoneRef.current.add(sub.id)
+      setWrittenProgress(prev => ({ ...prev, [sub.id]: { status: r.error ? 'failed' : 'done', saved: r.saved, notSaved: r.rejected.length, error: r.error } }))
+    }
     const wanted = clampPerSubtopic(perSubtopic)
     const batches = Math.ceil(wanted / GEN_BATCH)
     let total = 0
@@ -573,6 +605,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const doneCount   = (progress || []).filter(p => p.gen_status === 'done').length
   const failedCount = (progress || []).filter(p => p.gen_status === 'failed').length
   const totalQs     = (progress || []).reduce((n, p) => n + (p.questions_generated || 0), 0)
+  const totalWritten = Object.values(writtenProgress).reduce((n, w) => n + (w.saved || 0), 0)
   const remainingCount = (progress || []).length - doneCount - failedCount
   const isDraft     = curriculum.status === 'draft'
 
@@ -638,6 +671,20 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 onBlur={e => choosePerSubtopic(e.target.value)}
                 disabled={saving || generating}
                 style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
+              />
+            </label>
+          )}
+          {isDraft && (
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}
+              title="Short-answer questions marked by AI against a marking scheme. Students see them once Written answers is switched on in Student features.">
+              Written answers per subtopic
+              <input
+                type="number" min={0} max={MAX_WRITTEN_PER_SUBTOPIC} step={1}
+                value={writtenPer}
+                onChange={e => setWrittenPer(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+                onBlur={e => chooseWritten(e.target.value)}
+                disabled={saving || generating}
+                style={{ width: 56, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
               />
             </label>
           )}
@@ -1069,7 +1116,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                 }} />
               </div>
               <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 5 }}>
-                {totalQs} questions · {doneCount} of {progress.length} subtopics done
+                {totalQs} questions{totalWritten > 0 ? ` + ${totalWritten} written answers` : ''} · {doneCount} of {progress.length} subtopics done
                 {failedCount > 0 && <span style={{ color: 'var(--t-danger)' }}> · {failedCount} failed</span>}
               </div>
             </div>
@@ -1110,6 +1157,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
                       padding: '1px 0',
                     }}>
                       {p.gen_status === 'done' ? `${p.questions_generated} questions` : p.gen_status === 'generating' ? 'Writing…' : p.gen_status === 'failed' ? 'Failed' : 'Waiting'}
+                      {writtenProgress[p.id] && (
+                        <span title={writtenProgress[p.id].error || (writtenProgress[p.id].notSaved ? `${writtenProgress[p.id].notSaved} didn't pass the checks` : '')}
+                          style={{ color: writtenProgress[p.id].status === 'failed' ? 'var(--t-danger)' : 'var(--t-textMuted)' }}>
+                          {' · '}{writtenProgress[p.id].status === 'writing' ? 'written answers…' : `${writtenProgress[p.id].saved} written${writtenProgress[p.id].status === 'failed' ? ' (failed)' : ''}`}
+                        </span>
+                      )}
                     </span>
                     {p.gen_status === 'failed' && (
                       <button
