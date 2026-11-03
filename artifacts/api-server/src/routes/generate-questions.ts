@@ -506,7 +506,7 @@ export async function generateForTopic(opts: {
     ...(flagGraphs ? GRAPH_INSTRUCTIONS : []),
     ...(flagTables ? TABLE_INSTRUCTIONS : []),
     ...(chemFigures
-      ? ["  structures (array, [] when none) and figure (object, only when needed), as described below", ...chemPromptLines({ tableKey: flagTables ? "table_data" : undefined })]
+      ? ["  structures (array, [] when none) and figure (object, only when needed), as described below", ...chemPromptLines({ tableKey: flagTables ? "table_data" : undefined, subject: normalizedSubject })]
       : mathFigures ? figureInstructions(figuresRequired) : includeDiagrams ? DIAGRAM_INSTRUCTIONS : []),
     ...(flagLatex ? [latexPromptRule(latexExample)] : []),
     "Questions must be accurate, unambiguous, and test conceptual understanding aligned with the curriculum.",

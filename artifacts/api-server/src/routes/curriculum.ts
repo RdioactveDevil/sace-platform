@@ -523,7 +523,7 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     ...(chem ? [
       "  structures (array, [] when none), figure (object, only when needed) and table_data (object, only when needed), as described below",
       "  table_data schema: { \"caption\": \"Table 1\", \"headers\": [\"Protein\", \"Rf value\"], \"rows\": [[\"albumin\", \"0.10\"]] }",
-      ...chemPromptLines({ tableKey: "table_data" }),
+      ...chemPromptLines({ tableKey: "table_data", subject: subjectName }),
     ] : []),
     latexPromptRule("$\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$"),
     "Questions must be accurate, unambiguous, and test conceptual understanding.",

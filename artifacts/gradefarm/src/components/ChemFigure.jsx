@@ -453,10 +453,343 @@ function Reflux({ fig, c }) {
   )
 }
 
+// A conical flask: neck from neckTop, body to bottom, liquid from liquidY down.
+function ConicalFlask({ cx, neckTop, bottom, liquidY, c, halfNeck = 10, halfBase = 60 }) {
+  const shoulder = neckTop + (bottom - neckTop) * 0.3
+  const xAt = (y, side) => {
+    if (y <= shoulder) return cx + side * halfNeck
+    return cx + side * (halfNeck + ((y - shoulder) / (bottom - shoulder)) * (halfBase - halfNeck))
+  }
+  const ly = Math.max(liquidY ?? bottom, shoulder)
+  return (
+    <g>
+      {liquidY != null && liquidY < bottom && (
+        <polygon points={`${xAt(ly, -1)},${ly} ${xAt(ly, 1)},${ly} ${cx + halfBase - 1},${bottom - 1} ${cx - halfBase + 1},${bottom - 1}`} fill={c.fill} />
+      )}
+      <path d={`M ${cx - halfNeck} ${neckTop} V ${shoulder} L ${cx - halfBase} ${bottom} H ${cx + halfBase} L ${cx + halfNeck} ${shoulder} V ${neckTop}`}
+        fill="none" stroke={c.stroke} strokeWidth={1.8} strokeLinejoin="round" />
+    </g>
+  )
+}
+
+function Flame({ x, y, c, size = 1 }) {
+  const s = size
+  return <path d={`M ${x - 8 * s} ${y} Q ${x - 16 * s} ${y - 12 * s} ${x - 8 * s} ${y - 24 * s} Q ${x - 4 * s} ${y - 16 * s} ${x} ${y - 28 * s} Q ${x + 6 * s} ${y - 16 * s} ${x + 8 * s} ${y - 24 * s} Q ${x + 16 * s} ${y - 12 * s} ${x + 8 * s} ${y} Z`}
+    fill="none" stroke={c.stroke} strokeWidth={1.4} />
+}
+
+// A glass tube drawn as two walls: an outer stroke with the background inside.
+function Tube({ d, c, width = 9 }) {
+  return (
+    <g>
+      <path d={d} fill="none" stroke={c.stroke} strokeWidth={width} strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={c.bg} strokeWidth={width - 3} strokeLinejoin="round" />
+    </g>
+  )
+}
+
+function Ticks({ x, y1, y2, step = 12, c, left = true }) {
+  const out = []
+  for (let y = y1, i = 0; y <= y2; y += step, i++) out.push(<line key={i} x1={x} y1={y} x2={x + (left ? 1 : -1) * (i % 5 === 0 ? 10 : 6)} y2={y} stroke={c.stroke} strokeWidth={0.9} />)
+  return <g>{out}</g>
+}
+
+function Distillation({ fig, c }) {
+  const L = fig.labels || {}
+  const frac = !!fig.fractional
+  const cx = 170, cy = 250, r = 44
+  const head = frac ? 78 : 150 // top of the still head
+  const S = [cx + 10, head + 22], E = [450, head + 132]
+  const len = Math.hypot(E[0] - S[0], E[1] - S[1])
+  const d = [(E[0] - S[0]) / len, (E[1] - S[1]) / len], n = [-d[1], d[0]] // n points down-left
+  const at = (t) => [S[0] + (E[0] - S[0]) * t, S[1] + (E[1] - S[1]) * t]
+  const J1 = at(0.22), J2 = at(0.86)
+  const inStub = [J2[0] + n[0] * 13, J2[1] + n[1] * 13], inEnd = [J2[0] + n[0] * 40, J2[1] + n[1] * 40]
+  const outStub = [J1[0] - n[0] * 13, J1[1] - n[1] * 13], outEnd = [J1[0] - n[0] * 40, J1[1] - n[1] * 40]
+  const mid = at(0.55)
+  const rx = E[0] + 8, rTop = E[1] + 14, rBottom = rTop + 74
+  const H = Math.max(cy + r + 56, rBottom + 26), W = 560
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 380 }} role="img" aria-label={fig.caption || (frac ? 'Fractional distillation' : 'Distillation')}>
+      <defs><clipPath id="ds-flask"><circle cx={cx} cy={cy} r={r - 1} /></clipPath></defs>
+      <rect x={cx - r} y={cy + 6} width={r * 2} height={r} fill={c.fill} clipPath="url(#ds-flask)" />
+      <path d={`M ${cx - 9} ${head} V ${cy - r + 4} A ${r} ${r} 0 1 0 ${cx + 9} ${cy - r + 4} V ${head + 30}`} fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      {frac && Array.from({ length: 12 }, (_, i) => <circle key={i} cx={cx - 4 + (i % 2) * 8} cy={head + 44 + i * ((cy - r - head - 50) / 12)} r={3} fill="none" stroke={c.stroke} strokeWidth={0.9} />)}
+      {/* condenser: jacket then the inner tube */}
+      <path d={`M ${J1[0]} ${J1[1]} L ${J2[0]} ${J2[1]}`} stroke={c.stroke} strokeWidth={28} strokeLinecap="round" />
+      <path d={`M ${J1[0]} ${J1[1]} L ${J2[0]} ${J2[1]}`} stroke={c.bg} strokeWidth={25} strokeLinecap="round" />
+      <path d={`M ${J1[0]} ${J1[1]} L ${J2[0]} ${J2[1]}`} stroke={c.grid} strokeOpacity={0.4} strokeWidth={25} strokeLinecap="round" />
+      <Tube d={`M ${cx + 6} ${head + 22} L ${E[0]} ${E[1]}`} c={c} />
+      <path d={`M ${inStub[0]} ${inStub[1]} L ${inEnd[0]} ${inEnd[1]} M ${outStub[0]} ${outStub[1]} L ${outEnd[0]} ${outEnd[1]}`} stroke={c.stroke} strokeWidth={1.4} />
+      <Arrowhead at={inStub} from={inEnd} c={c} size={7} />
+      <Arrowhead at={[outEnd[0] - n[0] * 4, outEnd[1] - n[1] * 4]} from={outStub} c={c} size={7} />
+      {/* stopper and thermometer, bulb at the side arm */}
+      <rect x={cx - 12} y={head - 8} width={24} height={9} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <rect x={cx - 2} y={head - 58} width={4} height={76} fill={c.bg} stroke={c.stroke} strokeWidth={1} />
+      <circle cx={cx} cy={head + 21} r={4.5} fill={c.bg} stroke={c.stroke} strokeWidth={1.2} />
+      {/* receiver */}
+      <ConicalFlask cx={rx} neckTop={rTop} bottom={rBottom} liquidY={rBottom - 16} c={c} halfBase={38} halfNeck={9} />
+      <Flame x={cx} y={cy + r + 42} c={c} />
+      {L.thermometer && <><Lead from={[cx - 6, head - 40]} to={[cx - 26, head - 40]} c={c} /><Text chem c={c} x={cx - 30} y={head - 40} anchor="end" size={12.5}>{L.thermometer}</Text></>}
+      {frac && L.column && <><Lead from={[cx - 12, (head + cy - r) / 2]} to={[cx - 34, (head + cy - r) / 2]} c={c} /><Text chem c={c} x={cx - 38} y={(head + cy - r) / 2} anchor="end" size={12.5}>{L.column}</Text></>}
+      {L.flask && <><Lead from={[cx - r - 2, cy + 10]} to={[cx - r - 20, cy + 10]} c={c} /><Text chem c={c} x={cx - r - 24} y={cy + 10} anchor="end" size={12.5}>{L.flask}</Text></>}
+      {L.condenser && <Text chem c={c} x={mid[0] - n[0] * 30} y={mid[1] - n[1] * 30} anchor="start" size={12.5}>{L.condenser}</Text>}
+      {L.water_in && <Text chem c={c} x={inEnd[0] - 4} y={inEnd[1] + 10} anchor="end" size={12}>{L.water_in}</Text>}
+      {L.water_out && <Text chem c={c} x={outEnd[0] + 4} y={outEnd[1] - 8} anchor="start" size={12}>{L.water_out}</Text>}
+      {L.receiver && <><Lead from={[rx + 30, rTop + 30]} to={[rx + 48, rTop + 30]} c={c} /><Text chem c={c} x={rx + 52} y={rTop + 30} anchor="start" size={12.5}>{L.receiver}</Text></>}
+      {L.distillate && <><Lead from={[rx + 30, rBottom - 8]} to={[rx + 48, rBottom - 8]} c={c} /><Text chem c={c} x={rx + 52} y={rBottom - 8} anchor="start" size={12.5}>{L.distillate}</Text></>}
+      {L.heat && <Text chem c={c} x={cx + 22} y={cy + r + 30} anchor="start" size={12.5}>{L.heat}</Text>}
+    </svg>
+  )
+}
+
+function Calorimetry({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 440, H = 360
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 360 }} role="img" aria-label={fig.caption || 'Calorimetry'}>
+      <rect x={40} y={340} width={220} height={10} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <rect x={62} y={30} width={7} height={310} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <line x1={69} y1={120} x2={150} y2={120} stroke={c.stroke} strokeWidth={3} />
+      {/* can of water */}
+      <rect x={151} y={118} width={98} height={80} fill={c.fill} />
+      <path d="M 150 90 V 200 H 250 V 90" fill="none" stroke={c.stroke} strokeWidth={2} />
+      <rect x={196} y={34} width={6} height={150} fill={c.bg} stroke={c.stroke} strokeWidth={1} />
+      <circle cx={199} cy={186} r={5} fill={c.bg} stroke={c.stroke} strokeWidth={1.2} />
+      {/* spirit burner */}
+      <Flame x={200} y={246} c={c} />
+      <rect x={197} y={246} width={6} height={30} fill={c.stroke} />
+      <path d="M 168 276 H 232 Q 244 276 244 290 V 318 Q 244 330 232 330 H 168 Q 156 330 156 318 V 290 Q 156 276 168 276 Z" fill={c.bg} stroke={c.stroke} strokeWidth={1.6} />
+      <rect x={158} y={300} width={84} height={28} rx={8} fill={c.fill} />
+      {L.thermometer && <><Lead from={[205, 54]} to={[226, 54]} c={c} /><Text chem c={c} x={230} y={54} anchor="start" size={12.5}>{L.thermometer}</Text></>}
+      {L.can && <><Lead from={[252, 100]} to={[272, 100]} c={c} /><Text chem c={c} x={276} y={100} anchor="start" size={12.5}>{L.can}</Text></>}
+      {L.water && <><Lead from={[244, 160]} to={[272, 160]} c={c} /><Text chem c={c} x={276} y={160} anchor="start" size={12.5}>{L.water}</Text></>}
+      {L.burner && <><Lead from={[246, 286]} to={[266, 286]} c={c} /><Text chem c={c} x={270} y={286} anchor="start" size={12.5}>{L.burner}</Text></>}
+      {L.fuel && <><Lead from={[236, 316]} to={[266, 316]} c={c} /><Text chem c={c} x={270} y={316} anchor="start" size={12.5}>{L.fuel}</Text></>}
+    </svg>
+  )
+}
+
+function GasCollection({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 610, H = 330
+  return (
+    <svg viewBox={`-70 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 340 }} role="img" aria-label={fig.caption || 'Gas collection over water'}>
+      <ConicalFlask cx={110} neckTop={150} bottom={300} liquidY={250} c={c} halfBase={58} />
+      <rect x={98} y={142} width={24} height={14} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      {/* trough of water with the upturned cylinder */}
+      <rect x={282} y={222} width={196} height={76} fill={c.fill} />
+      <path d="M 280 196 V 300 H 480 V 196" fill="none" stroke={c.stroke} strokeWidth={2} />
+      <rect x={341} y={150} width={58} height={128} fill={c.fill} />
+      <path d="M 340 282 V 70 H 400 V 282" fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      <Ticks x={340} y1={84} y2={266} c={c} />
+      {/* over the trough's rim, along the bottom, up under the cylinder's mouth */}
+      <Tube d="M 110 156 V 112 H 302 V 290 H 368 V 250" c={c} />
+      {L.flask && <><Lead from={[56, 270]} to={[38, 270]} c={c} /><Text chem c={c} x={34} y={270} anchor="end" size={12.5}>{L.flask}</Text></>}
+      {L.reactants && <Text chem c={c} x={110} y={316} size={12.5}>{L.reactants}</Text>}
+      {L.delivery_tube && <Text chem c={c} x={180} y={98} size={12.5}>{L.delivery_tube}</Text>}
+      {L.gas && <><Lead from={[392, 110]} to={[420, 110]} c={c} /><Text chem c={c} x={424} y={110} anchor="start" size={12.5}>{L.gas}</Text></>}
+      {L.cylinder && <><Lead from={[402, 180]} to={[420, 180]} c={c} /><Text chem c={c} x={424} y={180} anchor="start" size={12.5}>{L.cylinder}</Text></>}
+      {L.trough && <Text chem c={c} x={440} y={316} size={12.5}>{L.trough}</Text>}
+    </svg>
+  )
+}
+
+function GasSyringe({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 610, H = 300
+  return (
+    <svg viewBox={`-70 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 320 }} role="img" aria-label={fig.caption || 'Gas syringe'}>
+      <ConicalFlask cx={110} neckTop={130} bottom={270} liquidY={225} c={c} halfBase={56} />
+      <rect x={98} y={122} width={24} height={14} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <Tube d="M 110 136 V 100 H 262" c={c} />
+      {/* syringe: barrel, plunger */}
+      <rect x={262} y={86} width={190} height={28} fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      {Array.from({ length: 10 }, (_, i) => <line key={i} x1={280 + i * 17} y1={86} x2={280 + i * 17} y2={i % 5 === 0 ? 96 : 92} stroke={c.stroke} strokeWidth={0.9} />)}
+      <rect x={338} y={89} width={6} height={22} fill={c.grid} stroke={c.stroke} strokeWidth={1} />
+      <rect x={344} y={97} width={140} height={6} fill={c.grid} stroke={c.stroke} strokeWidth={1} />
+      <rect x={484} y={80} width={8} height={40} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      {L.flask && <><Lead from={[56, 245]} to={[38, 245]} c={c} /><Text chem c={c} x={34} y={245} anchor="end" size={12.5}>{L.flask}</Text></>}
+      {L.reactants && <Text chem c={c} x={110} y={288} size={12.5}>{L.reactants}</Text>}
+      {L.syringe && <Text chem c={c} x={380} y={64} size={12.5}>{L.syringe}</Text>}
+      {L.reading && <><Lead from={[341, 116]} to={[341, 140]} c={c} /><Text chem c={c} x={341} y={152} size={12.5}>{L.reading}</Text></>}
+    </svg>
+  )
+}
+
+function SeparatingFunnel({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 420, H = 390
+  const body = 'M 184 60 Q 96 120 150 196 L 186 240 V 262 H 194 V 240 L 230 196 Q 284 120 196 60 Z'
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 390 }} role="img" aria-label={fig.caption || 'Separating funnel'}>
+      <defs><clipPath id="sf-body"><path d={body} /></clipPath></defs>
+      <rect x={60} y={372} width={170} height={10} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <rect x={66} y={30} width={7} height={342} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <line x1={73} y1={150} x2={128} y2={150} stroke={c.stroke} strokeWidth={3} />
+      <rect x={100} y={96} width={180} height={60} fill={c.fill} clipPath="url(#sf-body)" />
+      <rect x={100} y={156} width={180} height={110} fill={c.grid} fillOpacity={0.55} clipPath="url(#sf-body)" />
+      <line x1={110} y1={156} x2={270} y2={156} stroke={c.stroke} strokeWidth={1} clipPath="url(#sf-body)" />
+      <path d={body} fill="none" stroke={c.stroke} strokeWidth={1.8} strokeLinejoin="round" />
+      <rect x={180} y={34} width={20} height={26} rx={3} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <path d="M 186 278 V 322 L 190 330 L 194 322 V 278" fill="none" stroke={c.stroke} strokeWidth={1.5} />
+      <rect x={172} y={262} width={36} height={16} rx={3} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <path d="M 150 316 V 372 H 230 V 316" fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      {L.funnel && <><Lead from={[232, 80]} to={[262, 80]} c={c} /><Text chem c={c} x={266} y={80} anchor="start" size={12.5}>{L.funnel}</Text></>}
+      {L.top_layer && <><Lead from={[236, 128]} to={[286, 128]} c={c} /><Text chem c={c} x={290} y={128} anchor="start" size={12.5}>{L.top_layer}</Text></>}
+      {L.bottom_layer && <><Lead from={[232, 196]} to={[286, 196]} c={c} /><Text chem c={c} x={290} y={196} anchor="start" size={12.5}>{L.bottom_layer}</Text></>}
+      {L.tap && <><Lead from={[210, 270]} to={[262, 270]} c={c} /><Text chem c={c} x={266} y={270} anchor="start" size={12.5}>{L.tap}</Text></>}
+      {L.beaker && <><Lead from={[232, 350]} to={[262, 350]} c={c} /><Text chem c={c} x={266} y={350} anchor="start" size={12.5}>{L.beaker}</Text></>}
+    </svg>
+  )
+}
+
+function Filtration({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 420, H = 370
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 370 }} role="img" aria-label={fig.caption || 'Filtration'}>
+      {L.mixture && <><Text chem c={c} x={190} y={26} size={12.5}>{L.mixture}</Text><line x1={190} y1={38} x2={190} y2={68} stroke={c.stroke} strokeWidth={1.3} /><Arrowhead at={[190, 74]} from={[190, 38]} c={c} size={7} /></>}
+      {/* filter paper cone, with the residue at its tip */}
+      <path d="M 134 86 L 246 86 L 190 166 Z" fill="none" stroke={c.stroke} strokeWidth={1} strokeDasharray="4 3" />
+      <path d="M 169 136 L 211 136 L 190 166 Z" fill={c.grid} fillOpacity={0.7} />
+      <path d="M 120 82 L 182 172 V 250 H 198 V 172 L 260 82" fill="none" stroke={c.stroke} strokeWidth={1.8} strokeLinejoin="round" />
+      <ConicalFlask cx={190} neckTop={232} bottom={352} liquidY={322} c={c} halfBase={62} halfNeck={13} />
+      {L.funnel && <><Lead from={[254, 96]} to={[280, 96]} c={c} /><Text chem c={c} x={284} y={96} anchor="start" size={12.5}>{L.funnel}</Text></>}
+      {L.filter_paper && <><Lead from={[228, 112]} to={[280, 124]} c={c} /><Text chem c={c} x={284} y={126} anchor="start" size={12.5}>{L.filter_paper}</Text></>}
+      {L.residue && <><Lead from={[202, 152]} to={[280, 156]} c={c} /><Text chem c={c} x={284} y={158} anchor="start" size={12.5}>{L.residue}</Text></>}
+      {L.filtrate && <><Lead from={[236, 336]} to={[280, 336]} c={c} /><Text chem c={c} x={284} y={336} anchor="start" size={12.5}>{L.filtrate}</Text></>}
+    </svg>
+  )
+}
+
+function Glassware({ fig, c }) {
+  const L = fig.labels || {}
+  const W = 240, H = 340, cx = 120
+  let art = null
+  if (fig.item === 'pipette') {
+    art = <g>
+      <path d={`M ${cx - 4} 18 V 120 Q ${cx - 18} 132 ${cx - 18} 170 Q ${cx - 18} 208 ${cx - 4} 220 V 300 L ${cx} 312 L ${cx + 4} 300 V 220 Q ${cx + 18} 208 ${cx + 18} 170 Q ${cx + 18} 132 ${cx + 4} 120 V 18`} fill="none" stroke={c.stroke} strokeWidth={1.6} />
+      <line x1={cx - 9} y1={64} x2={cx + 9} y2={64} stroke={c.stroke} strokeWidth={1.4} />
+    </g>
+  } else if (fig.item === 'volumetric_flask') {
+    art = <g>
+      <rect x={cx - 11} y={20} width={22} height={16} rx={3} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      {/* long neck with a calibration mark, round bulb, flat base */}
+      <path d={`M ${cx - 8} 36 V 198 A 58 58 0 0 0 ${cx - 40} 304 H ${cx + 40} A 58 58 0 0 0 ${cx + 8} 198 V 36`} fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      <line x1={cx - 12} y1={100} x2={cx + 12} y2={100} stroke={c.stroke} strokeWidth={1.4} />
+    </g>
+  } else if (fig.item === 'measuring_cylinder') {
+    art = <g>
+      <path d={`M ${cx - 24} 30 L ${cx - 30} 22 M ${cx - 24} 30 V 296 H ${cx + 24} V 30`} fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      <Ticks x={cx - 24} y1={46} y2={286} step={10} c={c} />
+      <rect x={cx - 44} y={296} width={88} height={10} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+    </g>
+  } else if (fig.item === 'burette') {
+    art = <g>
+      <rect x={cx - 10} y={14} width={20} height={250} fill="none" stroke={c.stroke} strokeWidth={1.6} />
+      <Ticks x={cx - 10} y1={28} y2={250} step={10} c={c} />
+      <rect x={cx - 18} y={266} width={36} height={8} rx={2} fill={c.grid} stroke={c.stroke} strokeWidth={1.2} />
+      <path d={`M ${cx - 5} 274 V 300 L ${cx} 310 L ${cx + 5} 300 V 274`} fill="none" stroke={c.stroke} strokeWidth={1.4} />
+    </g>
+  } else if (fig.item === 'conical_flask') {
+    art = <ConicalFlask cx={cx} neckTop={60} bottom={300} c={c} halfBase={86} halfNeck={20} />
+  } else if (fig.item === 'beaker') {
+    art = <g>
+      <path d={`M ${cx - 80} 110 L ${cx - 70} 120 V 300 H ${cx + 70} V 110`} fill="none" stroke={c.stroke} strokeWidth={1.8} />
+      <Ticks x={cx - 70} y1={150} y2={270} step={30} c={c} />
+    </g>
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 320 }} role="img" aria-label={fig.caption || 'Glassware'}>
+      {art}
+      {L.name && <Text chem c={c} x={cx} y={H - 12} size={14} weight={700}>{L.name}</Text>}
+    </svg>
+  )
+}
+
 export function Apparatus({ fig, c }) {
   if (fig.kind === 'galvanic_cell') return <GalvanicCell fig={fig} c={c} />
   if (fig.kind === 'electrolytic_cell') return <ElectrolyticCell fig={fig} c={c} />
   if (fig.kind === 'titration') return <Titration fig={fig} c={c} />
   if (fig.kind === 'reflux') return <Reflux fig={fig} c={c} />
+  if (fig.kind === 'distillation') return <Distillation fig={fig} c={c} />
+  if (fig.kind === 'calorimetry') return <Calorimetry fig={fig} c={c} />
+  if (fig.kind === 'gas_collection') return <GasCollection fig={fig} c={c} />
+  if (fig.kind === 'gas_syringe') return <GasSyringe fig={fig} c={c} />
+  if (fig.kind === 'separating_funnel') return <SeparatingFunnel fig={fig} c={c} />
+  if (fig.kind === 'filtration') return <Filtration fig={fig} c={c} />
+  if (fig.kind === 'glassware') return <Glassware fig={fig} c={c} />
   return null
+}
+
+// ── Particle diagrams ─────────────────────────────────────────────────────────
+//   { type: 'particles', boxes: [{ label, particles: [{ kind: 'A'..'F', count }] }], key: { A: 'N2', ... } }
+// A filled atom, B open atom, C filled–filled, D open–open, E filled–open molecule, F small filled atom.
+
+function Particle({ kind, x, y, angle, c }) {
+  const filled = { fill: c.text, stroke: c.text }
+  const open = { fill: c.bg, stroke: c.text }
+  const r = 7
+  if (kind === 'A') return <circle cx={x} cy={y} r={8} {...filled} strokeWidth={1.2} />
+  if (kind === 'B') return <circle cx={x} cy={y} r={8} {...open} strokeWidth={1.4} />
+  if (kind === 'F') return <circle cx={x} cy={y} r={4.5} {...filled} />
+  const dx = Math.cos(angle) * r * 0.9, dy = Math.sin(angle) * r * 0.9
+  const a = kind === 'D' ? open : filled, b = kind === 'C' ? filled : open
+  return (
+    <g>
+      <circle cx={x - dx} cy={y - dy} r={r} {...a} strokeWidth={1.3} />
+      <circle cx={x + dx} cy={y + dy} r={r} {...b} strokeWidth={1.3} />
+    </g>
+  )
+}
+
+// Deterministic positions so a figure always looks the same: a seeded generator with spacing.
+function scatter(count, w, h, seed, minGap) {
+  let s = seed >>> 0
+  const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32 }
+  const pts = []
+  for (let tries = 0; pts.length < count && tries < count * 400; tries++) {
+    const p = [14 + rand() * (w - 28), 14 + rand() * (h - 28), rand() * Math.PI]
+    if (pts.every(q => Math.hypot(q[0] - p[0], q[1] - p[1]) >= minGap)) pts.push(p)
+  }
+  return pts
+}
+
+export function Particles({ fig, c }) {
+  const boxes = list(fig.boxes).slice(0, 3)
+  if (!boxes.length) return null
+  const BOX = 170, GAP = 28, TOP = 26
+  const key = fig.key && typeof fig.key === 'object' ? fig.key : {}
+  const used = [...new Set(boxes.flatMap(b => list(b.particles).map(p => p.kind)))]
+  const keyRows = used.filter(k => key[k])
+  const W = boxes.length * BOX + (boxes.length - 1) * GAP + 20, H = TOP + BOX + 16 + keyRows.length * 26
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 360 }} role="img" aria-label={fig.caption || 'Particle diagram'}>
+      {boxes.map((b, bi) => {
+        const x0 = 10 + bi * (BOX + GAP)
+        const items = list(b.particles).flatMap(p => Array.from({ length: Math.min(20, p.count | 0) }, () => p.kind)).slice(0, 30)
+        const pos = scatter(items.length, BOX, BOX, 977 * (bi + 1) + items.length, items.length > 20 ? 24 : 30)
+        return (
+          <g key={bi}>
+            {b.label && <Text chem c={c} x={x0 + BOX / 2} y={12} size={12.5} weight={700}>{str(b.label)}</Text>}
+            <rect x={x0} y={TOP} width={BOX} height={BOX} fill={c.bg} stroke={c.stroke} strokeWidth={1.4} />
+            {items.map((k, i) => pos[i] && <Particle key={i} kind={k} x={x0 + pos[i][0]} y={TOP + pos[i][1]} angle={pos[i][2]} c={c} />)}
+            {bi < boxes.length - 1 && (
+              <g>
+                <line x1={x0 + BOX + 5} y1={TOP + BOX / 2} x2={x0 + BOX + GAP - 7} y2={TOP + BOX / 2} stroke={c.stroke} strokeWidth={1.4} />
+                <Arrowhead at={[x0 + BOX + GAP - 3, TOP + BOX / 2]} from={[x0 + BOX + 5, TOP + BOX / 2]} c={c} size={6} />
+              </g>
+            )}
+          </g>
+        )
+      })}
+      {keyRows.map((k, i) => (
+        <g key={k}>
+          <Particle kind={k} x={30} y={TOP + BOX + 30 + i * 26} angle={0} c={c} />
+          <Text chem c={c} x={52} y={TOP + BOX + 30 + i * 26} anchor="start" size={12.5}>{str(key[k], 30)}</Text>
+        </g>
+      ))}
+    </svg>
+  )
 }
