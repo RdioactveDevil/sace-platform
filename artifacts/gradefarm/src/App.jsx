@@ -1209,8 +1209,18 @@ function AppInner() {
       .then(cs => {
         const fresh = cs.map(curriculumToSubjectTile).find(tile => tile.id === id)
         if (cancelled || !fresh) return
+        const staleTile = selectedSubject
         setSelectedSubject(prev => (prev?.id === id ? { ...prev, ...fresh } : prev))
         try { localStorage.setItem('gf-subject', JSON.stringify(fresh)) } catch { /* storage unavailable */ }
+        // The bank was loaded with the saved tile, which decides whether
+        // written-answer questions are in it. If that switch changed, load it again.
+        if (!!staleTile?.features?.written_answers !== !!fresh.features?.written_answers) {
+          questionsLoad.current = { key: null, promise: null }
+          const reload = loadQuestions(fresh)
+          reload
+            .then(qs => { if (!cancelled && questionsLoad.current.promise === reload) setQuestions(qs) })
+            .catch(() => {})
+        }
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -1237,9 +1247,10 @@ function AppInner() {
   // the question bank is not readable signed out).
   useEffect(() => {
     if (!user?.id || !selectedSubject || questions.length > 0) return
-    const key = selectedSubject.id
-    loadQuestions(selectedSubject)
-      .then(qs => { if (questionsLoad.current.key === key) setQuestions(qs) })
+    // Only the latest load for this subject wins (the tile refresh above may start a newer one).
+    const load = loadQuestions(selectedSubject)
+    load
+      .then(qs => { if (questionsLoad.current.promise === load) setQuestions(qs) })
       .catch(() => {})
   }, [user?.id, selectedSubject?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
