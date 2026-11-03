@@ -4,7 +4,7 @@
 // questions: [...] }] }. Grading reuses the multi-format question engine, so a
 // section can mix MCQ, numeric, ordering, hotspot, etc.
 
-import { gradeResponse } from './questionTypes.js'
+import { gradeResponse, isAiMarked } from './questionTypes.js'
 
 /** Format seconds as M:SS, or H:MM:SS past an hour. */
 export function formatClock(totalSeconds) {
@@ -31,6 +31,8 @@ function shuffle(arr) {
  * descriptor { count, filter? } that samples from the pool.
  */
 export function buildPaper(track, pool = []) {
+  // Written answers are marked by AI one at a time, not on Finish.
+  pool = pool.filter(q => !isAiMarked(q))
   const sections = (track.sections || []).map((sec) => {
     let questions = sec.questions
     if (!questions) {
@@ -70,6 +72,8 @@ const DEFAULT_SECONDS_PER_QUESTION = 90
 export function buildSubjectExam(subject, pool = [], isSeen = () => false) {
   const features = subject?.features || {}
   const wanted = Math.max(1, Math.round(Number(features.exam_questions) || DEFAULT_EXAM_QUESTIONS))
+  // Written answers are marked by AI one at a time, not on Finish.
+  pool = pool.filter(q => !isAiMarked(q))
 
   // A reading passage's questions travel together as one block; everything
   // else is a block of one.

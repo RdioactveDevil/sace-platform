@@ -17,7 +17,7 @@ export const parseOptions = (o) => {
  * A question with its answer key and what students picked, and the ways to
  * settle it. Only the handlers passed in show as buttons.
  */
-export function QuestionPanel({ questionId, q, meta, outcome, open, busy, reporterId, reporterName, onSetAnswer, onDismiss, onRecheck, onEdit, onDelete, onClearFlags, onPreview }) {
+export function QuestionPanel({ questionId, q, meta, outcome, open, busy, reporterId, reporterName, onSetAnswer, onDismiss, onRecheck, onEdit, onDelete, onClearFlags, onPreview, onCloseMissing }) {
   const options = parseOptions(q?.options)
   const [pick, setPick] = useState(null)
   const [picks, setPicks] = useState(null) // { index: count } from students' answers
@@ -91,6 +91,13 @@ export function QuestionPanel({ questionId, q, meta, outcome, open, busy, report
           {onRecheck && <button type="button" style={btn('secondary', !!busy)} disabled={!!busy} onClick={onRecheck}>{busy === 'recheck' ? 'Checking…' : 'Check again with AI'}</button>}
           <button type="button" style={btn('secondary')} onClick={onPreview}>Open in preview</button>
           {onDelete && <button type="button" style={{ ...btn('danger', !!busy), marginLeft: 'auto' }} disabled={!!busy} onClick={() => setConfirmDelete(true)}>Remove</button>}
+        </div>
+      )}
+      {/* The question was deleted elsewhere: nothing to fix, only close. */}
+      {!q && open && onCloseMissing && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 240px', fontSize: 13, color: 'var(--t-textSub)' }}>There's nothing left to fix, so this report can be closed.</span>
+          <button type="button" style={btn('primary', !!busy)} disabled={!!busy} onClick={onCloseMissing}>{busy === 'close' ? 'Closing…' : 'Close report'}</button>
         </div>
       )}
       {confirmDelete && (

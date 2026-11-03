@@ -129,3 +129,12 @@ Apply it **before** deploying the app that uses them: onboarding for parents
 and students under 15 saves through `PUT /api/account/parent`, which needs the
 columns. Until it is applied the API lets every AI request through (nothing to
 wait on) and the app hides the parent card.
+
+## Written answers (20261104000000)
+
+`20261104000000_marked_questions` adds `total_marks` / `marking_scheme` on
+`questions` and `draft_questions` (for the new `question_type = 'marked'`) and
+the `answer_markings` table, where the API keeps each AI-marked answer. Apply
+it **before** deploying the API: `POST /api/marked/mark` and
+`/api/marked/generate` read and write those columns. Nothing changes for
+students until an admin switches on **Written answers** for a subject.

@@ -204,6 +204,7 @@ function ReportsView({ reports, reload }) {
               onRecheck={() => run('recheck', () => resolveQuestionReport(selected.id, 'recheck'), 'Checked again.')}
               onEdit={(fields) => run('edit', () => resolveQuestionReport(selected.id, 'edit', fields), 'Saved. The report is closed.')}
               onDelete={() => run('delete', () => resolveQuestionReport(selected.id, 'delete'), 'Removed from the bank.')}
+              onCloseMissing={() => run('close', () => resolveQuestionReport(selected.id, 'close'), 'Report closed.')}
               onPreview={() => navigate(`/admin/questions?tab=preview&id=${encodeURIComponent(selected.question_id)}`)} />
           )}
         </div>

@@ -31,3 +31,18 @@ export const CLAUDE_EXAM_MODEL = process.env.AI_EXAM_MODEL || "claude-opus-5-5";
  * (AI_EXAM_EFFORT=medium) if requests start timing out.
  */
 export const CLAUDE_EXAM_EFFORT = process.env.AI_EXAM_EFFORT || "high";
+
+/**
+ * Model that marks students' written answers against a marking scheme. Deciding
+ * which marks an answer earns is judgement work, and a wrong mark costs more
+ * trust than the few cents it saves, so this defaults to Sonnet rather than
+ * the everyday Haiku. Override via AI_MARK_MODEL (e.g. claude-haiku-5-5).
+ */
+export const CLAUDE_MARK_MODEL = process.env.AI_MARK_MODEL || "claude-sonnet-5-5";
+
+/**
+ * Model that writes written-answer questions and their marking schemes. Runs
+ * only when an admin generates them, so quality wins over cost. Override via
+ * AI_MARKED_GEN_MODEL.
+ */
+export const CLAUDE_MARKED_GEN_MODEL = process.env.AI_MARKED_GEN_MODEL || "claude-opus-5-5";
