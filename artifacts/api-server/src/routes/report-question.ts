@@ -259,6 +259,8 @@ router.post("/retry-pending-reports", async (req, res) => {
 //                                              rewrite it (any of those fields)
 //   { action: "delete" }                       take it out of the bank
 //   { action: "recheck" }                      run the AI check on it again
+//   { action: "close" }                        the question is already gone
+//                                              from the bank: just close it
 // Every open report on the same question is settled together.
 
 router.post("/question-reports/:id/resolve", async (req, res) => {
@@ -301,6 +303,17 @@ router.post("/question-reports/:id/resolve", async (req, res) => {
   }
 
   const { data: q } = await adminDb.from("questions").select("id, options").eq("id", report.question_id).maybeSingle();
+
+  // Reports on a question that was deleted some other way have nothing left
+  // to fix, so they're closed as removed.
+  if (action === "close") {
+    if (q) { res.status(400).json({ error: "The question is still in the bank. Settle it with one of the other actions." }); return; }
+    const error = await settle("deleted", "Question no longer in the bank; report closed by an admin");
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   if (!q) { res.status(404).json({ error: "The question is no longer in the bank" }); return; }
   const current = parseOptions(q.options);
 
@@ -329,7 +342,7 @@ router.post("/question-reports/:id/resolve", async (req, res) => {
     return;
   }
 
-  res.status(400).json({ error: "action must be dismiss, set_answer, edit, delete or recheck" });
+  res.status(400).json({ error: "action must be dismiss, set_answer, edit, delete, recheck or close" });
 });
 
 // ── GET /api/question-flags (admin only) ──────────────────────────────────────
