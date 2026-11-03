@@ -18,7 +18,6 @@ export function WrittenAnswerInput({ question, response, onChange, disabled, onS
         <label htmlFor={`wa-${question.id}`} style={{ fontSize: 12.5, fontWeight: 700, color: t.textSub }}>
           Your answer{marks ? ` · ${marks} mark${marks === 1 ? '' : 's'}` : ''}
         </label>
-        <span style={{ fontSize: 11.5, color: t.textFaint }}>Marked by AI against the marking scheme</span>
       </div>
       <textarea
         id={`wa-${question.id}`}
