@@ -1,6 +1,7 @@
 -- Leaderboard opt-out: some students don't want their name and XP shown to
--- others. When hide_from_leaderboard is on, the student is left off every
--- class leaderboard (API) and off the all-users leaderboard view. Users set it
+-- other students. When hide_from_leaderboard is on, the student is left off
+-- the class leaderboards other students see (the class's tutors and admins
+-- still see them; API) and off the all-users leaderboard view. Users set it
 -- on their own row from Account → Preferences (existing profiles policies;
 -- it isn't a protected column).
 alter table public.profiles

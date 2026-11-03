@@ -797,7 +797,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       {isStudent && 'hide_from_leaderboard' in profile && (
         <Row t={t} label="Hide me from leaderboards" noteTone={lbHiddenMsg ? 'danger' : null}
           note={lbHiddenMsg || (lbHidden
-            ? "Classmates can't see your name, XP or streak on the leaderboard. You can still see theirs."
+            ? "Classmates can't see your name, XP or streak on the leaderboard. Your tutors and GradeFarm admins still can, and you can still see theirs."
             : 'Your name, XP and streak show on your class leaderboards.')}
           action={<Toggle on={lbHidden} onClick={handleToggleLeaderboardHidden} disabled={savingLbHidden} label="Hide me from leaderboards" />} />
       )}

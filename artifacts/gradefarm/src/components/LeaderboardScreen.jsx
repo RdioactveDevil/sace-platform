@@ -69,9 +69,9 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
           )}
         </div>
 
-        {profile.hide_from_leaderboard && !loading && !error && active && (
+        {profile.hide_from_leaderboard && !loading && !error && active && !active.is_staff && (
           <div role="status" style={{ ...card, padding: '12px 16px', fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-            You're hidden from leaderboards, so classmates can't see your name or XP. Turn it off in Account → Preferences to join in.
+            You're hidden from leaderboards, so classmates can't see your name or XP (your tutors still can). Turn it off in Account → Preferences to join in.
           </div>
         )}
 
@@ -110,7 +110,15 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                     return (
                       <tr key={p.id} aria-current={isMe ? 'true' : undefined} style={{ background: rowBg }}>
                         <td style={{ ...cell, fontWeight: 700, color: t.textMuted }}>{p.position}</td>
-                        <td style={{ ...cell, fontWeight: isMe ? 800 : 600 }}>{isMe ? 'You' : p.display_name}</td>
+                        <td style={{ ...cell, fontWeight: isMe ? 800 : 600 }}>
+                          {isMe ? 'You' : p.display_name}
+                          {p.hidden && (
+                            <span title="This student hid themselves from leaderboards. Only tutors and admins can see them here."
+                              style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 999, border: `1px solid ${t.border}`, fontSize: 11, fontWeight: 600, color: t.textMuted, whiteSpace: 'nowrap' }}>
+                              Hidden from classmates
+                            </span>
+                          )}
+                        </td>
                         <td className="lb-hide" style={{ ...cell, color: t.textMuted }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><RankIcon level={lvl} size={14} />{RANKS[lvl]}</span>
                         </td>
