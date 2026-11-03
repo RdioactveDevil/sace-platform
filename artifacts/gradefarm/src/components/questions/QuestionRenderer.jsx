@@ -10,6 +10,10 @@ import { WrittenAnswerInput, MarkingFeedback } from './WrittenAnswer'
 // asking the server again (it would answer from its own record anyway).
 const markedThisVisit = new Map()
 
+// The bank question's own id. Extra-practice copies get their own id
+// (bank__<parent>__<id>) and keep the original in bank_question_id.
+const bankId = (q) => q.bank_question_id || q.id
+
 const GOLD = '#f1be43'
 const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -285,7 +289,7 @@ export default function QuestionRenderer({ question, response, onChange, showAns
   useEffect(() => {
     if (type !== 'marked' || !showAns || markResult || marking || typeof response !== 'string' || !response.trim()) return
     let cancelled = false
-    markWrittenAnswer(question.id, response)
+    markWrittenAnswer(bankId(question), response)
       .then(r => { if (!cancelled) { markedThisVisit.set(question.id, { response, result: r }); setMarkResult(r) } })
       .catch(() => {})
     return () => { cancelled = true }
@@ -299,7 +303,7 @@ export default function QuestionRenderer({ question, response, onChange, showAns
     setMarkError('')
     const id = question.id
     try {
-      const r = await markWrittenAnswer(id, response)
+      const r = await markWrittenAnswer(bankId(question), response)
       markedThisVisit.set(id, { response, result: r })
       // Moved on while it was marking: keep the marks, but don't apply them here.
       if (shownId.current !== id) return

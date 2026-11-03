@@ -38,6 +38,8 @@ router.post("/marked/mark", async (req, res) => {
       res.status(400).json({ error: "questionId required" });
       return;
     }
+    // An extra-practice copy of a bank question (bank__<parent>__<id>) is marked as that question.
+    const bankQuestionId = questionId.startsWith("bank__") ? questionId.split("__").slice(2).join("__") : questionId;
     const answer = normalizeResponse(response);
     if (!answer) {
       res.status(400).json({ error: "Write your answer first." });
@@ -51,7 +53,7 @@ router.post("/marked/mark", async (req, res) => {
     const { data: qRow, error: qErr } = await caller.admin
       .from("questions")
       .select("id, subject, question, question_type, total_marks, marking_scheme, solution, table_data, diagram, curriculum_id")
-      .eq("id", questionId)
+      .eq("id", bankQuestionId)
       .maybeSingle();
     if (qErr) {
       res.status(500).json({ error: qErr.message });
