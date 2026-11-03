@@ -12,6 +12,7 @@ import { latexPromptRule } from "../lib/math-prompt";
 import { generatePassageSets, insertPassageSets, topicQuestionStyle, QUESTIONS_PER_PASSAGE } from "../lib/passages";
 import { requireAdmin } from "../lib/auth";
 import { scopeForSubtopic, scopePromptLines, filterInScope } from "../lib/course-scope";
+import { attachChemFigures, chemPromptLines, isChemSubject } from "../lib/chem-figures";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -507,6 +508,8 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     return;
   }
 
+  // Chemistry: SACE conventions, structures drawn from SMILES, graphs and tables.
+  const chem = isChemSubject(subjectName);
   const system = [
     `You are generating multiple-choice questions for students studying ${subjectName}.`,
     "Return ONLY a valid JSON array. No markdown, no commentary outside the array.",
@@ -517,6 +520,11 @@ router.post("/admin/curriculum-generate", async (req, res) => {
     "  answer_index (integer 0–3)",
     "  solution (string — explain why the answer is correct, 2–4 sentences)",
     "  difficulty (integer 1–5)",
+    ...(chem ? [
+      "  structures (array, [] when none), figure (object, only when needed) and table_data (object, only when needed), as described below",
+      "  table_data schema: { \"caption\": \"Table 1\", \"headers\": [\"Protein\", \"Rf value\"], \"rows\": [[\"albumin\", \"0.10\"]] }",
+      ...chemPromptLines({ tableKey: "table_data" }),
+    ] : []),
     latexPromptRule("$\\frac{d}{dx}$, $$\\int_a^b f(x)\\,dx$$"),
     "Questions must be accurate, unambiguous, and test conceptual understanding.",
     ...(examContext ? [
@@ -570,8 +578,8 @@ router.post("/admin/curriculum-generate", async (req, res) => {
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         thinking: CLAUDE_THINKING,
-        // About 2,000 tokens a question (stem, options, worked solution).
-        max_tokens: Math.min(32000, 2100 * count + 1000),
+        // About 2,000 tokens a question (stem, options, worked solution); more with structures and graphs.
+        max_tokens: Math.min(32000, (chem ? 2800 : 2100) * count + 1000),
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -594,7 +602,14 @@ router.post("/admin/curriculum-generate", async (req, res) => {
 
   let questions = extractJsonArray(rawText) as Array<{
     question: string; options: string[]; answer_index: number; solution?: string; difficulty?: number;
+    structures?: unknown; figure?: unknown; diagram?: unknown; table_data?: unknown;
   }>;
+  // Draw and check structures; a structure that fails the check drops its question.
+  if (chem) {
+    const figs = attachChemFigures(questions);
+    if (figs.problems.length) logger.info({ subtopicId, problems: figs.problems }, "[curriculum-generate] structures failed the check");
+    questions = figs.kept;
+  }
 
   if (!questions.length) {
     await admin.from("curriculum_subtopics").update({ gen_status: "failed" }).eq("id", subtopicId);
@@ -639,7 +654,8 @@ router.post("/admin/curriculum-generate", async (req, res) => {
       answer_index: q.answer_index,
       solution: normalizeMathText(q.solution || "") as string,
       graph: null,
-      table_data: null,
+      table_data: chem && q.table_data && typeof q.table_data === "object" ? q.table_data : null,
+      diagram: chem ? q.diagram ?? null : null,
       tip: null,
       created_at: now,
     }));

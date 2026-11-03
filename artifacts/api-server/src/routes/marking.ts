@@ -18,6 +18,7 @@ type MarkedRow = {
   marking_scheme: unknown;
   solution: string | null;
   table_data: unknown;
+  diagram: unknown;
   curriculum_id: string | null;
 };
 
@@ -49,7 +50,7 @@ router.post("/marked/mark", async (req, res) => {
 
     const { data: qRow, error: qErr } = await caller.admin
       .from("questions")
-      .select("id, subject, question, question_type, total_marks, marking_scheme, solution, table_data, curriculum_id")
+      .select("id, subject, question, question_type, total_marks, marking_scheme, solution, table_data, diagram, curriculum_id")
       .eq("id", questionId)
       .maybeSingle();
     if (qErr) {

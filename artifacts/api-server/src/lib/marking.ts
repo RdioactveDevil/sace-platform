@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MARK_MODEL } from "./anthropic-model";
+import { describeChemDiagram } from "./chem-figures";
 
 /**
  * AI marking of written answers ('marked' questions), mark point by mark
@@ -164,6 +165,8 @@ export type MarkableQuestion = {
   marking_scheme: unknown;
   solution?: string | null;
   table_data?: unknown;
+  /** Structures and graphs shown with the question (chem-figures). */
+  diagram?: unknown;
 };
 
 function tableText(table: unknown): string {
@@ -193,12 +196,14 @@ function markingSystem(subject: string): string {
 
 function markingUser(q: MarkableQuestion, scheme: MarkPoint[], answer: string): string {
   const table = tableText(q.table_data);
+  const figure = describeChemDiagram(q.diagram);
   const schemeLines = scheme.map((p, i) =>
     `${i + 1}. [${p.marks} mark${p.marks === 1 ? "" : "s"}] ${p.point}${p.guidance ? `\n   Guidance: ${p.guidance}` : ""}`);
   return [
     `QUESTION (${schemeTotal(scheme)} marks):`,
     q.question,
     ...(table ? ["", "Data given with the question:", table] : []),
+    ...(figure ? ["", figure] : []),
     "",
     "MARKING SCHEME:",
     ...schemeLines,

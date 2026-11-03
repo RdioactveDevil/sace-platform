@@ -5,6 +5,11 @@ import { deleteQuestion } from '../lib/adminDb'
 import { markingScheme, totalMarks } from '../lib/questionTypes'
 import { ui, btn, note, FONT_B } from '../lib/adminUi'
 import MathText from './MathText'
+import DiagramView from './DiagramView'
+import TableView from './TableView'
+
+// The app's current theme (App sets it on <html>), for the structure and graph previews.
+const pageTheme = () => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark')
 
 // Subtopics written at once in "Generate for every subtopic".
 const BULK_CONCURRENCY = 2
@@ -34,7 +39,7 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
 
   const load = useCallback(async () => {
     const { data, error: e } = await supabase.from('questions')
-      .select('id, topic, subtopic, subtopic_id, question, total_marks, marking_scheme, solution, difficulty, created_at')
+      .select('id, topic, subtopic, subtopic_id, question, total_marks, marking_scheme, solution, difficulty, diagram, table_data, created_at')
       .eq('curriculum_id', curriculumId).eq('question_type', 'marked')
       .order('created_at', { ascending: false }).limit(1000)
     if (e) { setQuestions([]); setError(e.message); return }
@@ -190,6 +195,8 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
                 {open && (
                   <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: 'var(--t-textSub)', lineHeight: 1.6 }}>
                     <div style={{ color: 'var(--t-text)' }}><MathText text={q.question} /></div>
+                    {q.table_data && <TableView table={q.table_data} theme={pageTheme()} />}
+                    {q.diagram && <DiagramView diagram={q.diagram} theme={pageTheme()} />}
                     <div>
                       <div style={ui.label}>Marking scheme</div>
                       <ol style={{ margin: 0, paddingLeft: 20 }}>
