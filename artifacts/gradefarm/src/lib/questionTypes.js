@@ -11,6 +11,10 @@
 //   numeric      → answer: number, tolerance?: number, unit?: string
 //   short_text   → accept: string[], case_sensitive?: boolean
 //   order        → items: string[]  (already in CORRECT order)
+//   marked       → total_marks: number, marking_scheme: [{ marks, point, guidance? }],
+//                  solution (the model answer). Marked by AI on the server,
+//                  point by point (POST /api/marked/mark), so gradeResponse
+//                  never decides these.
 //
 // A "response" is whatever the renderer collects from the student:
 //   mcq          → number (chosen index)
@@ -18,6 +22,7 @@
 //   numeric      → string | number
 //   short_text   → string
 //   order        → string[] (items in the student's order)
+//   marked       → string (the written answer)
 
 export const QUESTION_TYPES = {
   mcq:          { label: 'Multiple choice',  needsCheckButton: false },
@@ -27,6 +32,28 @@ export const QUESTION_TYPES = {
   order:        { label: 'Put in order',     needsCheckButton: true },
   hotspot:      { label: 'Click the region', needsCheckButton: true },
   image_label:  { label: 'Label the diagram', needsCheckButton: true },
+  marked:       { label: 'Written answer',   needsCheckButton: true, aiMarked: true },
+}
+
+/** Written-answer questions marked by AI (not right/wrong by key). Kept out of timed exams. */
+export function isAiMarked(question) {
+  return !!QUESTION_TYPES[getQuestionType(question)].aiMarked
+}
+
+/**
+ * The marking scheme as stored ([{ marks, point, guidance? }]), or []
+ * when it's missing or malformed.
+ */
+export function markingScheme(question) {
+  let s = question?.marking_scheme
+  if (typeof s === 'string') { try { s = JSON.parse(s) } catch { s = null } }
+  return Array.isArray(s) ? s.filter(p => p && Number(p.marks) > 0 && typeof p.point === 'string') : []
+}
+
+/** A written-answer question's marks: total_marks, else the scheme's sum. */
+export function totalMarks(question) {
+  const n = Number(question?.total_marks)
+  return n > 0 ? n : markingScheme(question).reduce((sum, p) => sum + Number(p.marks), 0)
 }
 
 export function getQuestionType(question) {
@@ -75,6 +102,7 @@ export function responseIsComplete(question, response) {
       return !Number.isNaN(parseFloat(response))
     }
     case 'short_text':
+    case 'marked':
       return typeof response === 'string' && response.trim().length > 0
     case 'order':
       return Array.isArray(response) && response.length === (question.items?.length || 0)
@@ -157,6 +185,9 @@ export function describeCorrectAnswer(question) {
     case 'short_text':
       return (question.accept || [])[0] ?? ''
 
+    case 'marked':
+      return question.solution ?? ''
+
     case 'order':
       return (question.items || []).join(' → ')
 
@@ -179,6 +210,7 @@ export function emptyResponse(question) {
     case 'multi_select': return []
     case 'numeric':      return ''
     case 'short_text':   return ''
+    case 'marked':       return ''
     case 'order':        return []
     case 'image_label':  return (question.markers || []).map(() => null)
     case 'hotspot':

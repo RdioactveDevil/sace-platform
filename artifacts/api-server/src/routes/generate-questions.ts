@@ -28,7 +28,7 @@ const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 // Provides Claude focused curriculum context when generating questions.
 // Topics without an entry fall back to the subtopic name alone — perfectly fine
 // for newly created or custom curricula.
-const LEARNING_OBJECTIVES: Record<string, string> = {
+export const LEARNING_OBJECTIVES: Record<string, string> = {
   // ── Chemistry Stage 1 ────────────────────────────────────────────────────────
   "Properties and uses of materials": "properties (physical/chemical) of metals, non-metals and metalloids; uses linked to properties; classification of materials",
   "Atomic structure": "atomic number, mass number, isotopes, electron configuration, periodic trends; Bohr model and quantum model overview",

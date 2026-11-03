@@ -13,6 +13,7 @@ import { refreshManagedTopicsCache } from '../lib/adminTopics'
 import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import SharedQuestionsPanel from './SharedQuestionsPanel'
 import CourseScopePanel from './CourseScopePanel'
+import WrittenAnswersPanel from './WrittenAnswersPanel'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
@@ -832,6 +833,9 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       {/* Reference resources — textbooks/exams distilled into generation exemplars */}
       {!generating && <CurriculumResourcesPanel curriculumId={curriculumId} />}
 
+      {/* Written-answer questions, marked by AI against a marking scheme */}
+      {!generating && <WrittenAnswersPanel curriculumId={curriculumId} topics={curriculum.topics} enabled={!!curriculum.features?.written_answers} />}
+
       {/* Course scope, and checking the bank against it */}
       {!generating && <CourseScopePanel curriculumId={curriculumId} />}
 
@@ -1184,6 +1188,17 @@ function FeatureSwitches({ features, saving, onChange }) {
         <span>
           <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Essay Marker</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>AI marking of persuasive, narrative and GAMSAT-style essays (Learn → Essay Marker).</span>
+        </span>
+      </label>
+
+      <label style={row}>
+        <input type="checkbox" checked={!!features.written_answers} onChange={e => onChange({ written_answers: e.target.checked || undefined })} style={{ accentColor: 'var(--t-text)' }} />
+        <span>
+          <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Written answers</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>
+            Short-answer questions in practice, marked by AI point by point against a marking scheme (Written answers panel below).
+            Each answer marked costs roughly 2c. Not used in Exam Mode.
+          </span>
         </span>
       </label>
 

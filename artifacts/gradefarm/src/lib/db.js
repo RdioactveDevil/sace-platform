@@ -3,6 +3,7 @@ import { currentStreak } from './streak'
 import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 import { fileBorrowedQuestions } from './sharedQuestions'
+import { isAiMarked } from './questionTypes'
 
 // â”€â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /**
@@ -377,6 +378,12 @@ export async function getQuestions(subject = 'Chemistry') {
  * errors and we fall back to spelling-matching alone.
  */
 export async function getQuestionsForSubjectTile(subjectTile) {
+  const qs = await loadBankForTile(subjectTile)
+  // Written-answer (AI-marked) questions only where an admin switched them on.
+  return subjectTile?.features?.written_answers ? qs : qs.filter(q => !isAiMarked(q))
+}
+
+async function loadBankForTile(subjectTile) {
   const keys = questionsBankSubjectKeys(subjectTile)
   const curriculumId = curriculumIdFromTile(subjectTile)
 
@@ -880,6 +887,24 @@ export async function markTutorialComplete(userId) {
     .update({ app_tutorial_completed_at: new Date().toISOString() })
     .eq('id', userId)
   if (error) throw error
+}
+
+// --- WRITTEN ANSWERS ---------------------------------------------------------
+/**
+ * Have the AI mark a written answer to a 'marked' question, point by point:
+ * { awarded, total, marks: [{ point, awarded, of, evidence, found, comment }], summary, cached }
+ * Throws with `status` set (429 = today's AI limit) when it can't be marked.
+ */
+export async function markWrittenAnswer(questionId, response) {
+  return tutorFetch('/api/marked/mark', { method: 'POST', body: JSON.stringify({ questionId, response }) })
+}
+
+/**
+ * Admin: write and check up to 3 written-answer questions for a subtopic and
+ * save the ones that pass. { saved: [question rows], rejected: [{ question, reason }] }
+ */
+export async function generateMarkedQuestions(subtopicId, { count = 3, difficulty = 'mixed' } = {}) {
+  return tutorFetch('/api/marked/generate', { method: 'POST', body: JSON.stringify({ subtopicId, count, difficulty }) })
 }
 
 // â”€â”€â”€ LEADERBOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

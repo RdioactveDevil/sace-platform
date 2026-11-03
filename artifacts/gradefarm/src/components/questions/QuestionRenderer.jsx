@@ -1,7 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { THEMES } from '../../lib/theme'
 import { getQuestionType, gradeResponse, responseIsComplete, describeCorrectAnswer } from '../../lib/questionTypes'
+import { markWrittenAnswer } from '../../lib/db'
 import MathText from '../MathText'
+import { WrittenAnswerInput, MarkingFeedback } from './WrittenAnswer'
+
+// Marks already given this page visit, by question id: { response, result }.
+// Lets the feedback come back when the quiz is left and reopened, without
+// asking the server again (it would answer from its own record anyway).
+const markedThisVisit = new Map()
 
 const GOLD = '#f1be43'
 const NAVY = '#0c1037'
@@ -260,10 +267,55 @@ function ImageLabel({ question, response, onChange, showAns, theme }) {
 export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer' }) {
   const t = THEMES[theme]
   const type = getQuestionType(question)
-  const canSubmit = !showAns && responseIsComplete(question, response)
+  // Written answers: the AI marks them on the server, which takes a few seconds.
+  const [marking, setMarking] = useState(false)
+  const [markError, setMarkError] = useState('')
+  const [markResult, setMarkResult] = useState(null)
+  const shownId = useRef(question.id)
+  useEffect(() => {
+    shownId.current = question.id
+    const kept = markedThisVisit.get(question.id)
+    setMarkResult(showAns && kept && kept.response === response ? kept.result : null)
+    setMarking(false)
+    setMarkError('')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id])
+  // Back on an answered written question with no marks to hand (e.g. after a
+  // reload): ask again; the server answers from its record at no AI cost.
+  useEffect(() => {
+    if (type !== 'marked' || !showAns || markResult || marking || typeof response !== 'string' || !response.trim()) return
+    let cancelled = false
+    markWrittenAnswer(question.id, response)
+      .then(r => { if (!cancelled) { markedThisVisit.set(question.id, { response, result: r }); setMarkResult(r) } })
+      .catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, showAns, question.id])
+
+  const canSubmit = !showAns && !marking && responseIsComplete(question, response)
+
+  const submitMarked = async () => {
+    setMarking(true)
+    setMarkError('')
+    const id = question.id
+    try {
+      const r = await markWrittenAnswer(id, response)
+      markedThisVisit.set(id, { response, result: r })
+      // Moved on while it was marking: keep the marks, but don't apply them here.
+      if (shownId.current !== id) return
+      setMarkResult(r)
+      setMarking(false)
+      onSubmit(response, r.awarded >= r.total, r)
+    } catch (e) {
+      if (shownId.current !== id) return
+      setMarking(false)
+      setMarkError(e?.message || "Your answer couldn't be marked just now. Try again in a moment.")
+    }
+  }
 
   const submit = () => {
     if (!canSubmit) return
+    if (type === 'marked') { submitMarked(); return }
     onSubmit(response, gradeResponse(question, response))
   }
 
@@ -275,6 +327,17 @@ export default function QuestionRenderer({ question, response, onChange, showAns
       {type === 'order' && <OrderList question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
       {type === 'hotspot' && <Hotspot question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
       {type === 'image_label' && <ImageLabel question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
+      {type === 'marked' && !(showAns && markResult) && (
+        <WrittenAnswerInput question={question} response={response} onChange={onChange} disabled={showAns || marking} onSubmit={submit} canSubmit={canSubmit} theme={theme} />
+      )}
+      {type === 'marked' && showAns && markResult && (
+        <MarkingFeedback question={question} answer={typeof response === 'string' ? response : ''} result={markResult} theme={theme} />
+      )}
+      {type === 'marked' && markError && !showAns && (
+        <div role="alert" style={{ marginTop: 10, padding: '9px 12px', borderRadius: 10, background: t.dangerBg, border: `1px solid ${t.danger}44`, fontSize: 13, color: t.danger }}>
+          {markError}
+        </div>
+      )}
 
       {showAns && (type === 'numeric' || type === 'short_text') && (
         <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 10, background: t.successBg, border: `1px solid ${t.success}44`, fontSize: 13, color: t.success, fontWeight: 700 }}>
@@ -293,7 +356,7 @@ export default function QuestionRenderer({ question, response, onChange, showAns
             cursor: canSubmit ? 'pointer' : 'default', fontFamily: FONT_B,
           }}
         >
-          {checkLabel}
+          {type === 'marked' ? (marking ? 'Marking your answer…' : markError ? 'Try marking again' : 'Mark my answer') : checkLabel}
         </button>
       )}
     </div>

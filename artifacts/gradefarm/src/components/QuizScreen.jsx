@@ -52,7 +52,7 @@ import DiagramView from './DiagramView'
 import PassageView from './PassageView'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
-import { getQuestionType, describeCorrectAnswer, gradeResponse, responseIsComplete } from '../lib/questionTypes'
+import { getQuestionType, describeCorrectAnswer, gradeResponse, responseIsComplete, isAiMarked } from '../lib/questionTypes'
 import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 
@@ -1308,12 +1308,18 @@ export default function QuizScreen({
   // result. Mirrors the main-question path of handleAnswer, and routes
   // remediation variants through the same shared outcome handler so the mastery
   // streak advances for non-MCQ question types too.
-  const handleSubmitResponse = async (response, isCorrect) => {
+  // Written answers also pass their marks ({ awarded, total }): full marks
+  // count as right; part marks count as not yet right (the question comes back
+  // for review) but earn that share of the XP instead of losing XP.
+  const handleSubmitResponse = async (response, isCorrect, marks = null) => {
     if (showAns || !currentQ) return
     const isVariant = !!currentQ.is_variant
-    const xpEarned = isVariant
-      ? calcRemediationXP(isCorrect, currentQ.difficulty)
-      : calcXP(isCorrect, currentQ.difficulty, streak)
+    const partMarks = !!marks && !isCorrect && marks.awarded > 0 && marks.total > 0
+    const xpEarned = partMarks
+      ? Math.max(1, Math.round(calcXP(true, currentQ.difficulty, 0) * marks.awarded / marks.total))
+      : isVariant
+        ? calcRemediationXP(isCorrect, currentQ.difficulty)
+        : calcXP(isCorrect, currentQ.difficulty, streak)
     const newStreak = isCorrect ? streak + 1 : 0
     const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
 
@@ -1369,7 +1375,8 @@ export default function QuizScreen({
       return
     }
 
-    if (!isCorrect) {
+    // Written answers already come back with mark-by-mark feedback.
+    if (!isCorrect && !marks) {
       setLoadingTip(true)
       try {
         const res = await fetch('/api/chat', {
@@ -1501,9 +1508,11 @@ export default function QuizScreen({
   function startExam() {
     const n = questionLimit > 0 ? questionLimit : EXAM_DEFAULT_COUNT
     const target = assignmentBand ? assignmentBand.target : getTargetDifficulty([], questions)
+    // Written answers are marked by AI one at a time, so they stay out of timed exams.
+    const examPool = questions.filter(q => !isAiMarked(q))
     const picked = []
     for (let i = 0; i < n; i++) {
-      const q = selectNextQuestion(questions, struggleMap, picked.map(x => x.id), quizMode, effectiveSubtopics, target, assignmentBand)
+      const q = selectNextQuestion(examPool, struggleMap, picked.map(x => x.id), quizMode, effectiveSubtopics, target, assignmentBand)
       if (!q || picked.some(x => x.id === q.id)) break
       picked.push(q)
     }
@@ -2242,12 +2251,18 @@ export default function QuizScreen({
               {/* Practice, after answering: the result, why, and what's next. */}
               {!examRun && showAns && (
                 <div className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease' }}>
-                  <div role="status" style={{ fontSize: 15, fontWeight: 800, color: correct ? t.success : t.text }}>
-                    {correct ? 'Right.' : 'Not quite.'}
-                    {inRemediationQuestion && remediationStatus !== 'complete' && (
-                      <span style={{ fontWeight: 600, color: t.textMuted }}> {Math.min(remediationStreak, remediationTarget)} of {remediationTarget} in a row.</span>
-                    )}
-                  </div>
+                  {/* Written answers show their marks above, with the feedback. */}
+                  {!isAiMarked(currentQ) && (
+                    <div role="status" style={{ fontSize: 15, fontWeight: 800, color: correct ? t.success : t.text }}>
+                      {correct ? 'Right.' : 'Not quite.'}
+                      {inRemediationQuestion && remediationStatus !== 'complete' && (
+                        <span style={{ fontWeight: 600, color: t.textMuted }}> {Math.min(remediationStreak, remediationTarget)} of {remediationTarget} in a row.</span>
+                      )}
+                    </div>
+                  )}
+                  {currentQ.solution && isAiMarked(currentQ) && (
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: -4 }}>Model answer</div>
+                  )}
                   {currentQ.solution && (
                     <div style={{ fontSize: 14, color: t.textSub, lineHeight: 1.7 }}><MathText text={currentQ.solution} /></div>
                   )}
