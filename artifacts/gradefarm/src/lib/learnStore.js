@@ -13,6 +13,8 @@ function fromLessonRow(row) {
     step: row.step,
     revealed: row.revealed,
     checkIndex: row.check_index,
+    // Card lessons (lessonCards.js) keep the card they're on in check_index.
+    ...(row.content?.v === 2 && { card: row.check_index }),
     picked: row.picked,
     answers: Array.isArray(row.answers) ? row.answers : [],
     finishedAt: row.finished_at ? Date.parse(row.finished_at) : null,
@@ -45,7 +47,7 @@ export async function saveLesson(userId, subject, lesson) {
     content: lesson.data,
     step: lesson.step ?? 0,
     revealed: lesson.revealed ?? 1,
-    check_index: lesson.checkIndex ?? 0,
+    check_index: (lesson.data?.v === 2 ? lesson.card : lesson.checkIndex) ?? 0,
     picked: lesson.picked ?? null,
     answers: lesson.answers || [],
     finished_at: lesson.finishedAt ? new Date(lesson.finishedAt).toISOString() : null,

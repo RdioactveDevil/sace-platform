@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
+import { lessonScore, lessonProgressLabel } from '../lib/lessonCards'
 import { supabase } from '../lib/supabase'
 import { fetchMyExamAttempts } from '../lib/db'
 import { fetchLessons } from '../lib/learnStore'
@@ -81,7 +82,7 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
       }))
       const lessonItems = Object.values(lessons || {}).map(l => ({
         key: `lesson-${l.topic}`, kind: 'Lesson', group: 'learn', at: l.updatedAt || 0, title: l.topic,
-        sub: l.finishedAt ? `Finished · ${(l.answers || []).filter(Boolean).length} of ${(l.answers || []).length} check questions` : `Step ${Math.min(l.step + 1, 4)} of 4`,
+        sub: l.finishedAt ? `Finished · ${lessonScore(l).right} of ${lessonScore(l).total} questions right` : lessonProgressLabel(l),
         action: l.finishedAt ? 'Review' : 'Resume', run: () => onOpenLesson?.(l.topic),
       }))
       const chatItems = (chatsRes.data || [])
