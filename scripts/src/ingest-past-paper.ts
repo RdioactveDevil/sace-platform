@@ -30,6 +30,8 @@
  *   tsx ingest-past-paper.ts --pdf <url | admin-uploads path> --subject "VCE Mathematical Methods Units 3 and 4"
  *     --kind official --publisher VCAA --year 2023 --paper "Exam 2"
  *     [--solutions <url | path>] [--topic "Only this topic"] [--limit 5] [--apply]
+ *   Add --recrop (with a batch or a paper) to redo the figure crops of papers already loaded,
+ *   without reading their questions again.
  *   (--pdf-url / --storage-path still work in place of --pdf.)
  */
 import { createHash } from "node:crypto";
@@ -37,9 +39,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { PDFiumLibrary } from "@hyzyla/pdfium";
 import sharp from "sharp";
+import { snapToInk, pctToPx, grow, crop, type Page, type PxBox } from "./lib/figure-crop";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 const MODEL = process.env.INGEST_MODEL || "claude-opus-5-5";
+// A second, close-up look at each figure to place its box exactly.
+const FIGURE_MODEL = process.env.FIGURE_MODEL || "claude-sonnet-5-5";
 
 type Args = {
   pdf?: string;
@@ -52,6 +57,8 @@ type Args = {
   topic?: string;
   apply: boolean;
   limit?: number;
+  /** Redo the figure crops of a paper already in the bank, leaving its questions as they are. */
+  recrop?: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -68,6 +75,7 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--paper") a.paper = v();
     else if (k === "--topic") a.topic = v();
     else if (k === "--apply") a.apply = true;
+    else if (k === "--recrop") a.recrop = true;
     else if (k === "--limit") a.limit = parseInt(v() || "", 10) || undefined;
   }
   return a;
@@ -179,6 +187,9 @@ function outputSchema(topicNames: string[]) {
   };
 }
 
+/** How a figure's box is described, for every prompt that asks for one. */
+const FIGURE_BOX_RULE = "figure_page is the 1-based page number in the PDF where a figure, graph, table image or diagram printed with the question appears, and figure_bbox is its box as PERCENTAGES (0–100) of that page. The box holds the figure only: everything that belongs to it (axes, scale numbers, axis titles, legends, labels and their leader lines, captions such as 'molecule A' or 'monomer 3'), and no question text, sentences, part labels such as (i) or (1), mark allocations or answer lines. Use figure_page 0 and a zero box when there is no figure.";
+
 function systemPrompt(args: Args, section: "A" | "B", course: Course, hasSolutions: boolean): string {
   const courseList = course.topics.length
     ? course.topics.map((t) => `- ${t.name}${t.subtopics.length ? `: ${t.subtopics.join("; ")}` : ""}`).join("\n")
@@ -188,7 +199,7 @@ function systemPrompt(args: Args, section: "A" | "B", course: Course, hasSolutio
     "Copy the wording exactly as printed. Do not rewrite, simplify, correct or add to any question.",
     "Write every mathematical expression and chemical formula in LaTeX inside $...$ (inline) or $$...$$ (displayed). Use \\ce{} for chemical formulas. A literal dollar sign is \\$.",
     "Keep line breaks that matter (e.g. a function definition on its own line) as \\n.",
-    "figure_page is the 1-based page number in the PDF where a figure, graph, table image or diagram printed with the question appears, and figure_bbox is its box as PERCENTAGES (0–100) of that page, generous rather than tight. Use figure_page 0 and a zero box when there is no figure.",
+    FIGURE_BOX_RULE,
     "Tables that are plain text may be written as a markdown table in the text instead of a figure.",
     `topic must be one of the course topics below, and subtopic one of that topic's subtopics (exactly as written). Course:\n${courseList}`,
     args.topic ? `Every question in this run is on the topic "${args.topic}".` : "",
@@ -273,26 +284,177 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-async function cropFigure(page: { png: Buffer; width: number; height: number }, bbox: BBox): Promise<Buffer> {
-  const pad = 1.5; // % padding so we never clip the figure
-  const left = Math.round(clamp((bbox.x - pad) / 100, 0, 1) * page.width);
-  const top = Math.round(clamp((bbox.y - pad) / 100, 0, 1) * page.height);
-  const width = Math.round(clamp((bbox.w + pad * 2) / 100, 0, 1) * page.width);
-  const height = Math.round(clamp((bbox.h + pad * 2) / 100, 0, 1) * page.height);
-  const w = Math.max(8, Math.min(width, page.width - left));
-  const h = Math.max(8, Math.min(height, page.height - top));
-  return sharp(page.png).extract({ left, top, width: w, height: h }).png().toBuffer();
+/**
+ * Crop one figure: a close-up look by FIGURE_MODEL at the area around the
+ * rough box gives its exact box, then snapToInk() corrects it against the
+ * page (drops stray lines of question text, keeps labels whole).
+ * `hint` says which figure it is (the text printed with it).
+ */
+async function placeFigure(client: Anthropic, page: Page, rough: BBox, hint: string): Promise<Buffer> {
+  const roughPx = pctToPx(page, rough);
+  let box: PxBox = roughPx;
+  try {
+    const area = grow(page, roughPx, 0.05);
+    const areaPng = await sharp(await crop(page, area)).resize({ width: Math.min(1600, area.width), withoutEnlargement: true }).png().toBuffer();
+    const message = await client.messages.create({
+      model: FIGURE_MODEL,
+      max_tokens: 400,
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: { found: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, w: { type: "number" }, h: { type: "number" } },
+            required: ["found", "x", "y", "w", "h"],
+            additionalProperties: false,
+          },
+        },
+      },
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: areaPng.toString("base64") } },
+          {
+            type: "text",
+            text: [
+              "This is part of a page of an exam paper. It contains a figure (a diagram, graph, structure or table image) and probably some of the question text around it.",
+              `The figure belongs with this question text: "${hint.slice(0, 400)}"`,
+              "Give the box around the figure as PERCENTAGES (0–100) of THIS image: x and y of its top-left corner, w and h its width and height.",
+              "Include everything that belongs to the figure: axes, scale numbers, axis titles, legends, labels and their leader lines, and captions such as 'molecule A' or 'monomer 3'.",
+              "Leave out question text, sentences, part labels such as (i) or (1), mark allocations and answer lines. found is false if there is no figure here.",
+            ].join("\n"),
+          },
+        ],
+      }],
+    } as Anthropic.MessageCreateParamsNonStreaming);
+    const text = message.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+    const r = JSON.parse(text) as { found: boolean; x: number; y: number; w: number; h: number };
+    if (r.found && r.w > 1 && r.h > 1) {
+      box = {
+        left: Math.round(area.left + (clamp(r.x, 0, 100) / 100) * area.width),
+        top: Math.round(area.top + (clamp(r.y, 0, 100) / 100) * area.height),
+        width: Math.round((clamp(r.w, 0, 100) / 100) * area.width),
+        height: Math.round((clamp(r.h, 0, 100) / 100) * area.height),
+      };
+    }
+  } catch (err) {
+    console.warn(`  close-up look failed (${(err as Error).message}); using the first box`);
+  }
+  return crop(page, await snapToInk(page, box));
 }
+
+/** A file name that changes when the crop does, so a new crop is never served from a cache. */
+const figurePath = (sourceId: string, name: string, png: Buffer) =>
+  `exam-papers/${sourceId}/${name}-${createHash("sha1").update(png).digest("hex").slice(0, 8)}.png`;
 
 const hasFigure = (page: number, box: BBox) => page > 0 && box && box.w > 0 && box.h > 0;
 
 type Outcome = { questions: number; marks: number; figures: number; skipped: string[] };
 
 /** Load one paper: read it, crop its figures, and save (apply) or list (dry run) its questions. */
+/**
+ * --recrop: redo the figures of a paper already in the bank. Finds where each
+ * of its saved figures is printed, crops them again the careful way
+ * (placeFigure), and points the questions at the new images. The questions
+ * themselves are left as they are.
+ */
+async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buffer, source: string): Promise<Outcome> {
+  const sourceId = createHash("sha1").update(`${args.subject}|${source}`).digest("hex").slice(0, 10);
+  const { data: rows, error } = await admin.from("questions")
+    .select("id, exam_section, source_question, question, image_url, parts")
+    .like("id", `ep_${sourceId}_%`);
+  if (error) throw new Error(`Loading the paper's questions failed: ${error.message}`);
+  type Row = { id: string; exam_section: string; source_question: string; question: string; image_url: string | null; parts: { label: string; text: string; image_url: string | null }[] | null };
+  const figs: { key: string; row: Row; part: number; name: string; hint: string }[] = [];
+  for (const r of (rows || []) as Row[]) {
+    const n = `${r.exam_section}${r.source_question}`;
+    if (r.image_url) figs.push({ key: `${r.id}|q`, row: r, part: -1, name: n, hint: r.question || "" });
+    (r.parts || []).forEach((p, i) => {
+      if (p.image_url) figs.push({ key: `${r.id}|${i}`, row: r, part: i, name: `${n}${p.label || ""}`, hint: p.text || "" });
+    });
+  }
+  console.log(`${(rows || []).length} question(s) from ${source} in the bank, ${figs.length} with figures.`);
+  if (!figs.length) return { questions: 0, marks: 0, figures: 0, skipped: [] };
+
+  // Where each figure is printed.
+  const list = figs.map((f) => `- key ${f.key}: question ${f.row.source_question}${f.part >= 0 ? `, part (${f.row.parts![f.part].label})` : ""}. Printed with: "${f.hint.slice(0, 300).replace(/\s+/g, " ")}"`).join("\n");
+  const message = await client.beta.messages
+    .stream({
+      model: MODEL,
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: {
+        effort: "high",
+        format: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              figures: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: { key: { type: "string" }, figure_page: { type: "integer" }, figure_bbox: bboxSchema },
+                  required: ["key", "figure_page", "figure_bbox"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["figures"],
+            additionalProperties: false,
+          },
+        },
+      },
+      system: `You find figures in an exam paper (${source}). ${FIGURE_BOX_RULE}`,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: paper.toString("base64") }, title: "Exam paper" },
+          { type: "text", text: `Find each of these figures and give its page and box, with the same key:\n${list}` },
+        ],
+      }],
+    })
+    .finalMessage();
+  const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  const found = new Map(((JSON.parse(text) as { figures: { key: string; figure_page: number; figure_bbox: BBox }[] }).figures || []).map((f) => [f.key, f]));
+  const pages = [...new Set([...found.values()].filter((f) => hasFigure(f.figure_page, f.figure_bbox)).map((f) => f.figure_page))];
+  const rendered = await renderPages(paper, pages);
+
+  const changed = new Map<string, Row>();
+  const skipped: string[] = [];
+  let figures = 0;
+  for (const f of figs) {
+    const at = found.get(f.key);
+    if (!at || !hasFigure(at.figure_page, at.figure_bbox) || !rendered.has(at.figure_page)) { skipped.push(f.name); continue; }
+    const png = await placeFigure(client, rendered.get(at.figure_page)!, at.figure_bbox, f.hint);
+    figures++;
+    if (!args.apply) { console.log(`  ${f.name}: page ${at.figure_page}, ${png.length}-byte crop`); continue; }
+    const path = figurePath(sourceId, f.name, png);
+    const { error: upErr } = await admin.storage.from("question-images").upload(path, png, { contentType: "image/png", upsert: true });
+    if (upErr) { console.warn(`  ${f.name}: upload failed: ${upErr.message}`); skipped.push(f.name); continue; }
+    const url = admin.storage.from("question-images").getPublicUrl(path).data.publicUrl;
+    const row = changed.get(f.row.id) || { ...f.row, parts: f.row.parts ? f.row.parts.map((p) => ({ ...p })) : null };
+    if (f.part < 0) row.image_url = url;
+    else row.parts![f.part].image_url = url;
+    changed.set(f.row.id, row);
+    console.log(`  ${f.name}: page ${at.figure_page} → ${path}`);
+  }
+  if (args.apply) {
+    for (const r of changed.values()) {
+      const { error: upd } = await admin.from("questions").update({ image_url: r.image_url, parts: r.parts }).eq("id", r.id);
+      if (upd) console.warn(`  saving ${r.id} failed: ${upd.message}`);
+    }
+  }
+  console.log(`${figures} figure(s) cropped again${args.apply ? `, ${changed.size} question(s) updated` : " (dry run: nothing saved)"}.${skipped.length ? ` Not found: ${skipped.join(", ")}` : ""}`);
+  return { questions: changed.size, marks: 0, figures, skipped };
+}
+
 async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Outcome> {
   const source = sourceLabel(args);
   console.log(`Paper: ${source} (${args.kind}) for ${args.subject}`);
   const paper = await loadPdf(admin, args.pdf as string);
+  if (args.recrop) return recropPaper(admin, client, args, paper, source);
   const solutions = args.solutions ? await loadPdf(admin, args.solutions) : null;
   const course = await loadCourse(admin, args.subject as string);
   if (!course.topics.length) console.warn(`::warning::No course called "${args.subject}" found; topics will be free text and the questions won't link to a subject. Check the name matches Admin → Curricula exactly.`);
@@ -322,14 +484,14 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
 
   const sourceId = createHash("sha1").update(`${args.subject}|${source}`).digest("hex").slice(0, 10);
   let figures = 0;
-  const figure = async (page: number, box: BBox, name: string): Promise<string | null> => {
+  const figure = async (page: number, box: BBox, name: string, hint = ""): Promise<string | null> => {
     if (!hasFigure(page, box) || !rendered.has(page)) return null;
     try {
-      const crop = await cropFigure(rendered.get(page)!, box);
+      const png = await placeFigure(client, rendered.get(page)!, box, hint);
       figures++;
-      if (!args.apply) return `(dry-run: ${crop.length}-byte crop)`;
-      const path = `exam-papers/${sourceId}/${name}.png`;
-      const { error } = await admin.storage.from("question-images").upload(path, crop, { contentType: "image/png", upsert: true });
+      if (!args.apply) return `(dry-run: ${png.length}-byte crop)`;
+      const path = figurePath(sourceId, name, png);
+      const { error } = await admin.storage.from("question-images").upload(path, png, { contentType: "image/png", upsert: true });
       if (error) throw new Error(error.message);
       return admin.storage.from("question-images").getPublicUrl(path).data.publicUrl;
     } catch (err) {
@@ -359,7 +521,7 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
       source_paper: args.paper,
       source_question: num,
       exam_section: section,
-      image_url: await figure(q.figure_page, q.figure_bbox, `${section}${num}`),
+      image_url: await figure(q.figure_page, q.figure_bbox, `${section}${num}`, q.question || ""),
       created_at: new Date().toISOString(),
     };
     if (section === "A") {
@@ -374,7 +536,7 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
           text: p.text || "",
           marks: Math.max(0, Math.round(p.marks || 0)),
           solution: p.solution || "",
-          image_url: await figure(p.figure_page, p.figure_bbox, `${section}${num}${p.label || ""}`),
+          image_url: await figure(p.figure_page, p.figure_bbox, `${section}${num}${p.label || ""}`, p.text || ""),
         });
       }
       const total = parts.reduce((s, p) => s + p.marks, 0);
@@ -438,7 +600,7 @@ async function runBatch(admin: any, client: Anthropic, id: string, cli: Args) {
     try {
       const out = await ingestOne(admin, client, {
         pdf: p.pdf, solutions: p.solutions || undefined, subject: batch.subject, kind: p.kind === "commercial" ? "commercial" : "official",
-        publisher: p.publisher, year: Number(p.year), paper: p.paper, topic: cli.topic, apply: cli.apply, limit: cli.limit,
+        publisher: p.publisher, year: Number(p.year), paper: p.paper, topic: cli.topic, apply: cli.apply, limit: cli.limit, recrop: cli.recrop,
       });
       results[i] = { status: cli.apply ? "saved" : "checked", mode, ...out, at: new Date().toISOString() };
     } catch (err) {
