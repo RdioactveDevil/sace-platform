@@ -900,6 +900,14 @@ export async function markWrittenAnswer(questionId, response) {
 }
 
 /**
+ * Titan's Advice for a written-answer question (made once per question, then shared):
+ * { advice: { notes: [{ quote, mark, note }], cells: [{ row, col, note? }], steps: [string] }, cached }
+ */
+export async function fetchTitanAdvice(questionId) {
+  return tutorFetch('/api/marked/advice', { method: 'POST', body: JSON.stringify({ questionId }) })
+}
+
+/**
  * Admin: write and check up to 3 written-answer questions for a subtopic and
  * save the ones that pass. { saved: [question rows], rejected: [{ question, reason }] }
  */

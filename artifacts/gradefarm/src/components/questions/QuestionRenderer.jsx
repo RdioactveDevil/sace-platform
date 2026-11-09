@@ -3,7 +3,7 @@ import { THEMES } from '../../lib/theme'
 import { getQuestionType, gradeResponse, responseIsComplete, describeCorrectAnswer } from '../../lib/questionTypes'
 import { markWrittenAnswer } from '../../lib/db'
 import MathText from '../MathText'
-import { WrittenAnswerInput, MarkingFeedback } from './WrittenAnswer'
+import { WrittenAnswerInput, MarkingFeedback, MarkedAnswer } from './WrittenAnswer'
 
 // Marks already given this page visit, by question id: { response, result }.
 // Lets the feedback come back when the quiz is left and reopened, without
@@ -268,13 +268,19 @@ function ImageLabel({ question, response, onChange, showAns, theme }) {
  * (mcq is intentionally NOT handled here — the legacy quiz card renders mcq
  * inline so its instant-answer behaviour and styling stay byte-identical.)
  */
-export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer' }) {
+// feedbackMode (written answers): 'full' shows the marks here; 'answer' shows only
+// the highlighted answer, for a page that puts the mark points beside it.
+// onMarked(result) hands the marks to that page whenever they arrive.
+export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer', feedbackMode = 'full', onMarked }) {
   const t = THEMES[theme]
   const type = getQuestionType(question)
   // Written answers: the AI marks them on the server, which takes a few seconds.
   const [marking, setMarking] = useState(false)
   const [markError, setMarkError] = useState('')
   const [markResult, setMarkResult] = useState(null)
+  const onMarkedRef = useRef(onMarked)
+  onMarkedRef.current = onMarked
+  useEffect(() => { if (markResult) onMarkedRef.current?.(markResult) }, [markResult])
   const shownId = useRef(question.id)
   useEffect(() => {
     shownId.current = question.id
@@ -334,9 +340,9 @@ export default function QuestionRenderer({ question, response, onChange, showAns
       {type === 'marked' && !(showAns && markResult) && (
         <WrittenAnswerInput question={question} response={response} onChange={onChange} disabled={showAns || marking} onSubmit={submit} canSubmit={canSubmit} theme={theme} />
       )}
-      {type === 'marked' && showAns && markResult && (
-        <MarkingFeedback question={question} answer={typeof response === 'string' ? response : ''} result={markResult} theme={theme} />
-      )}
+      {type === 'marked' && showAns && markResult && (feedbackMode === 'answer'
+        ? <MarkedAnswer answer={typeof response === 'string' ? response : ''} result={markResult} theme={theme} />
+        : <MarkingFeedback question={question} answer={typeof response === 'string' ? response : ''} result={markResult} theme={theme} />)}
       {type === 'marked' && markError && !showAns && (
         <div role="alert" style={{ marginTop: 10, padding: '9px 12px', borderRadius: 10, background: t.dangerBg, border: `1px solid ${t.danger}44`, fontSize: 13, color: t.danger }}>
           {markError}

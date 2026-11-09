@@ -19,6 +19,7 @@ import {
   applyAssignmentAnswer,
 } from '../lib/engine'
 import {
+  fetchTitanAdvice,
   recordAnswer,
   addXP,
   createSession,
@@ -52,6 +53,8 @@ import DiagramView from './DiagramView'
 import PassageView from './PassageView'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
+import { MarkPoints } from './questions/WrittenAnswer'
+import { AnnotatedQuestion, AdviceSteps } from './TitanAdvice'
 import { getQuestionType, describeCorrectAnswer, gradeResponse, responseIsComplete, isAiMarked } from '../lib/questionTypes'
 import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
@@ -283,6 +286,13 @@ export default function QuizScreen({
       .catch(() => {})
 
   const [floatXP, setFloatXP] = useState(null)
+  // Written answers: the marks (for the side panel) and Titan's Advice for the question on screen.
+  const [marking, setMarking] = useState(null)
+  const [adviceOn, setAdviceOn] = useState(false)
+  const [advice, setAdvice] = useState(null)
+  const [adviceState, setAdviceState] = useState('idle') // idle | loading | error
+  const [adviceError, setAdviceError] = useState('')
+  const adviceForRef = useRef(null)
   // The question on screen was served because it was due back for review.
   const [dueBackId, setDueBackId] = useState(null)
   // Exam mode picks its questions up front so students can move between them,
@@ -379,6 +389,37 @@ export default function QuizScreen({
 
   const currentQ = _currentQ ?? null
   const selected = _selected ?? null
+
+  // A new question starts with no marks and no advice on show; a question that
+  // already carries its saved advice uses it without asking the server.
+  useEffect(() => {
+    setMarking(null)
+    setAdviceOn(false)
+    setAdviceState('idle')
+    setAdviceError('')
+    const saved = currentQ?.advice
+    setAdvice(saved && Array.isArray(saved.notes) ? saved : null)
+    adviceForRef.current = currentQ?.id ?? null
+  }, [currentQ?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleAdvice = async () => {
+    if (adviceOn) { setAdviceOn(false); return }
+    setAdviceOn(true)
+    if (advice || adviceState === 'loading' || !currentQ) return
+    const id = currentQ.id
+    setAdviceState('loading')
+    setAdviceError('')
+    try {
+      const r = await fetchTitanAdvice(currentQ.bank_question_id || currentQ.id)
+      if (adviceForRef.current !== id) return
+      setAdvice(r.advice || null)
+      setAdviceState('idle')
+    } catch (e) {
+      if (adviceForRef.current !== id) return
+      setAdviceState('error')
+      setAdviceError(e?.message || "Titan couldn't annotate this question just now.")
+    }
+  }
   const showAns = _showAns ?? false
   const correct = _correct ?? null
   const earnedXP = _earnedXP ?? 0
@@ -1963,6 +2004,11 @@ export default function QuizScreen({
 
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: t.textSub, background: t.bgSubtle, border: `1px solid ${t.border}`, padding: '2px 9px', borderRadius: 999 }
   const sidePassage = !isMobile && questionAreaWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
+  // A marked written answer on a wide screen: question and answer on the left, marks on the right.
+  const writtenAnswer = !examRun && showAns && !!currentQ && isAiMarked(currentQ)
+  const splitFeedback = writtenAnswer && !isMobile && !sidePassage && !!marking
+  // Titan's Advice drawn over the question (after answering).
+  const annotated = writtenAnswer && adviceOn && !!advice
   const isMcq = getQuestionType(currentQ) === 'mcq'
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
   const btn = (kind, disabled = false) => ({
@@ -2116,7 +2162,7 @@ export default function QuizScreen({
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
         <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '14px' : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : 640, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {sidePassage && (
             // The passage is what students read closely, so it gets ~60% of the row.
             <div style={{ flex: '3 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
@@ -2181,14 +2227,18 @@ export default function QuizScreen({
             <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
               {currentQ.passage && !sidePassage && <PassageView passage={currentQ.passage} theme={theme} />}
               {currentQ.graph && <GraphView graph={currentQ.graph} theme={theme} />}
-              {currentQ.table_data && <TableView table={currentQ.table_data} theme={theme} />}
+              {currentQ.table_data && !annotated && <TableView table={currentQ.table_data} theme={theme} />}
               {currentQ.diagram && <DiagramView diagram={currentQ.diagram} theme={theme} />}
               {currentQ.image_url && getQuestionType(currentQ) !== 'hotspot' && getQuestionType(currentQ) !== 'image_label' && (
                 <img src={currentQ.image_url} alt="Question diagram" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 10, marginBottom: 16 }} />
               )}
-              <div style={{ fontSize: isMobile ? 15.5 : 17, fontWeight: 700, color: t.text, lineHeight: 1.6, marginBottom: 18 }}>
-                <MathText text={currentQ.question} />
-              </div>
+              {annotated ? (
+                <AnnotatedQuestion question={currentQ} advice={advice} theme={theme} fontSize={isMobile ? 15.5 : 17} />
+              ) : (
+                <div style={{ fontSize: isMobile ? 15.5 : 17, fontWeight: 700, color: t.text, lineHeight: 1.6, marginBottom: 18 }}>
+                  <MathText text={currentQ.question} />
+                </div>
+              )}
 
               {isMcq ? (
                 <div role={showAns ? undefined : 'radiogroup'} aria-label="Answer options" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2226,6 +2276,8 @@ export default function QuizScreen({
                   theme={theme}
                   hideCheck={examRun}
                   checkLabel="Check answer"
+                  feedbackMode={splitFeedback ? 'answer' : 'full'}
+                  onMarked={setMarking}
                 />
               )}
 
@@ -2248,8 +2300,8 @@ export default function QuizScreen({
                 </div>
               )}
 
-              {/* Practice, after answering: the result, why, and what's next. */}
-              {!examRun && showAns && (
+              {/* Practice, after answering: the result, why, and what's next (in the side panel for a marked written answer on a wide screen). */}
+              {!examRun && showAns && !splitFeedback && (
                 <div className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease' }}>
                   {/* Written answers show their marks above, with the feedback. */}
                   {!isAiMarked(currentQ) && (
@@ -2280,6 +2332,7 @@ export default function QuizScreen({
                   {remediationPendingEntry && remediationStatus === 'generating' && (
                     <div style={{ fontSize: 12.5, color: t.textMuted }}>Getting practice questions like this one ready…</div>
                   )}
+                  {writtenAnswer && <AdviceBlock />}
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, position: 'relative' }}>
                     <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), ...(isMobile ? { flex: 1 } : {}) }}>
@@ -2304,11 +2357,54 @@ export default function QuizScreen({
               </div>
             )}
           </div>
+          {splitFeedback && (
+            <aside aria-label="Your marks" className="qz-anim" style={{ flex: '1 1 380px', minWidth: 0, maxWidth: 480, position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', gap: 12, animation: 'fadeUp 0.25s ease' }}>
+              <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '18px 20px' }}>
+                <MarkPoints question={currentQ} result={marking} theme={theme} />
+              </div>
+              <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <AdviceBlock />
+              </div>
+              {currentQ.solution && (
+                <details style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '14px 18px' }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 800, color: t.text }}>Model answer</summary>
+                  <div style={{ marginTop: 10, fontSize: 14, color: t.textSub, lineHeight: 1.7 }}><MathText text={currentQ.solution} /></div>
+                </details>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
+                <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={btn('primary', remediationStatus === 'generating')}>
+                  {nextButtonLabel}
+                </button>
+                {onOpenLearn && !examMode && (
+                  <button type="button" onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                    {correct ? 'Ask Titan about this' : 'Ask Titan why'}
+                  </button>
+                )}
+              </div>
+              <ReportLink />
+            </aside>
+          )}
           </div>
         </div>
       </div>
     </div>
   )
+
+  // Titan's Advice: a button that draws the annotations on the question, then
+  // the steps and where this answer went wrong.
+  function AdviceBlock() {
+    const loading = adviceState === 'loading'
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <button type="button" onClick={toggleAdvice} aria-pressed={adviceOn} disabled={loading}
+          style={{ ...btn('secondary', loading), alignSelf: 'flex-start', borderColor: t.borderAccent || t.border, color: t.goldText }}>
+          {loading ? 'Titan is annotating…' : adviceOn && advice ? "Hide Titan's Advice" : "Show Titan's Advice on the question"}
+        </button>
+        {adviceState === 'error' && adviceOn && <div role="alert" style={{ fontSize: 12.5, color: t.danger }}>{adviceError}</div>}
+        {adviceOn && advice && <AdviceSteps advice={advice} marking={marking} theme={theme} />}
+      </div>
+    )
+  }
 
   // "Something wrong with this question?" and its menu. The thank-you stays
   // until the next question.

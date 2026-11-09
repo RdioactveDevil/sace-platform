@@ -42,10 +42,51 @@ export function WrittenAnswerInput({ question, response, onChange, disabled, onS
 }
 
 /** Mark-by-mark feedback: the answer with the credited parts highlighted, then each mark point. */
+/**
+ * Mark-by-mark feedback in one column: score, the answer with what earned each
+ * mark highlighted, then the mark points. The quiz's side panel uses the two
+ * halves separately (MarkedAnswer on the left, MarkPoints on the right).
+ */
 export function MarkingFeedback({ question, answer, result, theme }) {
+  return (
+    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Score result={result} theme={theme} />
+      <MarkedAnswer answer={answer} result={result} theme={theme} />
+      <PointList question={question} result={result} theme={theme} />
+      <Summary result={result} theme={theme} />
+    </div>
+  )
+}
+
+/** Score, mark points and the AI's summary: the side panel's top. */
+export function MarkPoints({ question, result, theme }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Score result={result} theme={theme} />
+      <PointList question={question} result={result} theme={theme} />
+      <Summary result={result} theme={theme} />
+    </div>
+  )
+}
+
+function Score({ result, theme }) {
   const t = THEMES[theme]
-  const scheme = markingScheme(question)
   const full = result.awarded >= result.total
+  return (
+    <div role="status" style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 22, fontWeight: 800, color: full ? t.success : t.text, fontVariantNumeric: 'tabular-nums' }}>
+        {result.awarded} / {result.total}
+      </span>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: t.textMuted }}>
+        mark{result.total === 1 ? '' : 's'}{full ? ' · full marks' : ''}
+      </span>
+    </div>
+  )
+}
+
+/** The student's answer with what earned each mark highlighted and numbered. */
+export function MarkedAnswer({ answer, result, theme }) {
+  const t = THEMES[theme]
   const ranges = evidenceRanges(answer, result.marks)
 
   const pieces = []
@@ -63,24 +104,20 @@ export function MarkingFeedback({ question, answer, result, theme }) {
   if (pos < answer.length) pieces.push(answer.slice(pos))
 
   return (
-    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div role="status" style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 22, fontWeight: 800, color: full ? t.success : t.text, fontVariantNumeric: 'tabular-nums' }}>
-          {result.awarded} / {result.total}
-        </span>
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: t.textMuted }}>
-          mark{result.total === 1 ? '' : 's'}{full ? ' · full marks' : ''}
-        </span>
-      </div>
-
       <div>
         <div style={{ fontSize: 11.5, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Your answer</div>
         <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.7, color: t.textSub, padding: '10px 12px', borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}`, overflowWrap: 'anywhere' }}>
           {pieces}
         </div>
-        {ranges.length > 0 && <div style={{ fontSize: 11.5, color: t.textFaint, marginTop: 4 }}>Highlighted: what earned each mark (numbers match the mark points below).</div>}
+        {ranges.length > 0 && <div style={{ fontSize: 11.5, color: t.textFaint, marginTop: 4 }}>Highlighted: what earned each mark (numbers match the mark points).</div>}
       </div>
+  )
+}
 
+function PointList({ question, result, theme }) {
+  const t = THEMES[theme]
+  const scheme = markingScheme(question)
+  return (
       <ol aria-label="Marks" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {result.marks.map((m) => {
           const p = scheme[m.point]
@@ -108,12 +145,16 @@ export function MarkingFeedback({ question, answer, result, theme }) {
           )
         })}
       </ol>
+  )
+}
 
-      {result.summary && (
-        <div style={{ fontSize: 13.5, color: t.textSub, lineHeight: 1.6, paddingLeft: 10, borderLeft: `2px solid ${t.accent}` }}>
-          <MathText text={result.summary} />
-        </div>
-      )}
+/** The marker's one-line advice for next time (shown as Titan's tip). */
+function Summary({ result, theme }) {
+  const t = THEMES[theme]
+  if (!result.summary) return null
+  return (
+    <div style={{ display: 'flex', gap: 8, fontSize: 13.5, color: t.textSub, lineHeight: 1.6, padding: '10px 12px', borderRadius: 10, background: t.accentGlow2 || t.bgSubtle, border: `1px solid ${t.borderAccent || t.border}` }}>
+      <div style={{ flex: 1, minWidth: 0 }}><strong style={{ color: t.text }}>Titan's tip: </strong><MathText text={result.summary} /></div>
     </div>
   )
 }

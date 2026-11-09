@@ -55,10 +55,12 @@ function InlineMath({ text, style }) {
         if (part.type === 'text') return <span key={i} style={weight}>{part.content}</span>
         const { html } = part
         if (html === null) return <span key={i} style={weight}>{part.content}</span>
+        // data-tex: the segment's source, so Titan's Advice can find it on screen.
         if (part.display) {
           return (
             <div
               key={i}
+              data-tex={part.content}
               dangerouslySetInnerHTML={{ __html: html }}
               style={{ overflowX: 'auto', textAlign: 'center', margin: '8px 0', maxWidth: '100%' }}
             />
@@ -67,6 +69,7 @@ function InlineMath({ text, style }) {
         return (
           <span
             key={i}
+            data-tex={part.content}
             dangerouslySetInnerHTML={{ __html: html }}
             style={{ verticalAlign: 'middle', ...weight }}
           />
