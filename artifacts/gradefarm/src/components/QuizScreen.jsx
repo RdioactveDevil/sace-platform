@@ -58,6 +58,8 @@ import { AnnotatedQuestion, AdviceSteps } from './TitanAdvice'
 import { getQuestionType, describeCorrectAnswer, gradeResponse, responseIsComplete, isAiMarked } from '../lib/questionTypes'
 import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
+import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
+import Celebration from './Celebration'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -286,6 +288,10 @@ export default function QuizScreen({
       .catch(() => {})
 
   const [floatXP, setFloatXP] = useState(null)
+  // A run of right answers worth calling out (3, 5, 10…), shown under the XP.
+  const [floatStreak, setFloatStreak] = useState(null)
+  // Bumped when a session ends well, to fire the confetti on the summary.
+  const [celebrate, setCelebrate] = useState(0)
   // Written answers: the marks (for the side panel) and Titan's Advice for the question on screen.
   const [marking, setMarking] = useState(null)
   const [adviceOn, setAdviceOn] = useState(false)
@@ -1267,8 +1273,11 @@ export default function QuizScreen({
     setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isRemediationQuestion, response: idx, timeMs: timeTakenMs }])
     if (!isRemediationQuestion) countAssignmentAnswer(isCorrect, idx, timeTakenMs)
 
+    // Exams stay silent: answers aren't marked until the end.
+    if (!examRun) playSound(answerSound(isCorrect, newStreak))
     if (isCorrect && !examRun) {
       setFloatXP(xpEarned)
+      setFloatStreak(isStreakMilestone(newStreak) ? newStreak : null)
       setTimeout(() => setFloatXP(null), 1400)
     }
 
@@ -1373,8 +1382,11 @@ export default function QuizScreen({
     setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant, response, timeMs: timeTakenMs }])
     if (!isVariant) countAssignmentAnswer(isCorrect, response, timeTakenMs)
 
+    // Part marks get the right-answer chime: they earned XP.
+    if (!examRun) playSound(answerSound(isCorrect || partMarks, newStreak))
     if (isCorrect && !examRun) {
       setFloatXP(xpEarned)
+      setFloatStreak(isStreakMilestone(newStreak) ? newStreak : null)
       setTimeout(() => setFloatXP(null), 1400)
     }
 
@@ -1692,7 +1704,19 @@ export default function QuizScreen({
   // A new question closes the report menu and its thank-you.
   useEffect(() => { setReportMenuOpen(false); setReportThanks(false) }, [currentQ?.id])
 
-  if (finished || (!currentQ && sessionResults.length > 0)) {
+  // The summary opens: a fanfare, and confetti if it went well.
+  const showingSummary = finished || (!currentQ && sessionResults.length > 0)
+  useEffect(() => {
+    if (!showingSummary) return
+    const main = sessionResults.filter(r => !r.remediation)
+    const right = main.filter(r => r.correct).length
+    const sound = finishSound(right, main.length)
+    if (sound) playSound(sound)
+    if (isCelebration(right, main.length)) setCelebrate(n => n + 1)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showingSummary])
+
+  if (showingSummary) {
     const startMode = (mode, ids = []) => {
       generatingMoreRef.current = false
       bankExhaustionAttempted.current = false
@@ -1800,6 +1824,7 @@ export default function QuizScreen({
 
     return (
       <div style={{ height: '100%', minHeight: '100%', background: t.bg, fontFamily: FONT_B, overflowY: 'auto', color: t.text }}>
+        {celebrate > 0 && <Celebration burst={celebrate} />}
         <style>{`
           .ss-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
           .ss-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 180px) 52px 14px; gap: 12px; align-items: center; width: 100%; padding: 11px 16px; border: none; background: transparent; text-align: left; cursor: pointer; font-family: inherit; color: inherit; }
@@ -2086,6 +2111,11 @@ export default function QuizScreen({
       {floatXP && (
         <div className="qz-anim" style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', fontSize: 30, fontWeight: 800, color: t.goldText, animation: 'floatXP 1.4s ease forwards', pointerEvents: 'none', zIndex: 9999 }}>
           +{floatXP} XP
+          {floatStreak && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 16, color: t.text, marginTop: 2 }}>
+              <Flame size={18} color={t.goldText} aria-hidden="true" /> {floatStreak} in a row
+            </div>
+          )}
         </div>
       )}
 

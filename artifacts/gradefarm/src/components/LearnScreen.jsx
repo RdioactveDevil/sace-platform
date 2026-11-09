@@ -6,6 +6,8 @@ import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import MathText from './MathText'
 import { questionHelpSystemSection, questionHelpOpeningPrompt } from '../lib/questionHelp'
 import { resolveConsolidation } from '../lib/consolidation'
+import { playSound, answerSound, finishSound, isCelebration } from '../lib/sounds'
+import Celebration from './Celebration'
 import { awaitingParent } from '../lib/parentConsent'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
 
@@ -531,6 +533,7 @@ export default function LearnScreen({
     return () => { cancelled = true }
   }, [lessonStoreKey, profile?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const [lesson, setLesson] = useState(null)       // { topic, data, step, revealed, checkIndex, picked, answers, startedAt, updatedAt }
+  const [celebrate, setCelebrate] = useState(0)    // bumped to fire confetti on a well-finished lesson
   const [lessonLoading, setLessonLoading] = useState('')  // topic being written, '' when idle
   const [lessonError, setLessonError] = useState('')
   const [topicPickerOpen, setTopicPickerOpen] = useState(false)
@@ -689,6 +692,21 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
   const updateLesson = (patch) => saveLesson({ ...lesson, ...patch })
   const finishLesson = () => {
     updateLesson({ step: 3, finishedAt: Date.now() })
+    const right = (lesson?.answers || []).filter(Boolean).length
+    const total = lesson?.data?.checks?.length || 0
+    const sound = finishSound(right, total)
+    if (sound) playSound(sound)
+    if (isCelebration(right, total)) setCelebrate(n => n + 1)
+  }
+  // Checking a lesson question: the same sounds as the quiz, counting the
+  // run of right answers so far for the streak sound.
+  const checkLessonAnswer = (check) => {
+    const ok = lesson.picked === check.answer_index
+    const answers = [...lesson.answers.slice(0, lesson.checkIndex), ok]
+    let run = 0
+    for (let i = answers.length - 1; i >= 0 && answers[i]; i--) run++
+    playSound(answerSound(ok, run))
+    updateLesson({ answers })
   }
 
   // Lessons in progress (newest first) for the start screen.
@@ -1174,7 +1192,7 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       {!answered && (
                         <button type="button" style={primaryBtn(lesson.picked != null)} disabled={lesson.picked == null}
-                          onClick={() => updateLesson({ answers: [...lesson.answers.slice(0, lesson.checkIndex), lesson.picked === check.answer_index] })}>
+                          onClick={() => checkLessonAnswer(check)}>
                           Check
                         </button>
                       )}
@@ -1190,6 +1208,7 @@ Give exactly 4 ideas, 3 to 5 example steps, 3 checks with 4 options each (vary w
                   </>
                 )}
 
+                {step === 3 && celebrate > 0 && <Celebration burst={celebrate} />}
                 {step === 3 && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'start' }}>
                     <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
