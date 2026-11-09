@@ -32,6 +32,7 @@ import remediationRouter from "./remediation";
 import readinessRouter from "./readiness";
 import familyRouter from "./family";
 import markingRouter from "./marking";
+import answersRouter from "./answers";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(remediationRouter);
 router.use(readinessRouter);
 router.use(familyRouter);
 router.use(markingRouter);
+router.use(answersRouter);
 
 export default router;
