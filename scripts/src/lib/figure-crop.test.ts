@@ -9,6 +9,16 @@ test("bands join runs across small gaps only", () => {
   assert.deepEqual(bands(ink, 1), [{ start: 1, end: 2 }, { start: 4, end: 4 }, { start: 8, end: 9 }]);
 });
 
+/** A line of "text" as letters (14px wide, 5px apart) in words (18px apart). */
+function text(x: number, y: number, w: number, h = 30): number[][] {
+  const out: number[][] = [];
+  for (let at = x, i = 0; at + 14 <= x + w; i++) {
+    out.push([at, y, 14, h]);
+    at += i % 6 === 5 ? 32 : 19;
+  }
+  return out;
+}
+
 /** A white page with black rectangles (x, y, w, h), at render scale 3. */
 async function page(rects: number[][]) {
   const width = 1785, height = 2523;
@@ -19,11 +29,11 @@ async function page(rects: number[][]) {
 // A figure (400–1300 × 600–1000), its caption close under it, a two-line
 // paragraph of question text well above it and a line of text well below.
 const LAYOUT = [
-  [300, 420, 1100, 30], [300, 458, 900, 30],  // question text, two lines
+  ...text(300, 420, 1100), ...text(300, 458, 900), // question text, two lines
   [400, 600, 900, 400],                        // the figure
   [1350, 780, 160, 30],                        // a label to its right ("distillate")
   [700, 1030, 300, 30],                        // its caption
-  [300, 1180, 1000, 30],                       // question text below
+  ...text(300, 1180, 1000),                    // question text below
 ];
 
 test("a sloppy box loses the question text and gets back the cut-off label", async () => {
@@ -46,7 +56,7 @@ test("captions spread under a figure stay; a line of running text inside the box
   // Three structures, their captions well below them (spread out, with wide gaps),
   // and a question sentence above, all inside a generous box.
   const p = await page([
-    [300, 400, 1100, 30],                                       // running text (one solid run)
+    ...text(300, 400, 1100),                                    // running text
     [400, 600, 250, 200], [800, 600, 250, 200], [1200, 600, 250, 200],
     [430, 860, 190, 30], [830, 860, 190, 30], [1230, 860, 190, 30], // molecule A / B / C
   ]);
@@ -57,7 +67,7 @@ test("captions spread under a figure stay; a line of running text inside the box
 
 test("question text printed right against the figure goes; a caption a little below it comes back", async () => {
   const p = await page([
-    [300, 500, 1100, 30],                                  // a sentence, only 25px above the figure
+    ...text(300, 500, 1100),                               // a sentence, only 25px above the figure
     [400, 555, 900, 300],                                  // the figure
     [450, 940, 200, 30], [800, 940, 200, 30], [1100, 940, 180, 30], // captions, 85px below
     [1450, 1000, 120, 30],                                  // "(3 marks)" off to the right

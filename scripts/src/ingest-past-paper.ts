@@ -329,7 +329,9 @@ async function placeFigure(client: Anthropic, page: Page, rough: BBox, hint: str
     } as Anthropic.MessageCreateParamsNonStreaming);
     const text = message.content.map((c) => (c.type === "text" ? c.text : "")).join("");
     const r = JSON.parse(text) as { found: boolean; x: number; y: number; w: number; h: number };
-    if (r.found && r.w > 1 && r.h > 1) {
+    // A box far smaller than the first one is a close-up of one label (a
+    // stray "Cl"), not the figure: keep the first box then.
+    if (r.found && r.w > 1 && r.h > 1 && (r.w / 100) * area.width * (r.h / 100) * area.height >= 0.25 * roughPx.width * roughPx.height) {
       box = {
         left: Math.round(area.left + (clamp(r.x, 0, 100) / 100) * area.width),
         top: Math.round(area.top + (clamp(r.y, 0, 100) / 100) * area.height),

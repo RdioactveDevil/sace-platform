@@ -108,7 +108,7 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   const wordGap = 12 * scale;
   const boxWidth = x1 - x0 + 1;
   const runningText = (l: Band) => {
-    let first = -1, last = -1, gap = 0, widest = 0;
+    let first = -1, last = -1, gap = 0, widest = 0, run = 0, longest = 0;
     for (let x = sx0; x <= sx1; x++) {
       let ink = false;
       for (let y = l.start; y <= l.end && !ink; y++) ink = dark(x, y);
@@ -117,10 +117,18 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
         else widest = Math.max(widest, gap);
         last = x;
         gap = 0;
-      } else if (first >= 0) gap++;
+        longest = Math.max(longest, ++run);
+      } else {
+        if (first >= 0) gap++;
+        run = 0;
+      }
     }
-    // Taller than a ruled line (answer lines and table borders aren't text).
-    return first >= 0 && l.end - l.start + 1 >= 4 * scale && last - first + 1 >= 0.5 * boxWidth && widest <= wordGap;
+    const height = l.end - l.start + 1;
+    // Taller than a ruled line (answer lines and table borders aren't text),
+    // and broken up like letters: a drawing has long unbroken strokes (bonds,
+    // axes), a sentence never runs ink much longer than a letter or two.
+    return first >= 0 && height >= 4 * scale && longest <= 2 * height
+      && last - first + 1 >= 0.5 * boxWidth && widest <= wordGap;
   };
   const isText = (bl: Band[]) => {
     if (!bl.every((l) => l.end - l.start + 1 <= textLine)) return false;
@@ -130,9 +138,10 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   while (kept.length > 1 && isText(kept[0])) kept.shift();
   while (kept.length > 1 && isText(kept[kept.length - 1])) kept.pop();
 
-  // Question text printed right against the figure (closer than the clear
-  // gap, so in the figure's block): text-high lines at the very top or bottom
+  // Question text printed right against the top of the figure (closer than
+  // the clear gap, so in the figure's block): text-high lines at the very top
   // that include a line of running text go, as long as some figure is left.
+  // Not at the bottom, where a figure's own axis title or caption sits.
   const textHigh = (l: Band) => l.end - l.start + 1 <= textLine;
   const trimEdge = (bl: Band[], fromTop: boolean): Band[] => {
     const lines = fromTop ? bl : [...bl].reverse();
@@ -145,7 +154,6 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   // (Which block comes after the figure, found before trimming changes the blocks.)
   const lastKept = blocks.indexOf(kept[kept.length - 1]);
   kept[0] = trimEdge(kept[0], true);
-  kept[kept.length - 1] = trimEdge(kept[kept.length - 1], false);
 
   // A caption printed a little below the figure ("molecule A   molecule B"):
   // the next block down, if it's a line or two of short labels under the
@@ -159,7 +167,9 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   };
   const below = lastKept >= 0 ? blocks[lastKept + 1] : undefined;
   if (below && below.length <= 2 && below.every(textHigh) && !below.some(runningText)
-      && below[0].start - span(kept[kept.length - 1]).end <= 40 * scale) {
+      && below[0].start - span(kept[kept.length - 1]).end <= 40 * scale
+      // Not the page's footer ("page 6 of 12").
+      && below[below.length - 1].end < H * 0.93) {
     const fig = inkSpan(span(kept[0]).start, span(kept[kept.length - 1]).end);
     const cap = inkSpan(below[0].start, below[below.length - 1].end);
     const inside = cap.first >= fig.first - 10 * scale && cap.last <= fig.last + 10 * scale;
@@ -168,25 +178,32 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   const top = span(kept[0]).start;
   const bottom = span(kept[kept.length - 1]).end;
 
-  // Columns across the kept rows; keep column bands that touch the box.
+  // Columns across the kept rows, the whole page wide (a label or caption
+  // line is followed to its end, however far); keep column bands that touch
+  // the box.
   const colInk: boolean[] = [];
-  for (let x = sx0; x <= sx1; x++) {
+  for (let x = 0; x < W; x++) {
     let n = 0;
     for (let y = top; y <= bottom && n < 2; y++) if (dark(x, y)) n++;
     colInk.push(n >= 2);
   }
   // A clear gap between columns: wider than the space between words.
   const colGap = Math.max(6, Math.round(14 * scale));
-  const cols = bands(colInk, colGap)
-    .map((b) => ({ start: b.start + sx0, end: b.end + sx0 }))
-    .filter((b) => b.end >= x0 && b.start <= x1);
+  const cols = bands(colInk, colGap).filter((b) => b.end >= x0 && b.start <= x1);
   if (!cols.length) return box;
   const left = Math.min(...cols.map((b) => b.start));
   const right = Math.max(...cols.map((b) => b.end));
 
+  // A little white margin, but only white: never part of the next line.
   const pad = Math.round(3 * scale);
-  const l = clampX(left - pad), t = clampY(top - pad);
-  return { left: l, top: t, width: clampX(right + pad) - l + 1, height: clampY(bottom + pad) - t + 1 };
+  const rowBlank = (y: number) => { for (let x = left; x <= right; x++) if (dark(x, y)) return false; return true; };
+  const colBlank = (x: number) => { for (let y = top; y <= bottom; y++) if (dark(x, y)) return false; return true; };
+  let t = top, b = bottom, l = left, r = right;
+  for (let i = 0; i < pad && t > 0 && rowBlank(t - 1); i++) t--;
+  for (let i = 0; i < pad && b < H - 1 && rowBlank(b + 1); i++) b++;
+  for (let i = 0; i < pad && l > 0 && colBlank(l - 1); i++) l--;
+  for (let i = 0; i < pad && r < W - 1 && colBlank(r + 1); i++) r++;
+  return { left: l, top: t, width: r - l + 1, height: b - t + 1 };
 }
 
 /** Percent box (0–100 of the page) → pixels. */
