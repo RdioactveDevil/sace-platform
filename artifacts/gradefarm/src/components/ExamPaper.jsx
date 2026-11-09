@@ -14,7 +14,9 @@ import { partsOf, marksOf, sourceLabel, paginate, linesForMarks, formatMinutes }
 // branding only: no board logos, crests, copyright lines or acknowledgements.
 
 const MM = 96 / 25.4
-const letter = (i) => String.fromCharCode(65 + i)
+const letter = (i) => (Number.isInteger(i) ? String.fromCharCode(65 + i) : '–')
+// A student's copy has answers only for questions they've answered or from real papers.
+const NOT_YET = 'Solution shown once you have answered this question in practice.'
 const range = (n) => Array.from({ length: Math.max(0, n) }, (_, i) => i)
 
 // ── Geometry (mm) ────────────────────────────────────────────────────────────
@@ -205,14 +207,19 @@ function solutionBlocks(exam, numberOf) {
       key: `sol-A-${q.id}`, el: (
         <div className="xp-sol" style={{ paddingBottom: '4mm' }}>
           <h4>Question {numberOf('A', i)}: {letter(q.answer_index)} <span className="src">{sourceLabel(q)}</span></h4>
-          {q.solution && <MathText text={q.solution} />}
+          {q.solution ? <MathText text={q.solution} /> : !Number.isInteger(q.answer_index) && <p>{NOT_YET}</p>}
         </div>
       ),
     }))
   }
   exam.B.forEach((q, i) => {
     out.push({ key: `sol-B-${q.id}`, keepWithNext: true, el: <div className="xp-sol" style={{ paddingBottom: '1.5mm' }}><h4>Question {numberOf('B', i)} ({marksOf(q)} marks) <span className="src">{sourceLabel(q)}</span></h4></div> })
-    partsOf(q).forEach((p, k) => {
+    const parts = partsOf(q)
+    if (!parts.some(p => p.solution)) {
+      out.push({ key: `sol-B-${q.id}-none`, el: <div className="xp-sol-part"><b /><div>{NOT_YET}</div><span /></div> })
+      return
+    }
+    parts.forEach((p, k) => {
       if (!p.solution && !p.marks) return
       out.push({
         key: `sol-B-${q.id}-${k}`, el: (

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { buildSubjectExam, countQuestions, formatClock, examAnswerRecords } from '../lib/examEngine'
+import { buildSubjectExam, countQuestions, formatClock } from '../lib/examEngine'
 import { seenQuestionChecker } from '../lib/engine'
-import { saveExamAttempt, fetchExamPercentile, fetchMyExamAttempts, recordAnswer } from '../lib/db'
+import { markExam, fetchExamPercentile, fetchMyExamAttempts } from '../lib/db'
 import ExamSimulator from './ExamSimulator'
 
 const GOLD = '#f1be43'
@@ -26,34 +26,29 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
     return () => { alive = false }
   }, [paper, profile?.id])
 
-  // Add every question on the paper to the student's answer history, so exam
-  // questions count as answered and aren't served again in practice.
-  const recordExamAnswers = (records) => {
-    if (!profile?.id || !records.length) return
+  // The server marks the paper, records every question on it as answered (so
+  // practice doesn't serve them again) and saves the attempt; then the track
+  // percentile. Resolves to { reveals, stats } for ExamSimulator.
+  const handleResult = async ({ trackId, title, paper: p, answers, secTimes }) => {
+    const r = await markExam({
+      trackId, title,
+      sections: p.sections.map((s) => ({ id: s.id, name: s.name, questionIds: s.questions.map((q) => q.id) })),
+      answers,
+      timeSpent: secTimes,
+    })
+    const reveals = Object.fromEntries(Object.entries(r.results || {}).map(([id, x]) => [id, x.reveal || {}]))
     const now = new Date().toISOString()
     setStruggleMap?.((prev) => {
       const next = { ...prev }
-      for (const r of records) {
-        const old = next[r.questionId] ?? { attempts: 0, wrong: 0 }
-        next[r.questionId] = { ...old, attempts: old.attempts + 1, wrong: old.wrong + (r.correct ? 0 : 1), last_seen: now }
+      for (const [id, x] of Object.entries(r.results || {})) {
+        const old = next[id] ?? { attempts: 0, wrong: 0 }
+        next[id] = { ...old, attempts: old.attempts + 1, wrong: old.wrong + (x.correct ? 0 : 1), last_seen: now }
       }
       return next
     })
-    // Background, a few at a time; a failed write only loses that history row.
-    const queue = [...records]
-    const worker = async () => {
-      for (let r = queue.shift(); r; r = queue.shift()) {
-        try { await recordAnswer(profile.id, r.questionId, r.correct, r.selected) } catch { /* non-blocking */ }
-      }
-    }
-    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {})
-  }
-
-  // Persist the finished attempt (best-effort) and return the track percentile.
-  const handleResult = async (result) => {
-    if (paper) recordExamAnswers(examAnswerRecords(paper, result.answers))
-    try { if (profile?.id) await saveExamAttempt(profile.id, result) } catch { /* non-blocking */ }
-    try { return await fetchExamPercentile(result.trackId, result.percent) } catch { return null }
+    let stats = null
+    try { stats = await fetchExamPercentile(trackId, r.percent) } catch { /* the result still shows */ }
+    return { reveals, stats }
   }
 
   if (paper) {

@@ -1,3 +1,11 @@
+// NOT READY FOR RELEASE: since migration 20261110000000 (server marking),
+// students can no longer read answers from `questions`, write answer_log or
+// struggle_profiles, or call award_xp / record_answer. This app still does all
+// of those, so for students it loads no questions and saves no answers. Before
+// releasing it, move it to what the web app uses: read `questions_student`,
+// and mark answers with POST /api/answers/present and /api/answers/check
+// (artifacts/api-server/src/routes/answers.ts).
+
 import { supabase } from "./supabase";
 import { nextReviewTime, type Question, type StruggleMap } from "./engine";
 

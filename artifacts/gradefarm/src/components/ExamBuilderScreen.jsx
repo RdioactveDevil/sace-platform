@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus, Save, Link2, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getExamBankForTile, fetchTutorClasses, fetchMyClasses } from '../lib/db'
+import { getExamBankForTile, fetchTutorClasses, fetchMyClasses, fetchSolutions } from '../lib/db'
 import { listBuiltExams, getBuiltExam, saveBuiltExam, deleteBuiltExam } from '../lib/builtExams'
 import {
   bankSummary, examPool, pickExam, swapCandidate, examTotals, writingMinutes, isMathsSubject,
@@ -52,7 +52,7 @@ const examMinutes = (board, marks) => (board === 'sace' ? (marks >= 90 ? 130 : M
  */
 const DEFAULT_STORE = { list: listBuiltExams, get: getBuiltExam, save: saveBuiltExam, remove: deleteBuiltExam }
 
-export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null }) {
+export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
   const board = boardOf(subject)
@@ -173,6 +173,24 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
   }), [picked, byId])
   const totals = examTotals(exam)
   const minutes = examMinutes(board, totals.total)
+
+  // The bank comes without answers. For the solutions pages, ask the server for
+  // them: tutors and admins get every one; students get those for questions
+  // they've answered and for questions from real past and trial papers.
+  const askedSolutions = useRef(new Set())
+  const examIds = [...exam.A, ...exam.B].map(q => q.id).join(',')
+  useEffect(() => {
+    if (!solutions || !examIds) return
+    const want = examIds.split(',').filter(id => !askedSolutions.current.has(id))
+    if (!want.length) return
+    want.forEach(id => askedSolutions.current.add(id))
+    let alive = true
+    loadSolutions(want).then(found => {
+      if (!alive || !found || !Object.keys(found).length) return
+      setBank(prev => (prev || []).map(q => (found[q.id] ? { ...q, ...found[q.id] } : q)))
+    }).catch(() => { want.forEach(id => askedSolutions.current.delete(id)) })
+    return () => { alive = false }
+  }, [solutions, examIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const used = [...picked.A, ...picked.B]
   const swapSeed = useRef(1)
