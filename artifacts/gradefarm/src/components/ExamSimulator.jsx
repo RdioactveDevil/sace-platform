@@ -89,8 +89,15 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
   )
 }
 
-export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, onResult }) {
+// onResult({ trackId, title, paper, answers, secTimes }) marks the paper on the
+// server and resolves to { reveals: { [questionId]: answer fields }, stats }:
+// the questions arrive without their answers, which join them once marked.
+export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark', onExit, onResult }) {
   const t = THEMES[theme]
+  const [paper, setPaper] = useState(paperIn)
+  const [marked, setMarked] = useState(false)
+  const [markError, setMarkError] = useState(false)
+  const [markAttempt, setMarkAttempt] = useState(0)
   const [phase, setPhase] = useState('intro')   // intro | running | results | review
   const [secIdx, setSecIdx] = useState(0)
   const [qIdx, setQIdx] = useState(0)
@@ -101,19 +108,26 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
   const [reviewIdx, setReviewIdx] = useState(0)
   const [insights, setInsights] = useState(null) // { band, ready, stats, loading }
 
-  // When the paper finishes, compute the predicted band and fetch the track
-  // percentile (saving the attempt happens inside onResult).
+  // When the paper finishes, have it marked (which also saves the attempt),
+  // add the answers to its questions, then work out the predicted band.
   useEffect(() => {
-    if (phase !== 'results') return
-    const r = gradePaper(paper, answers, secTimes)
-    setInsights({ band: predictScore(trackId, r.percent), ready: readiness(r.percent), stats: null, loading: !!onResult })
-    if (onResult) {
-      Promise.resolve(onResult({ ...r, trackId, title: paper.title, answers }))
-        .then((stats) => setInsights((prev) => ({ ...(prev || {}), stats, loading: false })))
-        .catch(() => setInsights((prev) => ({ ...(prev || {}), loading: false })))
-    }
+    if (phase !== 'results' || marked) return
+    let alive = true
+    setMarkError(false)
+    Promise.resolve(onResult ? onResult({ trackId, title: paper.title, paper, answers, secTimes }) : null)
+      .then((out) => {
+        if (!alive) return
+        const reveals = out?.reveals || {}
+        const withAnswers = { ...paper, sections: paper.sections.map((s) => ({ ...s, questions: s.questions.map((q) => ({ ...q, ...(reveals[q.id] || {}) })) })) }
+        const r = gradePaper(withAnswers, answers, secTimes)
+        setPaper(withAnswers)
+        setInsights({ band: predictScore(trackId, r.percent), ready: readiness(r.percent), stats: out?.stats ?? null, loading: false })
+        setMarked(true)
+      })
+      .catch(() => { if (alive) setMarkError(true) })
+    return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
+  }, [phase, markAttempt])
 
   const section = paper.sections[secIdx]
 
@@ -176,6 +190,20 @@ export default function ExamSimulator({ paper, trackId, theme = 'dark', onExit, 
   }
 
   // ── Results ──────────────────────────────────────────────────────────────────
+  if (phase === 'results' && !marked) {
+    return (
+      <Shell theme={theme}>
+        <div role="status" style={{ textAlign: 'center', maxWidth: 420 }}>
+          <div style={{ fontFamily: FONT_D, fontSize: 24, color: t.text, marginBottom: 10 }}>{markError ? "Your exam couldn't be marked" : 'Marking your exam…'}</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginBottom: 20 }}>
+            {markError ? 'Your answers are still here. Check your connection and try again.' : 'This takes a few seconds.'}
+          </div>
+          {markError && <button onClick={() => setMarkAttempt((n) => n + 1)} style={primaryBtn}>Try again</button>}
+        </div>
+      </Shell>
+    )
+  }
+
   if (phase === 'results') {
     const r = gradePaper(paper, answers, secTimes)
     const accColor = r.percent >= 70 ? t.success : r.percent >= 40 ? GOLD : t.danger

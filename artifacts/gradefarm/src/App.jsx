@@ -1813,6 +1813,11 @@ function AppInner() {
                   return fresh.length ? [...prev, ...fresh] : prev
                 })
               }}
+              onAnswersRevealed={(reveals) => {
+                // The server sends a question's answer and solution once it's answered.
+                if (!reveals || !Object.keys(reveals).length) return
+                setQuestions(prev => prev.map(q => (reveals[q.id] ? { ...q, ...reveals[q.id] } : q)))
+              }}
               onGoToStudyPlan={() => navigate('/my-progress')} />
             </AppShell>
       } />

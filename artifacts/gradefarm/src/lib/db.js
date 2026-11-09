@@ -1,6 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase'
 import { currentStreak } from './streak'
-import { nextReviewTime } from './engine'
 import { questionsBankSubjectKeys } from './subjects'
 import { fileBorrowedQuestions } from './sharedQuestions'
 import { isAiMarked } from './questionTypes'
@@ -363,10 +362,50 @@ async function fetchAllRows(buildQuery, orderColumn = 'id') {
   return all
 }
 
+// Students read questions without their answers (questions_student, migration
+// 20261110000000); answers come back from the API once a question is answered.
+const STUDENT_QUESTIONS_VIEW = 'questions_student'
+// Until that migration is applied the view doesn't exist; read the table then,
+// so deploying the app first doesn't leave the bank empty.
+let studentQuestionsTable = null
+async function studentQuestions() {
+  if (!studentQuestionsTable) {
+    studentQuestionsTable = supabase.from(STUDENT_QUESTIONS_VIEW).select('id').limit(1)
+      .then(({ error }) => (error && (error.code === 'PGRST205' || error.code === '42P01') ? 'questions' : STUDENT_QUESTIONS_VIEW))
+      .catch(() => STUDENT_QUESTIONS_VIEW)
+  }
+  return studentQuestionsTable
+}
+
 export async function getQuestions(subject = 'Chemistry') {
+  const table = await studentQuestions()
   const data = await fetchAllRows(() =>
-    supabase.from('questions').select('*').eq('subject', subject))
-  return mapAndDedupeQuestions(data, subject)
+    supabase.from(table).select('*').eq('subject', subject))
+  return mapAndDedupeQuestions(await withPassages(data), subject)
+}
+
+/** Fetch an answer-free question by id (e.g. a held question the bank in hand doesn't have). */
+export async function getStudentQuestion(id) {
+  const table = await studentQuestions()
+  const { data, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  const [q] = await withPassages([data])
+  return mapAndDedupeQuestions([q], q.subject)[0] || q
+}
+
+/** Attach each reading-comprehension question's passage (the view can't embed it). */
+async function withPassages(rows) {
+  const ids = [...new Set((rows || []).map(r => r.passage_id).filter(Boolean))]
+  if (!ids.length) return rows || []
+  const byId = {}
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data } = await supabase.from('passages').select('id, title, kind, body').in('id', ids.slice(i, i + 100))
+      for (const p of data || []) byId[p.id] = p
+    }
+  } catch { /* questions still load without their passages */ }
+  return rows.map(r => (r.passage_id ? { ...r, passage: byId[r.passage_id] || null } : r))
 }
 
 /**
@@ -390,24 +429,26 @@ export async function getExamBankForTile(subjectTile) {
 }
 
 async function loadBankForTile(subjectTile) {
+  const table = await studentQuestions()
   const keys = questionsBankSubjectKeys(subjectTile)
   const curriculumId = curriculumIdFromTile(subjectTile)
 
   if (curriculumId) {
     try {
       // Reading-comprehension questions carry their passage (migration 20261015000003).
-      const cols = '*, passage:passages(id, title, kind, body)'
+      const cols = '*'
       const linked = await fetchAllRows(() =>
-        supabase.from('questions').select(cols).eq('curriculum_id', curriculumId))
+        supabase.from(table).select(cols).eq('curriculum_id', curriculumId))
       const unlinked = keys.length
         ? await fetchAllRows(() =>
-            supabase.from('questions').select(cols).is('curriculum_id', null).in('subject', keys))
+            supabase.from(table).select(cols).is('curriculum_id', null).in('subject', keys))
         : []
       const own = [...linked, ...unlinked]
       const borrowed = await fetchBorrowedQuestions(curriculumId, cols, keys[0] || subjectTile.name, own.map(q => q.id))
       // Questions an admin kept out of this subject (off its course), without deleting them.
       const hidden = await fetchHiddenQuestionIds(curriculumId)
-      return mapAndDedupeQuestions([...own, ...borrowed].filter(q => !hidden.has(q.id)), keys[0] || subjectTile.name)
+      const rows = await withPassages([...own, ...borrowed].filter(q => !hidden.has(q.id)))
+      return mapAndDedupeQuestions(rows, keys[0] || subjectTile.name)
     } catch {
       // curriculum_id not migrated yet — fall through to spelling match
     }
@@ -416,8 +457,8 @@ async function loadBankForTile(subjectTile) {
   if (keys.length === 0) return []
   if (keys.length === 1) return getQuestions(keys[0])
   const data = await fetchAllRows(() =>
-    supabase.from('questions').select('*').in('subject', keys))
-  return mapAndDedupeQuestions(data, keys[0])
+    supabase.from(table).select('*').in('subject', keys))
+  return mapAndDedupeQuestions(await withPassages(data), keys[0])
 }
 
 /** Ids of questions hidden from this subject (curriculum_hidden_questions); none if that can't be read. */
@@ -453,6 +494,7 @@ export async function reportOffCourse(questionId, curriculumId) {
  */
 async function fetchBorrowedQuestions(curriculumId, cols, subject, ownIds) {
   try {
+    const table = await studentQuestions()
     const { data: subs, error: sErr } = await supabase
       .from('curriculum_subtopics')
       .select('id, name, order_index, topic:curriculum_topics(name, order_index)')
@@ -470,7 +512,7 @@ async function fetchBorrowedQuestions(curriculumId, cols, subject, ownIds) {
     const rows = []
     for (let i = 0; i < sources.length; i += 100) {
       const part = sources.slice(i, i + 100)
-      rows.push(...await fetchAllRows(() => supabase.from('questions').select(cols).in('subtopic_id', part)))
+      rows.push(...await fetchAllRows(() => supabase.from(table).select(cols).in('subtopic_id', part)))
     }
     return fileBorrowedQuestions(rows, links, targets, { subject, ownIds })
   } catch {
@@ -486,9 +528,10 @@ function curriculumIdFromTile(tile) {
 // â”€â”€â”€ STRUGGLE PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /** Exact row count for `questions.subject` (head-only request). */
 export async function countQuestionsForSubject(subject) {
+  const table = await studentQuestions()
   const { count, error } = await supabase
-    .from('questions')
-    .select('*', { count: 'exact', head: true })
+    .from(table)
+    .select('id', { count: 'exact', head: true })
     .eq('subject', subject)
 
   if (error) throw error
@@ -562,70 +605,81 @@ export async function getStruggleMap(userId) {
   return Object.fromEntries(data.map(r => [r.question_id, r]))
 }
 
-// `selected` is the chosen option index for an MCQ, null for other types.
-export async function recordAnswer(userId, questionId, correct, selected = null, sessionId = null, timeTakenMs = null) {
-  // One call logs the answer and updates the struggle row (migration
-  // 20261025000004_record_answer.sql).
-  const { error } = await supabase.rpc('record_answer', {
-    p_question_id: questionId,
-    p_correct: !!correct,
-    p_selected: Number.isInteger(selected) ? selected : null,
-    p_session_id: sessionId,
-    p_time_ms: Number.isFinite(timeTakenMs) ? Math.round(timeTakenMs) : null,
-  })
-  if (!error) return
-  // A session id the log won't take (not a uuid, or no such sessions row)
-  // mustn't lose the answer: record it without one.
-  if (sessionId && (error.code === '22P02' || error.code === '23503')) {
-    return recordAnswer(userId, questionId, correct, selected, null, timeTakenMs)
+// ─── MARKING ───────────────────────────────────────────────────────────────────
+// Answers are marked by the API (routes/answers.ts): the app has the questions
+// without their answers, so it sends each answer and gets back whether it was
+// right, the XP, and the answer and solution to show (`reveal`). The API also
+// records the answer, updates the review schedule and assignment progress.
+
+/**
+ * Put a question on screen. `context` is 'practice:<subject>' or
+ * 'assignment:<id>'. Resolves to { questionId, held }: when the student
+ * already had an unanswered question on screen there, that one comes back
+ * (held: true) and should be shown instead. Never throws: on failure the
+ * question asked for is shown.
+ */
+export async function presentQuestion(questionId, context) {
+  try {
+    return await tutorFetch('/api/answers/present', { method: 'POST', body: JSON.stringify({ questionId, context }) })
+  } catch {
+    return { questionId, held: false }
   }
-  if (error.code !== 'PGRST202') throw error
+}
 
-  // Before that migration: three requests, and answer_log.selected is NOT NULL.
-  // The answer log doesn't depend on the struggle row, so write it alongside
-  // the read-then-write below instead of after it.
-  const logInsert = supabase.from('answer_log').insert({
-    user_id: userId,
-    session_id: sessionId,
-    question_id: questionId,
-    selected: Number.isInteger(selected) ? selected : 0,
-    correct,
-    time_taken_ms: timeTakenMs,
-  })
+/**
+ * Mark one answer. Body: { questionId, response, context, sessionId, timeMs }
+ * for a bank question, plus `remediation: { parentQuestionId, bankId |
+ * variantId | token, complete }` for extra practice.
+ * → { correct, marks, xp, bonus, run, reveal, profile, assignment }.
+ * Throws with `status` 409 and body.code 'held' (another question is on
+ * screen: body.heldQuestionId) or 'mark_first' (a written answer not marked yet).
+ */
+export async function checkAnswer(body) {
+  return tutorFetch('/api/answers/check', { method: 'POST', body: JSON.stringify(body) })
+}
 
-  const updateStruggle = async () => {
-    // maybeSingle: a first attempt has no row yet, which .single() reports as an error.
-    const { data: existing } = await supabase
-      .from('struggle_profiles')
-      .select('attempts, wrong')
-      .eq('user_id', userId)
-      .eq('question_id', questionId)
-      .maybeSingle()
+/**
+ * Mark a practice exam and save the attempt. Body: { trackId, title,
+ * sections: [{ id, name, questionIds }], answers, timeSpent }.
+ * → { totalCorrect, totalQuestions, percent, perSection, results: { [id]: { correct, reveal } } }
+ */
+export async function markExam(body) {
+  return tutorFetch('/api/answers/exam', { method: 'POST', body: JSON.stringify(body) })
+}
 
-    const attempts = (existing?.attempts ?? 0) + 1
-    const wrong = (existing?.wrong ?? 0) + (correct ? 0 : 1)
-    const next_review = nextReviewTime(attempts, wrong).toISOString()
-    const last_seen = new Date().toISOString()
+/**
+ * Mark the quiz's exam mode at Finish. Body: { items: [{ questionId, response,
+ * timeMs }] (answered, in order), questionIds (all), context, sessionId }.
+ * → { results: { [id]: { correct, xp } }, reveals, xp, run, profile, assignment }
+ */
+export async function markExamRun(body) {
+  return tutorFetch('/api/answers/exam-run', { method: 'POST', body: JSON.stringify(body) })
+}
 
-    if (existing) {
-      await supabase
-        .from('struggle_profiles')
-        .update({ attempts, wrong, last_seen, next_review })
-        .eq('user_id', userId)
-        .eq('question_id', questionId)
-    } else {
-      await supabase.from('struggle_profiles').insert({
-        user_id: userId,
-        question_id: questionId,
-        attempts,
-        wrong,
-        last_seen,
-        next_review,
-      })
-    }
+/**
+ * Answers and solutions for questions on a built exam: all of them for tutors
+ * and admins; for students, the ones they've answered and those from real
+ * past or trial papers. → { [questionId]: reveal }
+ */
+export async function fetchSolutions(questionIds) {
+  const ids = [...new Set((questionIds || []).filter(Boolean))]
+  if (!ids.length) return {}
+  const out = {}
+  for (let i = 0; i < ids.length; i += 300) {
+    const json = await tutorFetch('/api/answers/solutions', { method: 'POST', body: JSON.stringify({ questionIds: ids.slice(i, i + 300) }) })
+    Object.assign(out, json.solutions || {})
   }
+  return out
+}
 
-  await Promise.all([updateStruggle(), logInsert])
+/** A one-question concept builder for a missed question (no answer; its `token` marks it), or null. */
+export async function fetchConceptBuilder(parentQuestionId) {
+  try {
+    const json = await tutorFetch('/api/remediation/concept-builder', { method: 'POST', body: JSON.stringify({ parentQuestionId }) })
+    return json.variant || null
+  } catch {
+    return null
+  }
 }
 
 // â”€â”€â”€ SESSION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -645,28 +699,7 @@ export async function updateSession(sessionId, updates) {
 }
 
 // â”€â”€â”€ XP & STREAK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// XP and streaks are awarded server-side (award_xp clamps the amount and derives
-// the streak) — the profiles row itself is not writable for these columns.
-// `correct` is true/false for a graded answer, which also updates the recent
-// accuracy ranks need, and null for a bonus. Resolves to the profile fields
-// award_xp changed: { xp, streak, best_streak, recent_correct?, recent_answers? }.
-export async function addXP(userId, xpEarned, newStreak, currentProfile, correct = null) {
-  let { data, error } = await supabase.rpc('award_xp', {
-    p_xp_earned: Math.round(xpEarned),
-    p_new_streak: newStreak,
-    ...(correct == null ? {} : { p_correct: correct }),
-  })
-  // Before the rank-accuracy migration award_xp has no p_correct; still award the XP.
-  if (error?.code === 'PGRST202' && correct != null) {
-    ;({ data, error } = await supabase.rpc('award_xp', { p_xp_earned: Math.round(xpEarned), p_new_streak: newStreak }))
-  }
-  if (error) throw error
-  const row = (Array.isArray(data) ? data[0] : data) || {}
-  return {
-    ...row,
-    xp: row.xp ?? Math.max(0, (currentProfile?.xp ?? 0) + xpEarned),
-  }
-}
+// XP and streaks are awarded by the API with each marked answer (checkAnswer).
 
 // â”€â”€â”€ QUESTION FLAGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function flagQuestion(userId, questionId, flagType) {
@@ -969,8 +1002,9 @@ function normalizeVariant(v, parentQuestionId = null, conceptTag = null) {
 export async function getRemediationVariants(parentQuestionId, conceptTag, excludeIds = []) {
   const exclude = new Set(excludeIds)
 
+  // Without their answers: /answers/check marks them.
   const { data: direct, error: directError } = await supabase
-    .from('question_variants')
+    .from('question_variants_student')
     .select('*')
     .eq('parent_question_id', parentQuestionId)
     .order('usage_count', { ascending: true })
@@ -982,7 +1016,7 @@ export async function getRemediationVariants(parentQuestionId, conceptTag, exclu
     .filter(v => !exclude.has(v.id) && !exclude.has(v.variant_record_id))
 
   const { data: concept, error: conceptError } = await supabase
-    .from('question_variants')
+    .from('question_variants_student')
     .select('*')
     .eq('concept_tag', conceptTag)
     .order('usage_count', { ascending: true })
@@ -1117,35 +1151,6 @@ export async function getVariantCountsByConceptTags(conceptTags) {
     if (ct) counts[ct] = (counts[ct] || 0) + 1
   }
   return counts
-}
-
-export async function incrementQuestionVariantUsage(variantId) {
-  // Only stored variants (uuid ids) have a usage count; bank questions served
-  // as remediation and concept-builders don't.
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(variantId || ''))) return
-
-  const { error: rpcError } = await supabase.rpc('bump_variant_usage', { p_variant_id: variantId })
-  if (!rpcError) return
-  if (rpcError.code !== 'PGRST202') throw rpcError
-
-  // Before migration 20261025000005 there is no RPC; update the row directly.
-  const { data: existing, error: fetchError } = await supabase
-    .from('question_variants')
-    .select('id, usage_count')
-    .eq('id', variantId)
-    .single()
-
-  if (fetchError) throw fetchError
-
-  const { error } = await supabase
-    .from('question_variants')
-    .update({
-      usage_count: (existing?.usage_count ?? 0) + 1,
-      last_seen_at: new Date().toISOString(),
-    })
-    .eq('id', variantId)
-
-  if (error) throw error
 }
 
 // ── TUTOR DASHBOARD ───────────────────────────────────────────────────────────
@@ -1657,23 +1662,6 @@ export async function fetchAssignmentsForStudent(studentId) {
 export async function completeAssignment(assignmentId) {
   const { error } = await supabase.rpc('complete_assignment', { p_assignment_id: assignmentId })
   if (error) throw error
-}
-
-/** Record one answer toward an assignment's question_count (and pass mark, if
- *  set). The RPC completes the assignment once both are met. Returns
- *  { progress_count, question_count, min_accuracy, recent_results,
- *  completed_at }, or null if the assignment is already done.
- */
-export async function recordAssignmentAnswer(assignmentId, correct, { questionId = null, response = null, timeMs = null } = {}) {
-  const { data, error } = await supabase.rpc('record_assignment_answer', {
-    p_assignment_id: assignmentId,
-    p_correct: !!correct,
-    p_question_id: questionId,
-    p_response: response ?? null,
-    p_time_ms: Number.isFinite(timeMs) ? Math.round(timeMs) : null,
-  })
-  if (error) throw error
-  return Array.isArray(data) ? data[0] || null : data
 }
 
 /** The student's most recently finished assignments, each with the
@@ -2251,22 +2239,6 @@ export async function getRoomToken(roomName) {
 }
 
 // ── Exam simulator attempts + percentile analytics ──────────────────────────
-export async function saveExamAttempt(userId, attempt) {
-  if (!userId) return null
-  const row = {
-    user_id: userId,
-    track_id: attempt.trackId,
-    title: attempt.title || null,
-    total_correct: attempt.totalCorrect ?? 0,
-    total_questions: attempt.totalQuestions ?? 0,
-    percent: attempt.percent ?? 0,
-    per_section: attempt.perSection ?? null,
-  }
-  const { data, error } = await supabase.from('exam_attempts').insert(row).select('id').maybeSingle()
-  if (error) throw error
-  return data
-}
-
 // Aggregate percentile for a track via the SECURITY DEFINER RPC (no other
 // users' rows are exposed — only the aggregate comparison).
 export async function fetchExamPercentile(trackId, percent) {

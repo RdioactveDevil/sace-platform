@@ -5,9 +5,6 @@ import {
   dueQuestionIds,
   DUE_PER_SESSION,
   nextReviewTime,
-  calcXP,
-  calcRemediationXP,
-  getRemediationCompletionBonus,
   getLevelProgress,
   rankAccuracy,
   sessionWrongIds,
@@ -16,22 +13,22 @@ import {
   questionContentKey,
   ASSIGNMENT_DIFFICULTIES,
   assignmentStanding,
-  applyAssignmentAnswer,
 } from '../lib/engine'
 import {
   fetchTitanAdvice,
-  recordAnswer,
-  addXP,
+  checkAnswer,
+  presentQuestion,
+  getStudentQuestion,
+  markExamRun,
+  fetchConceptBuilder,
   createSession,
   getRemediationVariants,
   storeRemediationVariants,
   fetchAndPersistMoreQuestions,
-  incrementQuestionVariantUsage,
   flagQuestion,
   reportQuestion, reportOffCourse,
   flagTopicForStudyPlan,
   completeAssignment,
-  recordAssignmentAnswer,
   notifyAssignmentFinished,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
@@ -46,7 +43,6 @@ import {
   REMEDIATION_DB_TIMEOUT_MS,
 } from '../lib/remediation'
 import MathText from './MathText'
-import { parseLatexJson } from '../lib/mathMarkup'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
@@ -55,7 +51,7 @@ import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { MarkPoints } from './questions/WrittenAnswer'
 import { AnnotatedQuestion, AdviceSteps } from './TitanAdvice'
-import { getQuestionType, describeCorrectAnswer, gradeResponse, responseIsComplete, isAiMarked } from '../lib/questionTypes'
+import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked } from '../lib/questionTypes'
 import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
@@ -112,78 +108,6 @@ function getTargetDifficulty(sessionResults, questions) {
   if (accuracy >= 0.7) return Math.min(5, ceiling + 1)
   if (accuracy <= 0.4) return Math.max(1, ceiling - 1)
   return Math.min(5, ceiling)
-}
-
-async function generateConceptBuilderViaAI(parentQuestion, conceptTag) {
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-
-    const correctAnswer = parentQuestion.options?.[parentQuestion.answer_index] || ''
-    const subjectLabel = parentQuestion?.subject || 'school'
-    const system = [
-      `You are a ${subjectLabel} teacher generating a concept-builder question for a struggling student.`,
-      'Return only a valid JSON object (not an array).',
-      'The question MUST embed the key fact or hint directly in the question stem — like a teacher explaining in class.',
-      'Structure: state the core concept or mechanism first, then ask the student to apply it.',
-      'Make it feel like a teacher leading the student step-by-step to the answer.',
-      'Required keys: question, options (array of exactly 4 strings), answer_index, solution, tip,',
-      'difficulty (always 1), topic, subtopic, concept_tag, variant_type (always "concept_builder").',
-      'No markdown, no commentary outside the JSON.',
-      'Write all maths in LaTeX inside $...$, escaping backslashes for JSON (e.g. "$\\\\frac{1}{2}$").',
-    ].join(' ')
-
-    const user = [
-      `Topic: ${parentQuestion.topic}`,
-      `Subtopic: ${parentQuestion.subtopic}`,
-      `Concept: ${conceptTag}`,
-      `Original question: ${parentQuestion.question}`,
-      `Correct answer: ${correctAnswer}`,
-      `Key explanation: ${parentQuestion.solution}`,
-      '',
-      'Generate ONE concept-builder question in this style:',
-      '"Alcohols contain an -OH group which forms hydrogen bonds with water molecules.',
-      ' Based on this property, short-chain alcohols are: A. soluble in water  B. insoluble in water  C. only soluble when heated  D. soluble only in organic solvents"',
-      '',
-      'The hint/concept MUST be in the question stem itself. Make the student reason from the hint to the answer.',
-    ].join('\n')
-
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        max_tokens: 600,
-        system,
-        messages: [{ role: 'user', content: user }],
-      }),
-    })
-
-    clearTimeout(timeout)
-    if (!res.ok) return null
-
-    const data = await res.json()
-    const rawText = data?.content?.[0]?.text || ''
-
-    // Parse single JSON object
-    try {
-      const parsed = parseLatexJson(rawText)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
-    } catch {}
-
-    // Try extracting object from text
-    const start = rawText.indexOf('{')
-    const end = rawText.lastIndexOf('}')
-    if (start !== -1 && end > start) {
-      try {
-        const parsed = parseLatexJson(rawText.slice(start, end + 1))
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
-      } catch {}
-    }
-    return null
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -268,24 +192,31 @@ export default function QuizScreen({
   onGoToStudyPlan,
   // Free subject only: { used, limit, onAnswered, onUpgrade } — questions answered today.
   freeQuota = null,
+  // Answers and solutions the server sent for answered questions ({ [id]: fields }),
+  // for App to add to the bank in hand (the summary and reviews show them).
+  onAnswersRevealed,
 }) {
   const t = THEMES[theme]
-  // Every answered question in the free subject counts toward today's limit.
-  const recordAnswerCounted = (...args) => {
-    freeQuota?.onAnswered?.()
-    return recordAnswer(...args)
+  /** Show the XP, day streak and accuracy the server worked out for an answer. */
+  const applyProfile = (row) => {
+    if (!row) return
+    const { xp, streak, best_streak, recent_correct, recent_answers } = row
+    setProfile(p => ({
+      ...p,
+      ...(xp != null && { xp }),
+      // The day streak (the server works it out), not this quiz's run of right answers.
+      ...(streak != null && { streak, best_streak, last_active: new Date().toISOString() }),
+      ...(recent_answers != null && { recent_correct, recent_answers }),
+    }))
   }
-  /** Award an answer's XP (server-side) and show the new totals; never throws. */
-  const awardAnswerXP = (xpEarned, newStreak, isCorrect) =>
-    addXP(profile.id, xpEarned, newStreak, profile, isCorrect)
-      .then(({ xp, streak, best_streak, recent_correct, recent_answers }) => setProfile(p => ({
-        ...p,
-        xp,
-        // The day streak (award_xp works it out), not this quiz's run of right answers.
-        ...(streak != null && { streak, best_streak, last_active: new Date().toISOString() }),
-        ...(recent_answers != null && { recent_correct, recent_answers }),
-      })))
-      .catch(() => {})
+  // Checking an answer with the server: no second check while one is on its way.
+  const [checking, setChecking] = useState(false)
+  const checkingRef = useRef(false)
+  const [checkError, setCheckError] = useState('')
+  // The question on screen came back because it was left unanswered (a reload,
+  // or a session ended part-way): it has to be answered before a new one.
+  const [heldNote, setHeldNote] = useState(false)
+  const currentQRef = useRef(null)
 
   const [floatXP, setFloatXP] = useState(null)
   // A run of right answers worth calling out (3, 5, 10…), shown under the XP.
@@ -457,6 +388,13 @@ export default function QuizScreen({
   // that concept, and remediation on each miss could keep a struggling student
   // in it indefinitely.
   const remediationAllowed = activeAssignment?.remediation !== false && !consolidation && !examRun
+  // Where the server keeps the question on screen until it's answered: the
+  // assignment (answers count toward it), else the subject. Reviewing wrong
+  // answers is practice, so it doesn't count toward an assignment.
+  const countsForAssignment = !!activeAssignment?.question_count && quizMode !== 'review'
+  const holdContext = countsForAssignment
+    ? `assignment:${activeAssignment.id}`
+    : `practice:${String(subjectTile?.id || subjectTile?.name || questions[0]?.subject || 'subject').replace(/[^\w .|:/()&+-]/g, '_').slice(0, 150)}`
   const targetDifficultyFor = (results) =>
     assignmentBand ? assignmentBand.target : getTargetDifficulty(results, questions)
   // Background top-ups for a student working at 4+ ask for exam-grade questions
@@ -520,7 +458,9 @@ export default function QuizScreen({
     setReporting(false)
   }
 
-  const setDisplayQuestion = useCallback((q) => {
+  const showHeldRef = useRef(null)
+  // `held`: this is the question the server kept for the student (see below).
+  const setDisplayQuestion = useCallback((q, { held = false } = {}) => {
     setFinished(false)
     setCurrentQ(q)
     setSelected(null)
@@ -528,8 +468,33 @@ export default function QuizScreen({
     setCorrect(null)
     setEarnedXP(0)
     setAiTip('')
+    setHeldNote(held)
+    setCheckError('')
+    currentQRef.current = q
     startTime.current = Date.now()
-  }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns])
+    // A bank question: tell the server it's on screen, so it stays this
+    // student's question until answered. If they already had one on screen
+    // here that they left unanswered (a reload, or ending the session), that
+    // one comes back instead, so a hard question can't be swapped away.
+    // Exams pick their questions up front and mark them at the end.
+    if (q && !q.is_variant && !examRun && !held) {
+      presentQuestion(q.id, holdContext).then(r => {
+        if (r?.held && r.questionId && r.questionId !== q.id && currentQRef.current?.id === q.id && !checkingRef.current) {
+          showHeldRef.current?.(r.questionId)
+        }
+      })
+    }
+  }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns, examRun, holdContext])
+
+  /** Show the question the server kept for the student (from the bank in hand, else fetched). */
+  const showHeldQuestion = async (id) => {
+    const q = questions.find(x => x.id === id) || await getStudentQuestion(id).catch(() => null)
+    if (!q) return false
+    setDueBackId(null)
+    setDisplayQuestion(q, { held: true })
+    return true
+  }
+  showHeldRef.current = showHeldQuestion
 
   // `review` is the list to draw from in 'review' mode; starting a review
   // passes it in, since the reviewIds prop only updates on the next render.
@@ -721,25 +686,19 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_currentQ, loadNext, profile.id, quizMode, quizSubtopics, struggleMap, consolidation])
 
-  // Count a main-question answer toward the assignment goal. App holds the
-  // running state (updated here the same way the RPC updates the row) so it
-  // survives this screen remounting; the RPC decides completion.
-  // The question, response and time go into the tutor's assignment report.
-  // Reviewing wrong answers is practice: redoing a miss mustn't count.
-  const countAssignmentAnswer = (isCorrect, response, timeMs, questionId = currentQ?.id) => {
-    if (!activeAssignment?.question_count || quizMode === 'review') return
-    const next = applyAssignmentAnswer(activeAssignment, isCorrect)
-    onAssignmentProgress?.({ progress_count: next.progress_count, recent_results: next.recent_results })
+  // The assignment's progress after an answer, as the server recorded it (it
+  // checks the question is in the assignment and counts each question once;
+  // the question, response and time go into the tutor's assignment report).
+  // App holds the running state so it survives this screen remounting.
+  const applyAssignmentResult = (row) => {
+    if (!countsForAssignment || !row || row.counted === false || row.progress_count == null) return
+    onAssignmentProgress?.({ progress_count: row.progress_count, recent_results: row.recent_results })
+    if (!row.completed_at) return
     const id = activeAssignment.id
-    recordAssignmentAnswer(id, isCorrect, { questionId, response, timeMs })
-      .then(row => {
-        if (!row?.completed_at) return
-        setCompletedGoal(assignmentStanding({ ...next, ...row }))
-        setAssignmentsCompleted([{ id }])
-        onAssignmentComplete?.()
-        notifyAssignmentFinished(id).catch(() => {})
-      })
-      .catch(() => {})
+    setCompletedGoal(assignmentStanding({ ...activeAssignment, ...row }))
+    setAssignmentsCompleted([{ id }])
+    onAssignmentComplete?.()
+    notifyAssignmentFinished(id).catch(() => {})
   }
 
   // Legacy assignments (no question_count): complete when the session ends,
@@ -1159,9 +1118,9 @@ export default function QuizScreen({
         setRemediationStatus('struggling')
       } else if (newWrongCount === 2) {
         setRemediationTarget(2)
-        const tag = remediationOriginalQ?.concept_tag || getQuestionConceptTag(remediationOriginalQ)
         ;(async () => {
-          const cb = await generateConceptBuilderViaAI(remediationOriginalQ, tag)
+          // Made on the server, which keeps its answer (the app gets a sealed copy to mark it).
+          const cb = remediationOriginalQ?.id ? await fetchConceptBuilder(remediationOriginalQ.id) : null
           if (!cb) return
           const normalized = {
             ...normalizeVariantRecord(remediationOriginalQ, cb, 0),
@@ -1176,54 +1135,28 @@ export default function QuizScreen({
     return false
   }
 
-  // Async persistence for a remediation-variant answer (attempt tracking +
-  // completion bonus). Runs AFTER the synchronous decision above, so it never
-  // gates the Next button on a network round-trip.
-  const persistRemediationVariantOutcome = async (isCorrect, selectedIndex, timeTakenMs, completed, newStreak, xpEarned) => {
-    try { await incrementQuestionVariantUsage(currentQ.variant_record_id) } catch {}
-
-    // Track the variant attempt against its real bank id so this question is
-    // excluded from future non-'all' sessions. Only when we have a real
-    // questions.id — synthetic queue keys would violate the struggle row's FK.
-    // A freshly generated variant's id arrives once the server has checked and
-    // saved it (null if it didn't pass).
-    const contentKey = questionContentKey(currentQ)
-    const pendingBankId = currentQ.variant_record_id && pendingBankIdsRef.current.get(currentQ.variant_record_id)
+  // After a remediation-variant answer: the bank question it was recorded
+  // under (the server records it) is now answered this session, so it isn't
+  // served again. Freshly generated variants have a bank id once the server
+  // has checked and saved them (null if they didn't pass).
+  const trackRemediationVariant = async (q, isCorrect) => {
+    const contentKey = questionContentKey(q)
+    const pendingBankId = q.variant_record_id && pendingBankIdsRef.current.get(q.variant_record_id)
     const trackId =
-      currentQ.bank_question_id ||
+      q.bank_question_id ||
       (pendingBankId && await pendingBankId) ||
       // A stored variant's bank copy has the same content under its own id.
-      (contentKey && questions.find(q => questionContentKey(q) === contentKey)?.id) ||
+      (contentKey && questions.find(x => questionContentKey(x) === contentKey)?.id) ||
       null
-    if (trackId) {
-      try {
-        await recordAnswerCounted(profile.id, trackId, isCorrect, selectedIndex ?? null, sessionId, timeTakenMs)
-      } catch (recErr) {
-        console.warn('[gradefarm] failed to record variant answer:', recErr?.message || recErr)
+    if (!trackId) return
+    setStruggleMap(prev => {
+      const old = prev[trackId] ?? { attempts: 0, wrong: 0 }
+      return {
+        ...prev,
+        [trackId]: { ...old, attempts: old.attempts + 1, wrong: old.wrong + (isCorrect ? 0 : 1), last_seen: new Date().toISOString() },
       }
-      setStruggleMap(prev => {
-        const old = prev[trackId] ?? { attempts: 0, wrong: 0 }
-        return {
-          ...prev,
-          [trackId]: {
-            ...old,
-            attempts: old.attempts + 1,
-            wrong: old.wrong + (isCorrect ? 0 : 1),
-            last_seen: new Date().toISOString(),
-          },
-        }
-      })
-      setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
-    }
-
-    if (completed) {
-      const bonus = getRemediationCompletionBonus()
-      try {
-        const { xp: newXP } = await addXP(profile.id, bonus, newStreak, { ...profile, xp: profile.xp + xpEarned })
-        setProfile(p => ({ ...p, xp: newXP }))
-        setSessionXP(s => s + bonus)
-      } catch {}
-    }
+    })
+    setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
   }
 
   // End Session: show the summary for what was answered (nothing answered yet
@@ -1237,179 +1170,101 @@ export default function QuizScreen({
     setFinished(true)
   }
 
-  // Exam mode: the answer isn't shown, so answering moves straight on to the
-  // next question, or ends the exam once it has its question count.
-  const advanceExam = () => {
-    const answered = [...sessionAnswered, currentQ.id]
-    setSessionAnswered(answered)
-    const mainAnswered = sessionResults.filter(r => !r.remediation).length + 1
-    if (questionLimit > 0 && mainAnswered >= questionLimit) {
-      setEndedForExam(true)
-      setFinished(true)
-      return
-    }
-    const targetDiff = getTargetDifficulty(sessionResults, questions)
-    setQNumber(n => n + 1)
-    setStruggleMap(prev => { loadNext(answered, prev, quizMode, effectiveSubtopics, targetDiff); return prev })
-  }
+  // What the server needs to mark an answer to the question on screen.
+  const answerRequest = (q, response, timeTakenMs) => ({
+    questionId: q.bank_question_id || q.id,
+    response,
+    context: holdContext,
+    sessionId,
+    timeMs: timeTakenMs,
+    ...(q.is_variant && {
+      remediation: {
+        parentQuestionId: q.parent_question_id || remediationOriginalQ?.id,
+        ...(q.bank_question_id ? { bankId: q.bank_question_id } : q.token ? { token: q.token } : { variantId: q.variant_record_id || q.id }),
+        // The answer that would finish the run; the server gives the bonus only if it's right.
+        complete: remediationStreak + 1 >= remediationTarget,
+      },
+    }),
+  })
 
-  const handleAnswer = async (idx) => {
-    if (showAns || !currentQ) return
-
-    const isRemediationQuestion = !!currentQ.is_variant
-    const isCorrect = idx === currentQ.answer_index
-    const xpEarned = isRemediationQuestion
-      ? calcRemediationXP(isCorrect, currentQ.difficulty)
-      : calcXP(isCorrect, currentQ.difficulty, streak)
-    const newStreak = isCorrect ? streak + 1 : 0
+  /**
+   * Check an answer with the server and show the result. The server marks it,
+   * records it, awards the XP and counts it toward the assignment, then sends
+   * the answer and solution to show (`reveal`), which join the question here.
+   * Written answers pass their marks ({ awarded, total }) from /marked/mark:
+   * full marks count as right; part marks count as not yet right (the question
+   * comes back for review) but earn that share of the XP.
+   */
+  const submitAnswer = async (response, marks = null) => {
+    if (showAns || !currentQ || checkingRef.current) return
+    const q = currentQ
+    const isVariant = !!q.is_variant
     const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
-
-    setSelected(idx)
-    setShowAns(true)
-    setCorrect(isCorrect)
-    setEarnedXP(xpEarned)
-    setStreak(newStreak)
-    setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isRemediationQuestion, response: idx, timeMs: timeTakenMs }])
-    if (!isRemediationQuestion) countAssignmentAnswer(isCorrect, idx, timeTakenMs)
-
-    // Exams stay silent: answers aren't marked until the end.
-    if (!examRun) playSound(answerSound(isCorrect, newStreak))
-    if (isCorrect && !examRun) {
-      setFloatXP(xpEarned)
-      setFloatStreak(isStreakMilestone(newStreak) ? newStreak : null)
-      setTimeout(() => setFloatXP(null), 1400)
-    }
-
-    // Commit the remediation DECISION synchronously, batched with setShowAns,
-    // so a fast "Next" click can never read stale state and skip remediation
-    // entry (wrong main answer) or the completion mode-change (variant answer).
-    let remediationCompleted = false
-    if (isRemediationQuestion) {
-      remediationCompleted = decideRemediationVariantOutcome(isCorrect)
-    } else if (!isCorrect && !currentQ.passage_id && remediationAllowed) {
-      // Reading-passage questions skip remediation: a generated "similar
-      // question" would have no passage to answer from.
-      enterRemediationStateSync(currentQ)
-    }
-
-    // The XP award and the answer record are independent writes; neither the
-    // remediation queue nor the AI tip needs them, so don't make those wait.
-    const xpWrite = awardAnswerXP(xpEarned, newStreak, isCorrect)
-
-    if (isRemediationQuestion) {
-      await xpWrite
-      await persistRemediationVariantOutcome(isCorrect, idx, timeTakenMs, remediationCompleted, newStreak, xpEarned)
-      return
-    }
-
-    setStruggleMap(prev => {
-      const old = prev[currentQ.id] ?? { attempts: 0, wrong: 0 }
-      return {
-        ...prev,
-        [currentQ.id]: {
-          ...old,
-          attempts: old.attempts + 1,
-          wrong: old.wrong + (isCorrect ? 0 : 1),
-          last_seen: new Date().toISOString(),
-          // Same schedule the database sets, so a question just answered isn't still "due".
-          next_review: nextReviewTime(old.attempts + 1, old.wrong + (isCorrect ? 0 : 1)).toISOString(),
-        },
-      }
-    })
-
-    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, idx, sessionId, timeTakenMs)
-      .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
-
-    if (examRun) {
-      advanceExam()
-      await Promise.all([xpWrite, answerWrite])
-      return
-    }
-
-    if (!isCorrect) {
-      // Remediation state was already set synchronously above. Load the queue in
-      // the background — parallel with the AI tip fetch.
-      if (!currentQ.passage_id && remediationAllowed) enterRemediation(currentQ)
-
-      setLoadingTip(true)
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            max_tokens: 200,
-            system: `You are a ${currentQ.subject || 'school'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
-            messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect: ${currentQ.options[currentQ.answer_index]}\nStudent chose: ${currentQ.options[idx]}\nSolution: ${currentQ.solution}` }],
-          }),
-        })
-        const d = await res.json()
-        setAiTip(d.content?.[0]?.text || '')
-      } catch {
-        setAiTip('')
-      }
-      setLoadingTip(false)
-    }
-    await Promise.all([xpWrite, answerWrite])
-  }
-
-  // Outcome handler for non-MCQ question types (numeric, multi-select, short
-  // text, ordering). The renderer grades the response and calls this with the
-  // result. Mirrors the main-question path of handleAnswer, and routes
-  // remediation variants through the same shared outcome handler so the mastery
-  // streak advances for non-MCQ question types too.
-  // Written answers also pass their marks ({ awarded, total }): full marks
-  // count as right; part marks count as not yet right (the question comes back
-  // for review) but earn that share of the XP instead of losing XP.
-  const handleSubmitResponse = async (response, isCorrect, marks = null) => {
-    if (showAns || !currentQ) return
-    const isVariant = !!currentQ.is_variant
-    const partMarks = !!marks && !isCorrect && marks.awarded > 0 && marks.total > 0
-    const xpEarned = partMarks
-      ? Math.max(1, Math.round(calcXP(true, currentQ.difficulty, 0) * marks.awarded / marks.total))
-      : isVariant
-        ? calcRemediationXP(isCorrect, currentQ.difficulty)
-        : calcXP(isCorrect, currentQ.difficulty, streak)
-    const newStreak = isCorrect ? streak + 1 : 0
-    const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
-
+    checkingRef.current = true
+    setChecking(true)
+    setCheckError('')
     setSelected(response)
+    let r
+    try {
+      r = await checkAnswer(answerRequest(q, response, timeTakenMs))
+    } catch (err) {
+      checkingRef.current = false
+      setChecking(false)
+      if (err?.status === 409 && err.body?.code === 'held' && err.body.heldQuestionId && await showHeldQuestion(err.body.heldQuestionId)) return
+      setCheckError(err?.status === 409 && err.body?.code === 'mark_first'
+        ? 'Mark your answer first.'
+        : "Your answer couldn't be checked just now. Check your connection and try again.")
+      return
+    }
+    checkingRef.current = false
+    setChecking(false)
+    if (currentQRef.current?.id !== q.id) return
+
+    const isCorrect = !!r.correct
+    const partMarks = !!marks && !isCorrect && marks.awarded > 0 && marks.total > 0
+    const xpEarned = Number(r.xp) || 0
+    const bonus = Number(r.bonus) || 0
+    const newStreak = isCorrect ? streak + 1 : 0
+    // The answer and solution, now it's been answered.
+    const shown = { ...q, ...(r.reveal || {}) }
+    currentQRef.current = shown
+    setCurrentQ(shown)
+    if (!isVariant && r.reveal) onAnswersRevealed?.({ [q.id]: r.reveal })
+    freeQuota?.onAnswered?.()
+
     setShowAns(true)
     setCorrect(isCorrect)
     setEarnedXP(xpEarned)
     setStreak(newStreak)
-    setSessionXP(s => s + xpEarned)
-    setSessionResults(r => [...r, { id: currentQ.id, correct: isCorrect, topic: currentQ.topic, subtopic: currentQ.subtopic, remediation: isVariant, response, timeMs: timeTakenMs }])
-    if (!isVariant) countAssignmentAnswer(isCorrect, response, timeTakenMs)
+    setSessionXP(sx => sx + xpEarned + bonus)
+    setSessionResults(rs => [...rs, { id: q.id, correct: isCorrect, topic: q.topic, subtopic: q.subtopic, remediation: isVariant, response, timeMs: timeTakenMs }])
+    applyProfile(r.profile)
+    if (!isVariant) applyAssignmentResult(r.assignment)
 
     // Part marks get the right-answer chime: they earned XP.
-    if (!examRun) playSound(answerSound(isCorrect || partMarks, newStreak))
-    if (isCorrect && !examRun) {
+    playSound(answerSound(isCorrect || partMarks, newStreak))
+    if (isCorrect && xpEarned > 0) {
       setFloatXP(xpEarned)
       setFloatStreak(isStreakMilestone(newStreak) ? newStreak : null)
       setTimeout(() => setFloatXP(null), 1400)
     }
 
-    // Commit the remediation decision synchronously (batched with setShowAns) so
-    // a fast "Next" click can't bypass the completion mode-change.
-    let remediationCompleted = false
-    if (isVariant) remediationCompleted = decideRemediationVariantOutcome(isCorrect)
-
-    const xpWrite = awardAnswerXP(xpEarned, newStreak, isCorrect)
-
-    // Remediation variant: persist attempt + completion bonus (decision already
-    // committed above).
     if (isVariant) {
-      await xpWrite
-      await persistRemediationVariantOutcome(isCorrect, null, timeTakenMs, remediationCompleted, newStreak, xpEarned)
+      decideRemediationVariantOutcome(isCorrect)
+      await trackRemediationVariant(q, isCorrect)
       return
     }
 
+    // Reading-passage questions skip remediation: a generated "similar
+    // question" would have no passage to answer from.
+    const remediate = !isCorrect && !q.passage_id && remediationAllowed
+    if (remediate) enterRemediationStateSync(shown)
+
     setStruggleMap(prev => {
-      const old = prev[currentQ.id] ?? { attempts: 0, wrong: 0 }
+      const old = prev[q.id] ?? { attempts: 0, wrong: 0 }
       return {
         ...prev,
-        [currentQ.id]: {
+        [q.id]: {
           ...old,
           attempts: old.attempts + 1,
           wrong: old.wrong + (isCorrect ? 0 : 1),
@@ -1420,36 +1275,36 @@ export default function QuizScreen({
       }
     })
 
-    const answerWrite = recordAnswerCounted(profile.id, currentQ.id, isCorrect, null, sessionId, timeTakenMs).catch(() => {})
-
-    if (examRun) {
-      advanceExam()
-      await Promise.all([xpWrite, answerWrite])
-      return
-    }
-
+    if (isCorrect) return
+    // Load the extra practice in the background, alongside the tip.
+    if (remediate) enterRemediation(shown)
     // Written answers already come back with mark-by-mark feedback.
-    if (!isCorrect && !marks) {
-      setLoadingTip(true)
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            max_tokens: 200,
-            system: `You are a ${currentQ.subject || 'school'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
-            messages: [{ role: 'user', content: `Topic: ${currentQ.topic} — ${currentQ.subtopic}\nQ: ${currentQ.question}\nCorrect answer: ${describeCorrectAnswer(currentQ)}\nStudent answered: ${JSON.stringify(response)}\nSolution: ${currentQ.solution}` }],
-          }),
-        })
-        const d = await res.json()
-        setAiTip(d.content?.[0]?.text || '')
-      } catch {
-        setAiTip('')
-      }
-      setLoadingTip(false)
+    if (marks) return
+    setLoadingTip(true)
+    try {
+      const mcq = getQuestionType(shown) === 'mcq'
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          max_tokens: 200,
+          system: `You are a ${shown.subject || 'school'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
+          messages: [{ role: 'user', content: `Topic: ${shown.topic} — ${shown.subtopic}\nQ: ${shown.question}\nCorrect answer: ${describeCorrectAnswer(shown)}\nStudent answered: ${mcq ? shown.options?.[response] : JSON.stringify(response)}\nSolution: ${shown.solution || ''}` }],
+        }),
+      })
+      const dj = await res.json()
+      setAiTip(dj.content?.[0]?.text || '')
+    } catch {
+      setAiTip('')
     }
-    await Promise.all([xpWrite, answerWrite])
+    setLoadingTip(false)
   }
+
+  const handleAnswer = (idx) => submitAnswer(idx)
+  // Non-MCQ question types: the renderer collects the response (its own
+  // correctness guess is ignored: the server marks it). Written answers pass
+  // their marks too.
+  const handleSubmitResponse = (response, _localGuess, marks = null) => submitAnswer(response, marks)
 
   const loadNextRemediationQuestion = async () =>
     runLoadNextRemediationQuestion({
@@ -1609,54 +1464,61 @@ export default function QuizScreen({
     })
   }
 
-  // Grade every question, then record the answers and XP in exam order (so the
-  // run of right answers the server works out matches) and show the summary.
+  // Finish: the server marks every answer in exam order (so runs of right
+  // answers count), records them, awards the XP and counts them toward the
+  // assignment; then the summary shows, with the answers and solutions.
+  const [examMarking, setExamMarking] = useState('') // '' | 'marking' | 'error'
   const finishExam = async () => {
     if (examGradedRef.current || !examSet.length) return
     examGradedRef.current = true
     setShowFinishExam(false)
+    setExamMarking('marking')
     const cur = examSet[examIndex]
     const times = cur && startTime.current
       ? { ...examTimes, [cur.id]: (examTimes[cur.id] || 0) + (Date.now() - startTime.current) }
       : examTimes
-    const graded = examSet.map(q => {
-      const r = examResponses[q.id]
-      const answered = r != null && responseIsComplete(q, r)
-      return { q, r: answered ? r : null, answered, ok: answered && gradeResponse(q, r) }
-    })
-    let run = streak
-    let xpTotal = 0
-    const results = graded.map(g => {
-      const xp = g.answered ? calcXP(g.ok, g.q.difficulty, run) : 0
-      if (g.answered) run = g.ok ? run + 1 : 0
-      xpTotal += xp
-      g.xp = xp
-      g.streakAfter = run
-      return { id: g.q.id, correct: g.ok, topic: g.q.topic, subtopic: g.q.subtopic, remediation: false, response: g.r, timeMs: times[g.q.id] || null, skipped: !g.answered }
+    const answeredQs = examSet.filter(q => examResponses[q.id] != null && responseIsComplete(q, examResponses[q.id]))
+    let r
+    try {
+      r = await markExamRun({
+        items: answeredQs.map(q => ({ questionId: q.id, response: examResponses[q.id], timeMs: times[q.id] || null })),
+        questionIds: examSet.map(q => q.id),
+        context: holdContext,
+        sessionId,
+      })
+    } catch {
+      // Nothing was saved: let them try again.
+      examGradedRef.current = false
+      setExamMarking('error')
+      return
+    }
+    setExamMarking('')
+    const reveals = r.reveals || {}
+    onAnswersRevealed?.(reveals)
+    setExamSet(set => set.map(q => ({ ...q, ...(reveals[q.id] || {}) })))
+    const results = examSet.map(q => {
+      const res = r.results?.[q.id]
+      const answered = !!res
+      return { id: q.id, correct: !!res?.correct, topic: q.topic, subtopic: q.subtopic, remediation: false, response: answered ? examResponses[q.id] : null, timeMs: times[q.id] || null, skipped: !answered }
     })
     setSessionResults(results)
-    setSessionXP(s => s + xpTotal)
-    setStreak(run)
+    setSessionXP(sx => sx + (Number(r.xp) || 0))
+    setStreak(Number(r.run) || 0)
     setSessionAnswered(examSet.map(q => q.id))
+    applyProfile(r.profile)
+    applyAssignmentResult(r.assignment)
+    freeQuota?.onAnswered?.()
     setStruggleMap(prev => {
       const next = { ...prev }
-      for (const g of graded) {
-        if (!g.answered) continue
-        const old = next[g.q.id] ?? { attempts: 0, wrong: 0 }
-        next[g.q.id] = { ...old, attempts: old.attempts + 1, wrong: old.wrong + (g.ok ? 0 : 1), last_seen: new Date().toISOString() }
+      for (const q of answeredQs) {
+        const ok = !!r.results?.[q.id]?.correct
+        const old = next[q.id] ?? { attempts: 0, wrong: 0 }
+        next[q.id] = { ...old, attempts: old.attempts + 1, wrong: old.wrong + (ok ? 0 : 1), last_seen: new Date().toISOString() }
       }
       return next
     })
     setEndedForExam(true)
     setFinished(true)
-    for (const g of graded) {
-      if (!g.answered) continue
-      const t = times[g.q.id] || null
-      await recordAnswerCounted(profile.id, g.q.id, g.ok, getQuestionType(g.q) === 'mcq' ? g.r : null, sessionId, t)
-        .catch(err => console.warn('[gradefarm] failed to record answer:', err?.message || err))
-      await awardAnswerXP(g.xp, g.streakAfter, g.ok)
-      countAssignmentAnswer(g.ok, g.r, t, g.q.id)
-    }
   }
   finishExamRef.current = finishExam
 
@@ -2136,6 +1998,23 @@ export default function QuizScreen({
         </div>
       )}
 
+      {examMarking && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div role="dialog" aria-modal="true" aria-live="polite" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '22px', maxWidth: 400, width: '90%' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 6 }}>{examMarking === 'error' ? "Your exam couldn't be marked" : 'Marking your exam…'}</div>
+            <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6 }}>
+              {examMarking === 'error' ? 'Nothing is lost: your answers are still here. Check your connection and try again.' : 'This takes a few seconds.'}
+            </div>
+            {examMarking === 'error' && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+                <button type="button" onClick={() => setExamMarking('')} style={btn('secondary')}>Back to the exam</button>
+                <button type="button" onClick={finishExam} style={btn('primary')}>Try again</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {showFinishExam && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div role="dialog" aria-modal="true" aria-labelledby="gf-finish-title" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '22px', maxWidth: 400, width: '90%', animation: 'popIn 0.2s ease' }}>
@@ -2164,6 +2043,9 @@ export default function QuizScreen({
               {!isMobile && currentQ.difficulty != null && <span style={{ whiteSpace: 'nowrap' }} title="How hard this question is, from 1 to 5">Level {currentQ.difficulty}</span>}
               {dueBackId === currentQ.id && !remediationMode && (
                 <span title="You answered this before. It's back on its review schedule." style={{ ...chip, color: t.goldText, borderColor: t.borderAccent, whiteSpace: 'nowrap' }}>Due back</span>
+              )}
+              {heldNote && !showAns && (
+                <span title="You left this question without answering it. Answer it to move on." style={{ ...chip, color: t.goldText, borderColor: t.borderAccent, whiteSpace: 'nowrap' }}>Finish this one first</span>
               )}
               {!isMobile && goalDisplay && (
                 <span title="Questions answered toward your tutor's assignment" style={chip}>
@@ -2283,7 +2165,7 @@ export default function QuizScreen({
                         aria-checked={showAns ? undefined : i === selected}
                         disabled={showAns}
                         // Choosing only selects: a misclick can be changed before Check answer.
-                        onClick={() => { if (showAns) return; if (examRun) chooseExamResponse(i); else setSelected(i) }}
+                        onClick={() => { if (showAns || checking) return; if (examRun) chooseExamResponse(i); else setSelected(i) }}
                         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, textAlign: 'left', fontFamily: FONT_B, fontSize: 14.5, fontWeight: 500,
                           border: `1px solid ${t.border}`, background: t.bgCard, color: s.text, cursor: showAns ? 'default' : 'pointer', ...s.box }}
                       >
@@ -2308,6 +2190,7 @@ export default function QuizScreen({
                   checkLabel="Check answer"
                   feedbackMode={splitFeedback ? 'answer' : 'full'}
                   onMarked={setMarking}
+                  busy={checking}
                 />
               )}
 
@@ -2325,9 +2208,13 @@ export default function QuizScreen({
               {/* Practice, before answering: check the chosen option. */}
               {!examRun && !showAns && isMcq && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-                  <button type="button" onClick={() => { if (selected != null) handleAnswer(selected) }} disabled={selected == null} style={btn('primary', selected == null)}>Check answer</button>
+                  <button type="button" onClick={() => { if (selected != null) handleAnswer(selected) }} disabled={selected == null || checking} style={btn('primary', selected == null || checking)}>{checking ? 'Checking…' : 'Check answer'}</button>
                   {!isMobile && <span style={{ fontSize: 12, color: t.textFaint, marginLeft: 'auto' }}>Press 1–{currentQ.options.length} to choose, Enter to check</span>}
                 </div>
+              )}
+
+              {!examRun && !showAns && checkError && (
+                <div role="alert" style={{ marginTop: 10, padding: '9px 12px', borderRadius: 10, background: t.dangerBg, border: `1px solid ${t.danger}44`, fontSize: 13, color: t.danger }}>{checkError}</div>
               )}
 
               {/* Practice, after answering: the result, why, and what's next (in the side panel for a marked written answer on a wide screen). */}

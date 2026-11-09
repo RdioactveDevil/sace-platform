@@ -271,7 +271,10 @@ function ImageLabel({ question, response, onChange, showAns, theme }) {
 // feedbackMode (written answers): 'full' shows the marks here; 'answer' shows only
 // the highlighted answer, for a page that puts the mark points beside it.
 // onMarked(result) hands the marks to that page whenever they arrive.
-export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer', feedbackMode = 'full', onMarked }) {
+// busy: the page is checking the answer with the server (the quiz marks
+// answers there; the second argument onSubmit gets is only a local guess, right
+// only for questions that carry their answers, like Question Lab's examples).
+export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer', feedbackMode = 'full', onMarked, busy = false }) {
   const t = THEMES[theme]
   const type = getQuestionType(question)
   // Written answers: the AI marks them on the server, which takes a few seconds.
@@ -302,7 +305,7 @@ export default function QuestionRenderer({ question, response, onChange, showAns
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, showAns, question.id])
 
-  const canSubmit = !showAns && !marking && responseIsComplete(question, response)
+  const canSubmit = !showAns && !marking && !busy && responseIsComplete(question, response)
 
   const submitMarked = async () => {
     setMarking(true)
@@ -366,7 +369,7 @@ export default function QuestionRenderer({ question, response, onChange, showAns
             cursor: canSubmit ? 'pointer' : 'default', fontFamily: FONT_B,
           }}
         >
-          {type === 'marked' ? (marking ? 'Marking your answer…' : markError ? 'Try marking again' : 'Mark my answer') : checkLabel}
+          {type === 'marked' ? (marking ? 'Marking your answer…' : busy ? 'Saving…' : markError ? 'Try marking again' : 'Mark my answer') : busy ? 'Checking…' : checkLabel}
         </button>
       )}
     </div>

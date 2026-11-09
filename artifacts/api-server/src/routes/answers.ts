@@ -143,11 +143,12 @@ async function openAssignment(admin: SupabaseClient, userId: string, id: string 
 }
 
 /**
- * Whether a question belongs to an assignment: in its subject, and in one of
+ * Whether questions belong to an assignment: in its subject, and in one of
  * its topics (assignments list subtopic names; a subject's questions borrowed
  * from another subject count under the subtopic they're filed under there).
+ * Looks the subject up once and returns a test for each question.
  */
-export async function fitsAssignment(admin: SupabaseClient, a: Assignment, q: QuestionRow): Promise<boolean> {
+export async function assignmentMatcher(admin: SupabaseClient, a: Assignment): Promise<(q: QuestionRow) => boolean> {
   const topics = (a.topics || []).filter(Boolean);
   const { data: currs } = a.subject
     ? await admin.from("curricula").select("id").eq("name", a.subject)
@@ -169,14 +170,25 @@ export async function fitsAssignment(admin: SupabaseClient, a: Assignment, q: Qu
     }
   }
 
-  const inSubject = !currIds.length
-    || (q.curriculum_id != null && currIds.includes(q.curriculum_id))
-    || (q.subtopic_id != null && borrowed.includes(q.subtopic_id))
-    || (!!a.subject && q.subject === a.subject);
-  if (!inSubject) return false;
-  if (!topics.length) return true;
-  return topics.includes(q.subtopic || "") || topics.includes(q.topic || "")
-    || (q.subtopic_id != null && (subtopicIds.includes(q.subtopic_id) || borrowed.includes(q.subtopic_id)));
+  return (q) => {
+    const inSubject = !currIds.length
+      || (q.curriculum_id != null && currIds.includes(q.curriculum_id))
+      || (q.subtopic_id != null && borrowed.includes(q.subtopic_id))
+      || (!!a.subject && q.subject === a.subject);
+    if (!inSubject) return false;
+    if (!topics.length) return true;
+    return topics.includes(q.subtopic || "") || topics.includes(q.topic || "")
+      || (q.subtopic_id != null && (subtopicIds.includes(q.subtopic_id) || borrowed.includes(q.subtopic_id)));
+  };
+}
+
+async function recordAssignmentAnswer(admin: SupabaseClient, userId: string, assignmentId: string, q: QuestionRow, correct: boolean, response: unknown, ms: number | null) {
+  const { data, error } = await admin.rpc("record_assignment_answer_for", {
+    p_user: userId, p_assignment_id: assignmentId, p_correct: correct, p_question_id: q.id,
+    p_response: response === null ? null : response, p_time_ms: ms,
+  });
+  if (error) logger.warn({ err: error, assignmentId }, "[answers] assignment answer failed");
+  return ((Array.isArray(data) ? data[0] : data) as Record<string, unknown>) || null;
 }
 
 type Marked = { correct: boolean; marks: { awarded: number; total: number } | null };
@@ -329,13 +341,8 @@ router.post("/answers/check", async (req, res) => {
     if (context?.startsWith("assignment:")) {
       const a = await openAssignment(admin, userId, uuid(context.slice(11)));
       if (a?.question_count) {
-        if (await fitsAssignment(admin, a, q)) {
-          const { data, error } = await admin.rpc("record_assignment_answer_for", {
-            p_user: userId, p_assignment_id: a.id, p_correct: correct, p_question_id: q.id,
-            p_response: response === null ? null : response, p_time_ms: ms,
-          });
-          if (error) logger.warn({ err: error, assignmentId: a.id }, "[answers] assignment answer failed");
-          assignment = ((Array.isArray(data) ? data[0] : data) as Record<string, unknown>) || null;
+        if ((await assignmentMatcher(admin, a))(q)) {
+          assignment = await recordAssignmentAnswer(admin, userId, a.id, q, correct, response, ms);
         } else {
           assignment = { counted: false, reason: "not_in_assignment" };
         }
@@ -505,6 +512,68 @@ router.post("/answers/exam", async (req, res) => {
     res.json({ totalCorrect, totalQuestions, percent, perSection, results, attemptId });
   } catch (err) {
     logger.error({ err }, "[answers] exam marking failed");
+    res.status(500).json({ error: "Your exam couldn't be marked just now. Try again." });
+  }
+});
+
+// ── Exam run ─────────────────────────────────────────────────────────────────
+// The quiz's exam mode: questions answered one after another, marked together
+// at Finish. Body: { items: [{ questionId, response, timeMs }] (answered, in
+// order), questionIds (every question on it), context?, sessionId? }.
+// Each answer is marked, recorded and earns XP in order (so runs of right
+// answers count), and counts toward the assignment when the context is one.
+// → { results: { [id]: { correct, xp } }, reveals: { [id]: reveal }, xp, run, profile, assignment }
+router.post("/answers/exam-run", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
+  const body = (req.body || {}) as Record<string, unknown>;
+  const items = (Array.isArray(body.items) ? body.items : []).slice(0, 100) as Record<string, unknown>[];
+  const sessionId = uuid(body.sessionId);
+  const context = str(body.context, 200);
+  const { admin, userId } = caller;
+  const keepsRecord = userId !== "service";
+  try {
+    const answeredIds = items.map((it) => str(it.questionId)).filter((x): x is string => !!x);
+    const allIds = [...new Set([...answeredIds, ...(Array.isArray(body.questionIds) ? body.questionIds : []).filter((x): x is string => typeof x === "string")])].slice(0, 120);
+    const [rows, readable] = await Promise.all([loadQuestions(admin, allIds), readableIds(caller, allIds)]);
+    const reveals: Record<string, Record<string, unknown>> = {};
+    for (const id of allIds) {
+      const q = rows.get(id);
+      if (q && readable.has(id)) reveals[id] = revealOf(q);
+    }
+
+    const a = keepsRecord && context?.startsWith("assignment:") ? await openAssignment(admin, userId, uuid(context.slice(11))) : null;
+    const fits = a?.question_count ? await assignmentMatcher(admin, a) : null;
+
+    let run = keepsRecord ? await sessionRun(admin, userId, sessionId) : 0;
+    let xpTotal = 0;
+    let profile: ProfileFields | null = null;
+    let assignment: Record<string, unknown> | null = null;
+    const results: Record<string, { correct: boolean; xp: number }> = {};
+    const seen = new Set<string>();
+    for (const it of items) {
+      const id = str(it.questionId);
+      const q = id ? rows.get(id) : undefined;
+      if (!id || !q || !readable.has(id) || seen.has(id) || questionType(q) === "marked" || questionType(q) === "extended") continue;
+      seen.add(id);
+      const response = cleanResponse(it.response);
+      const correct = gradeResponse(q, response);
+      const ms = timeMs(it.timeMs);
+      let xp = calcXP(correct, q.difficulty, run);
+      if (keepsRecord) {
+        if (xp > 0 && await answeredRightRecently(admin, userId, id)) xp = 0;
+        await recordAnswer(admin, userId, id, correct, questionType(q) === "mcq" && Number.isInteger(response) ? response as number : null, sessionId, ms);
+        profile = (await awardXP(admin, userId, xp, correct)) || profile;
+        if (a && fits?.(q)) assignment = (await recordAssignmentAnswer(admin, userId, a.id, q, correct, response, ms)) || assignment;
+      }
+      run = correct ? run + 1 : 0;
+      xpTotal += xp;
+      results[id] = { correct, xp };
+    }
+    if (keepsRecord && context) await admin.from("question_holds").delete().eq("user_id", userId).eq("context", context).in("question_id", [...seen]);
+    res.json({ results, reveals, xp: xpTotal, run, profile, assignment });
+  } catch (err) {
+    logger.error({ err }, "[answers] exam run failed");
     res.status(500).json({ error: "Your exam couldn't be marked just now. Try again." });
   }
 });

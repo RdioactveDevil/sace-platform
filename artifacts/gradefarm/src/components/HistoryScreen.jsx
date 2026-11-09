@@ -52,7 +52,7 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
       const qIds = [...new Set(answers.map(a => a.question_id).filter(Boolean))]
       const questionMap = {}
       if (qIds.length) {
-        const { data: qs } = await supabase.from('questions').select('id, question, topic, subtopic').in('id', qIds)
+        const { data: qs } = await supabase.from('questions_student').select('id, question, topic, subtopic').in('id', qIds)
         ;(qs || []).forEach(q => { questionMap[q.id] = q })
       }
 
