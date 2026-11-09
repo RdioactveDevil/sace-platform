@@ -96,13 +96,17 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 // Student navigation: three sections in the sidebar, each with tabs across the
 // top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
 // appear for subjects that switch it on (Admin → Curricula → Features); Essay
-// Marker is full-screen, so its tab opens that screen. Exam mode is a switch in
-// the Practice session builder rather than a page of its own.
+// Marker and the Exam builder are full-screen, so their entries open those
+// screens. Exam mode is a switch in the Practice session builder rather than a
+// page of its own.
 // Sections marked `tutoring` only show for students with a tutor or a lesson.
 // The Student Portal (`separate`) sits apart from the rest, above Change Subject.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
+  ]},
+  { icon: 'exam', label: 'Exam builder', id: 'exams', feature: 'test_maker', pages: [
+    { id: 'exam-builder', label: 'Exam builder', path: '/exam-builder', feature: 'test_maker' },
   ]},
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
@@ -189,6 +193,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
       {name === 'video'       && <><rect x="2" y="4.5" width="10" height="9" rx="1.5" {...S} /><path d="m12 8 4-2.25v6.5L12 10" {...S} /></>}
       {name === 'portal'      && <><path d="M1.75 6.5 9 3l7.25 3.5L9 10Z" {...S} /><path d="M4.5 8v3.75c0 1.1 2 2.25 4.5 2.25s4.5-1.15 4.5-2.25V8" {...S} /><path d="M16.25 6.5v4" {...S} /></>}
+      {name === 'exam'        && <><path d="M4.5 2h6.5l3 3v10.25a.75.75 0 0 1-.75.75h-8.75a.75.75 0 0 1-.75-.75V2.75A.75.75 0 0 1 4.5 2Z" {...S} /><path d="M11 2v3h3" {...S} /><path d="M6.5 8.5h5" {...S} /><path d="M6.5 11h5" {...S} /><path d="M6.5 13.5h3" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
     </svg>
   )
@@ -1639,13 +1644,14 @@ function AppInner() {
       } />
 
       {/* Exam builder — a practice exam mixed from past and trial papers; only for subjects with test_maker on */}
-      <Route path="/test-maker" element={
+      <Route path="/test-maker" element={<Navigate to={`/exam-builder${location.search}`} replace />} />
+      <Route path="/exam-builder" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
         : subjectLocked || selectedAccess === 'free'
           ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
         : subjectHasFeature(selectedSubject, 'test_maker')
-          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} onExit={() => navigate('/question-bank')} />
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/question-bank')} />
           : <Navigate to="/question-bank" replace />
       } />
 

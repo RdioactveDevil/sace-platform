@@ -308,7 +308,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         {examOn ? 'Start exam' : 'Start practice'}
       </button>
       {subjectHasFeature(subject, 'test_maker') && (
-        <button type="button" onClick={() => navigate('/test-maker')} disabled={!questions.length}
+        <button type="button" onClick={() => navigate('/exam-builder')} disabled={!questions.length}
           style={{ width: '100%', padding: '11px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, color: questions.length ? t.text : t.textFaint, cursor: questions.length ? 'pointer' : 'not-allowed' }}>
           Build a practice exam
         </button>

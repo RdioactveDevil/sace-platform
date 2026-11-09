@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus } from 'lucide-react'
+import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus, Save, Link2, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getExamBankForTile } from '../lib/db'
+import { getExamBankForTile, fetchTutorClasses, fetchMyClasses } from '../lib/db'
+import { listBuiltExams, getBuiltExam, saveBuiltExam, deleteBuiltExam } from '../lib/builtExams'
 import {
   bankSummary, examPool, pickExam, swapCandidate, examTotals, writingMinutes, isMathsSubject,
   sourceLabel, marksOf, BANK_SOURCE,
@@ -45,8 +46,13 @@ const examMinutes = (board, marks) => (board === 'sace' ? (marks >= 90 ? 130 : M
  * commercial trial exams in the bank (filtered by paper, source, year and
  * topic), with every question swappable, removable and reorderable, laid out
  * like the real paper (ExamPaper.jsx) and saved as PDF from the print window.
+ * Exams can be saved (built_exams) and opened again from the list or a link
+ * (/exam-builder?exam=<id>); tutors can share a saved exam with a class, and
+ * its students see it under "From your tutor".
  */
-export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loadBank = getExamBankForTile }) {
+const DEFAULT_STORE = { list: listBuiltExams, get: getBuiltExam, save: saveBuiltExam, remove: deleteBuiltExam }
+
+export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
   const board = boardOf(subject)
@@ -75,12 +81,41 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
   const [paperTitle, setPaperTitle] = useState('')
   const [materials, setMaterials] = useState('')
 
-  // First load: the paper with the most real exam questions, its sources, its usual shape.
+  // Saved exams: the caller's own, and those shared with their classes.
+  const myId = profile?.id || null
+  const isTutor = !!(profile?.is_tutor || profile?.is_admin)
+  const [saved, setSaved] = useState(null)
+  const [current, setCurrent] = useState(null)   // the saved exam on screen: { id, title, classId, ownerId }
+  const [notice, setNotice] = useState('')
+  const [classes, setClasses] = useState([])
   useEffect(() => {
-    if (!bank || paper !== null) return
-    const first = [...realPapers].sort((a, b) => b.count - a.count)[0]?.name || ''
-    choosePaper(first)
-  }, [bank]) // eslint-disable-line react-hooks/exhaustive-deps
+    let alive = true
+    store.list(subjectName).then(rows => { if (alive) setSaved(rows || []) })
+    const getClasses = loadClasses || (isTutor ? fetchTutorClasses : fetchMyClasses)
+    Promise.resolve(getClasses()).then(list => { if (alive) setClasses(list || []) }).catch(() => {})
+    return () => { alive = false }
+  }, [subjectName, isTutor]) // eslint-disable-line react-hooks/exhaustive-deps
+  const className = (id) => classes.find(c => c.id === id)?.name || 'your class'
+  const mine = (saved || []).filter(r => r.owner_id === myId)
+  const fromTutor = (saved || []).filter(r => r.owner_id !== myId && r.class_id)
+
+  // First load: a saved exam from the link, else the paper with the most real
+  // exam questions, its sources and its usual shape.
+  useEffect(() => {
+    if (!bank || saved === null || paper !== null) return
+    const want = new URLSearchParams(window.location.search).get('exam')
+    const open = (row) => {
+      if (row && row.subject === subjectName) { applySaved(row); return }
+      if (row) setNotice(`That exam is for ${row.subject}. Switch subject to open it.`)
+      else if (want) setNotice("That saved exam couldn't be found. It may have been deleted or not shared with you.")
+      const first = [...realPapers].sort((a, b) => b.count - a.count)[0]?.name || ''
+      choosePaper(first)
+    }
+    if (!want) { open(null); return }
+    const row = saved.find(r => r.id === want)
+    if (row) open(row)
+    else store.get(want).then(open)
+  }, [bank, saved]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sourcesForPaper = (p) => summary.sources.filter(s => !p || !s.paper || s.paper === p)
   function choosePaper(p) {
@@ -97,15 +132,40 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
 
   const pool = useMemo(() => examPool(bank || [], { paper: paper || '', sources: sources || [], topics }), [bank, paper, sources, topics])
   const byId = useMemo(() => new Map((bank || []).map(q => [q.id, q])), [bank])
+  const byIdRef = useRef(byId)
+  byIdRef.current = byId
 
-  // The exam: rebuilt when a setting changes; then edited by hand.
+  // The exam: rebuilt when a setting changes; then edited by hand. A saved
+  // exam keeps its own questions until one of its settings is changed.
   const [picked, setPicked] = useState({ A: [], B: [] })
   const [edited, setEdited] = useState(false)
+  const settingsKey = JSON.stringify([paper, sources, topics, mcCount, bMarks, seed])
+  const appliedKey = useRef(null)
   useEffect(() => {
     if (!bank || sources === null) return
+    if (appliedKey.current === settingsKey) return
+    appliedKey.current = null
     setPicked(pickExam(pool, { mcCount, bMarks, seed, allQuestions: bank }))
     setEdited(false)
   }, [pool, mcCount, bMarks, seed]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function applySaved(row) {
+    const st = row.settings || {}
+    const next = {
+      paper: st.paper ?? '', sources: st.sources ?? [], topics: st.topics ?? [],
+      mcCount: st.mcCount ?? 0, bMarks: st.bMarks ?? 0,
+    }
+    appliedKey.current = JSON.stringify([next.paper, next.sources, next.topics, next.mcCount, next.bMarks, seed])
+    setPaper(next.paper); setSources(next.sources); setTopics(next.topics); setMcCount(next.mcCount); setBMarks(next.bMarks)
+    setShowSources(!!st.showSources); setAnswerSheet(st.answerSheet !== false); setSolutions(st.solutions !== false)
+    setSubjectTitle(st.subjectTitle || strip(subjectName)); setPaperTitle(st.paperTitle || ''); setMaterials(st.materials || '')
+    setPicked({ A: row.questions?.A || [], B: row.questions?.B || [] })
+    setEdited(false)
+    setCurrent({ id: row.id, title: row.title, classId: row.class_id, ownerId: row.owner_id })
+    const missing = [...(row.questions?.A || []), ...(row.questions?.B || [])].filter(id => !byIdRef.current.has(id)).length
+    setNotice(missing ? `${missing} question${missing === 1 ? ' is' : 's are'} no longer in the bank, so ${missing === 1 ? 'it was' : 'they were'} left out.` : '')
+    try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
+  }
 
   const exam = useMemo(() => ({
     A: picked.A.map(id => byId.get(id)).filter(Boolean),
@@ -134,6 +194,48 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
   const [adding, setAdding] = useState(null)
   const [search, setSearch] = useState('')
   const addable = adding ? pool[adding].filter(q => !used.includes(q.id) && (!search.trim() || `${q.question} ${q.topic} ${sourceLabel(q)}`.toLowerCase().includes(search.trim().toLowerCase()))).slice(0, 60) : []
+
+  // Saving: a new exam, or changes to one the caller owns. Tutors can share it with a class.
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveTitle, setSaveTitle] = useState('')
+  const [saveClass, setSaveClass] = useState('')
+  const [saveState, setSaveState] = useState('')
+  const ownsCurrent = !!current && current.ownerId === myId
+  const openSave = () => {
+    setSaveTitle(current?.title || `${subjectTitle} ${board === 'vce' ? paperTitle : ''} practice exam`.replace(/\s+/g, ' ').trim())
+    setSaveClass(ownsCurrent ? current.classId || '' : '')
+    setSaveState('')
+    setSaveOpen(true)
+  }
+  const doSave = async (asNew) => {
+    if (!myId || !saveTitle.trim()) return
+    setSaveState('saving')
+    const row = await store.save({
+      id: ownsCurrent && !asNew ? current.id : undefined, ownerId: myId, subject: subjectName, title: saveTitle.trim(),
+      questions: picked, classId: isTutor ? saveClass || null : null,
+      settings: { board, paper, sources, topics, mcCount, bMarks, showSources, answerSheet, solutions, subjectTitle, paperTitle, materials },
+    })
+    if (!row) { setSaveState('error'); return }
+    setSaved(prev => [row, ...(prev || []).filter(r => r.id !== row.id)])
+    setCurrent({ id: row.id, title: row.title, classId: row.class_id, ownerId: row.owner_id })
+    appliedKey.current = settingsKey
+    setEdited(false)
+    setSaveState('saved')
+    setSaveOpen(false)
+    try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
+  }
+  const removeSaved = async (row) => {
+    if (!window.confirm(`Delete "${row.title}"?${row.class_id ? ' Your class will no longer see it.' : ''}`)) return
+    if (!(await store.remove(row.id))) return
+    setSaved(prev => (prev || []).filter(r => r.id !== row.id))
+    if (current?.id === row.id) setCurrent(null)
+  }
+  const [copied, setCopied] = useState(false)
+  const copyLink = () => {
+    if (!current) return
+    const url = `${window.location.origin}/exam-builder?exam=${current.id}`
+    navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }).catch(() => {})
+  }
 
   const download = () => {
     const before = document.title
@@ -205,18 +307,99 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
         <button type="button" onClick={onExit} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
           <ArrowLeft size={16} aria-hidden="true" /> Back to practice
         </button>
-        <div className="eb-title" style={{ fontSize: 15, fontWeight: 800 }}>Exam builder</div>
+        <div className="eb-title" style={{ fontSize: 15, fontWeight: 800 }}>{current ? current.title : 'Exam builder'}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+        {myId && (
+          <button type="button" onClick={openSave} disabled={!totals.total}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: totals.total ? t.text : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: totals.total ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+            <Save size={15} aria-hidden="true" /> {saveState === 'saved' && !edited ? 'Saved' : 'Save'}
+          </button>
+        )}
         <button type="button" onClick={download} disabled={!totals.total}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? '#0c1037' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
           <Printer size={16} aria-hidden="true" /> Download PDF
         </button>
+        </div>
       </div>
+
+      {saveOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="eb-save-h" onClick={e => { if (e.target === e.currentTarget) setSaveOpen(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, padding: 16 }}>
+          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: 20, width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div id="eb-save-h" style={{ fontSize: 16, fontWeight: 800 }}>{ownsCurrent ? 'Save changes' : 'Save this exam'}</div>
+            <label style={{ fontSize: 12, color: t.textMuted }}>Name
+              <input autoFocus value={saveTitle} onChange={e => setSaveTitle(e.target.value)} maxLength={120} style={{ ...input, marginTop: 4 }}
+                onKeyDown={e => { if (e.key === 'Enter') doSave(false) }} />
+            </label>
+            {isTutor && (
+              <label style={{ fontSize: 12, color: t.textMuted }}>Share with a class
+                <select value={saveClass} onChange={e => setSaveClass(e.target.value)} style={{ ...input, marginTop: 4 }}>
+                  <option value="">Don't share (just me)</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.subject ? ` · ${c.subject}` : ''}</option>)}
+                </select>
+                <span style={{ display: 'block', marginTop: 4, color: t.textFaint }}>Students in the class see it under "From your tutor" in their exam builder.</span>
+              </label>
+            )}
+            {saveState === 'error' && <div role="alert" style={{ fontSize: 12.5, color: t.danger }}>Couldn't save. Check your connection and try again.</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setSaveOpen(false)} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              {ownsCurrent && <button type="button" onClick={() => doSave(true)} disabled={!saveTitle.trim() || saveState === 'saving'} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save as new</button>}
+              <button type="button" onClick={() => doSave(false)} disabled={!saveTitle.trim() || saveState === 'saving'} style={{ padding: '9px 16px', borderRadius: 10, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                {saveState === 'saving' ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!bank ? (
         <p role="status" style={{ padding: 24, color: loadError ? t.danger : t.textMuted }}>{loadError || 'Loading exam questions…'}</p>
       ) : (
         <div className="eb-grid">
           <div className="eb-side">
+            {notice && <div className="eb-card" role="status" style={{ fontSize: 12.5, color: t.textSub, lineHeight: 1.55 }}>{notice}</div>}
+
+            {(mine.length > 0 || fromTutor.length > 0 || current) && (
+              <div className="eb-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {current && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6, borderBottom: `1px solid ${t.border}` }}>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
+                      <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Open: {current.title}</div>
+                      <div style={{ color: t.textMuted }}>{current.ownerId !== myId ? `From your tutor · ${className(current.classId)}` : current.classId ? `Shared with ${className(current.classId)}` : 'Only you can see it'}{edited ? ' · unsaved changes' : ''}</div>
+                    </div>
+                    <button type="button" onClick={copyLink} title="Copy a link to this exam" aria-label="Copy link" style={iconBtn}><Link2 size={15} /></button>
+                    {copied && <span style={{ fontSize: 11.5, color: t.success }}>Copied</span>}
+                  </div>
+                )}
+                {fromTutor.length > 0 && (
+                  <>
+                    <span style={{ ...label, marginBottom: 0 }}>From your tutor</span>
+                    {fromTutor.map(r => (
+                      <button key={r.id} type="button" onClick={() => applySaved(r)}
+                        style={{ textAlign: 'left', border: 'none', background: current?.id === r.id ? t.bgSubtle : 'transparent', color: t.text, padding: '6px 4px', borderRadius: 7, cursor: 'pointer', fontFamily: FONT_B }}>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>{r.title}</div>
+                        <div style={{ fontSize: 11.5, color: t.textMuted }}>{className(r.class_id)} · {new Date(r.updated_at).toLocaleDateString()}</div>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {mine.length > 0 && (
+                  <>
+                    <span style={{ ...label, marginBottom: 0, marginTop: fromTutor.length ? 6 : 0 }}>My saved exams</span>
+                    {mine.map(r => (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 7, background: current?.id === r.id ? t.bgSubtle : 'transparent' }}>
+                        <button type="button" onClick={() => applySaved(r)} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'transparent', color: t.text, padding: '6px 4px', cursor: 'pointer', fontFamily: FONT_B }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                          <div style={{ fontSize: 11.5, color: t.textMuted }}>{new Date(r.updated_at).toLocaleDateString()}{r.class_id ? ` · shared with ${className(r.class_id)}` : ''}</div>
+                        </button>
+                        <button type="button" onClick={() => removeSaved(r)} title="Delete" aria-label={`Delete ${r.title}`} style={iconBtn}><Trash2 size={14} /></button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
             {!hasRealExams && (
               <div className="eb-card" style={{ fontSize: 12.5, color: t.textSub, lineHeight: 1.55 }}>
                 No past or trial exam papers are loaded for this subject yet, so this exam uses GradeFarm questions.
