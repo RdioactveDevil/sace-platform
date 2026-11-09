@@ -126,3 +126,63 @@ export function parseLessonJson(raw) {
     summary: (d.summary || []).filter(Boolean),
   }
 }
+
+const letter = (i) => String.fromCharCode(65 + i)
+
+/** A short name for a card, as the student sees it ("Key idea 2 of 4: Product law"). */
+export function cardLabel(cards, index) {
+  const c = cards[index]
+  if (!c) return ''
+  const n = `Step ${index + 1} of ${cards.length}`
+  if (c.type === 'intro') return `${n} · Intro`
+  if (c.type === 'idea') return `${n} · Key idea ${c.n} of ${c.of}: ${c.idea.title}`
+  if (c.type === 'example') return `${n} · Worked example`
+  if (c.type === 'check') return `${n} · ${c.quick ? 'Quick check' : `Final challenge ${c.n} of ${c.of}`}`
+  return `${n} · Wrap-up`
+}
+
+/**
+ * What Titan needs to answer about the card on screen: an outline of the
+ * lesson, then the current card in full (the idea and its example, the
+ * question with its options and the student's answer, or the worked example
+ * with the lines revealed so far). Goes in the chat's system prompt.
+ */
+export function describeLessonCard(lesson) {
+  const data = lesson?.data
+  const cards = buildCards(data)
+  if (!cards.length) return ''
+  const at = Math.min(lesson.card ?? 0, cards.length - 1)
+  const c = cards[at]
+  const out = [`GUIDED LESSON: "${lesson.topic || data.title || ''}". The student is working through it one card at a time and is asking from the card on screen.`]
+  out.push('Lesson outline:', ...cards.map((_, i) => `${i === at ? '→' : ' '} ${cardLabel(cards, i)}`))
+  out.push('', `CARD ON SCREEN NOW: ${cardLabel(cards, at)}`)
+
+  if (c.type === 'idea') {
+    out.push(`Idea: ${c.idea.title}`, `Explanation shown: ${c.idea.text}`)
+    if (c.idea.example) out.push(`Example shown: ${c.idea.example}`)
+    if (c.idea.watch_out) out.push(`"Watch out" note shown: ${c.idea.watch_out}`)
+  } else if (c.type === 'example') {
+    const shown = Math.min(lesson.revealed ?? 1, data.example.steps.length)
+    out.push(`Worked example problem: ${data.example.problem}`, `The working is in numbered lines; the student has revealed lines 1 to ${shown} of ${data.example.steps.length}.`)
+    data.example.steps.forEach((st, i) => out.push(`  Line ${i + 1}${i < shown ? '' : ' (not revealed yet)'}: ${st.work}${st.note ? ` (why: ${st.note})` : ''}`))
+    out.push('If the student says "step N" or "line N" here, they mean line N of this worked example. Explain revealed lines fully. For a line not revealed yet, help them work it out with a hint before showing it.')
+  } else if (c.type === 'check') {
+    const a = answerAt(lesson.answers, c.slot)
+    out.push(`Question: ${c.check.question}`, ...c.check.options.map((o, i) => `  ${letter(i)}. ${o}`), `Correct answer: ${letter(c.check.answer_index)}`)
+    if (c.check.explanation) out.push(`Explanation shown after answering: ${c.check.explanation}`)
+    if (!a) {
+      const picked = Number.isInteger(lesson.picked) ? ` They have selected ${letter(lesson.picked)} but not checked it yet.` : ''
+      out.push(`The student has NOT answered this yet.${picked} Do not tell them the answer or which option is right: give a hint or a smaller question that leads them there.`)
+    } else {
+      out.push(`The student answered ${a.picked != null ? letter(a.picked) : 'it'} and was ${a.ok ? 'right' : 'wrong'}. You can now discuss the answer openly${a.ok ? '' : ', starting from why their choice was tempting'}.`)
+    }
+  } else if (c.type === 'intro') {
+    out.push(`Ideas in this lesson: ${(data.ideas || []).map(i => i.title).join('; ')}`)
+  } else {
+    const { right, total } = lessonScore(lesson)
+    out.push(`They finished the lesson with ${right} of ${total} questions right.`)
+    if (data.summary?.length) out.push(`Summary shown: ${data.summary.join('; ')}`)
+  }
+  out.push('', 'Answer about this card unless the student clearly asks about another part of the lesson (use the outline to find it). Refer to things the way the screen does: "the example", "the watch-out note", "option B", "line 3".')
+  return out.join('\n')
+}

@@ -88,3 +88,30 @@ test('answers keep the pick, and old true/false answers still count', () => {
   assert.deepEqual(lessonScore({ data: v2, answers: [{ ok: true, picked: 1 }, true, { ok: false, picked: 0 }] }), { right: 2, total: 4 })
   assert.equal(runEndingAt([true, { ok: true, picked: 1 }], 1), 2)
 })
+
+test('Titan is told exactly which card is on screen', async () => {
+  const { describeLessonCard, cardLabel } = await import('./lessonCards.js')
+  const cards = buildCards(v2)
+  assert.equal(cardLabel(cards, 1), 'Step 2 of 10 · Key idea 1 of 3: A')
+  assert.equal(cardLabel(cards, 7), 'Step 8 of 10 · Final challenge 1 of 2')
+
+  const idea = describeLessonCard({ topic: 'Logs', data: { ...v2, ideas: [{ ...v2.ideas[0], example: 'ex', watch_out: 'careful' }, ...v2.ideas.slice(1)] }, card: 1 })
+  assert.match(idea, /CARD ON SCREEN NOW: Step 2 of 10 · Key idea 1 of 3: A/)
+  assert.match(idea, /Example shown: ex/)
+  assert.match(idea, /"Watch out" note shown: careful/)
+  assert.match(idea, /→ Step 2 of 10/)
+
+  const unanswered = describeLessonCard({ data: v2, card: 2, picked: 2, answers: [] })
+  assert.match(unanswered, /Question: Q1/)
+  assert.match(unanswered, /C\. c/)
+  assert.match(unanswered, /NOT answered/)
+  assert.match(unanswered, /selected C/)
+
+  const answered = describeLessonCard({ data: v2, card: 2, answers: [{ ok: false, picked: 0 }] })
+  assert.match(answered, /answered A and was wrong/)
+
+  const example = describeLessonCard({ data: { ...v2, example: { problem: 'p', steps: [{ work: 'w1', note: 'n1' }, { work: 'w2' }] } }, card: 6, revealed: 1 })
+  assert.match(example, /revealed lines 1 to 1 of 2/)
+  assert.match(example, /Line 1: w1 \(why: n1\)/)
+  assert.match(example, /Line 2 \(not revealed yet\): w2/)
+})
