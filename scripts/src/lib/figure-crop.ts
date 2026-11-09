@@ -100,9 +100,32 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   });
   if (!kept.length) return box;
   // Question text the box reached into: a block made only of text-high lines,
-  // at the top or bottom, set apart from the figure by that clear gap.
+  // at the top or bottom, set apart from the figure by that clear gap, that
+  // the box cuts through or that holds a line of running text (long, with no
+  // gap wider than between words). Captions spread under a figure ("molecule
+  // A   molecule B") and short labels inside the box stay.
   const textLine = 16 * scale;
-  const isText = (bl: Band[]) => bl.every((l) => l.end - l.start + 1 <= textLine);
+  const wordGap = 12 * scale;
+  const boxWidth = x1 - x0 + 1;
+  const runningText = (l: Band) => {
+    let first = -1, last = -1, gap = 0, widest = 0;
+    for (let x = sx0; x <= sx1; x++) {
+      let ink = false;
+      for (let y = l.start; y <= l.end && !ink; y++) ink = dark(x, y);
+      if (ink) {
+        if (first < 0) first = x;
+        else widest = Math.max(widest, gap);
+        last = x;
+        gap = 0;
+      } else if (first >= 0) gap++;
+    }
+    return first >= 0 && last - first + 1 >= 0.5 * boxWidth && widest <= wordGap;
+  };
+  const isText = (bl: Band[]) => {
+    if (!bl.every((l) => l.end - l.start + 1 <= textLine)) return false;
+    const { start, end } = span(bl);
+    return start < y0 || end > y1 || bl.some(runningText);
+  };
   while (kept.length > 1 && isText(kept[0])) kept.shift();
   while (kept.length > 1 && isText(kept[kept.length - 1])) kept.pop();
   const top = span(kept[0]).start;
