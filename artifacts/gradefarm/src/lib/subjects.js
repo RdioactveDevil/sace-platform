@@ -40,7 +40,7 @@ export function curriculumToSubjectTile(c) {
  * Optional per-subject tools, switched on in Admin → Curricula → Features.
  * Off unless the subject's curriculum enables them.
  * @param {object} tile  subject tile
- * @param {'exam_mode'|'essay_marker'|'writing'|'written_answers'} feature
+ * @param {'exam_mode'|'essay_marker'|'writing'|'written_answers'|'test_maker'} feature
  */
 export function subjectHasFeature(tile, feature) {
   return !!tile?.features?.[feature]

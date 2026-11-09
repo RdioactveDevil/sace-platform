@@ -59,6 +59,7 @@ const InviteScreen          = lazyWithReload(() => import('./components/InviteSc
 const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazyWithReload(() => import('./components/ExamModeScreen'))
+const TestMakerScreen       = lazyWithReload(() => import('./components/TestMakerScreen'))
 const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
@@ -515,14 +516,17 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
 function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, theme }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  const exam = reason === 'exam'
+  const exam = reason === 'exam' || reason === 'test'
+  const feature = reason === 'test' ? 'The test maker' : 'Exam Mode'
   return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
       <Lock size={48} color={GOLD} aria-hidden="true" />
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>{exam ? 'Exam Mode is for paid subjects' : `Unlock ${formatSubjectLabel(subject)}`}</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>{exam ? `${feature} is for paid subjects` : `Unlock ${formatSubjectLabel(subject)}`}</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
         {exam
-          ? <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
+          ? reason === 'test'
+            ? <>Printable tests aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to make them — you can cancel any time.</>
+            : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
           : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
       <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1631,6 +1635,18 @@ function AppInner() {
           ? <LockedSubjectScreen subject={selectedSubject} reason={subjectLocked ? 'locked' : 'exam'} onChangeSubject={() => navigate('/question-bank')} theme={theme} />
         : subjectHasFeature(selectedSubject, 'exam_mode')
           ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
+          : <Navigate to="/question-bank" replace />
+      } />
+
+      {/* Test maker — a printable test from the subject's bank; only for subjects with test_maker on */}
+      <Route path="/test-maker" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+        : subjectLocked || selectedAccess === 'free'
+          ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
+        : subjectHasFeature(selectedSubject, 'test_maker')
+          ? <TestMakerScreen theme={theme} questions={questions} struggleMap={struggleMap} subject={selectedSubject} profile={profile}
+              initialSubtopics={location.state?.subtopics || []} onExit={() => navigate('/question-bank')} />
           : <Navigate to="/question-bank" replace />
       } />
 

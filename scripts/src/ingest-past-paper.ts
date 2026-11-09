@@ -21,6 +21,8 @@
  *
  * Usage:
  *   tsx ingest-past-paper.ts --pdf-url <url> --subject "Chemistry Stage 1" --topic "Acids and bases" [--subtopic "The pH scale"] [--apply] [--limit 20]
+ *     [--source "VCAA 2024 Exam 1" --year 2024]   (labels the questions as past-exam questions,
+ *     so the test maker can filter by exam and year; each question keeps its printed number)
  *   tsx ingest-past-paper.ts --storage-path <admin-uploads/path.pdf> --subject ... --topic ...
  */
 import { createClient } from "@supabase/supabase-js";
@@ -38,6 +40,8 @@ type Args = {
   subtopic?: string;
   apply: boolean;
   limit?: number;
+  source?: string;
+  year?: number;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -52,11 +56,14 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--subtopic") a.subtopic = v();
     else if (k === "--apply") a.apply = true;
     else if (k === "--limit") a.limit = parseInt(v() || "", 10) || undefined;
+    else if (k === "--source") a.source = v();
+    else if (k === "--year") a.year = parseInt(v() || "", 10) || undefined;
   }
   return a;
 }
 
 type ExtractedQuestion = {
+  number?: string; // as printed, e.g. "5" or "3b"
   question: string;
   options?: string[];
   answer_index?: number;
@@ -107,6 +114,7 @@ async function extractQuestions(pdf: Buffer, args: Args): Promise<ExtractedQuest
   const system = [
     `You are extracting exam questions from a ${args.subject || "past exam paper"} for the topic "${args.topic || ""}".`,
     "Return ONLY a JSON array. Each object:",
+    "  number (string — the question number as printed on the paper, e.g. \"5\" or \"3b\")",
     "  question (string — the full question stem, with LaTeX in $...$ for any maths/chemistry)",
     "  options (array of 4 strings) and answer_index (0–3) — for multiple-choice questions",
     "  solution (string — a short worked explanation of the correct answer)",
@@ -257,6 +265,8 @@ async function main() {
       answer_index: q.answer_index,
       solution: q.solution || "",
       image_url: args.apply ? imageUrl : null,
+      // Past-exam label (migration 20261109000003_question_source.sql).
+      ...(args.source && { source: args.source, source_year: args.year ?? null, source_question: q.number ? String(q.number) : null }),
       created_at: new Date().toISOString(),
     });
   }
