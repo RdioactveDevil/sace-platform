@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails, addFamilyChild, switchToChild, removeFamilyChild } from '../lib/db'
 import { AU_STATES, stateLabel } from '../lib/subjectFilter'
-import { soundsEnabled, setSoundsEnabled } from '../lib/sounds'
+import { applySoundsSetting, playSound } from '../lib/sounds'
 import { useFamily } from './FamilySwitcher'
 import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
@@ -412,7 +412,6 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   // The section list on the left jumps to a section and shows where you are.
   const scrollRef = useRef(null)
   const [active, setActive] = useState('profile')
-  const [soundsOn, setSoundsOn] = useState(soundsEnabled)
   const jumpTo = (id, smooth = true) => {
     const el = document.getElementById(`acct-${id}`)
     if (!el) return
@@ -501,6 +500,9 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const [lbHidden, setLbHidden]         = useState(!!profile.hide_from_leaderboard)
   const [savingLbHidden, setSavingLbHidden] = useState(false)
   const [lbHiddenMsg, setLbHiddenMsg]   = useState('')
+  const [soundsOn, setSoundsOn]         = useState(profile.sounds_enabled !== false)
+  const [savingSounds, setSavingSounds] = useState(false)
+  const [soundsMsg, setSoundsMsg]       = useState('')
 
   // A plain card, for the parent and family panels.
   const plainCard = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '16px 18px' }
@@ -584,6 +586,24 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       setTimeout(() => setRemindersMsg(''), 3000)
     } finally {
       setSavingReminders(false)
+    }
+  }
+
+  const handleToggleSounds = async () => {
+    const next = !soundsOn
+    setSavingSounds(true); setSoundsMsg('')
+    try {
+      const updates = { sounds_enabled: next }
+      await updateProfile(profile.id, updates)
+      onProfileUpdated?.(updates)
+      applySoundsSetting(next)
+      setSoundsOn(next)
+      if (next) playSound('correct')
+    } catch {
+      setSoundsMsg("Couldn't save. Try again.")
+      setTimeout(() => setSoundsMsg(''), 3000)
+    } finally {
+      setSavingSounds(false)
     }
   }
 
@@ -801,8 +821,8 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
         <Row t={t} first label="Email reminders" note={remindersMsg || 'Lesson reminders and assignment due dates. Emails your tutor sends you directly always arrive.'} noteTone={remindersMsg ? 'danger' : null}
           action={<Toggle on={remindersOn} onClick={handleToggleReminders} disabled={savingReminders} label="Email reminders" />} />
       )}
-      <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Sound effects" note="Chimes for right answers, streaks and finishing. Saved on this device."
-        action={<Toggle on={soundsOn} onClick={() => { setSoundsEnabled(!soundsOn); setSoundsOn(!soundsOn) }} label="Sound effects" />} />
+      <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Sound effects" note={soundsMsg || 'Chimes for right answers, streaks and finishing. Saved on your account.'} noteTone={soundsMsg ? 'danger' : null}
+        action={<Toggle on={soundsOn} onClick={handleToggleSounds} disabled={savingSounds} label="Sound effects" />} />
       {typeof onToggleTheme === 'function' && (
         <Row t={t} label="Dark mode" note="Saved on this device. Also in the sidebar."
           action={<Toggle on={theme === 'dark'} onClick={onToggleTheme} label="Dark mode" />} />

@@ -2,10 +2,11 @@
 // answer, a soft low note for a wrong one, a rising run for a streak, and a
 // fanfare when a quiz or lesson is done. They're made with the Web Audio API,
 // so there are no files to download. On by default; the switch is in
-// Account → Preferences and is kept in this browser.
+// Account → Preferences and is saved on the account (profiles.sounds_enabled,
+// migration 20261109000002_sounds_enabled.sql). App.jsx passes the signed-in
+// profile's setting here with applySoundsSetting.
 
-const KEY = 'gf-sounds'
-export const SOUNDS_EVENT = 'gf-sounds-change'
+let enabled = true
 
 /** A streak of right answers that gets its own sound: 3, 5, then every 5. */
 export const isStreakMilestone = (streak) => streak === 3 || (streak >= 5 && streak % 5 === 0)
@@ -29,13 +30,12 @@ export function isCelebration(correct, total) {
 }
 
 export function soundsEnabled() {
-  try { return localStorage.getItem(KEY) !== 'off' } catch { return true }
+  return enabled
 }
 
-export function setSoundsEnabled(on) {
-  try { localStorage.setItem(KEY, on ? 'on' : 'off') } catch {}
-  try { window.dispatchEvent(new CustomEvent(SOUNDS_EVENT, { detail: on })) } catch {}
-  if (on) playSound('correct')
+/** The account's setting: anything but an explicit false is on (older rows, signed out). */
+export function applySoundsSetting(value) {
+  enabled = value !== false
 }
 
 // Notes as [frequency Hz, start s, length s, volume 0–1].

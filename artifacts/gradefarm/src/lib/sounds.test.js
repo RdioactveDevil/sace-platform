@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { answerSound, finishSound, isCelebration, isStreakMilestone, playSound, soundsEnabled } from './sounds.js'
+import { answerSound, applySoundsSetting, finishSound, isCelebration, isStreakMilestone, playSound, soundsEnabled } from './sounds.js'
 
 test('streak milestones are 3, 5 and every 5 after', () => {
   const hits = Array.from({ length: 21 }, (_, i) => i).filter(isStreakMilestone)
@@ -32,4 +32,16 @@ test('confetti for all right, or 70%+ over three or more', () => {
 test('outside a browser it stays quiet and on by default', () => {
   assert.equal(soundsEnabled(), true)
   assert.doesNotThrow(() => playSound('correct'))
+})
+
+test('the account setting switches sounds off only when it is false', () => {
+  applySoundsSetting(false)
+  assert.equal(soundsEnabled(), false)
+  assert.doesNotThrow(() => playSound('correct'))
+  applySoundsSetting(undefined)
+  assert.equal(soundsEnabled(), true)
+  applySoundsSetting(null)
+  assert.equal(soundsEnabled(), true)
+  applySoundsSetting(true)
+  assert.equal(soundsEnabled(), true)
 })

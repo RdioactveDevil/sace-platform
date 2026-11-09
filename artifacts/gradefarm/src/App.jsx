@@ -27,6 +27,7 @@ import { appZoom } from './lib/appZoom'
 import { TUTOR_NAV, ADMIN_NAV, workspaceForPath, sectionForPortalPath, PORTAL_BADGES_EVENT } from './lib/portalNav'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
+import { applySoundsSetting } from './lib/sounds'
 
 // Vite fires this when a chunk's preloaded dependencies are gone after a
 // deploy; reload to pick up the new build instead of erroring.
@@ -917,6 +918,8 @@ function AppInner() {
   const location = useLocation()
   const [user, setUser]                       = useState(null)
   const [profile, setProfile]                 = useState(null)
+  // Sound effects follow the signed-in account (Account → Preferences).
+  useEffect(() => { applySoundsSetting(profile?.sounds_enabled) }, [profile?.sounds_enabled])
   const [questions, setQuestions]             = useState([])
   const [struggleMap, setStruggleMap]         = useState({})
   const [loading, setLoading]                 = useState(true)
