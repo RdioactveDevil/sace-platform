@@ -1733,7 +1733,8 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
+          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })}
+            onProfileUpdated={updates => setProfile(prev => (prev ? { ...prev, ...updates } : prev))} />
       } />
 
       {/* Get access / purchase page */}

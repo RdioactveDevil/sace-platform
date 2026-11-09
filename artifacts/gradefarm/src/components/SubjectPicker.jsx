@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { curriculumToSubjectTile, subjectAccess, yearFromStage } from '../lib/subjects'
-import { fetchSubjectBankCounts, getBillingConfig } from '../lib/db'
+import { curriculumToSubjectTile, subjectAccess } from '../lib/subjects'
+import { fetchSubjectBankCounts, getBillingConfig, updateProfile } from '../lib/db'
+import { AU_STATES, fitsStudent, subjectYear } from '../lib/subjectFilter'
 import { studentTiers } from '../lib/pricing'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIconByName } from './SubjectIcons'
 import { THEMES } from '../lib/theme'
-import { AuthLayout, authBtn } from './AuthLayout'
+import { AuthLayout, authBtn, choiceChip } from './AuthLayout'
 import CalmBackground from './CalmBackground'
 import { groupSubject } from '../lib/homeSubjects'
 
@@ -30,15 +31,20 @@ function writeCountsCache(counts) {
 /**
  * Choosing a subject. One subject gets a big card: the one they used last,
  * else their own, else the one for their year level. Every other subject is
- * a list under it. `fullAccess` (tutors/admins) unlocks them all. A calm
+ * a list under it. Subjects they haven't got are only listed if they fit the
+ * student's state and year (lib/subjectFilter.js); "Show all subjects" lists
+ * the rest. `fullAccess` (tutors/admins) unlocks and lists them all. A calm
  * moving background (CalmBackground) sits behind the page.
  */
-export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess, theme = 'dark', onToggleTheme }) {
+export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess, onProfileUpdated, theme = 'dark', onToggleTheme }) {
   const t = THEMES[theme]
   const [liveQuestionCounts, setCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamic]   = useState([])
   const [loadingCurricula, setLoading]  = useState(true)
   const [billing, setBilling]           = useState(null)
+  const [showAll, setShowAll]           = useState(false)
+  const [stateSaving, setStateSaving]   = useState(false)
+  const [stateError, setStateError]     = useState('')
 
   useEffect(() => {
     if (fullAccess) return
@@ -83,14 +89,15 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const priceLabel       = !hasFreeSubject ? 'Try free'
     : billing?.trialDays > 0 ? `${billing.trialDays} days free`
     : `$${billing?.nextPrice ?? tiers[0]}/${billing?.interval ?? 'week'}`
-  const comingSoon       = allSubjects.filter(s => !s.available)
 
   const firstName = profile.display_name?.split(' ')[0] ?? 'there'
 
   const year = Number(profile.year_level) || null
-  const forYear = year ? allSubjects.filter(s => s.available && yearFromStage(s.stage) === year) : []
+  // Subjects for this student's state and year. Staff see everything.
+  const fits = (s) => fullAccess || fitsStudent(s, { state: profile.state, year })
+  const forYear = year ? allSubjects.filter(s => s.available && fits(s) && subjectYear(s) === year) : []
   // Lower years first, so a list reads like a school.
-  const byYear = (a, b) => (yearFromStage(a.stage) ?? 99) - (yearFromStage(b.stage) ?? 99) || a.name.localeCompare(b.name)
+  const byYear = (a, b) => (subjectYear(a) ?? 99) - (subjectYear(b) ?? 99) || a.name.localeCompare(b.name)
 
   // One subject gets the big card: the one they used last, else their own,
   // else the one for their year. Everything else is a list under it.
@@ -98,9 +105,27 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const lastId = (() => { try { return JSON.parse(localStorage.getItem('gf-subject') || 'null')?.id } catch { return null } })()
   const pick = hasOwn
     ? subscribed.find(s => s.id === lastId) || subscribed[0]
-    : forYear[0] || [...notSubscribed].sort(byYear)[0]
+    : forYear[0] || notSubscribed.filter(fits).sort(byYear)[0] || [...notSubscribed].sort(byYear)[0]
   const ownOthers = subscribed.filter(s => s !== pick).sort(byYear)
-  const more = notSubscribed.filter(s => s !== pick).sort(byYear)
+  const others = notSubscribed.filter(s => s !== pick).sort(byYear)
+  const more = showAll ? others : others.filter(fits)
+  const allComingSoon = allSubjects.filter(s => !s.available)
+  const comingSoon = showAll ? allComingSoon : allComingSoon.filter(fits)
+  const hiddenCount = others.length - others.filter(fits).length + allComingSoon.length - allComingSoon.filter(fits).length
+
+  // Accounts from before onboarding asked for a state: ask here, once.
+  const askState = !fullAccess && !profile.state
+  const saveState = async (code) => {
+    setStateSaving(true)
+    setStateError('')
+    try {
+      await updateProfile(profile.id, { state: code })
+      onProfileUpdated?.({ state: code })
+    } catch {
+      setStateError("Couldn't save. Check your connection and try again.")
+    }
+    setStateSaving(false)
+  }
   const shortName = pick ? groupSubject({ name: pick.name, level: pick.stage }).name || pick.name : ''
 
   const heading = fullAccess ? 'Pick a subject'
@@ -180,6 +205,7 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
     .sp-row-w { min-width: 0; flex: 1; display: flex; flex-direction: column; }
     .sp-row-w b { font-size: 14.5px; color: ${t.text}; line-height: 1.35; }
     .sp-row-w span { font-size: 12.5px; color: ${t.textMuted}; }
+    .sp-state { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
     .sp-h3 { margin: 8px 0 0; font-size: 16px; font-weight: 800; color: ${t.text}; }
     @media (max-width: 600px) {
       .sp-hero { grid-template-columns: 1fr; }
@@ -206,6 +232,24 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
               <h1 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 30px)', fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.2, color: t.text }}>{heading}</h1>
             </div>
 
+            {askState && (
+              <div className="sp-card sp-state" role="group" aria-labelledby="sp-state-h">
+                <div>
+                  <h3 id="sp-state-h" className="sp-h3" style={{ margin: 0 }}>Which state do you study in?</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: t.textMuted }}>We'll only list subjects for your state, like VCE in Victoria or SACE in South Australia.</p>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {AU_STATES.map(([code, label]) => (
+                    <button key={code} type="button" className="af-chip" disabled={stateSaving} onClick={() => saveState(code)}
+                      style={{ ...choiceChip(t, false), cursor: stateSaving ? 'wait' : 'pointer' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {stateError && <p role="alert" style={{ margin: 0, fontSize: 13, color: t.danger }}>{stateError}</p>}
+              </div>
+            )}
+
             <div className="sp-card">{hero}</div>
 
             {ownOthers.length > 0 && (
@@ -225,6 +269,15 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
               <p style={{ margin: 0, fontSize: 13, color: t.textMuted }}>
                 On the way: {comingSoon.map(s => `${s.name}${s.stage ? ` (${s.stage})` : ''}`).join(', ')}.
               </p>
+            )}
+
+            {(hiddenCount > 0 || showAll) && (
+              <div>
+                <button type="button" className="af-btn" onClick={() => setShowAll(v => !v)} aria-expanded={showAll}
+                  style={{ ...authBtn(t, 'secondary'), minHeight: 36, fontSize: 13, padding: '0 14px' }}>
+                  {showAll ? 'Show only subjects for me' : `Show all subjects (${hiddenCount} more)`}
+                </button>
+              </div>
             )}
           </>
         )}

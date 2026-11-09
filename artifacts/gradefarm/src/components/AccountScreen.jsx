@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails, addFamilyChild, switchToChild, removeFamilyChild } from '../lib/db'
+import { AU_STATES, stateLabel } from '../lib/subjectFilter'
 import { useFamily } from './FamilySwitcher'
 import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
@@ -675,6 +676,14 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
               <>
                 <Chips t={t} label="Year level" options={YEAR_LEVELS.map(y => [y, `Year ${y}`])} value={draft.year_level} onChange={v => setDraft(d => ({ ...d, year_level: v }))} />
                 {saveCancel('year', () => saveRow('year', { year_level: draft.year_level === '' ? null : Number(draft.year_level) }))}
+              </>
+            )} />
+          <Row t={t} label="State" value={stateLabel(profile.state) || 'Not set'} note={saved('state') || 'Decides whether you see VCE or SACE subjects.'} noteTone={saved('state') ? 'success' : null}
+            action={change('state', { state: profile.state || '' })}
+            editor={editing === 'state' && (
+              <>
+                <Chips t={t} label="State" options={AU_STATES} value={draft.state} onChange={v => setDraft(d => ({ ...d, state: v }))} />
+                {saveCancel('state', () => saveRow('state', { state: draft.state || null }))}
               </>
             )} />
           <Row t={t} label="School" value={profile.school || 'Not set'} note={saved('school')} noteTone="success"

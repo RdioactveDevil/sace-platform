@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { completeOnboarding, saveParentDetails } from '../lib/db'
 import { needsParentConsent } from '../lib/parentConsent'
+import { AU_STATES } from '../lib/subjectFilter'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, Note, authBtn, linkStyle, choiceChip } from './AuthLayout'
 import CalmBackground from './CalmBackground'
@@ -17,9 +18,10 @@ const SHOWS_ATAR = (year) => !year || year >= 11
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
- * Setting up a new account, one question per screen: year level, date of
- * birth, a parent's email if they're under 15, school, and what they're
- * aiming for (with the terms). Name and email come from sign-up.
+ * Setting up a new account, one question per screen: year level, state
+ * (so the subject picker shows VCE or SACE, not both), date of birth, a
+ * parent's email if they're under 15, school, and what they're aiming for
+ * (with the terms). Name and email come from sign-up.
  *
  * `suggestedYearLevel`: from the subjects their tutor included, pre-selected until they pick one.
  * `asParent`: they signed up as a parent setting the account up for their child
@@ -33,6 +35,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [dob, setDob]                 = useState('')
   const [school, setSchool]           = useState(profile.school || '')
+  const [studyState, setStudyState]   = useState(profile.state || null)
   // Until they choose, the year their tutor's subjects suggest (those can
   // arrive just after this mounts, as the invite is accepted in the background).
   const [chosenYear, setYearLevel]    = useState(null)
@@ -63,7 +66,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const [askNames] = useState(() => !(profile.display_name || '').trim() || !(initialParentName || '').trim())
   const screens = [
     askNames && (!(profile.display_name || '').trim() || isParent) && 'name',
-    'year', 'dob', askParentEmail && 'parent', 'school', 'goal',
+    'year', 'state', 'dob', askParentEmail && 'parent', 'school', 'goal',
   ].filter(Boolean)
   // Subjects are chosen (and paid for) on the subject picker after onboarding.
   const [screen, setScreen] = useState(screens[0])
@@ -93,6 +96,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
       if (dob)                profileUpdates.dob = dob
       if (school.trim())      profileUpdates.school = school.trim()
       if (yearLevel)          profileUpdates.year_level = yearLevel
+      if (studyState)         profileUpdates.state = studyState
       if (atarTarget && SHOWS_ATAR(yearLevel)) profileUpdates.atar_target = atarTarget
       if (goals.trim())       profileUpdates.goals = goals.trim()
       if (studyHours)         profileUpdates.study_hours_per_week = studyHours
@@ -113,6 +117,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const valid = {
     name: !!displayName.trim() && (!isParent || !!parentName.trim()),
     year: !!yearLevel,
+    state: !!studyState,
     dob: dobValid,
     parent: !!parentEmailClean && !parentEmailError,
     school: true,
@@ -166,6 +171,21 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
           ))}
         </div>
         {!screens.includes('name') && switchHolder}
+      </>
+    ),
+    state: (
+      <>
+        <H>{you('Which state do you study in?', `Which state does ${child} study in?`)}</H>
+        <Sub>{you("We'll show you subjects for your state, like VCE in Victoria or SACE in South Australia.", "We'll show them subjects for their state, like VCE in Victoria or SACE in South Australia.")}</Sub>
+        <div role="radiogroup" aria-label="State" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {AU_STATES.map(([code, label]) => (
+            <button key={code} type="button" role="radio" aria-checked={studyState === code} className="af-chip"
+              onClick={() => { setStudyState(code); setTimeout(next, 160) }}
+              style={choiceChip(t, studyState === code, 'lg')}>
+              {label}
+            </button>
+          ))}
+        </div>
       </>
     ),
     dob: (
@@ -244,6 +264,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   }[screen]
 
   const optionalScreen = screen === 'school'
+  // Year and state are one tap each: picking a chip moves on, so no Next button.
+  const chipScreen = screen === 'year' || screen === 'state'
   return (
     <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} align="top"
       center={(
@@ -255,7 +277,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         style={{ width: '100%', maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 18, padding: 'clamp(16px, 12vh, 120px) 0 0' }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: t.textFaint }}>Question {at + 1} of {screens.length}</span>
         {body}
-        {screen !== 'year' && (
+        {!chipScreen && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
             <button type="submit" className="af-btn" disabled={!valid} style={authBtn(t, 'primary', { disabled: !valid })}>
               {isLast ? (saving ? 'Setting up…' : 'Start') : 'Next'}
@@ -265,7 +287,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
             {!isLast && <span style={{ fontSize: 12.5, color: t.textFaint, marginLeft: 4 }} className="onb-kbd">or press Enter</span>}
           </div>
         )}
-        {screen === 'year' && at > 0 && (
+        {chipScreen && at > 0 && (
           <div><button type="button" className="af-link" onClick={back} style={{ ...linkStyle(t), fontSize: 13.5, fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back</button></div>
         )}
       </form>
