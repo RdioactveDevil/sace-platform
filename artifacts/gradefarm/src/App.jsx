@@ -59,7 +59,7 @@ const InviteScreen          = lazyWithReload(() => import('./components/InviteSc
 const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazyWithReload(() => import('./components/ExamModeScreen'))
-const TestMakerScreen       = lazyWithReload(() => import('./components/TestMakerScreen'))
+const ExamBuilderScreen     = lazyWithReload(() => import('./components/ExamBuilderScreen'))
 const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
@@ -517,7 +517,7 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
   const t = THEMES[theme]
   const navigate = useNavigate()
   const exam = reason === 'exam' || reason === 'test'
-  const feature = reason === 'test' ? 'The test maker' : 'Exam Mode'
+  const feature = reason === 'test' ? 'The exam builder' : 'Exam Mode'
   return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
       <Lock size={48} color={GOLD} aria-hidden="true" />
@@ -525,7 +525,7 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
         {exam
           ? reason === 'test'
-            ? <>Printable tests aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to make them — you can cancel any time.</>
+            ? <>Printable practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to make them — you can cancel any time.</>
             : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
           : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
@@ -1638,15 +1638,14 @@ function AppInner() {
           : <Navigate to="/question-bank" replace />
       } />
 
-      {/* Test maker — a printable test from the subject's bank; only for subjects with test_maker on */}
+      {/* Exam builder — a practice exam mixed from past and trial papers; only for subjects with test_maker on */}
       <Route path="/test-maker" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
         : subjectLocked || selectedAccess === 'free'
           ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
         : subjectHasFeature(selectedSubject, 'test_maker')
-          ? <TestMakerScreen theme={theme} questions={questions} struggleMap={struggleMap} subject={selectedSubject} profile={profile}
-              initialSubtopics={location.state?.subtopics || []} onExit={() => navigate('/question-bank')} />
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} onExit={() => navigate('/question-bank')} />
           : <Navigate to="/question-bank" replace />
       } />
 
