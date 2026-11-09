@@ -255,13 +255,31 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }).catch(() => {})
   }
 
-  const download = () => {
+  // Download PDF makes the file itself (lib/examPdf.js), page by page at A4,
+  // so it doesn't depend on the browser's print settings. If that fails, the
+  // print window is the fallback.
+  const [pdfProgress, setPdfProgress] = useState(null) // null | { done, total }
+  const fileTitle = `${subjectTitle} ${board === 'vce' ? paperTitle : ''} practice exam`.replace(/\s+/g, ' ').trim()
+  const printInstead = () => {
     const before = document.title
-    document.title = `${subjectTitle} ${board === 'vce' ? paperTitle : ''} practice exam`.replace(/\s+/g, ' ').trim()
+    document.title = fileTitle
     const restore = () => { document.title = before; window.removeEventListener('afterprint', restore) }
     window.addEventListener('afterprint', restore)
     window.print()
     setTimeout(restore, 1000)
+  }
+  const download = async () => {
+    if (pdfProgress) return
+    setPdfProgress({ done: 0, total: 0 })
+    try {
+      const { downloadExamPdf } = await import('../lib/examPdf')
+      await downloadExamPdf(previewRef.current, `${fileTitle.replace(/[^\w .-]+/g, '') || 'Practice exam'}.pdf`, (done, total) => setPdfProgress({ done, total }))
+    } catch (err) {
+      console.warn('[exam builder] making the PDF failed; printing instead', err)
+      printInstead()
+    } finally {
+      setPdfProgress(null)
+    }
   }
 
   // Preview scale: pages are A4 at 96 dpi (794px wide).
@@ -333,9 +351,10 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
             <Save size={15} aria-hidden="true" /> {saveState === 'saved' && !edited ? 'Saved' : 'Save'}
           </button>
         )}
-        <button type="button" onClick={download} disabled={!totals.total}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? '#0c1037' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
-          <Printer size={16} aria-hidden="true" /> Download PDF
+        <button type="button" onClick={download} disabled={!totals.total || !!pdfProgress} aria-live="polite"
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? '#0c1037' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total && !pdfProgress ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+          <Printer size={16} aria-hidden="true" />
+          {pdfProgress ? (pdfProgress.total ? `Making PDF… ${pdfProgress.done}/${pdfProgress.total}` : 'Making PDF…') : 'Download PDF'}
         </button>
         </div>
       </div>
@@ -536,7 +555,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
                 </label>
               ))}
             </div>
-            <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.5 }}>Download PDF opens the print window: choose Save as PDF, paper size A4, margins none.</div>
+            <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.5 }}>Download PDF saves an A4 PDF ready to print. It takes a few seconds for a long exam.</div>
           </div>
 
           <div className="eb-preview" ref={previewRef}>
