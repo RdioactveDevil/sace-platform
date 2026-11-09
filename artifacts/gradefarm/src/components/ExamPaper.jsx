@@ -136,7 +136,8 @@ const CSS = `
 
   .xp-sol h4 { margin: 0 0 1mm; font-size: 10.5pt; }
   .xp-sol .src { font-size: 8pt; font-style: italic; color: #555; font-weight: 400; }
-  .xp-sol-part { display: grid; grid-template-columns: 9mm 1fr auto; column-gap: 2mm; padding-bottom: 2.5mm; }
+  .xp-sol-part { display: grid; grid-template-columns: 21mm 1fr auto; column-gap: 2mm; padding-bottom: 2.5mm; }
+  .xp-sol-part > b { white-space: nowrap; }
   .xp-anstable { border-collapse: collapse; width: 100%; margin-bottom: 5mm; font-size: 10pt; }
   .xp-anstable td { border: 0.25mm solid #1a1a1a; padding: 1.4mm 2mm; text-align: center; }
   .xp-sheet { padding: 16mm 20mm; height: 100%; font-size: 10pt; font-family: Arial, Helvetica, sans-serif; }
@@ -219,12 +220,17 @@ function solutionBlocks(exam, numberOf) {
       out.push({ key: `sol-B-${q.id}-none`, el: <div className="xp-sol-part"><b /><div>{NOT_YET}</div><span /></div> })
       return
     }
+    // Each answer under its full label, e.g. (b)(ii)(1): the parts that only
+    // introduce their sub-parts have no answer of their own and aren't listed.
+    const path = []
     parts.forEach((p, k) => {
+      path.length = Math.max(0, p.level - 1)
+      path[p.level - 1] = p.label ? `(${p.label})` : ''
       if (!p.solution && !p.marks) return
       out.push({
         key: `sol-B-${q.id}-${k}`, el: (
-          <div className="xp-sol-part" style={p.level > 1 ? { paddingLeft: `${7 * (p.level - 1)}mm` } : undefined}>
-            <b>{p.label ? `(${p.label})` : ''}</b>
+          <div className="xp-sol-part">
+            <b>{path.join('')}</b>
             <div><MathText text={p.solution || '—'} /></div>
             <span style={{ whiteSpace: 'nowrap' }}>{p.marks ? `${p.marks} mark${p.marks === 1 ? '' : 's'}` : ''}</span>
           </div>
