@@ -6,6 +6,7 @@ import { CLAUDE_MARK_MODEL } from "../lib/anthropic-model";
 import { markAnswer, normalizeResponse, responseHash, MAX_RESPONSE_CHARS, type MarkingResult } from "../lib/marking";
 import { generateMarkedQuestions, loadMarkedTarget, MARKED_MAX_COUNT } from "../lib/marked-questions";
 import { logger } from "../lib/logger";
+import { storedAdvice, writeAdvice } from "../lib/advice";
 
 const router = Router();
 
@@ -128,6 +129,83 @@ router.post("/marked/mark", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[marking] unexpected error");
     res.status(500).json({ error: "Your answer couldn't be marked just now. Try again in a moment." });
+  }
+});
+
+// POST /api/marked/advice  { questionId }
+// Titan's Advice for a written-answer question: a teacher's annotations on the
+// question (phrases, quantities and table cells to mark, each with a short
+// note) and the steps from the question to the answer:
+//   { advice: { notes: [{ quote, mark, note }], cells: [{ row, col, note? }], steps: [string] }, cached }
+// Made once per question and saved on it, so every student sees the same
+// marks and only the first one costs an AI call. Same access rules as marking.
+router.post("/marked/advice", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
+  try {
+    const { questionId } = (req.body || {}) as { questionId?: unknown };
+    if (typeof questionId !== "string" || !questionId) {
+      res.status(400).json({ error: "questionId required" });
+      return;
+    }
+    const bankQuestionId = questionId.startsWith("bank__") ? questionId.split("__").slice(2).join("__") : questionId;
+    const { data: qRow, error: qErr } = await caller.admin
+      .from("questions")
+      .select("id, subject, question, question_type, total_marks, marking_scheme, solution, table_data, diagram, curriculum_id, advice")
+      .eq("id", bankQuestionId)
+      .maybeSingle();
+    if (qErr) {
+      res.status(500).json({ error: qErr.message });
+      return;
+    }
+    const q = qRow as (MarkedRow & { advice: unknown }) | null;
+    if (!q || q.question_type !== "marked") {
+      res.status(404).json({ error: "Titan's Advice isn't available for this question." });
+      return;
+    }
+    if (!caller.isAdmin && !caller.isTutor) {
+      const { data: curr } = q.curriculum_id
+        ? await caller.admin.from("curricula").select("features").eq("id", q.curriculum_id).maybeSingle()
+        : { data: null };
+      const features = ((curr as { features?: Record<string, unknown> } | null)?.features ?? {});
+      if (features.written_answers !== true) {
+        res.status(403).json({ error: "Written answers aren't switched on for this subject." });
+        return;
+      }
+    }
+    const table = q.table_data && typeof q.table_data === "object" ? (q.table_data as { rows?: unknown[] }) : null;
+    const kept = storedAdvice(q.question, q.advice, table);
+    if (kept) {
+      res.json({ advice: kept, cached: true });
+      return;
+    }
+
+    const student = await loadStudentContext(caller);
+    if (blockAwaitingParent(student, res)) return;
+    const check = await checkAiQuota(caller, false);
+    if ("blocked" in check) {
+      res.status(429).json({ code: "ai_daily_limit", error: "You've reached today's AI limit, so Titan can't annotate this now. It resets tomorrow." });
+      return;
+    }
+
+    let advice;
+    try {
+      advice = await writeAdvice(q);
+    } catch (err) {
+      logger.error({ err, questionId: q.id }, "[marking] writing Titan's Advice failed");
+      res.status(502).json({ error: "Titan couldn't annotate this question just now. Try again in a moment." });
+      return;
+    }
+    if (!advice.notes.length && !advice.steps.length) {
+      res.status(502).json({ error: "Titan couldn't annotate this question just now. Try again in a moment." });
+      return;
+    }
+    const { error: saveErr } = await caller.admin.from("questions").update({ advice }).eq("id", q.id);
+    if (saveErr) logger.warn({ err: saveErr, questionId: q.id }, "[marking] saving Titan's Advice failed");
+    res.json({ advice, cached: false });
+  } catch (err) {
+    logger.error({ err }, "[marking] unexpected error in advice");
+    res.status(500).json({ error: "Titan couldn't annotate this question just now. Try again in a moment." });
   }
 });
 
