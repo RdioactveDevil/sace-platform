@@ -17,12 +17,16 @@ name: Ingest exam paper
 # PDFs: a public URL, or a path in the Supabase admin-uploads bucket.
 # Run in dry-run first: it lists every question it found with its topic,
 # parts and marks, without saving anything.
+#
+# Several papers at once: upload them on Admin → Exam papers, then paste the
+# batch ID into the first box and leave the paper details empty. Each paper's
+# result shows on that admin page.
 
 on:
   workflow_dispatch:
     inputs:
       pdf:
-        description: "Exam paper PDF: public URL or admin-uploads path"
+        description: "Batch ID from Admin → Exam papers, or one exam paper PDF (public URL or admin-uploads path)"
         type: string
         required: true
       solutions:
@@ -30,9 +34,9 @@ on:
         type: string
         default: ""
       subject:
-        description: "Subject, exactly as in Admin → Curricula (e.g. 'VCE Mathematical Methods Units 3 and 4')"
+        description: "Single paper only: subject, exactly as in Admin → Curricula (e.g. 'VCE Mathematical Methods Units 3 and 4')"
         type: string
-        required: true
+        default: ""
       kind:
         description: "Official past exam or commercial trial exam"
         type: choice
@@ -43,15 +47,15 @@ on:
       publisher:
         description: "Publisher (e.g. VCAA, SACE Board, NEAP, Insight, Kilbaha)"
         type: string
-        required: true
+        default: ""
       year:
         description: "Year of the paper (e.g. 2023)"
         type: string
-        required: true
+        default: ""
       paper:
         description: "Which paper (e.g. 'Exam 1', 'Exam 2'); questions from different papers are never mixed"
         type: string
-        required: true
+        default: ""
       topic:
         description: "Force every question onto this topic (optional; blank = file each question by its content)"
         type: string
@@ -75,7 +79,7 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -116,7 +120,11 @@ jobs:
             echo "::error::ANTHROPIC_API_KEY secret is not set."
             exit 1
           fi
-          ARGS=("--pdf" "$PDF" "--subject" "$SUBJECT" "--kind" "$KIND" "--publisher" "$PUBLISHER" "--year" "$YEAR" "--paper" "$PAPER")
+          ARGS=("--pdf" "$PDF" "--kind" "$KIND")
+          if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
+          if [ -n "${PUBLISHER// /}" ]; then ARGS+=("--publisher" "$PUBLISHER"); fi
+          if [ -n "${YEAR// /}" ]; then ARGS+=("--year" "$YEAR"); fi
+          if [ -n "${PAPER// /}" ]; then ARGS+=("--paper" "$PAPER"); fi
           if [ -n "${SOLUTIONS// /}" ]; then ARGS+=("--solutions" "$SOLUTIONS"); fi
           if [ -n "${TOPIC// /}" ]; then ARGS+=("--topic" "$TOPIC"); fi
           if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi

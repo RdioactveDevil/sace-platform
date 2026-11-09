@@ -26,6 +26,7 @@
  * AI_INTEGRATIONS_ANTHROPIC_BASE_URL / _API_KEY).
  *
  * Usage:
+ *   tsx ingest-past-paper.ts --pdf <batch id from Admin → Exam papers> [--apply]   (loads every paper in the batch)
  *   tsx ingest-past-paper.ts --pdf <url | admin-uploads path> --subject "VCE Mathematical Methods Units 3 and 4"
  *     --kind official --publisher VCAA --year 2023 --paper "Exam 2"
  *     [--solutions <url | path>] [--topic "Only this topic"] [--limit 5] [--apply]
@@ -285,28 +286,15 @@ async function cropFigure(page: { png: Buffer; width: number; height: number }, 
 
 const hasFigure = (page: number, box: BBox) => page > 0 && box && box.w > 0 && box.h > 0;
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (!process.env.SUPABASE_SERVICE_KEY) {
-    console.error("::error::SUPABASE_SERVICE_KEY is not set.");
-    process.exit(1);
-  }
-  if (!args.pdf || !args.subject || !args.publisher || !args.year || !args.paper) {
-    console.error("::error::--pdf, --subject, --publisher, --year and --paper are required.");
-    process.exit(1);
-  }
-  const source = sourceLabel(args);
-  const admin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
-  const client = new Anthropic({
-    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
-    baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
-    maxRetries: 4,
-  });
+type Outcome = { questions: number; marks: number; figures: number; skipped: string[] };
 
+/** Load one paper: read it, crop its figures, and save (apply) or list (dry run) its questions. */
+async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Outcome> {
+  const source = sourceLabel(args);
   console.log(`Paper: ${source} (${args.kind}) for ${args.subject}`);
-  const paper = await loadPdf(admin, args.pdf);
+  const paper = await loadPdf(admin, args.pdf as string);
   const solutions = args.solutions ? await loadPdf(admin, args.solutions) : null;
-  const course = await loadCourse(admin, args.subject);
+  const course = await loadCourse(admin, args.subject as string);
   if (!course.topics.length) console.warn(`::warning::No course called "${args.subject}" found; topics will be free text and the questions won't link to a subject. Check the name matches Admin → Curricula exactly.`);
   const subtopicsOf = new Map(course.topics.map((t) => [t.name, t.subtopics]));
 
@@ -402,6 +390,7 @@ async function main() {
   const marks = rows.reduce((s, r) => s + (r.exam_section === "A" ? 1 : Number(r.total_marks) || 0), 0);
   console.log(`Total marks: ${marks}`);
 
+  const outcome = { questions: rows.length, marks, figures, skipped };
   if (!args.apply) {
     console.log("[dry-run] no writes. Questions:");
     for (const r of rows) {
@@ -409,19 +398,83 @@ async function main() {
       console.log(`  ${r.exam_section}${r.source_question} [${r.topic} / ${r.subtopic}]${parts}${r.image_url ? " +figure" : ""}  ${String(r.question).slice(0, 80).replace(/\n/g, " ")}`);
     }
     console.log("Re-run with apply to save these to the bank.");
-    return;
+    return outcome;
   }
   if (rows.length === 0) {
     console.log("Nothing to save.");
-    return;
+    return outcome;
   }
   const { data: saved, error } = await admin.from("questions").upsert(rows, { onConflict: "id" }).select("id");
-  if (error) {
-    console.error(`::error::Save failed: ${error.message}`);
-    process.exit(1);
-  }
+  if (error) throw new Error(`Save failed: ${error.message}`);
   console.log(`Saved ${(saved || []).length} question(s) from ${source}.`);
   if (!solutions) console.log("Tip: no solutions PDF was given, so answers were worked out by the model. Run the 'Backfill — verify & repair' Action to fact-check them.");
+  return outcome;
+}
+
+type BatchPaper = { pdf: string; solutions?: string | null; kind: "official" | "commercial"; publisher: string; year: number; paper: string; source?: string };
+
+/**
+ * Load every paper in a batch from Admin → Exam papers (exam_paper_batches),
+ * one after another, writing each paper's outcome back to the batch so the
+ * admin page shows it. A paper that fails is recorded and the rest carry on.
+ */
+async function runBatch(admin: any, client: Anthropic, id: string, cli: Args) {
+  const { data: batch, error } = await admin.from("exam_paper_batches").select("id, subject, papers, results").eq("id", id).maybeSingle();
+  if (error || !batch) throw new Error(`Batch ${id} not found${error ? `: ${error.message}` : ""}. Copy the ID from Admin → Exam papers.`);
+  const papers = (batch.papers || []) as BatchPaper[];
+  const mode = cli.apply ? "apply" : "dry-run";
+  const results: Record<string, unknown> = { ...(batch.results || {}) };
+  const record = async () => {
+    const { error: e } = await admin.from("exam_paper_batches").update({ results, updated_at: new Date().toISOString() }).eq("id", id);
+    if (e) console.warn(`  couldn't record progress: ${e.message}`);
+  };
+  console.log(`Batch ${id}: ${papers.length} paper(s) for ${batch.subject} (${mode})`);
+  let failed = 0;
+  for (let i = 0; i < papers.length; i++) {
+    const p = papers[i];
+    console.log(`::group::${i + 1}/${papers.length} ${p.source || p.pdf}`);
+    results[i] = { status: "running", mode, at: new Date().toISOString() };
+    await record();
+    try {
+      const out = await ingestOne(admin, client, {
+        pdf: p.pdf, solutions: p.solutions || undefined, subject: batch.subject, kind: p.kind === "commercial" ? "commercial" : "official",
+        publisher: p.publisher, year: Number(p.year), paper: p.paper, topic: cli.topic, apply: cli.apply, limit: cli.limit,
+      });
+      results[i] = { status: cli.apply ? "saved" : "checked", mode, ...out, at: new Date().toISOString() };
+    } catch (err) {
+      failed++;
+      const message = err instanceof Error ? err.message : String(err);
+      results[i] = { status: "failed", mode, error: message.slice(0, 300), at: new Date().toISOString() };
+      console.error(`::error::${p.source || p.pdf}: ${message}`);
+    }
+    await record();
+    console.log("::endgroup::");
+  }
+  console.log(`\nDone: ${papers.length - failed} of ${papers.length} paper(s) ${cli.apply ? "saved" : "checked"}${failed ? `, ${failed} failed` : ""}.`);
+  if (failed) process.exitCode = 1;
+}
+
+const BATCH_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (!process.env.SUPABASE_SERVICE_KEY) {
+    console.error("::error::SUPABASE_SERVICE_KEY is not set.");
+    process.exit(1);
+  }
+  const admin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
+  const client = new Anthropic({
+    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+    maxRetries: 4,
+  });
+  const ref = (args.pdf || "").trim();
+  if (BATCH_ID.test(ref)) return runBatch(admin, client, ref, args);
+  if (!ref || !args.subject || !args.publisher || !args.year || !args.paper) {
+    console.error("::error::Give a batch ID from Admin → Exam papers, or a single paper with --pdf, --subject, --publisher, --year and --paper.");
+    process.exit(1);
+  }
+  await ingestOne(admin, client, args);
 }
 
 main().catch((err) => {

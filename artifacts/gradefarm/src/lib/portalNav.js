@@ -4,7 +4,7 @@
 // /tutor/<id> or /admin/<id>.
 import {
   LayoutDashboard, Users, School, ClipboardList, Video, MessageSquare, Folder, FlaskConical,
-  BookOpen, ListChecks, Flag, ChartColumn, Settings,
+  BookOpen, ListChecks, Flag, ChartColumn, Settings, FileStack,
 } from 'lucide-react'
 
 export const TUTOR_NAV = [
@@ -30,6 +30,7 @@ export const ADMIN_NAV = [
   { label: 'Content', items: [
     { id: 'subjects',  label: 'Subjects',  icon: BookOpen,        sub: 'Subjects, their topics and what students can see.' },
     { id: 'questions', label: 'Questions', icon: ListChecks,      sub: 'The question bank, adding questions and the review queue.' },
+    { id: 'exam-papers', label: 'Exam papers', icon: FileStack,    sub: 'Load past and trial exam papers for the exam builder, several at a time.' },
     { id: 'reports',   label: 'Reports',   icon: Flag,            sub: 'Questions students have reported as wrong.' },
   ]},
   { label: 'Platform', items: [
