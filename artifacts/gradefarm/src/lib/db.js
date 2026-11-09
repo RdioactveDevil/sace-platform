@@ -672,6 +672,19 @@ export async function fetchSolutions(questionIds) {
   return out
 }
 
+/**
+ * Titan's two-sentence tip after a wrong answer. The server writes each one
+ * once per question and answer and reuses it. Resolves to '' when there's none.
+ */
+export async function fetchAnswerTip(questionId, response) {
+  try {
+    const json = await tutorFetch('/api/answers/tip', { method: 'POST', body: JSON.stringify({ questionId, response }) })
+    return json.tip || ''
+  } catch {
+    return ''
+  }
+}
+
 /** A one-question concept builder for a missed question (no answer; its `token` marks it), or null. */
 export async function fetchConceptBuilder(parentQuestionId) {
   try {

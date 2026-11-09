@@ -18,6 +18,10 @@ name: Ingest exam paper
 # Run in dry-run first: it lists every question it found with its topic,
 # parts and marks, without saving anything.
 #
+# Figures cut off or with question text in them: run again with the same batch
+# ID (or paper) in "recrop figures" mode. It finds each saved figure on its
+# page, crops it again carefully and updates the questions' images only.
+#
 # Several papers at once: upload them on Admin → Exam papers, then paste the
 # batch ID into the first box and leave the paper details empty. Each paper's
 # result shows on that admin page.
@@ -66,6 +70,7 @@ on:
         options:
           - "dry-run (report only, no writes)"
           - "apply (save to the live bank)"
+          - "recrop figures (redo the figures of papers already loaded; questions unchanged)"
         default: "dry-run (report only, no writes)"
       limit:
         description: "Max questions (blank = all; for a quick test)"
@@ -110,6 +115,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INGEST_MODEL: ${{ vars.INGEST_MODEL }}
+          FIGURE_MODEL: ${{ vars.FIGURE_MODEL }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
@@ -130,6 +136,7 @@ jobs:
           if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
           case "$MODE" in
             apply*) ARGS+=("--apply") ;;
+            recrop*) ARGS+=("--recrop" "--apply") ;;
           esac
           echo "Running ingest with args: ${ARGS[*]}"
           pnpm --filter @workspace/scripts run ingest:past-paper -- "${ARGS[@]}"
