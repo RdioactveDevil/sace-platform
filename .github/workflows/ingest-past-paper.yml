@@ -1,39 +1,63 @@
-name: Ingest past paper
+name: Ingest exam paper
 
 # Manually triggered (Actions tab → this workflow → "Run workflow").
-# Extracts questions from a past-paper PDF and attaches each question's original
-# figure (cropped from the page) to it, then inserts into the live bank.
+# Loads a whole exam paper into the bank for the exam builder: an official past
+# exam (e.g. VCAA) or a commercial trial exam. Reads both sections (multiple
+# choice, and short/extended answer with parts and marks), files each question
+# under the subject's course topics, crops figures from the pages, and takes
+# answers and worked solutions from the solutions PDF when one is given.
+# Re-running the same paper updates its questions instead of adding copies.
 #
 # Requires repository secrets:
 #   SUPABASE_SERVICE_KEY — Supabase service_role key
 #   ANTHROPIC_API_KEY    — Anthropic API key
 # Optional repository variable:
-#   INGEST_MODEL         — overrides the extraction model (default claude-sonnet-4-6)
+#   INGEST_MODEL         — overrides the extraction model (default claude-opus-5-5)
 #
-# Provide the PDF via either a public URL or a path in the admin-uploads bucket.
-# Run in dry-run first to see how many questions/figures were found.
+# PDFs: a public URL, or a path in the Supabase admin-uploads bucket.
+# Run in dry-run first: it lists every question it found with its topic,
+# parts and marks, without saving anything.
+#
+# Several papers at once: upload them on Admin → Exam papers, then paste the
+# batch ID into the first box and leave the paper details empty. Each paper's
+# result shows on that admin page.
 
 on:
   workflow_dispatch:
     inputs:
-      pdf_url:
-        description: "Public URL of the past-paper PDF (or use storage_path)"
+      pdf:
+        description: "Batch ID from Admin → Exam papers, or one exam paper PDF (public URL or admin-uploads path)"
         type: string
-        default: ""
-      storage_path:
-        description: "Path in the admin-uploads bucket (alternative to pdf_url)"
+        required: true
+      solutions:
+        description: "Solutions / assessment report PDF (optional): URL or admin-uploads path"
         type: string
         default: ""
       subject:
-        description: "Subject (exact bank name, e.g. 'Chemistry Stage 1')"
+        description: "Single paper only: subject, exactly as in Admin → Curricula (e.g. 'VCE Mathematical Methods Units 3 and 4')"
         type: string
-        required: true
+        default: ""
+      kind:
+        description: "Official past exam or commercial trial exam"
+        type: choice
+        options:
+          - official
+          - commercial
+        default: official
+      publisher:
+        description: "Publisher (e.g. VCAA, SACE Board, NEAP, Insight, Kilbaha)"
+        type: string
+        default: ""
+      year:
+        description: "Year of the paper (e.g. 2023)"
+        type: string
+        default: ""
+      paper:
+        description: "Which paper (e.g. 'Exam 1', 'Exam 2'); questions from different papers are never mixed"
+        type: string
+        default: ""
       topic:
-        description: "Topic name"
-        type: string
-        required: true
-      subtopic:
-        description: "Subtopic name (optional; defaults to topic)"
+        description: "Force every question onto this topic (optional; blank = file each question by its content)"
         type: string
         default: ""
       mode:
@@ -41,21 +65,21 @@ on:
         type: choice
         options:
           - "dry-run (report only, no writes)"
-          - "apply (insert into the live bank)"
+          - "apply (save to the live bank)"
         default: "dry-run (report only, no writes)"
       limit:
-        description: "Max questions to ingest (blank = all)"
+        description: "Max questions (blank = all; for a quick test)"
         type: string
         default: ""
 
 concurrency:
-  group: ingest-past-paper
+  group: ingest-exam-paper
   cancel-in-progress: false
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -73,11 +97,14 @@ jobs:
 
       - name: Ingest
         env:
-          PDF_URL: ${{ inputs.pdf_url }}
-          STORAGE_PATH: ${{ inputs.storage_path }}
+          PDF: ${{ inputs.pdf }}
+          SOLUTIONS: ${{ inputs.solutions }}
           SUBJECT: ${{ inputs.subject }}
+          KIND: ${{ inputs.kind }}
+          PUBLISHER: ${{ inputs.publisher }}
+          YEAR: ${{ inputs.year }}
+          PAPER: ${{ inputs.paper }}
           TOPIC: ${{ inputs.topic }}
-          SUBTOPIC: ${{ inputs.subtopic }}
           MODE: ${{ inputs.mode }}
           LIMIT: ${{ inputs.limit }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -93,11 +120,13 @@ jobs:
             echo "::error::ANTHROPIC_API_KEY secret is not set."
             exit 1
           fi
-          ARGS=()
-          if [ -n "${PDF_URL// /}" ]; then ARGS+=("--pdf-url" "$PDF_URL"); fi
-          if [ -n "${STORAGE_PATH// /}" ]; then ARGS+=("--storage-path" "$STORAGE_PATH"); fi
-          ARGS+=("--subject" "$SUBJECT" "--topic" "$TOPIC")
-          if [ -n "${SUBTOPIC// /}" ]; then ARGS+=("--subtopic" "$SUBTOPIC"); fi
+          ARGS=("--pdf" "$PDF" "--kind" "$KIND")
+          if [ -n "${SUBJECT// /}" ]; then ARGS+=("--subject" "$SUBJECT"); fi
+          if [ -n "${PUBLISHER// /}" ]; then ARGS+=("--publisher" "$PUBLISHER"); fi
+          if [ -n "${YEAR// /}" ]; then ARGS+=("--year" "$YEAR"); fi
+          if [ -n "${PAPER// /}" ]; then ARGS+=("--paper" "$PAPER"); fi
+          if [ -n "${SOLUTIONS// /}" ]; then ARGS+=("--solutions" "$SOLUTIONS"); fi
+          if [ -n "${TOPIC// /}" ]; then ARGS+=("--topic" "$TOPIC"); fi
           if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
           case "$MODE" in
             apply*) ARGS+=("--apply") ;;

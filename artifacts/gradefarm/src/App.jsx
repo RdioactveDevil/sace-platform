@@ -27,6 +27,7 @@ import { appZoom } from './lib/appZoom'
 import { TUTOR_NAV, ADMIN_NAV, workspaceForPath, sectionForPortalPath, PORTAL_BADGES_EVENT } from './lib/portalNav'
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
+import { applySoundsSetting } from './lib/sounds'
 
 // Vite fires this when a chunk's preloaded dependencies are gone after a
 // deploy; reload to pick up the new build instead of erroring.
@@ -58,6 +59,7 @@ const InviteScreen          = lazyWithReload(() => import('./components/InviteSc
 const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazyWithReload(() => import('./components/ExamModeScreen'))
+const ExamBuilderScreen     = lazyWithReload(() => import('./components/ExamBuilderScreen'))
 const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
@@ -94,13 +96,17 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 // Student navigation: three sections in the sidebar, each with tabs across the
 // top of the page (SectionTabs) for its sub-pages. Pages with a `feature` only
 // appear for subjects that switch it on (Admin → Curricula → Features); Essay
-// Marker is full-screen, so its tab opens that screen. Exam mode is a switch in
-// the Practice session builder rather than a page of its own.
+// Marker and the Exam builder are full-screen, so their entries open those
+// screens. Exam mode is a switch in the Practice session builder rather than a
+// page of its own.
 // Sections marked `tutoring` only show for students with a tutor or a lesson.
 // The Student Portal (`separate`) sits apart from the rest, above Change Subject.
 const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
+  ]},
+  { icon: 'exam', label: 'Exam builder', id: 'exams', feature: 'test_maker', pages: [
+    { id: 'exam-builder', label: 'Exam builder', path: '/exam-builder', feature: 'test_maker' },
   ]},
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
@@ -187,6 +193,7 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
       {name === 'pen'         && <><path d="M12 3.5 6.5 9l-1 3.5 3.5-1L17.5 7 15 4.5l-3-1.5Z" {...S} /><path d="M3 15.5h5l1-1" {...S} /></>}
       {name === 'video'       && <><rect x="2" y="4.5" width="10" height="9" rx="1.5" {...S} /><path d="m12 8 4-2.25v6.5L12 10" {...S} /></>}
       {name === 'portal'      && <><path d="M1.75 6.5 9 3l7.25 3.5L9 10Z" {...S} /><path d="M4.5 8v3.75c0 1.1 2 2.25 4.5 2.25s4.5-1.15 4.5-2.25V8" {...S} /><path d="M16.25 6.5v4" {...S} /></>}
+      {name === 'exam'        && <><path d="M4.5 2h6.5l3 3v10.25a.75.75 0 0 1-.75.75h-8.75a.75.75 0 0 1-.75-.75V2.75A.75.75 0 0 1 4.5 2Z" {...S} /><path d="M11 2v3h3" {...S} /><path d="M6.5 8.5h5" {...S} /><path d="M6.5 11h5" {...S} /><path d="M6.5 13.5h3" {...S} /></>}
       {name === 'list-check'  && <><path d="M3 5.5h2" {...S} /><path d="M3 9h2" {...S} /><path d="M3 12.5h2" {...S} /><path d="m8.5 9 2 2 3.5-3.5" {...S} /></>}
     </svg>
   )
@@ -514,14 +521,17 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
 function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, theme }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
-  const exam = reason === 'exam'
+  const exam = reason === 'exam' || reason === 'test'
+  const feature = reason === 'test' ? 'The exam builder' : 'Exam Mode'
   return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: 'center' }}>
       <Lock size={48} color={GOLD} aria-hidden="true" />
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>{exam ? 'Exam Mode is for paid subjects' : `Unlock ${formatSubjectLabel(subject)}`}</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>{exam ? `${feature} is for paid subjects` : `Unlock ${formatSubjectLabel(subject)}`}</h2>
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
         {exam
-          ? <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
+          ? reason === 'test'
+            ? <>Printable practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to make them — you can cancel any time.</>
+            : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
           : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
       <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -917,6 +927,8 @@ function AppInner() {
   const location = useLocation()
   const [user, setUser]                       = useState(null)
   const [profile, setProfile]                 = useState(null)
+  // Sound effects follow the signed-in account (Account → Preferences).
+  useEffect(() => { applySoundsSetting(profile?.sounds_enabled) }, [profile?.sounds_enabled])
   const [questions, setQuestions]             = useState([])
   const [struggleMap, setStruggleMap]         = useState({})
   const [loading, setLoading]                 = useState(true)
@@ -1631,6 +1643,18 @@ function AppInner() {
           : <Navigate to="/question-bank" replace />
       } />
 
+      {/* Exam builder — a practice exam mixed from past and trial papers; only for subjects with test_maker on */}
+      <Route path="/test-maker" element={<Navigate to={`/exam-builder${location.search}`} replace />} />
+      <Route path="/exam-builder" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+        : subjectLocked || selectedAccess === 'free'
+          ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
+        : subjectHasFeature(selectedSubject, 'test_maker')
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/question-bank')} />
+          : <Navigate to="/question-bank" replace />
+      } />
+
       {/* AI Essay Marker — only for subjects with essay_marker on */}
       <Route path="/essay-lab" element={
         subjectHasFeature(selectedSubject, 'essay_marker')
@@ -1733,7 +1757,8 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })} />
+          : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })}
+            onProfileUpdated={updates => setProfile(prev => (prev ? { ...prev, ...updates } : prev))} />
       } />
 
       {/* Get access / purchase page */}

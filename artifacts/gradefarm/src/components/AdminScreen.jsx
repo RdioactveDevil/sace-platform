@@ -11,6 +11,7 @@ import AdminCurriculaTab         from './AdminCurriculaTab'
 import AdminCurriculumDetail     from './AdminCurriculumDetail'
 import AdminCohortTab            from './AdminCohortTab'
 import AdminSettingsTab          from './AdminSettingsTab'
+import AdminExamPapersTab        from './AdminExamPapersTab'
 import { adminListTutorApplications } from '../lib/db'
 import { getDraftQuestions, fetchQuestionReports, isOpenReport } from '../lib/adminDb'
 
@@ -117,6 +118,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
             <Route path="subjects"  element={<SubjectsRouter />} />
             <Route path="questions" element={<AdminQuestionsScreen profile={profile} tab={tab} onReviewChange={loadBadges} theme={theme} />} />
             <Route path="reports"   element={<AdminReportsScreen onChange={loadBadges} />} />
+            <Route path="exam-papers" element={<AdminExamPapersTab />} />
             <Route path="insights"  element={tab === 'assignments' ? <AdminAssignmentsTab /> : <AdminCohortTab />} />
             <Route path="settings"  element={<AdminSettingsTab />} />
             <Route path="*"         element={null} />

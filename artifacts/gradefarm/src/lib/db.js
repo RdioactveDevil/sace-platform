@@ -378,9 +378,15 @@ export async function getQuestions(subject = 'Chemistry') {
  * errors and we fall back to spelling-matching alone.
  */
 export async function getQuestionsForSubjectTile(subjectTile) {
-  const qs = await loadBankForTile(subjectTile)
+  // Multi-part exam questions (question_type 'extended') are only for the exam builder.
+  const qs = (await loadBankForTile(subjectTile)).filter(q => q.question_type !== 'extended')
   // Written-answer (AI-marked) questions only where an admin switched them on.
   return subjectTile?.features?.written_answers ? qs : qs.filter(q => !isAiMarked(q))
+}
+
+/** Everything in a subject's bank, multi-part exam questions included, for the exam builder. */
+export async function getExamBankForTile(subjectTile) {
+  return loadBankForTile(subjectTile)
 }
 
 async function loadBankForTile(subjectTile) {

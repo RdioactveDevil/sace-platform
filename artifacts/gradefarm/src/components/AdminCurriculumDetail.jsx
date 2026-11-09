@@ -1268,6 +1268,14 @@ function FeatureSwitches({ features, saving, onChange }) {
         </div>
       )}
 
+      <label style={row}>
+        <input type="checkbox" checked={!!features.test_maker} onChange={e => onChange({ test_maker: e.target.checked })} style={{ accentColor: 'var(--t-text)' }} />
+        <span>
+          <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Exam builder</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>Practice exams mixed from the past and trial exam papers loaded for this subject (the "Ingest exam paper" Action), laid out like the real paper and saved as PDF (Practice → Build a practice exam). Paid students only.</span>
+        </span>
+      </label>
+
       <div style={{ ...row, cursor: 'default' }}>
         <select
           value={features.writing || ''}
