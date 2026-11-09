@@ -12,6 +12,8 @@ import TableView from './TableView'
 
 const HAND = "'Caveat', 'Comic Sans MS', cursive"
 const NOTE_SIZE = 20
+// The style a note is written in; notes are measured in it before they're placed.
+const noteStyle = (pen, maxW) => ({ display: 'inline-block', maxWidth: maxW, fontFamily: HAND, fontSize: NOTE_SIZE, fontWeight: 600, lineHeight: 1.1, color: pen, whiteSpace: 'normal' })
 
 export const penColor = (theme) => (theme === 'light' ? '#c2362d' : '#ff8f80')
 
@@ -45,6 +47,7 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
   const boxRef = useRef(null)
   const textRef = useRef(null)
   const tableRef = useRef(null)
+  const sizerRef = useRef(null)
   const [layout, setLayout] = useState(null)
 
   const measure = useCallback(() => {
@@ -59,6 +62,9 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
     }
     const marks = []
     const targets = []
+    // Each note's real size in the font it's drawn in (a fallback font is far
+    // wider than Titan's handwriting), at most 60% of the width, wrapping beyond.
+    const sized = [...(sizerRef.current?.children || [])].map(el => el.firstChild).map(el => (el ? { w: Math.ceil(el.offsetWidth) + 4, h: Math.ceil(el.offsetHeight) } : null))
     ;(advice.notes || []).forEach((n, i) => {
       const rects = findQuoteRects(textRef.current, n.quote).map(rel)
       if (!rects.length) return
@@ -66,11 +72,11 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
       const kind = rects.length > 1 && (n.mark === 'circle' || n.mark === 'box') ? 'underline' : n.mark
       rects.forEach((r, j) => marks.push({ kind, rect: r, seed: i * 5 + j + 1 }))
       const first = rects[0]
-      const sz = noteSize(n.note, NOTE_SIZE)
+      const sz = sized[i]?.w ? sized[i] : noteSize(n.note, NOTE_SIZE)
       // Notes keep clear of the words and of the pen marks under them.
       const below = kind === 'double_underline' ? 9 : kind === 'underline' ? 6 : 3
       const keepOut = rects.map(r => ({ ...r, h: r.h + below }))
-      targets.push({ ...first, rects: keepOut, nw: sz.w, nh: sz.h, text: n.note })
+      targets.push({ ...first, rects: keepOut, nw: sz.w, nh: sz.h, text: n.note, quote: n.quote })
     })
     const cellNotes = []
     const rows = tableRef.current?.querySelectorAll('tbody tr') || []
@@ -84,7 +90,11 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
       marks.push({ kind: 'circle', rect: rel({ left: r.left, top: r.top, width: r.width, height: r.height }), seed: 50 + i })
       if (c.note) cellNotes.push(c.note)
     })
-    const placed = layoutNotes(targets, width)
+    // Every line of the question, so a note never sits on words, marked or not.
+    const lineRange = document.createRange()
+    if (textRef.current) lineRange.selectNodeContents(textRef.current)
+    const lines = textRef.current ? mergeLineRects([...lineRange.getClientRects()]).map(rel) : []
+    const placed = layoutNotes(targets, width, lines)
     const notes = targets.map((tg, i) => {
       const p = placed[i]
       // Short arrows: point at the part of the target under the note, start from the part of the note over it.
@@ -93,9 +103,9 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
       const fromX = clamp(toX, p.x + 10, p.x + tg.nw - 10)
       const from = p.above ? [fromX, p.y + tg.nh] : [fromX, p.y]
       const to = p.above ? [toX, tg.y - 3] : [toX, tg.y + tg.h + 4]
-      return { ...p, w: tg.nw, h: tg.nh, text: tg.text, from, to, tilt: i % 2 ? 1.5 : -1.5 }
+      return { ...p, w: tg.nw, h: tg.nh, text: tg.text, quote: tg.quote, from, to, tilt: i % 2 ? 1.5 : -1.5 }
     })
-    setLayout({ marks, notes, cellNotes, w: width, h: box.scrollHeight })
+    setLayout({ marks, notes: notes.filter(n => n.fits !== false), extra: notes.filter(n => n.fits === false), cellNotes, w: width, h: box.scrollHeight })
   }, [advice])
 
   useLayoutEffect(() => { measure() }, [measure, question?.question, fontSize])
@@ -136,12 +146,26 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
             {layout.notes.map((n, i) => (Math.hypot(n.to[0] - n.from[0], n.to[1] - n.from[1]) > 16 ? <Arrow key={`a${i}`} from={n.from} to={n.to} pen={pen} /> : null))}
           </svg>
           {layout.notes.map((n, i) => (
-            <div key={`n${i}`} style={{ position: 'absolute', left: n.x, top: n.y, width: n.w + 20, fontFamily: HAND, fontSize: NOTE_SIZE, fontWeight: 600, lineHeight: 1.1, color: pen, whiteSpace: 'nowrap', transform: `rotate(${n.tilt}deg)`, pointerEvents: 'none' }}>
+            <div key={`n${i}`} style={{ ...noteStyle(pen, n.w), position: 'absolute', left: n.x, top: n.y, width: n.w, transform: `rotate(${n.tilt}deg)`, pointerEvents: 'none' }}>
               {n.text}
             </div>
           ))}
         </>
       )}
+      {/* Notes with no clear spot beside their words, so they don't cover the question. */}
+      {layout?.extra?.length > 0 && (
+        <ul style={{ listStyle: 'none', margin: '0 0 12px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {layout.extra.map((n, i) => (
+            <li key={i} style={{ ...noteStyle(pen, '100%'), display: 'block' }}>
+              <span style={{ opacity: 0.75 }}>“{n.quote.replace(/\$/g, '')}”</span> → {n.text}
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* Hidden copies of the notes, to measure them in the font they're drawn in. */}
+      <div ref={sizerRef} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, visibility: 'hidden', pointerEvents: 'none', width: '100%' }}>
+        {(advice?.notes || []).map((n, i) => <div key={i}><span style={noteStyle(pen, '60%')}>{n.note}</span></div>)}
+      </div>
       {/* The notes, readable by screen readers and when a phrase couldn't be found on screen. */}
       <ul style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', margin: 0, padding: 0 }}>
         {(advice?.notes || []).map((n, i) => <li key={i}>{n.quote.replace(/\$/g, '')}: {n.note}</li>)}

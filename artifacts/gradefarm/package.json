@@ -77,6 +77,7 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
+    "@fontsource/caveat": "5.2.6",
     "@livekit/components-react": "^2.9.21",
     "@livekit/components-styles": "^1.1.2",
     "@livekit/track-processors": "^0.8.2",

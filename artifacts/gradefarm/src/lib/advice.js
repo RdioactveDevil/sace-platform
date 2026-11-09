@@ -62,16 +62,18 @@ const overlaps = (a, b, pad = 0) =>
  * just below, at the free spot closest to the target horizontally, so the
  * arrows stay short. targets: [{ x, y, w, h, nw, nh, rects? }] in the
  * container's coordinates (nw/nh: the note's size; rects: every line the
- * quote covers); returns [{ x, y, above }].
+ * quote covers; lines: every line of the question's text, which notes keep
+ * off too); returns [{ x, y, above, fits }] (fits: false when there was no
+ * clear spot for it).
  */
-export function layoutNotes(targets, width) {
+export function layoutNotes(targets, width, lines = []) {
   const placed = []
   const avoid = targets.map(t => t.rects?.length ? t.rects : [{ x: t.x, y: t.y, w: t.w, h: t.h }])
   const clampX = (x, w) => Math.max(0, Math.min(x, Math.max(0, width - w)))
   return targets.map((t, i) => {
     const others = avoid.filter((_, j) => j !== i).flat()
     // Notes may brush the text of other lines a little (handwriting sits low in its box), never other notes.
-    const free = (box) => box.y >= 0 && !placed.some(p => overlaps(p, box)) && !others.some(o => overlaps(o, box, 4))
+    const free = (box) => box.y >= 0 && !placed.some(p => overlaps(p, box)) && !others.some(o => overlaps(o, box, 4)) && !lines.some(l => overlaps(l, box, 4))
     const xs = [t.x, t.x + t.w / 2 - t.nw / 2, t.x + t.w - t.nw]
     for (const p of placed) xs.push(p.x + p.w + 12, p.x - t.nw - 12)
     const centre = t.x + t.w / 2
@@ -83,9 +85,12 @@ export function layoutNotes(targets, width) {
       }
     }
     tries.sort((a, b) => a.cost - b.cost)
-    const pick = tries.find(c => free({ x: c.x, y: c.y, w: t.nw, h: t.nh })) || tries[0]
+    const pick = tries.find(c => free({ x: c.x, y: c.y, w: t.nw, h: t.nh }))
+    // No clear spot (a crowded line, a narrow screen): the caller lists it
+    // under the question instead of writing it over the words.
+    if (!pick) return { x: tries[0].x, y: tries[0].y, above: tries[0].above, fits: false }
     placed.push({ x: pick.x, y: pick.y, w: t.nw, h: t.nh })
-    return { x: pick.x, y: pick.y, above: pick.above }
+    return { x: pick.x, y: pick.y, above: pick.above, fits: true }
   })
 }
 

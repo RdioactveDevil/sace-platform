@@ -4,7 +4,7 @@ import { layoutNotes, mergeLineRects, noteSize, handPath } from './advice.js'
 
 test('notes go above their target when there is room', () => {
   const [p] = layoutNotes([{ x: 40, y: 60, w: 100, h: 20, nw: 120, nh: 24 }], 600)
-  assert.deepEqual(p, { x: 30, y: 34, above: true })
+  assert.deepEqual(p, { x: 30, y: 34, above: true, fits: true })
 })
 
 test('a second note near the first never overlaps it, and stays close to its target', () => {
@@ -12,7 +12,7 @@ test('a second note near the first never overlaps it, and stays close to its tar
     { x: 0, y: 60, w: 100, h: 20, nw: 200, nh: 24 },
     { x: 140, y: 60, w: 60, h: 20, nw: 120, nh: 24 },
   ], 600)
-  assert.deepEqual(a, { x: 0, y: 34, above: true })
+  assert.deepEqual(a, { x: 0, y: 34, above: true, fits: true })
   const clear = b.x >= a.x + 200 || b.y >= a.y + 24
   assert.ok(clear, `second note at ${b.x},${b.y}`)
   assert.ok(Math.abs(b.x + 60 - 170) <= 60, `second note far from its target: ${b.x}`)
@@ -27,6 +27,16 @@ test('a note with no room above goes below', () => {
 test('notes stay inside the width', () => {
   const [p] = layoutNotes([{ x: 560, y: 80, w: 30, h: 20, nw: 150, nh: 24 }], 600)
   assert.equal(p.x, 450)
+})
+
+test('notes keep off every line of the question, and say when there is no clear spot', () => {
+  // Lines 40px apart: a 24px note fits in the gap above its line, a 44px (wrapped) one doesn't.
+  const lines = [{ x: 0, y: 0, w: 600, h: 20 }, { x: 0, y: 40, w: 600, h: 20 }, { x: 0, y: 80, w: 600, h: 20 }]
+  const [small] = layoutNotes([{ x: 100, y: 40, w: 100, h: 20, nw: 120, nh: 16 }], 600, lines)
+  assert.equal(small.fits, true)
+  assert.ok(small.y >= 20 && small.y + 16 <= 44, `small note at y ${small.y}`)
+  const [big] = layoutNotes([{ x: 100, y: 40, w: 100, h: 20, nw: 120, nh: 44 }], 600, lines)
+  assert.equal(big.fits, false)
 })
 
 test('line rectangles merge per line', () => {

@@ -9,6 +9,9 @@ import { normalizeResponse, responseHash } from "../lib/marking";
 import { unseal } from "../lib/sealed";
 import { VARIANT_SEAL, type SealedVariant } from "./remediation";
 import { logger } from "../lib/logger";
+import { createHash } from "node:crypto";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
+import { checkAiQuota } from "../lib/ai-quota";
 
 /**
  * Answers are marked here, not in the app (migration 20261110000000).
@@ -22,6 +25,7 @@ import { logger } from "../lib/logger";
  *   POST /answers/check      mark one answer
  *   POST /answers/exam       mark a whole practice exam and save the attempt
  *   POST /answers/solutions  answers and solutions for the exam builder
+ *   POST /answers/tip        Titan's short tip after a wrong answer (made once, then reused)
  *
  * Holds: the question a student is shown in a subject (or an assignment) stays
  * theirs until they answer it. Reloading the page or ending the session and
@@ -575,6 +579,87 @@ router.post("/answers/exam-run", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[answers] exam run failed");
     res.status(500).json({ error: "Your exam couldn't be marked just now. Try again." });
+  }
+});
+
+// ── Tip ──────────────────────────────────────────────────────────────────────
+// Body: { questionId, response }. Titan's two-sentence tip after a wrong
+// answer: the mistake behind that answer and a way to remember the right one.
+// The same wrong answer to the same question always gets the same tip, so each
+// is written once and kept in answer_tips (migration 20261110000001); only the
+// first student to give that answer costs an AI call. Only for questions the
+// student has answered. → { tip, cached }
+router.post("/answers/tip", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
+  const questionId = str(req.body?.questionId);
+  const response = cleanResponse(req.body?.response);
+  if (!questionId || response === null) {
+    res.status(400).json({ error: "questionId and response required" });
+    return;
+  }
+  const { admin, userId } = caller;
+  try {
+    const q = (await loadQuestions(admin, [questionId])).get(questionId);
+    if (!q || questionType(q) === "marked" || questionType(q) === "extended") {
+      res.status(404).json({ error: "No tip for that question." });
+      return;
+    }
+    if (!(await readableIds(caller, [q.id])).has(q.id)) {
+      res.status(403).json({ error: "You don't have access to that question" });
+      return;
+    }
+    // The tip gives the answer away, so only after answering.
+    if (!isStaff(caller)) {
+      const { data: answered } = await admin.from("answer_log").select("id").eq("user_id", userId).eq("question_id", q.id).limit(1);
+      if (!answered?.length) {
+        res.status(403).json({ error: "Answer the question first." });
+        return;
+      }
+    }
+    const key = questionType(q) === "mcq" && Number.isInteger(response)
+      ? `mcq:${response}`
+      : `r:${createHash("sha256").update(JSON.stringify(response)).digest("hex").slice(0, 32)}`;
+    const { data: kept } = await admin.from("answer_tips").select("tip").eq("question_id", q.id).eq("response_key", key).maybeSingle<{ tip: string }>();
+    if (kept?.tip) {
+      res.json({ tip: kept.tip, cached: true });
+      return;
+    }
+    const check = await checkAiQuota(caller, false);
+    if ("blocked" in check) {
+      res.json({ tip: "", cached: false });
+      return;
+    }
+
+    const { data: full } = await admin.from("questions").select("question").eq("id", q.id).maybeSingle<{ question: string }>();
+    const options = Array.isArray(q.options) ? (q.options as unknown[]).map(String) : [];
+    const correct = questionType(q) === "mcq" && q.answer_index != null ? options[q.answer_index] ?? "" : JSON.stringify(revealOf(q).answer ?? revealOf(q).accept ?? revealOf(q).items ?? revealOf(q).answer_indices ?? "");
+    const given = questionType(q) === "mcq" && Number.isInteger(response) ? options[response as number] ?? "" : JSON.stringify(response);
+    const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+    const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+    const ai = await fetch(`${baseUrl}/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        thinking: CLAUDE_THINKING,
+        max_tokens: 200,
+        system: `You are a ${q.subject || "school"} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
+        messages: [{ role: "user", content: `Topic: ${q.topic} — ${q.subtopic}\nQ: ${full?.question || ""}\nCorrect answer: ${correct}\nStudent answered: ${given}\nSolution: ${q.solution || ""}` }],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!ai.ok) throw new Error(`Claude API error ${ai.status}`);
+    const data = (await ai.json()) as { content?: { type: string; text?: string }[] };
+    const tip = (data.content?.find((b) => b.type === "text")?.text || "").trim().slice(0, 1000);
+    if (tip) {
+      const { error } = await admin.from("answer_tips").upsert({ question_id: q.id, response_key: key, tip }, { onConflict: "question_id,response_key", ignoreDuplicates: true });
+      if (error) logger.warn({ err: error, questionId: q.id }, "[answers] saving a tip failed");
+    }
+    res.json({ tip, cached: false });
+  } catch (err) {
+    logger.warn({ err }, "[answers] tip failed");
+    res.json({ tip: "", cached: false });
   }
 });
 

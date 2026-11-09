@@ -21,6 +21,7 @@ import {
   getStudentQuestion,
   markExamRun,
   fetchConceptBuilder,
+  fetchAnswerTip,
   createSession,
   getRemediationVariants,
   storeRemediationVariants,
@@ -1280,23 +1281,11 @@ export default function QuizScreen({
     if (remediate) enterRemediation(shown)
     // Written answers already come back with mark-by-mark feedback.
     if (marks) return
+    // Written once per question and answer on the server, then reused.
     setLoadingTip(true)
-    try {
-      const mcq = getQuestionType(shown) === 'mcq'
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          max_tokens: 200,
-          system: `You are a ${shown.subject || 'school'} tutor. Write exactly 2 sentences: one explaining the conceptual mistake, one giving a memory trick. No markdown. No preamble. Write any maths in LaTeX inside $...$.`,
-          messages: [{ role: 'user', content: `Topic: ${shown.topic} — ${shown.subtopic}\nQ: ${shown.question}\nCorrect answer: ${describeCorrectAnswer(shown)}\nStudent answered: ${mcq ? shown.options?.[response] : JSON.stringify(response)}\nSolution: ${shown.solution || ''}` }],
-        }),
-      })
-      const dj = await res.json()
-      setAiTip(dj.content?.[0]?.text || '')
-    } catch {
-      setAiTip('')
-    }
+    const tip = await fetchAnswerTip(q.bank_question_id || q.id, response)
+    // Moved on while it was coming: it's for the last question, not this one.
+    if (currentQRef.current?.id === q.id) setAiTip(tip)
     setLoadingTip(false)
   }
 

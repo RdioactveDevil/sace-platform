@@ -260,6 +260,9 @@ importers:
       '@excalidraw/excalidraw':
         specifier: ^0.18.1
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@fontsource/caveat':
+        specifier: 5.2.6
+        version: 5.2.6
       '@livekit/components-react':
         specifier: ^2.9.21
         version: 2.9.21(livekit-client@2.18.9)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tslib@2.8.1)
@@ -1736,6 +1739,9 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource/caveat@5.2.6':
+    resolution: {integrity: sha512-OKS809xrwMZq7wFQFBQ5DfK7EL7Pd0dVl7/cKyx3bwplugYhwLDp/+/7/PJH9F6KCHuit9aVdxMCxAbxFgKhSA==}
 
   '@gerrit0/mini-shiki@3.23.0':
     resolution: {integrity: sha512-bEMORlG0cqdjVyCEuU0cDQbORWX+kYCeo0kV1lbxF5bt4r7SID2l9bqsxJEM0zndaxpOUT7riCyIVEuqq/Ynxg==}
@@ -8941,6 +8947,8 @@ snapshots:
       react-dom: 19.1.0(react@19.1.0)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource/caveat@5.2.6': {}
 
   '@gerrit0/mini-shiki@3.23.0':
     dependencies:
