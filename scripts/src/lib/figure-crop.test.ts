@@ -41,3 +41,16 @@ test("a box that is already right stays put", async () => {
   const snapped = await snapToInk(p, { left: 390, top: 590, width: 1130, height: 480 });
   assert.ok(Math.abs(snapped.top - 591) <= 10 && Math.abs(snapped.left - 391) <= 10, JSON.stringify(snapped));
 });
+
+test("captions spread under a figure stay; a line of running text inside the box goes", async () => {
+  // Three structures, their captions well below them (spread out, with wide gaps),
+  // and a question sentence above, all inside a generous box.
+  const p = await page([
+    [300, 400, 1100, 30],                                       // running text (one solid run)
+    [400, 600, 250, 200], [800, 600, 250, 200], [1200, 600, 250, 200],
+    [430, 860, 190, 30], [830, 860, 190, 30], [1230, 860, 190, 30], // molecule A / B / C
+  ]);
+  const snapped = await snapToInk(p, { left: 280, top: 380, width: 1200, height: 540 });
+  assert.ok(snapped.top > 430, `kept the sentence: top ${snapped.top}`);
+  assert.ok(snapped.top + snapped.height >= 890, `lost the captions: bottom ${snapped.top + snapped.height}`);
+});
