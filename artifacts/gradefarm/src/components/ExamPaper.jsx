@@ -220,12 +220,16 @@ function solutionBlocks(exam, numberOf) {
       out.push({ key: `sol-B-${q.id}-none`, el: <div className="xp-sol-part"><b /><div>{NOT_YET}</div><span /></div> })
       return
     }
+<<<<<<< HEAD
     // Each answer under its full label, e.g. (b)(ii)(1): the parts that only
     // introduce their sub-parts have no answer of their own and aren't listed.
     const path = []
     parts.forEach((p, k) => {
       path.length = Math.max(0, p.level - 1)
       path[p.level - 1] = p.label ? `(${p.label})` : ''
+=======
+    parts.forEach((p, k) => {
+>>>>>>> origin/main
       if (!p.solution && !p.marks) return
       out.push({
         key: `sol-B-${q.id}-${k}`, el: (
