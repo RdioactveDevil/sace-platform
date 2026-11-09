@@ -66,11 +66,12 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   const clampY = (y: number) => Math.max(0, Math.min(H - 1, Math.round(y)));
   // How far beyond the box to look for the rest of a cut-off figure.
   const reachX = Math.round(W * 0.06);
-  const reachY = Math.round(H * 0.06);
   const x0 = clampX(box.left), x1 = clampX(box.left + box.width - 1);
   const y0 = clampY(box.top), y1 = clampY(box.top + box.height - 1);
   const sx0 = clampX(x0 - reachX), sx1 = clampX(x1 + reachX);
-  const sy0 = clampY(y0 - reachY), sy1 = clampY(y1 + reachY);
+  // Rows are looked at the whole page high, so nothing is cut off at the
+  // edge of the search: a block is followed to its end however far it goes.
+  const sy0 = 0, sy1 = H - 1;
   const dark = (x: number, y: number) => g[y * W + x] < INK;
 
   // Rows, judged across the box's own columns (a little wider for labels).
@@ -93,11 +94,18 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
     else blocks.push([l]);
   }
   const span = (bl: Band[]) => ({ start: bl[0].start, end: bl[bl.length - 1].end });
+  const overlapOf = (bl: Band[]) => Math.min(span(bl).end, y1) - Math.max(span(bl).start, y0) + 1;
   const kept = blocks.filter((bl) => {
     const { start, end } = span(bl);
-    const overlap = Math.min(end, y1) - Math.max(start, y0) + 1;
+    const overlap = overlapOf(bl);
     return overlap > 0 && overlap >= 0.5 * (end - start + 1);
   });
+  // A box on just part of a figure (one label, "Cl") covers no block by half:
+  // take the block it overlaps most, the whole figure that label belongs to.
+  if (!kept.length) {
+    const best = blocks.filter((bl) => overlapOf(bl) > 0).sort((a, b) => overlapOf(b) - overlapOf(a))[0];
+    if (best) kept.push(best);
+  }
   if (!kept.length) return box;
   // Question text the box reached into: a block made only of text-high lines,
   // at the top or bottom, set apart from the figure by that clear gap, that
@@ -106,7 +114,9 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   // A   molecule B") and short labels inside the box stay.
   const textLine = 16 * scale;
   const wordGap = 12 * scale;
-  const boxWidth = x1 - x0 + 1;
+  // A sentence is long: half the box, and never less than an eighth of the page
+  // (so a lone label like "Cl" is not one, however small the box).
+  const boxWidth = Math.max(x1 - x0 + 1, 0.25 * W);
   const runningText = (l: Band) => {
     let first = -1, last = -1, gap = 0, widest = 0, run = 0, longest = 0;
     for (let x = sx0; x <= sx1; x++) {
