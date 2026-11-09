@@ -54,3 +54,17 @@ test("captions spread under a figure stay; a line of running text inside the box
   assert.ok(snapped.top > 430, `kept the sentence: top ${snapped.top}`);
   assert.ok(snapped.top + snapped.height >= 890, `lost the captions: bottom ${snapped.top + snapped.height}`);
 });
+
+test("question text printed right against the figure goes; a caption a little below it comes back", async () => {
+  const p = await page([
+    [300, 500, 1100, 30],                                  // a sentence, only 25px above the figure
+    [400, 555, 900, 300],                                  // the figure
+    [450, 940, 200, 30], [800, 940, 200, 30], [1100, 940, 180, 30], // captions, 85px below
+    [1450, 1000, 120, 30],                                  // "(3 marks)" off to the right
+  ]);
+  // The box takes in the sentence but stops above the captions.
+  const snapped = await snapToInk(p, { left: 290, top: 490, width: 1120, height: 380 });
+  assert.ok(snapped.top > 530, `kept the sentence: top ${snapped.top}`);
+  assert.ok(snapped.top + snapped.height >= 970, `no captions: bottom ${snapped.top + snapped.height}`);
+  assert.ok(snapped.left + snapped.width < 1450, `took in the marks: right ${snapped.left + snapped.width}`);
+});

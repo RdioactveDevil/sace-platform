@@ -66,7 +66,7 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   const clampY = (y: number) => Math.max(0, Math.min(H - 1, Math.round(y)));
   // How far beyond the box to look for the rest of a cut-off figure.
   const reachX = Math.round(W * 0.06);
-  const reachY = Math.round(H * 0.04);
+  const reachY = Math.round(H * 0.06);
   const x0 = clampX(box.left), x1 = clampX(box.left + box.width - 1);
   const y0 = clampY(box.top), y1 = clampY(box.top + box.height - 1);
   const sx0 = clampX(x0 - reachX), sx1 = clampX(x1 + reachX);
@@ -119,7 +119,8 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
         gap = 0;
       } else if (first >= 0) gap++;
     }
-    return first >= 0 && last - first + 1 >= 0.5 * boxWidth && widest <= wordGap;
+    // Taller than a ruled line (answer lines and table borders aren't text).
+    return first >= 0 && l.end - l.start + 1 >= 4 * scale && last - first + 1 >= 0.5 * boxWidth && widest <= wordGap;
   };
   const isText = (bl: Band[]) => {
     if (!bl.every((l) => l.end - l.start + 1 <= textLine)) return false;
@@ -128,6 +129,42 @@ export async function snapToInk(page: Page, box: PxBox, scale = 3): Promise<PxBo
   };
   while (kept.length > 1 && isText(kept[0])) kept.shift();
   while (kept.length > 1 && isText(kept[kept.length - 1])) kept.pop();
+
+  // Question text printed right against the figure (closer than the clear
+  // gap, so in the figure's block): text-high lines at the very top or bottom
+  // that include a line of running text go, as long as some figure is left.
+  const textHigh = (l: Band) => l.end - l.start + 1 <= textLine;
+  const trimEdge = (bl: Band[], fromTop: boolean): Band[] => {
+    const lines = fromTop ? bl : [...bl].reverse();
+    let n = 0;
+    while (n < lines.length && textHigh(lines[n])) n++;
+    if (n === 0 || n === lines.length || !lines.slice(0, n).some(runningText)) return bl;
+    const rest = lines.slice(n);
+    return fromTop ? rest : rest.reverse();
+  };
+  // (Which block comes after the figure, found before trimming changes the blocks.)
+  const lastKept = blocks.indexOf(kept[kept.length - 1]);
+  kept[0] = trimEdge(kept[0], true);
+  kept[kept.length - 1] = trimEdge(kept[kept.length - 1], false);
+
+  // A caption printed a little below the figure ("molecule A   molecule B"):
+  // the next block down, if it's a line or two of short labels under the
+  // figure (not running text, not off to one side like "(3 marks)").
+  const inkSpan = (y0r: number, y1r: number) => {
+    let first = -1, last = -1;
+    for (let x = sx0; x <= sx1; x++) {
+      for (let y = y0r; y <= y1r; y++) if (dark(x, y)) { if (first < 0) first = x; last = x; break; }
+    }
+    return { first, last };
+  };
+  const below = lastKept >= 0 ? blocks[lastKept + 1] : undefined;
+  if (below && below.length <= 2 && below.every(textHigh) && !below.some(runningText)
+      && below[0].start - span(kept[kept.length - 1]).end <= 40 * scale) {
+    const fig = inkSpan(span(kept[0]).start, span(kept[kept.length - 1]).end);
+    const cap = inkSpan(below[0].start, below[below.length - 1].end);
+    const inside = cap.first >= fig.first - 10 * scale && cap.last <= fig.last + 10 * scale;
+    if (fig.first >= 0 && cap.first >= 0 && inside) kept.push(below);
+  }
   const top = span(kept[0]).start;
   const bottom = span(kept[kept.length - 1]).end;
 
