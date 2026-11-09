@@ -203,9 +203,9 @@ function systemPrompt(args: Args, section: "A" | "B", course: Course, hasSolutio
         "solution is a short worked explanation of why that option is right. parts is an empty list.",
       ]
     : [
-        "Extract ONLY the short-answer and extended-answer questions (usually Section B, or the whole paper for an exam without multiple choice). Skip multiple-choice questions.",
+        "Extract ONLY the short-answer and extended-answer questions (usually Section B, or every question in a paper without multiple choice, such as SACE question booklets). Skip multiple-choice questions.",
         "number is the question number as printed. question is the text before the first part (the shared context or definitions; empty if the question starts with a part).",
-        "parts lists every part in order: label as printed without the dot ('a', 'b', then 'i', 'ii' for sub-parts), level 1 for a, b, c and level 2 for i, ii, iii.",
+        "parts lists every part in order: label as printed without dots or brackets ('a', 'b'; 'i', 'ii' for sub-parts; '1', '2' for sub-sub-parts), level 1 for a, b, c, level 2 for i, ii, iii and level 3 for (1), (2) under a sub-part.",
         "A part that only introduces its sub-parts has marks 0 and its own text; each sub-part carries its marks. marks is the number printed for that part (e.g. '2 marks' → 2).",
         "solution on each part is the worked answer for that part (as in the solutions document when given). A part's figure goes on the part (figure_page / figure_bbox); a figure shared by the whole question goes on the question.",
         "A question with no lettered parts has one part with label '' holding the question's marks and solution, and question holds its text.",
@@ -381,8 +381,8 @@ async function main() {
       const parts = [];
       for (const p of q.parts || []) {
         parts.push({
-          label: String(p.label || "").replace(/\.$/, ""),
-          level: p.level === 2 ? 2 : 1,
+          label: String(p.label || "").replace(/^\(|\)?\.?$/g, ""),
+          level: p.level === 2 || p.level === 3 ? p.level : 1,
           text: p.text || "",
           marks: Math.max(0, Math.round(p.marks || 0)),
           solution: p.solution || "",

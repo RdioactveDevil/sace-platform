@@ -11,7 +11,7 @@
 //   source_paper      "Exam 1" / "Exam 2" (which paper: never mixed in one exam)
 //   source_question   "5" or "3b" as printed
 //   exam_section      'A' (multiple choice) | 'B' (short and extended answer)
-//   parts             [{ label: 'a', text, marks, solution, image_url, level: 1|2 }]
+//   parts             [{ label: 'a', text, marks, solution, image_url, level: 1|2|3 }]
 //                     for multi-part questions (question_type 'extended')
 
 import { getQuestionType, totalMarks } from './questionTypes.js'
@@ -52,12 +52,12 @@ export function sectionOf(q) {
 export function partsOf(q) {
   if (Array.isArray(q?.parts) && q.parts.length) {
     return q.parts.filter(p => p && (p.text || p.image_url)).map(p => ({
-      label: String(p.label || '').replace(/\.$/, ''),
+      label: String(p.label || '').replace(/^\(|\)?\.?$/g, ''),
       text: p.text || '',
       marks: Math.max(0, Number(p.marks) || 0),
       solution: p.solution || '',
       image_url: p.image_url || null,
-      level: Number(p.level) === 2 ? 2 : 1,
+      level: [2, 3].includes(Number(p.level)) ? Number(p.level) : 1,
     }))
   }
   const type = getQuestionType(q)

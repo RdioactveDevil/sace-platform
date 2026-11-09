@@ -3,9 +3,10 @@ import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus
 import { THEMES } from '../lib/theme'
 import { getExamBankForTile } from '../lib/db'
 import {
-  bankSummary, examPool, pickExam, swapCandidate, examTotals, writingMinutes, subjectCode, isMathsSubject,
+  bankSummary, examPool, pickExam, swapCandidate, examTotals, writingMinutes, isMathsSubject,
   sourceLabel, marksOf, BANK_SOURCE,
 } from '../lib/examBuilder'
+import { groupSubject } from '../lib/homeSubjects'
 import ExamPaper from './ExamPaper'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -13,17 +14,31 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const strip = (name = '') => String(name).replace(/^(VCE|SACE)\s+/i, '').replace(/\s*(Units?\s*\d.*|Stage\s*\d.*)$/i, '').trim()
 const paperNumber = (paper = '') => (String(paper).match(/\d+/) || [''])[0]
 
-function defaultMaterials(subjectName, paper) {
-  if (!isMathsSubject(subjectName)) return 'pens, pencils, highlighters, erasers, sharpeners, rulers and one scientific calculator'
-  if (paperNumber(paper) === '1') return 'pens, pencils, highlighters, erasers, sharpeners and rulers'
-  return 'pens, pencils, highlighters, erasers, sharpeners, rulers, a protractor, set squares, aids for curve sketching, one bound reference, one approved technology (calculator or software) and, if desired, one scientific calculator'
+/** 'sace' for SACE subjects, else 'vce': which exam's look the paper takes. */
+const boardOf = (subject) => (groupSubject({ name: subject?.name, level: subject?.stage }).group === 'sace' ? 'sace' : 'vce')
+
+/** VCE: the cover's approved materials. SACE: the cover's instructions. One per line. */
+function defaultMaterials(board, subjectName, paper) {
+  const maths = isMathsSubject(subjectName)
+  if (board === 'sace') {
+    return maths
+      ? ['Show appropriate working and steps of logic in the question booklets', 'State all answers correct to three significant figures, unless otherwise instructed', 'Use black or blue pen', 'You may use a sharp dark pencil for diagrams and graphical representations']
+      : ['Use black or blue pen', 'You may use a sharp dark pencil for diagrams and other representations', 'Approved calculators may be used']
+  }
+  if (!maths) return ['One scientific calculator']
+  if (paperNumber(paper) === '1') return []
+  return ['Protractors, set squares and aids for curve sketching', 'One bound reference', 'One approved CAS calculator or CAS software, and one scientific calculator']
 }
 
-/** A full paper's shape for this subject and paper: tech-free maths papers have no multiple choice. */
-function fullPaper(subjectName, paper) {
+/** A full paper's shape: VCE tech-free maths papers have no multiple choice; SACE papers are all written. */
+function fullPaper(board, subjectName, paper) {
+  if (board === 'sace') return { mc: 0, b: isMathsSubject(subjectName) ? 100 : 120 }
   if (isMathsSubject(subjectName) && paperNumber(paper) === '1') return { mc: 0, b: 40 }
   return { mc: 20, b: 60 }
 }
+
+/** Writing time: VCE 1.5 minutes a mark; SACE papers are 130 minutes for a full paper. */
+const examMinutes = (board, marks) => (board === 'sace' ? (marks >= 90 ? 130 : Math.max(15, Math.round((marks * 1.3) / 5) * 5)) : writingMinutes(marks))
 
 /**
  * The exam builder: a full practice exam mixed from real past exams and
@@ -34,6 +49,7 @@ function fullPaper(subjectName, paper) {
 export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loadBank = getExamBankForTile }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
+  const board = boardOf(subject)
   const [bank, setBank] = useState(null)
   const [loadError, setLoadError] = useState('')
   useEffect(() => {
@@ -72,11 +88,11 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
     const list = sourcesForPaper(p)
     const real = list.filter(s => s.kind !== 'bank')
     setSources((real.length ? real : list).map(s => s.key))
-    const shape = fullPaper(subjectName, p)
+    const shape = fullPaper(board, subjectName, p)
     setMcCount(shape.mc)
     setBMarks(shape.b)
-    setPaperTitle(p ? `Written examination ${paperNumber(p) || p}` : 'Written examination')
-    setMaterials(defaultMaterials(subjectName, p))
+    setPaperTitle(p && paperNumber(p) ? `Examination ${paperNumber(p)}` : 'Examination')
+    setMaterials(defaultMaterials(board, subjectName, p).join('\n'))
   }
 
   const pool = useMemo(() => examPool(bank || [], { paper: paper || '', sources: sources || [], topics }), [bank, paper, sources, topics])
@@ -96,7 +112,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
     B: picked.B.map(id => byId.get(id)).filter(Boolean),
   }), [picked, byId])
   const totals = examTotals(exam)
-  const minutes = writingMinutes(totals.total)
+  const minutes = examMinutes(board, totals.total)
 
   const used = [...picked.A, ...picked.B]
   const swapSeed = useRef(1)
@@ -121,7 +137,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
 
   const download = () => {
     const before = document.title
-    document.title = `${subjectTitle} ${paperTitle} practice exam`.trim()
+    document.title = `${subjectTitle} ${board === 'vce' ? paperTitle : ''} practice exam`.replace(/\s+/g, ' ').trim()
     const restore = () => { document.title = before; window.removeEventListener('afterprint', restore) }
     window.addEventListener('afterprint', restore)
     window.print()
@@ -254,13 +270,13 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
             </div>
 
             <div>
-              <span style={label}>Section A · multiple choice</span>
+              <span style={label}>{board === 'sace' ? 'Multiple choice' : 'Section A · multiple choice'}</span>
               {numberRow('Multiple-choice questions', mcCount, setMcCount, [0, 5, 10, 20, 30])}
               <div style={{ fontSize: 11.5, color: t.textFaint, marginTop: 5 }}>{pool.A.length} available</div>
             </div>
             <div>
-              <span style={label}>Section B · marks</span>
-              {numberRow('Section B marks', bMarks, setBMarks, [0, 20, 40, 60, 80])}
+              <span style={label}>{board === 'sace' ? 'Written questions · marks' : 'Section B · marks'}</span>
+              {numberRow('Section B marks', bMarks, setBMarks, board === 'sace' ? [20, 40, 60, 80, 100, 120] : [0, 20, 40, 60, 80])}
               <div style={{ fontSize: 11.5, color: t.textFaint, marginTop: 5 }}>{pool.B.length} questions available</div>
             </div>
 
@@ -307,10 +323,10 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
             <div className="eb-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <span style={{ ...label, marginBottom: 0 }}>Cover page</span>
               <label style={{ fontSize: 12, color: t.textMuted }}>Subject<input value={subjectTitle} onChange={e => setSubjectTitle(e.target.value)} style={{ ...input, marginTop: 4 }} /></label>
-              <label style={{ fontSize: 12, color: t.textMuted }}>Paper<input value={paperTitle} onChange={e => setPaperTitle(e.target.value)} style={{ ...input, marginTop: 4 }} /></label>
-              <label style={{ fontSize: 12, color: t.textMuted }}>Permitted materials<textarea value={materials} onChange={e => setMaterials(e.target.value)} rows={3} style={{ ...input, marginTop: 4, resize: 'vertical' }} /></label>
+              {board === 'vce' && <label style={{ fontSize: 12, color: t.textMuted }}>Paper<input value={paperTitle} onChange={e => setPaperTitle(e.target.value)} style={{ ...input, marginTop: 4 }} /></label>}
+              <label style={{ fontSize: 12, color: t.textMuted }}>{board === 'sace' ? 'Instructions' : 'Approved materials'} (one per line)<textarea value={materials} onChange={e => setMaterials(e.target.value)} rows={4} style={{ ...input, marginTop: 4, resize: 'vertical' }} /></label>
               {[
-                ['Multiple-choice answer sheet', answerSheet, setAnswerSheet],
+                ...(board === 'vce' ? [['Multiple-choice answer sheet', answerSheet, setAnswerSheet]] : []),
                 ['Solutions at the end', solutions, setSolutions],
                 ['Show where each question is from', showSources, setShowSources],
               ].map(([text, on, set]) => (
@@ -326,10 +342,11 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, onExit, loa
             <div className="eb-zoom" style={{ zoom }}>
               {totals.total > 0 ? (
                 <ExamPaper exam={exam} meta={{
-                  subjectTitle: subjectTitle || strip(subjectName), paperTitle, materials,
-                  headerCode: `${subjectCode(subjectName)} PRACTICE ${paper ? paper.toUpperCase() : 'EXAM'}`,
+                  board, subjectTitle: subjectTitle || strip(subjectName), paperTitle, paperNumber: paperNumber(paper || ''),
+                  headerTitle: `GradeFarm Practice ${subjectTitle || strip(subjectName)} ${paperTitle}`.trim(),
+                  materials: materials.split('\n').map(s => s.trim()).filter(Boolean),
                   readingMinutes: 15, writingMinutes: minutes, isMaths: isMathsSubject(subjectName),
-                  showSources, answerSheet, solutions, totals,
+                  showSources, answerSheet: board === 'vce' && answerSheet, solutions, totals,
                 }} />
               ) : (
                 <p style={{ color: t.textMuted, textAlign: 'center', padding: 40 }}>No questions match these settings.</p>
