@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { THEMES } from '../../lib/theme'
 import { getQuestionType, gradeResponse, responseIsComplete, describeCorrectAnswer } from '../../lib/questionTypes'
 import { markWrittenAnswer } from '../../lib/db'
 import MathText from '../MathText'
 import { WrittenAnswerInput, MarkingFeedback, MarkedAnswer } from './WrittenAnswer'
+
+// The maths working box brings MathLive with it, so it loads only when a
+// maths subject's written question needs it.
+const MathWorkingInput = lazy(() => import('./MathWorkingInput'))
 
 // Marks already given this page visit, by question id: { response, result }.
 // Lets the feedback come back when the quiz is left and reopened, without
@@ -274,7 +278,8 @@ function ImageLabel({ question, response, onChange, showAns, theme }) {
 // busy: the page is checking the answer with the server (the quiz marks
 // answers there; the second argument onSubmit gets is only a local guess, right
 // only for questions that carry their answers, like Question Lab's examples).
-export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer', feedbackMode = 'full', onMarked, busy = false }) {
+// mathInput: written answers are set out as maths working (maths subjects).
+export default function QuestionRenderer({ question, response, onChange, showAns, onSubmit, theme = 'dark', hideCheck = false, checkLabel = 'Check answer', feedbackMode = 'full', onMarked, busy = false, mathInput = false }) {
   const t = THEMES[theme]
   const type = getQuestionType(question)
   // Written answers: the AI marks them on the server, which takes a few seconds.
@@ -340,9 +345,13 @@ export default function QuestionRenderer({ question, response, onChange, showAns
       {type === 'order' && <OrderList question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
       {type === 'hotspot' && <Hotspot question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
       {type === 'image_label' && <ImageLabel question={question} response={response} onChange={onChange} showAns={showAns} theme={theme} />}
-      {type === 'marked' && !(showAns && markResult) && (
+      {type === 'marked' && !(showAns && markResult) && (mathInput ? (
+        <Suspense fallback={<div style={{ minHeight: 120 }} />}>
+          <MathWorkingInput key={question.id} question={question} response={response} onChange={onChange} disabled={showAns || marking} onSubmit={submit} canSubmit={canSubmit} theme={theme} />
+        </Suspense>
+      ) : (
         <WrittenAnswerInput question={question} response={response} onChange={onChange} disabled={showAns || marking} onSubmit={submit} canSubmit={canSubmit} theme={theme} />
-      )}
+      ))}
       {type === 'marked' && showAns && markResult && (feedbackMode === 'answer'
         ? <MarkedAnswer answer={typeof response === 'string' ? response : ''} result={markResult} theme={theme} />
         : <MarkingFeedback question={question} answer={typeof response === 'string' ? response : ''} result={markResult} theme={theme} />)}

@@ -46,6 +46,14 @@ export function subjectHasFeature(tile, feature) {
   return !!tile?.features?.[feature]
 }
 
+/**
+ * Maths subjects (by name): their written answers are set out as maths
+ * working in the maths box rather than a plain text box.
+ */
+export function usesMathInput(name) {
+  return /math|method|specialist|statist|calculus|algebra|numeracy/i.test(String(name || ''))
+}
+
 /** Find the tile whose subject matches a stored subject string (e.g. an assignment's). */
 export function findTileForSubjectString(tiles, subject) {
   const want = normalizeSubjectStorageKey(subject).toLowerCase()

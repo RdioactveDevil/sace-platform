@@ -49,6 +49,7 @@ import TableView from './TableView'
 import DiagramView from './DiagramView'
 import PassageView from './PassageView'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
+import { usesMathInput } from '../lib/subjects'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { MarkPoints } from './questions/WrittenAnswer'
 import { AnnotatedQuestion, AdviceSteps } from './TitanAdvice'
@@ -1887,6 +1888,7 @@ export default function QuizScreen({
   const annotated = writtenAnswer && adviceOn && !!advice
   const isMcq = getQuestionType(currentQ) === 'mcq'
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
+  const mathInput = usesMathInput(subjectTile?.name || currentQ?.subject)
   const btn = (kind, disabled = false) => ({
     padding: '9px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap',
     cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
@@ -2180,6 +2182,7 @@ export default function QuizScreen({
                   feedbackMode={splitFeedback ? 'answer' : 'full'}
                   onMarked={setMarking}
                   busy={checking}
+                  mathInput={mathInput}
                 />
               )}
 
