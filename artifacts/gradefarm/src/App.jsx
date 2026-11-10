@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
@@ -60,6 +60,7 @@ const PricingPage           = lazyWithReload(() => import('./components/PricingP
 const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
 const ExamModeScreen        = lazyWithReload(() => import('./components/ExamModeScreen'))
 const ExamBuilderScreen     = lazyWithReload(() => import('./components/ExamBuilderScreen'))
+const ExamsScreen           = lazyWithReload(() => import('./components/ExamsScreen'))
 const EssayMarkerScreen     = lazyWithReload(() => import('./components/EssayMarkerScreen'))
 const SessionRoom           = lazyWithReload(() => import('./components/SessionRoom'))
 const RecurringRoomPage     = lazyWithReload(() => import('./components/RecurringRoomPage'))
@@ -105,8 +106,8 @@ const NAV_SECTIONS = [
   { icon: 'home', label: 'Practice', id: 'practice', pages: [
     { id: 'home',  label: 'Question Bank', path: '/question-bank' },
   ]},
-  { icon: 'exam', label: 'Exam builder', id: 'exams', feature: 'test_maker', pages: [
-    { id: 'exam-builder', label: 'Exam builder', path: '/exam-builder', feature: 'test_maker' },
+  { icon: 'exam', label: 'Exams', id: 'exams', feature: 'test_maker', pages: [
+    { id: 'exams', label: 'Exams', path: '/exams', feature: 'test_maker' },
   ]},
   { icon: 'learn', label: 'Learn', id: 'learn', pages: [
     { id: 'learn', label: 'Titan AI',      path: '/learn' },
@@ -170,7 +171,18 @@ function visiblePages(section, subject) {
 
 // Older addresses that now open inside another tab.
 const PATH_ALIASES = { '/': '/question-bank', '/quiz': '/question-bank', '/portal/class': '/portal/tutor', '/recordings': '/lessons', '/class-resources': '/lessons' }
-const tabPath = (pathname) => PATH_ALIASES[pathname] || pathname
+// The exam builder and an exam's marking and result pages sit under Exams.
+const tabPath = (pathname) => PATH_ALIASES[pathname] || (pathname === '/exam-builder' || pathname.startsWith('/exams/') ? '/exams' : pathname)
+
+/** The Exams screens, with the attempt from the URL. */
+function ExamsRoute({ view, theme, subject, profile, navigate }) {
+  const { attemptId = null } = useParams()
+  return (
+    <ExamsScreen theme={theme} subject={subject} profile={profile} view={view} attemptId={attemptId}
+      go={(path) => navigate(path)} newExam={(query) => navigate(`/exam-builder${query ? `?${query}` : ''}`)}
+      onExit={() => navigate('/question-bank')} />
+  )
+}
 
 function sectionForPath(pathname) {
   const p = tabPath(pathname)
@@ -1651,9 +1663,22 @@ function AppInner() {
         : subjectLocked || selectedAccess === 'free'
           ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
         : subjectHasFeature(selectedSubject, 'test_maker')
-          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/question-bank')} />
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} />
           : <Navigate to="/question-bank" replace />
       } />
+
+      {/* Exams: the student's downloaded exams, self-marking and their scores */}
+      {[['/exams', 'dashboard'], ['/exams/:attemptId/mark', 'mark'], ['/exams/:attemptId', 'result']].map(([path, view]) => (
+        <Route key={path} path={path} element={
+          !(user && profile)
+            ? <Navigate to="/home" replace />
+          : subjectLocked || selectedAccess === 'free'
+            ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
+          : subjectHasFeature(selectedSubject, 'test_maker')
+            ? <ExamsRoute view={view} theme={theme} subject={selectedSubject} profile={profile} navigate={navigate} />
+            : <Navigate to="/question-bank" replace />
+        } />
+      ))}
 
       {/* AI Essay Marker — only for subjects with essay_marker on */}
       <Route path="/essay-lab" element={

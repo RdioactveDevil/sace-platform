@@ -141,23 +141,31 @@ export function examPool(questions, { paper = '', sources = [], topics = [] } = 
   return out
 }
 
-/** Real exam questions before bank questions, then spread across topics. */
-function spread(list, rand) {
-  const byTopic = new Map()
-  const ordered = [...shuffle(list.filter(q => q.source), rand), ...shuffle(list.filter(q => !q.source), rand)]
-  for (const q of ordered) {
-    const k = q.topic || ''
-    if (!byTopic.has(k)) byTopic.set(k, [])
-    byTopic.get(k).push(q)
+/**
+ * Questions the student hasn't seen before those they have (`seen`: ids from
+ * their exam attempts); within each, real exam questions before bank
+ * questions; then spread across topics.
+ */
+function spread(list, rand, seen = null) {
+  const fresh = seen?.size ? list.filter(q => !seen.has(q.id)) : list
+  const old = seen?.size ? list.filter(q => seen.has(q.id)) : []
+  const robin = (l) => {
+    const byTopic = new Map()
+    for (const q of [...shuffle(l.filter(q => q.source), rand), ...shuffle(l.filter(q => !q.source), rand)]) {
+      const k = q.topic || ''
+      if (!byTopic.has(k)) byTopic.set(k, [])
+      byTopic.get(k).push(q)
+    }
+    const lists = shuffle([...byTopic.values()], rand)
+    const out = []
+    for (let round = 0; ; round++) {
+      let took = false
+      for (const t of lists) if (t[round]) { out.push(t[round]); took = true }
+      if (!took) break
+    }
+    return out
   }
-  const lists = shuffle([...byTopic.values()], rand)
-  const out = []
-  for (let round = 0; ; round++) {
-    let took = false
-    for (const l of lists) if (l[round]) { out.push(l[round]); took = true }
-    if (!took) break
-  }
-  return out
+  return [...robin(fresh), ...robin(old)]
 }
 
 /** Course order of topics, as they first appear in the bank. */
@@ -170,20 +178,20 @@ function topicOrder(questions) {
 /**
  * Pick an exam: `mcCount` multiple-choice questions for Section A and Section B
  * questions adding up to about `bMarks` (never over by more than the last
- * question). Spread across topics, real exam questions first, then put in
- * course order. Returns { A: [ids], B: [ids] }.
+ * question). Spread across topics, questions not `seen` before first, real
+ * exam questions first, then put in course order. Returns { A: [ids], B: [ids] }.
  */
-export function pickExam(pool, { mcCount = 20, bMarks = 60, seed = 1, allQuestions = [] } = {}) {
+export function pickExam(pool, { mcCount = 20, bMarks = 60, seed = 1, allQuestions = [], seen = null } = {}) {
   const rand = seededRandom(seed)
   const order = topicOrder(allQuestions.length ? allQuestions : [...pool.A, ...pool.B])
   const byCourse = (a, b) => (order.get(a.topic) ?? 999) - (order.get(b.topic) ?? 999) || (Number(a.difficulty) || 3) - (Number(b.difficulty) || 3)
 
-  const A = spread(pool.A, rand).slice(0, mcCount).sort(byCourse)
+  const A = spread(pool.A, rand, seen).slice(0, mcCount).sort(byCourse)
 
   const B = []
   let marks = 0
   if (bMarks > 0) {
-    const candidates = spread(pool.B, rand)
+    const candidates = spread(pool.B, rand, seen)
     // Fill with the questions that fit, then top up with the closest one.
     for (const q of candidates) {
       const m = marksOf(q)
@@ -200,10 +208,12 @@ export function pickExam(pool, { mcCount = 20, bMarks = 60, seed = 1, allQuestio
   return { A: A.map(q => q.id), B: B.map(q => q.id) }
 }
 
-/** Another question for the same slot: same section, not already in the exam, preferably the same topic. */
-export function swapCandidate(pool, current, usedIds, seed = 1) {
+/** Another question for the same slot: same section, not already in the exam, not seen before if possible, preferably the same topic. */
+export function swapCandidate(pool, current, usedIds, seed = 1, seen = null) {
   const section = sectionOf(current)
-  const options = (pool[section] || []).filter(q => !usedIds.includes(q.id))
+  const all = (pool[section] || []).filter(q => !usedIds.includes(q.id))
+  const fresh = seen?.size ? all.filter(q => !seen.has(q.id)) : all
+  const options = fresh.length ? fresh : all
   if (!options.length) return null
   const rand = seededRandom(seed)
   const sameTopic = options.filter(q => q.topic === current.topic)
