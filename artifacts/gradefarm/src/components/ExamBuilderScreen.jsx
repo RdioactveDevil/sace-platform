@@ -354,7 +354,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
         <button type="button" onClick={download} disabled={!totals.total || !!pdfProgress} aria-live="polite"
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? '#0c1037' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total && !pdfProgress ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
           <Printer size={16} aria-hidden="true" />
-          {pdfProgress ? (pdfProgress.total ? `Making PDF… ${pdfProgress.done}/${pdfProgress.total}` : 'Making PDF…') : 'Download PDF'}
+          {pdfProgress ? (pdfProgress.total ? `Downloading… ${pdfProgress.done}/${pdfProgress.total}` : 'Downloading…') : 'Download PDF'}
         </button>
         </div>
       </div>
