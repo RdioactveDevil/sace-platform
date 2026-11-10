@@ -583,7 +583,7 @@ function VceExam({ exam, meta }) {
             </div>
             <div className="xv-cfoot">
               <span>Practice examination assembled by GradeFarm from past and trial examination questions.<br />Not an official examination.</span>
-              <Wordmark size="17pt" />
+              <Wordmark size="23pt" />
             </div>
           </div>
         </div>
@@ -765,7 +765,7 @@ function SaceExam({ exam, meta }) {
               <div className="xp-page">
                 <div className="xs-cover">
                   <div className="xs-tab" style={{ left: 0, top: `${tabTop}mm` }}>{b + 1}</div>
-                  <div className="xs-brand"><Wordmark size="19pt" /><small style={{ marginTop: '1.8mm' }}>Practice examination</small></div>
+                  <div className="xs-brand"><Wordmark size="26pt" /><small style={{ marginTop: '2.4mm' }}>Practice examination</small></div>
                   <div className="xs-title xs-narrow"><div className="t1">{meta.subjectTitle}</div><div className="t2">Practice exam</div></div>
                   <div className="xs-cbody">
                     <h2 className="xs-narrow">Question booklet {b + 1}</h2>
