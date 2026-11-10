@@ -14,12 +14,18 @@
  *                  character and NOT be immediately followed by a digit. This
  *                  lets `$92 = 8 + (n-1) \times 6$` render as math while
  *                  `it costs $5 and $10` stays as plain currency text.
+ *                  A closing `$` after a space is still accepted when what
+ *                  lies between is plainly LaTeX (a `\command`, `^` or `_`),
+ *                  as in `$\frac{dy}{dx} = $`, which money never is.
  *   - `\$`       → a literal, escaped dollar sign.
  *   - Inline math does not span newlines.
  *
  * @param {string} text
  * @returns {Array<{type:'text', content:string} | {type:'math', display:boolean, content:string}>}
  */
+// Signs that a run between dollars is LaTeX rather than prose or money.
+const LATEX_HINT = /\\[A-Za-z]+|[\^_]/
+
 export function tokenizeMath(text) {
   const tokens = []
   if (!text || typeof text !== 'string') return tokens
@@ -78,8 +84,9 @@ export function tokenizeMath(text) {
           if (text[j] === '$') {
             const prev = text[j - 1]
             const after = text[j + 1]
-            // Valid close: preceded by non-space and not followed by a digit
-            if (!isSpace(prev) && !isDigit(after)) {
+            // Valid close: preceded by non-space and not followed by a digit,
+            // or after a space when the run is plainly LaTeX.
+            if (!isDigit(after) && (!isSpace(prev) || LATEX_HINT.test(text.slice(i + 1, j)))) {
               close = j
               break
             }

@@ -9,6 +9,7 @@ import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exe
 import { extractJsonArray } from "../lib/json-latex";
 import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
+import { scopeForSubtopic, scopePromptLines, filterInScope, subtopicIdFor, type Scope } from "../lib/course-scope";
 import { logger } from "../lib/logger";
 
 /**
@@ -27,6 +28,11 @@ import { logger } from "../lib/logger";
  * answers in it. Each question the app serves carries its own sealed answer
  * (`token`), which /answers/check opens to mark it. (Vercel may freeze a function once it has
  * responded, so the check can't simply run after /variants replies.)
+ *
+ * Both generators are given the subtopic's course scope, including the topics
+ * the course teaches later (lib/course-scope.ts), so a question on graphing
+ * y² = x doesn't lean on differentiation. /store and the concept builder also
+ * run the course check and drop what's off the course.
  */
 
 const router = Router();
@@ -128,6 +134,16 @@ function toVariant(raw: unknown, parent: Parent): Variant | null {
   };
 }
 
+/** The parent question's course scope, or null when its subject has none written. */
+async function parentScope(caller: Caller, parent: Pick<Parent, "curriculum_id" | "subtopic">): Promise<Scope | null> {
+  try {
+    return await scopeForSubtopic(caller.admin, await subtopicIdFor(caller.admin, parent.curriculum_id, parent.subtopic));
+  } catch (err) {
+    logger.warn({ err }, "[remediation] couldn't read the course scope; generating without it");
+    return null;
+  }
+}
+
 /** Whether the caller may see this question (staff, or a subject they have access to). */
 async function canReadQuestion(caller: Caller, questionId: string): Promise<boolean> {
   if (caller.isAdmin || caller.isTutor) return true;
@@ -141,7 +157,7 @@ async function canReadQuestion(caller: Caller, questionId: string): Promise<bool
   return data === true;
 }
 
-async function generateWithClaude(caller: Caller, parent: Parent, targetDifficulty: number): Promise<unknown[]> {
+async function generateWithClaude(caller: Caller, parent: Parent, targetDifficulty: number, scope: Scope | null): Promise<unknown[]> {
   const options = parseOptions(parent.options);
   const correctAnswer = parent.answer_index != null ? options[parent.answer_index] ?? "" : "";
   const subjectLabel = parent.subject || "SACE";
@@ -154,6 +170,7 @@ async function generateWithClaude(caller: Caller, parent: Parent, targetDifficul
     "Keep the same underlying concept, but vary wording, values, or structure.",
     "Write all maths in LaTeX inside $...$, escaping backslashes for JSON.",
     "Do not include markdown or commentary outside the JSON array.",
+    ...scopePromptLines(scope),
   ];
   try {
     const exemplars = await fetchExemplarContext(caller.admin, parent.subject, parent.subtopic, 1500);
@@ -238,7 +255,7 @@ router.post("/remediation/variants", async (req, res) => {
     }
 
     const target = Math.max(1, Math.min(5, Math.round(Number(req.body?.targetDifficulty) || parent.difficulty || 3)));
-    const raw = await generateWithClaude(caller, parent, target);
+    const raw = await generateWithClaude(caller, parent, target, await parentScope(caller, parent));
     const variants = raw.map((r) => toVariant(r, parent)).filter((v): v is Variant => v !== null);
     if (!variants.length) {
       res.status(200).json({ variants: [] });
@@ -311,6 +328,12 @@ router.post("/remediation/store", async (req, res) => {
         return;
       }
       ({ kept, dropped, fixed } = await filterVerifiedQuestions(fresh, { context: { parentId: parent.id, route: "remediation/store" } }));
+      // Off the course (or relying on a topic taught later): not for the bank.
+      if (kept.length) {
+        const onCourse = await filterInScope(kept, await parentScope(caller, parent), { parentId: parent.id, route: "remediation/store" });
+        kept = onCourse.kept;
+        dropped += onCourse.dropped;
+      }
     }
 
     const now = new Date().toISOString();
@@ -412,6 +435,7 @@ router.post("/remediation/concept-builder", async (req, res) => {
     }
     const options = parseOptions(parent.options);
     const correctAnswer = parent.answer_index != null ? options[parent.answer_index] ?? "" : "";
+    const scope = await parentScope(caller, parent);
     const system = [
       `You are a ${parent.subject || "school"} teacher generating a concept-builder question for a struggling student.`,
       "Return only a valid JSON array containing exactly 1 object.",
@@ -420,6 +444,8 @@ router.post("/remediation/concept-builder", async (req, res) => {
       "Required keys: question, options (array of exactly 4 strings), answer_index, solution, tip, difficulty (always 1).",
       "No markdown, no commentary outside the JSON.",
       "Write all maths in LaTeX inside $...$, escaping backslashes for JSON.",
+      "The idea you state must be one the student is learning in this subtopic or has already learnt. Never introduce a new or more advanced method (for example calculus) to explain or answer it.",
+      ...scopePromptLines(scope),
     ].join(" ");
     const user = [
       `Topic: ${parent.topic}`,
@@ -440,6 +466,12 @@ router.post("/remediation/concept-builder", async (req, res) => {
     }
     v.difficulty = 1;
     v.variant_type = "concept_builder";
+    // A concept builder that leans on something off the course (or taught later) would only confuse.
+    const onCourse = await filterInScope([v], scope, { parentId: parent.id, route: "remediation/concept-builder" });
+    if (!onCourse.kept.length) {
+      res.json({ variant: null });
+      return;
+    }
     res.json({
       variant: {
         ...servedVariant(v, parent.id, caller.userId),

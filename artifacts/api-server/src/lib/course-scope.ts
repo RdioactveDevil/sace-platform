@@ -11,6 +11,12 @@ import { logger } from "./logger";
 // inside them: before a generated question enters the bank, and when an admin
 // audits a subject's bank. With no scope written for a subject there is
 // nothing to check against, so the check passes everything.
+//
+// A subtopic's scope also lists the topics that come after it in the course
+// (`laterTopics`, from the topics' order): a question on "The graph of y² = x"
+// mustn't rely on differentiation, which the course teaches later. It goes one
+// way only: the topics before it (`earlierTopics`) are fair game, so a
+// differentiation question may use a hyperbola or the graph of y = √x.
 
 export type Scope = {
   subject: string;
@@ -19,10 +25,40 @@ export type Scope = {
   topic: string;
   subtopic: string;
   scope: string;
+  /** Topics the course teaches after this subtopic's topic, in order. */
+  laterTopics?: string[];
+  /** Topics the course teaches before this subtopic's topic, in order: questions may build on them. */
+  earlierTopics?: string[];
 };
 
-export const hasScope = (s: Pick<Scope, "outOfScope" | "scope"> | null | undefined): boolean =>
-  !!s && !!(s.outOfScope.trim() || s.scope.trim());
+export const hasScope = (s: Pick<Scope, "outOfScope" | "scope" | "laterTopics"> | null | undefined): boolean =>
+  !!s && !!(s.outOfScope.trim() || s.scope.trim() || s.laterTopics?.length);
+
+/** Names of the topics after the one at `order` in a course, from its topics' order. */
+export function topicsAfter(topics: { name: string; order_index: number | null }[], order: number | null | undefined): string[] {
+  if (order == null) return [];
+  return topics.filter((t) => (t.order_index ?? -1) > order)
+    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)).map((t) => t.name);
+}
+
+/** Names of the topics before the one at `order` in a course. */
+export function topicsBefore(topics: { name: string; order_index: number | null }[], order: number | null | undefined): string[] {
+  if (order == null) return [];
+  return topics.filter((t) => t.order_index != null && t.order_index < order)
+    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)).map((t) => t.name);
+}
+
+async function courseTopics(admin: SupabaseClient, curriculumId: string): Promise<{ id: string; name: string; order_index: number | null }[]> {
+  const { data, error } = await admin.from("curriculum_topics").select("id, name, order_index").eq("curriculum_id", curriculumId);
+  return error ? [] : ((data || []) as { id: string; name: string; order_index: number | null }[]);
+}
+
+/** A subtopic's id from its subject and name (questions store the name). Null if not found. */
+export async function subtopicIdFor(admin: SupabaseClient, curriculumId: string | null | undefined, subtopic: string | null | undefined): Promise<string | null> {
+  if (!curriculumId || !subtopic) return null;
+  const { data, error } = await admin.from("curriculum_subtopics").select("id").eq("curriculum_id", curriculumId).eq("name", subtopic).limit(1);
+  return error || !data?.length ? null : (data[0] as { id: string }).id;
+}
 
 const SCOPE_MODEL = process.env.AI_SCOPE_MODEL || CLAUDE_MODEL;
 const BATCH = 8;
@@ -30,7 +66,8 @@ const BATCH = 8;
 type SubRow = {
   name: string;
   scope: string | null;
-  topic: { name: string } | { name: string }[] | null;
+  curriculum_id: string;
+  topic: { name: string; order_index: number | null } | { name: string; order_index: number | null }[] | null;
   curricula: { name: string; level_label: string | null; out_of_scope: string | null } | { name: string; level_label: string | null; out_of_scope: string | null }[] | null;
 };
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
@@ -40,7 +77,7 @@ export async function scopeForSubtopic(admin: SupabaseClient, subtopicId: string
   if (!subtopicId) return null;
   const { data, error } = await admin
     .from("curriculum_subtopics")
-    .select("name, scope, topic:curriculum_topics(name), curricula(name, level_label, out_of_scope)")
+    .select("name, scope, curriculum_id, topic:curriculum_topics(name, order_index), curricula(name, level_label, out_of_scope)")
     .eq("id", subtopicId)
     .maybeSingle();
   if (error || !data) return null;
@@ -53,6 +90,10 @@ export async function scopeForSubtopic(admin: SupabaseClient, subtopicId: string
     topic: t?.name || "",
     subtopic: r.name,
     scope: (r.scope || "").trim(),
+    ...await (async () => {
+      const topics = await courseTopics(admin, r.curriculum_id);
+      return { laterTopics: topicsAfter(topics, t?.order_index), earlierTopics: topicsBefore(topics, t?.order_index) };
+    })(),
   };
 }
 
@@ -61,12 +102,14 @@ export async function scopesForCurriculum(admin: SupabaseClient, curriculumId: s
   const { data: cur, error: cErr } = await admin.from("curricula").select("name, level_label, out_of_scope").eq("id", curriculumId).maybeSingle();
   if (cErr || !cur) return null;
   const { data: subs, error: sErr } = await admin
-    .from("curriculum_subtopics").select("id, name, scope, topic:curriculum_topics(name)").eq("curriculum_id", curriculumId);
+    .from("curriculum_subtopics").select("id, name, scope, topic:curriculum_topics(name, order_index)").eq("curriculum_id", curriculumId);
   if (sErr) return null;
   const subject = cur.name as string, level = ((cur.level_label as string) || "").trim(), outOfScope = ((cur.out_of_scope as string) || "").trim();
+  const topics = await courseTopics(admin, curriculumId);
   const bySubtopic = new Map<string, Scope>();
-  for (const s of (subs || []) as unknown as { id: string; name: string; scope: string | null; topic: { name: string } | { name: string }[] | null }[]) {
-    bySubtopic.set(s.id, { subject, level, outOfScope, topic: one(s.topic)?.name || "", subtopic: s.name, scope: (s.scope || "").trim() });
+  for (const s of (subs || []) as unknown as { id: string; name: string; scope: string | null; topic: { name: string; order_index: number | null } | { name: string; order_index: number | null }[] | null }[]) {
+    const t = one(s.topic);
+    bySubtopic.set(s.id, { subject, level, outOfScope, topic: t?.name || "", subtopic: s.name, scope: (s.scope || "").trim(), laterTopics: topicsAfter(topics, t?.order_index), earlierTopics: topicsBefore(topics, t?.order_index) });
   }
   return { subject, level, outOfScope, bySubtopic };
 }
@@ -79,6 +122,13 @@ export function scopePromptLines(s: Scope | null): string[] {
     `COURSE SCOPE — from the official course document for ${course}. Every question must stay inside it; a question that needs anything outside it will be rejected.`,
     ...(s!.scope ? [`What "${s!.subtopic}" covers in this course:`, s!.scope] : []),
     ...(s!.outOfScope ? ["NOT in this course — never test, use or rely on any of these:", s!.outOfScope] : []),
+    ...(s!.laterTopics?.length ? [
+      `The student is at "${s!.topic} > ${s!.subtopic}". These topics come LATER in the course and haven't been taught yet, so never use or rely on their methods or notation (in the question, the options, a hint or the solution): ${s!.laterTopics.join("; ")}.`,
+      "Use only this subtopic's ideas and what comes before it in the course. Don't bring in a more advanced method to explain or answer it.",
+    ] : []),
+    ...(s!.earlierTopics?.length ? [
+      `The student HAS already learnt these earlier topics, so questions may build on them freely (their functions, graphs, equations and methods): ${s!.earlierTopics.join("; ")}.`,
+    ] : []),
   ];
 }
 
@@ -93,8 +143,10 @@ function describeItem(item: ScopeItem, i: number): string {
     `### Q${i}`,
     `Subtopic: ${s.topic} > ${s.subtopic}`,
     s.scope ? `Subtopic scope:\n${s.scope}` : "Subtopic scope: (not written; judge by the subject-wide exclusions only)",
+    s.laterTopics?.length ? `Not yet taught at this point (later topics): ${s.laterTopics.join("; ")}` : "",
+    s.earlierTopics?.length ? `Already taught (earlier topics; fine to use): ${s.earlierTopics.join("; ")}` : "",
     `Question: ${item.question}${opts}${sol}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 async function callClaude(system: string, user: string, maxTokens: number): Promise<string> {
@@ -129,7 +181,8 @@ export function parseVerdicts(text: string, count: number): ScopeVerdict[] | nul
 const CHECK_SYSTEM = [
   "You check whether practice questions stay inside a school course, using the course scope you are given (taken from the official course document).",
   "A question is OUT only when answering it needs a concept, method, rule or notation that the course leaves out, or that clearly belongs to a different subject or level. Name that concept in the reason.",
-  "It is IN when it practises the subtopic's key ideas, or uses ordinary earlier knowledge a student of this course is expected to have (arithmetic, algebra, earlier-year content), even if the scope doesn't list that knowledge.",
+  "It is also OUT when answering it, or the method its stem or solution teaches, needs a topic listed as not yet taught at that point (e.g. differentiation in a question on sketching a parabola). Name that topic in the reason.",
+  "It is IN when it practises the subtopic's key ideas, or uses ordinary earlier knowledge a student of this course is expected to have (arithmetic, algebra, earlier-year content, and any topic listed as already taught), even if the scope doesn't list that knowledge. A later topic building on an earlier one is fine: a differentiation question may use any function or graph from an earlier topic.",
   "Do not judge correctness, difficulty or style here. Only whether it is on the course.",
   'Reply with ONLY a JSON array, one entry per question: [{"q": 0, "in": true, "reason": ""}, {"q": 1, "in": false, "reason": "Needs inverse functions, which this course leaves out."}]. Keep reasons to one plain sentence.',
 ].join("\n");
