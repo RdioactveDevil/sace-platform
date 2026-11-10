@@ -39,7 +39,8 @@ const CSS = `
   .xp-fig > div { background: #fff !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
   .xp .katex { font-size: 1.04em; }
   /* On paper nothing scrolls: a scroll box would print its scrollbar and cut off what doesn't fit. */
-  .xp .mt-display, .xp .mt-table, .xp-fig div { overflow: visible !important; }
+  .xp .mt-display, .xp .mt-table, .xp-fig div, .xp .katex-display { overflow: visible !important; }
+  .xp .katex-display { max-width: none !important; }
   .xp-measure { position: absolute; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 
   /* VCE */
