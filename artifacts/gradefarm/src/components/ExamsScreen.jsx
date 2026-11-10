@@ -49,7 +49,7 @@ export default function ExamsScreen({
   const attempt = attemptId ? (attempts || []).find(a => a.id === attemptId) : null
 
   const css = `
-    .ex { min-height: 100vh; background: ${t.bg}; color: ${t.text}; font-family: ${FONT_B}; }
+    .ex { min-height: 100%; background: ${t.bg}; color: ${t.text}; font-family: ${FONT_B}; }
     .ex-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid ${t.border}; position: sticky; top: 0; background: ${t.bg}; z-index: 3; }
     .ex-main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 56px; display: flex; flex-direction: column; gap: 22px; box-sizing: border-box; }
     .ex-card { background: ${t.bgCard}; border: 1px solid ${t.border}; border-radius: 14px; padding: 18px; box-sizing: border-box; min-width: 0; }
@@ -67,6 +67,7 @@ export default function ExamsScreen({
     .ex-link { border: none; background: transparent; color: ${t.goldText}; font-family: ${FONT_B}; font-size: 13.5px; font-weight: 700; cursor: pointer; padding: 0; }
     .ex-mark { min-width: 44px; height: 44px; padding: 0 12px; border-radius: 10px; font-family: ${FONT_B}; font-size: 14px; font-weight: 800; cursor: pointer; border: 1px solid ${t.borderMid}; background: transparent; color: ${t.text}; }
     .ex-skip { border-style: dashed; color: ${t.textMuted}; font-weight: 700; }
+    @media (max-width: 860px) { .ex-bar { position: static; } }
     @media (max-width: 640px) { .ex-bar { padding: 10px 14px; } .ex-main { padding: 16px 12px 48px; } .ex-indent { padding-left: 0 !important; margin-left: 0 !important; } }
   `
 
@@ -103,7 +104,6 @@ export default function ExamsScreen({
       <style>{css}</style>
       {view === 'dashboard' && (
         <div className="ex-bar">
-          {back}
           <div style={{ fontSize: 15.5, fontWeight: 800 }}>Exams{subjectName ? ` · ${subjectName}` : ''}</div>
           <button type="button" className="ex-btn primary" onClick={() => newExam('')}><Plus size={16} aria-hidden="true" /> New exam</button>
         </div>
