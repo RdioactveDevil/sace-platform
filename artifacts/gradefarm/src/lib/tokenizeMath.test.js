@@ -66,3 +66,14 @@ test('applyOutsideMath leaves math untouched', () => {
   const out = applyOutsideMath('a $x^2$ b $y^2$', (s) => s.toUpperCase())
   assert.equal(out, 'A $x^2$ B $y^2$')
 })
+
+test('a closing $ after a space still closes plain LaTeX, but not money', () => {
+  const t = tokenizeMath('the gradient at the point $(4, 2)$ is $\\frac{dy}{dx} = $ which value?')
+  assert.deepEqual(math(t), ['(4, 2)', '\\frac{dy}{dx} = '])
+  assert.ok(!texts(t).join('').includes('$'))
+  assert.deepEqual(math(tokenizeMath('so $x^2 $ here')), ['x^2 '])
+  // Money and prose keep their dollar signs.
+  assert.deepEqual(math(tokenizeMath('it costs $5 and $10 today')), [])
+  assert.deepEqual(math(tokenizeMath('pay $20 for lunch and $15 for dinner')), [])
+  assert.deepEqual(math(tokenizeMath('between $3 and $4 each')), [])
+})
