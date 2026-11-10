@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   sectionOf, partsOf, marksOf, sourceLabel, bankSummary, examPool, pickExam, swapCandidate,
   examTotals, writingMinutes, formatMinutes, subjectCode, paginate, linesForMarks, BANK_SOURCE,
+  splitAtFigure, wantsDrawing, figureSizeMm,
 } from './examBuilder.js'
 
 const mc = (id, extra = {}) => ({ id, question: `MC ${id}`, options: ['a', 'b', 'c', 'd'], answer_index: 0, question_type: 'mcq', topic: 'T1', ...extra })
@@ -107,4 +108,38 @@ test('seeded random is stable and in range', async () => {
   assert.deepEqual(xs, Array.from({ length: 5 }, seededRandom(42)))
   assert.ok(xs.every(x => x >= 0 && x < 1))
   assert.deepEqual(shuffle([1, 2, 3, 4], seededRandom(1)).sort(), [1, 2, 3, 4])
+})
+
+test('a part that is only a label is kept, so its sub-parts keep their place', () => {
+  const q = ext('9', [p('i', 1), { label: 'iii', text: '', marks: 0, level: 2 }, { label: '1', text: 'x', marks: 1, level: 3 }, { label: '', text: '' }])
+  assert.deepEqual(partsOf(q).map(x => x.label), ['i', 'iii', '1'])
+})
+
+test('a stem and a part introduction stay with the first answer space', () => {
+  // stem, intro, answer: none is left behind at the foot of a page
+  const blocks = [{ h: 600 }, { h: 50, keepWithNext: true }, { h: 100, keepWithNext: true }, { h: 300 }]
+  assert.deepEqual(paginate(blocks, 1000), [[0], [1, 2, 3]])
+})
+
+test('the blank gap under a page\'s last block may run past the foot', () => {
+  assert.deepEqual(paginate([{ h: 600 }, { h: 420, tail: 30 }], 1000), [[0, 1]])
+  assert.deepEqual(paginate([{ h: 600 }, { h: 420 }], 1000), [[0], [1]])
+})
+
+test('a figure goes where the text says it is', () => {
+  assert.deepEqual(splitAtFigure('A chain is shown below.\nDraw one amino acid from the chain shown above.'), ['A chain is shown below.', 'Draw one amino acid from the chain shown above.'])
+  assert.deepEqual(splitAtFigure('The diagram below shows apparatus.\n\nExplain how it works.'), ['The diagram below shows apparatus.', 'Explain how it works.'])
+  assert.deepEqual(splitAtFigure('The formula is shown below.'), ['The formula is shown below.', ''])
+  assert.deepEqual(splitAtFigure('Name the group in the diagram.'), ['Name the group in the diagram.', ''])
+})
+
+test('drawing answers and figure sizes', () => {
+  assert.equal(wantsDrawing('Draw the structural formula of one oxidation product.'), true)
+  assert.equal(wantsDrawing('Explain what the student could draw from the results.'), false)
+  // 216 px at 3 px per point is 72 points: one inch
+  assert.equal(Math.round(figureSizeMm(216, 216).width * 10) / 10, 25.4)
+  const big = figureSizeMm(2000, 1000)
+  assert.equal(big.width, 120)
+  assert.equal(big.height, 60)
+  assert.equal(figureSizeMm(0, 0), null)
 })

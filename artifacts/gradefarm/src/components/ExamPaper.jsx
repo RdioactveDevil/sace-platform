@@ -4,7 +4,7 @@ import MathText from './MathText'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
-import { partsOf, marksOf, sourceLabel, paginate, linesForMarks, formatMinutes } from '../lib/examBuilder'
+import { partsOf, marksOf, sourceLabel, paginate, linesForMarks, formatMinutes, splitAtFigure, wantsDrawing, figureSizeMm } from '../lib/examBuilder'
 
 // Practice exams laid out like the real papers, in two house styles matched
 // to the 2025 papers: VCE (VCAA question and answer book) and SACE (question
@@ -38,6 +38,8 @@ const CSS = `
   .xp-fig img { max-width: 100%; max-height: 95mm; object-fit: contain; display: block; }
   .xp-fig > div { background: #fff !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
   .xp .katex { font-size: 1.04em; }
+  /* On paper nothing scrolls: a scroll box would print its scrollbar and cut off what doesn't fit. */
+  .xp .mt-display, .xp .mt-table, .xp-fig div { overflow: visible !important; }
   .xp-measure { position: absolute; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 
   /* VCE */
@@ -64,9 +66,9 @@ const CSS = `
   .xv-opts { margin-top: 1.5mm; display: flex; flex-direction: column; gap: 2mm; }
   .xv-opt { display: grid; grid-template-columns: 8mm 1fr; }
   .xv-opt > b { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; padding-top: 0.4mm; }
-  .xv-part { display: grid; grid-template-columns: 8mm 1fr 22mm; padding-bottom: 6mm; }
-  .xv-part.l2 { grid-template-columns: 16mm 1fr 22mm; }
-  .xv-part.l3 { grid-template-columns: 24mm 1fr 22mm; }
+  .xv-part { display: grid; grid-template-columns: 8mm minmax(0, 1fr) 22mm; padding-bottom: 6mm; }
+  .xv-part.l2 { grid-template-columns: 16mm minmax(0, 1fr) 22mm; }
+  .xv-part.l3 { grid-template-columns: 24mm minmax(0, 1fr) 22mm; }
   .xv-part > .lbl { font-weight: 700; font-size: 10.5pt; padding-top: 0.4mm; }
   .xv-part.l2 > .lbl { padding-left: 8mm; } .xv-part.l3 > .lbl { padding-left: 16mm; }
   .xv-part > .mk { text-align: right; font-size: 10.5pt; align-self: end; }
@@ -106,7 +108,8 @@ const CSS = `
   .xs-stem { display: grid; grid-template-columns: 7mm 1fr; padding-bottom: 4mm; }
   .xs-qh { padding-bottom: 5mm; } .xs-qh b { display: inline-block; width: 35mm; }
   .xs-src { font-size: 8pt; font-style: italic; color: #555; margin-left: 2mm; }
-  .xs-part { display: grid; grid-template-columns: 7mm 7mm 7mm 7mm 1fr; padding-bottom: 3mm; }
+  .xs-part { display: grid; grid-template-columns: 7mm 7mm 7mm 7mm minmax(0, 1fr); padding-bottom: 3mm; }
+  .xs-part > * { grid-row: 1; }
   .xs-part > .lbl { grid-column: var(--lc); }
   .xs-part > .txt { grid-column: var(--tc) / -1; }
   .xs-lines { margin-bottom: 7mm; }
@@ -136,7 +139,7 @@ const CSS = `
 
   .xp-sol h4 { margin: 0 0 1mm; font-size: 10.5pt; }
   .xp-sol .src { font-size: 8pt; font-style: italic; color: #555; font-weight: 400; }
-  .xp-sol-part { display: grid; grid-template-columns: 21mm 1fr auto; column-gap: 2mm; padding-bottom: 2.5mm; }
+  .xp-sol-part { display: grid; grid-template-columns: 21mm minmax(0, 1fr) auto; column-gap: 2mm; padding-bottom: 2.5mm; }
   .xp-sol-part > b { white-space: nowrap; }
   .xp-anstable { border-collapse: collapse; width: 100%; margin-bottom: 5mm; font-size: 10pt; }
   .xp-anstable td { border: 0.25mm solid #1a1a1a; padding: 1.4mm 2mm; text-align: center; }
@@ -154,15 +157,63 @@ const CSS = `
 `
 
 function Figure({ q, src, onLoad }) {
+  const [size, setSize] = useState(null)
   if (!(q?.graph || q?.table_data || q?.diagram || src)) return null
+  // A figure cropped from an exam paper prints at the size it had on that paper.
+  const loaded = (e) => {
+    const img = e.currentTarget
+    if (/\/exam-papers\//.test(src)) setSize(figureSizeMm(img.naturalWidth, img.naturalHeight))
+    onLoad?.()
+  }
   return (
     <div className="xp-fig">
       {q?.graph && <GraphView graph={q.graph} theme="light" />}
       {q?.table_data && <TableView table={q.table_data} theme="light" />}
       {q?.diagram && <DiagramView diagram={q.diagram} theme="light" />}
-      {src && <img src={src} alt="" onLoad={onLoad} onError={onLoad} />}
+      {src && <img src={src} alt="" onLoad={loaded} onError={onLoad} style={size ? { width: `${size.width}mm`, height: 'auto' } : undefined} />}
     </div>
   )
+}
+
+/** A part's text with its figure where the text says it is ("... shown below"). */
+function PartText({ text, src, onLoad }) {
+  const [before, after] = src ? splitAtFigure(text) : [text, '']
+  return (
+    <>
+      {before && <MathText text={before} />}
+      <Figure src={src} onLoad={onLoad} />
+      {after && <div><MathText text={after} /></div>}
+    </>
+  )
+}
+
+/**
+ * Shrink any equation that is wider than the space it sits in, so that it
+ * prints whole. Sizes are compared within one family of measurements so the
+ * preview's zoom doesn't matter.
+ */
+function fitMath(root) {
+  if (!root) return
+  for (const el of root.querySelectorAll('.mt-display, span[data-tex]')) {
+    el.style.fontSize = ''
+    const display = el.classList.contains('mt-display')
+    let box = el, width = el.scrollWidth
+    if (!display) {
+      width = el.offsetWidth
+      if (width < 150) continue
+      box = el.parentElement
+      while (box && getComputedStyle(box).display.startsWith('inline')) box = box.parentElement
+    }
+    const room = box?.clientWidth || 0
+    if (room > 0 && width > room + 1) el.style.fontSize = `${Math.max(50, Math.floor((room / width) * 100))}%`
+  }
+}
+
+/** Fit the equations on the printed pages after every render. */
+function useFitMath() {
+  const ref = useRef(null)
+  useLayoutEffect(() => { fitMath(ref.current) })
+  return ref
 }
 
 /** Measure every block once, at the page's content width, in a hidden copy outside any zoomed preview. */
@@ -175,6 +226,7 @@ function useHeights(lists, className, widthMm) {
     const el = ref.current
     if (!el) return
     const next = {}
+    fitMath(el)
     for (const child of el.children) next[child.dataset.key] = child.getBoundingClientRect().height
     setHeights(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
   }, [lists, tick])
@@ -189,7 +241,7 @@ function useHeights(lists, className, widthMm) {
   return { heights, portal, bump: () => setTick(t => t + 1) }
 }
 
-const packed = (blocks, heights, capacityMm) => paginate(blocks.map(b => ({ ...b, h: heights[b.key] ?? 0 })), capacityMm * MM)
+const packed = (blocks, heights, capacityMm) => paginate(blocks.map(b => ({ ...b, h: heights[b.key] ?? 0, tail: (b.tailMm || 0) * MM })), capacityMm * MM)
 
 // ── Solutions (both styles) ───────────────────────────────────────────────────
 function solutionBlocks(exam, numberOf) {
@@ -318,7 +370,7 @@ function vceBlocks(exam, meta, onLoad) {
       ),
     })
     exam.A.forEach((q, i) => blocks.push({
-      key: `A-${q.id}`, section: 'A', el: (
+      key: `A-${q.id}`, section: 'A', tailMm: 7, el: (
         <div className="xv-q">
           <div className="xv-qh"><b>Question {i + 1}</b>{src(q)}</div>
           <div className="xv-serif"><MathText text={q.question} /></div>
@@ -358,15 +410,14 @@ function vceBlocks(exam, meta, onLoad) {
       parts.forEach((p, k) => {
         const intro = !p.marks
         blocks.push({
-          key: `B-${q.id}-${k}`, section, keepWithNext: intro, el: (
-            <div className={`xv-part${p.level > 1 ? ` l${p.level}` : ''}`} style={single ? { gridTemplateColumns: '0 1fr 22mm' } : undefined}>
+          key: `B-${q.id}-${k}`, section, keepWithNext: intro, tailMm: 6, el: (
+            <div className={`xv-part${p.level > 1 ? ` l${p.level}` : ''}`} style={single ? { gridTemplateColumns: '0 minmax(0, 1fr) 22mm' } : undefined}>
               <span className="lbl">{p.label ? `${p.label}.` : ''}</span>
-              <div className="xv-serif">
-                {p.text && <MathText text={p.text} />}
-                <Figure src={p.image_url} onLoad={onLoad} />
-              </div>
+              <div className="xv-serif"><PartText text={p.text} src={p.image_url} onLoad={onLoad} /></div>
               <span className="mk">{intro ? '' : `${p.marks} mark${p.marks === 1 ? '' : 's'}`}</span>
-              {!intro && <div className="xv-lines">{range(linesForMarks(p.marks)).map(j => <div key={j} className="xv-line" />)}</div>}
+              {!intro && (wantsDrawing(p.text)
+                ? <div className="xv-lines" style={{ height: `${8.6 * Math.max(5, linesForMarks(p.marks))}mm` }} />
+                : <div className="xv-lines">{range(linesForMarks(p.marks)).map(j => <div key={j} className="xv-line" />)}</div>)}
             </div>
           ),
         })
@@ -402,6 +453,7 @@ function VceExam({ exam, meta }) {
   const lists = useMemo(() => [blocks, sol], [blocks, sol])
   const { heights, portal, bump } = useHeights(lists, 'xv xv-body', VCE.width)
   bumpRef.current = bump
+  const fitRef = useFitMath()
   const pages = useMemo(() => packed(blocks, heights, VCE.height), [blocks, heights])
   const solPages = useMemo(() => (sol.length ? packed(sol, heights, VCE.height) : []), [sol, heights])
 
@@ -430,7 +482,7 @@ function VceExam({ exam, meta }) {
   return (
     <div className="xp xv">
       {portal}
-      <div className="xp-print">
+      <div className="xp-print" ref={fitRef}>
         {/* Cover */}
         <div className="xp-page">
           <div className="xv-cover">
@@ -541,6 +593,8 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
         <div className="xs-stem"><span>{num}.</span><div>{q.question && <MathText text={q.question} />}{src(q)}<Figure q={q} src={q.image_url} onLoad={onLoad} /></div></div>
       ),
     })
+    // A label printed alone, e.g. "(iii)" before its "(1)", goes on the next part's line.
+    let carried = null
     parts.forEach((p, k) => {
       const intro = !p.marks
       const marks = `(${p.marks} mark${p.marks === 1 ? '' : 's'})`
@@ -548,13 +602,21 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
       const base = meta.isMaths ? 1 : 2
       const lc = single ? base : base + p.level - 1
       const tc = single ? base : lc + 1
+      if (intro && !p.text && !p.image_url && parts[k + 1]?.level > p.level) { carried = { label: p.label, col: lc }; return }
+      const lead = carried
+      carried = null
       let space = null
       if (!intro) {
         if (meta.isMaths) {
           space = <><div className="xs-grid" style={{ height: `${5 * Math.min(22, 2 * p.marks + 2)}mm`, marginTop: '1mm' }} /><div className="xs-mk">{marks}</div></>
         } else {
           const n = Math.min(14, 2 * p.marks)
-          space = (
+          space = wantsDrawing(p.text) ? (
+            <div style={{ marginLeft: `${7 * (tc - 1)}mm` }}>
+              <div style={{ height: `${8.4 * Math.max(6, n)}mm` }} />
+              <div className="xs-mk" style={{ paddingTop: 0 }}>{marks}</div>
+            </div>
+          ) : (
             <div className="xs-lines" style={{ marginLeft: `${7 * (tc - 1)}mm` }}>
               {range(n - 1).map(j => <div key={j} className="xs-line" />)}
               <div className="xs-line last"><i />{marks}</div>
@@ -563,12 +625,13 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
         }
       }
       blocks.push({
-        key: `S-${qid}-${k}`, qid, num, keepWithNext: intro, el: (
+        key: `S-${qid}-${k}`, qid, num, keepWithNext: intro, tailMm: intro ? 3 : 7, el: (
           <div>
             {(p.text || p.label || p.image_url) && (
               <div className="xs-part" style={{ '--lc': lc, '--tc': tc }}>
-                {!single && <span className="lbl">{p.label ? `(${p.label})` : ''}</span>}
-                <div className="txt">{p.text && <MathText text={p.text} />}<Figure src={p.image_url} onLoad={onLoad} /></div>
+                {lead && <span style={{ gridColumn: lead.col }}>({lead.label})</span>}
+                {!single && <span className="lbl" style={p.label.length > 3 ? { letterSpacing: '-0.05em' } : undefined}>{p.label ? `(${p.label})` : ''}</span>}
+                <div className="txt"><PartText text={p.text} src={p.image_url} onLoad={onLoad} /></div>
               </div>
             )}
             {space}
@@ -623,6 +686,7 @@ function SaceExam({ exam, meta }) {
   const bookletPages = useMemo(() => bookletBlocks.map(b => packed(b, heights, SACE.height - 9)), [bookletBlocks, heights])
   const solPages = useMemo(() => (sol.length ? packed(sol, heights, SACE.height) : []), [sol, heights])
 
+  const fitRef = useFitMath()
   const totalMarks = all.reduce((s, q) => s + marksOf(q), 0)
   const extras = meta.isMaths ? ['Formula sheet'] : /chem/i.test(meta.subjectTitle) ? ['Periodic table and data sheet'] : []
 
@@ -630,7 +694,7 @@ function SaceExam({ exam, meta }) {
   return (
     <div className="xp xs">
       {portal}
-      <div className="xp-print">
+      <div className="xp-print" ref={fitRef}>
         {booklets.map((qs, b) => {
           const pages = bookletPages[b] || []
           const blocks = bookletBlocks[b]
