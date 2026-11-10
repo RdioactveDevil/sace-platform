@@ -157,6 +157,15 @@ const CSS = `
   }
 `
 
+/** The GradeFarm wordmark as on the site: "grade" in navy and "farm." in gold, in Sifonn Pro. */
+function Wordmark({ size }) {
+  return (
+    <span aria-label="gradefarm" style={{ fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, fontSize: size, letterSpacing: '0.08em', lineHeight: 1, whiteSpace: 'nowrap' }}>
+      <span style={{ color: '#0c1037' }}>grade</span><span style={{ color: '#e8ac1c' }}>farm.</span>
+    </span>
+  )
+}
+
 function Figure({ q, src, onLoad }) {
   const [size, setSize] = useState(null)
   if (!(q?.graph || q?.table_data || q?.diagram || src)) return null
@@ -574,7 +583,7 @@ function VceExam({ exam, meta }) {
             </div>
             <div className="xv-cfoot">
               <span>Practice examination assembled by GradeFarm from past and trial examination questions.<br />Not an official examination.</span>
-              <b style={{ fontSize: '12pt', letterSpacing: '0.04em' }}>GRADEFARM</b>
+              <Wordmark size="17pt" />
             </div>
           </div>
         </div>
@@ -756,7 +765,7 @@ function SaceExam({ exam, meta }) {
               <div className="xp-page">
                 <div className="xs-cover">
                   <div className="xs-tab" style={{ left: 0, top: `${tabTop}mm` }}>{b + 1}</div>
-                  <div className="xs-brand">GradeFarm<small>Practice examination</small></div>
+                  <div className="xs-brand"><Wordmark size="19pt" /><small style={{ marginTop: '1.8mm' }}>Practice examination</small></div>
                   <div className="xs-title xs-narrow"><div className="t1">{meta.subjectTitle}</div><div className="t2">Practice exam</div></div>
                   <div className="xs-cbody">
                     <h2 className="xs-narrow">Question booklet {b + 1}</h2>
