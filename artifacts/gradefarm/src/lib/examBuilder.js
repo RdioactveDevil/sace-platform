@@ -51,7 +51,8 @@ export function sectionOf(q) {
 /** A written question's parts; a question without parts is one unlabelled part. */
 export function partsOf(q) {
   if (Array.isArray(q?.parts) && q.parts.length) {
-    return q.parts.filter(p => p && (p.text || p.image_url)).map(p => ({
+    // A part with only a label still counts: "(iii)" printed alone before its (1) and (2).
+    return q.parts.filter(p => p && (p.text || p.image_url || p.label)).map(p => ({
       label: String(p.label || '').replace(/^\(|\)?\.?$/g, ''),
       text: p.text || '',
       marks: Math.max(0, Number(p.marks) || 0),
@@ -249,7 +250,7 @@ export function subjectCode(name = '') {
 export const isMathsSubject = (name = '') => /math/i.test(name)
 
 /**
- * Pack measured blocks into pages. Blocks: { h, keepWithNext, section }.
+ * Pack measured blocks into pages. Blocks: { h, keepWithNext, tail, section }.
  * A block that is taller than a page gets a page to itself. A block marked
  * keepWithNext moves to the next page with the block after it. A new section
  * can start a new page (`breakBefore`). Returns arrays of block indexes.
@@ -262,8 +263,12 @@ export function paginate(blocks, capacity) {
     const b = blocks[i]
     if (b.breakBefore) flush()
     let need = b.h
-    // Keep a heading with what follows it.
-    if (b.keepWithNext && blocks[i + 1]) need += blocks[i + 1].h
+    // Keep a heading with what follows it: a question's stem, then a part's
+    // introduction, stay with the first part that has answer space.
+    let j = i
+    for (; blocks[j].keepWithNext && blocks[j + 1]; j++) need += blocks[j + 1].h
+    // The blank gap under the last of them (`tail`) may run past the foot of the page.
+    need -= blocks[j].tail || 0
     if (page.length && used + Math.min(need, capacity) > capacity) flush()
     page.push(i)
     used += b.h
@@ -276,4 +281,39 @@ export function paginate(blocks, capacity) {
 export function linesForMarks(marks) {
   const m = Math.max(1, Number(marks) || 1)
   return Math.min(16, m === 1 ? 3 : m * 3)
+}
+
+/**
+ * Where a part's figure goes in its text: after the last line that says the
+ * figure is "below", so that what follows ("... shown above") reads in order.
+ * Returns [before, after]; the figure follows all the text when no line says so.
+ */
+export function splitAtFigure(text = '') {
+  const lines = String(text).split('\n')
+  let at = -1
+  // Not past a table written into the text, which "below" may be pointing at.
+  const stop = lines.findIndex(l => /^\s*\|.*\|\s*$/.test(l))
+  const end = stop < 0 ? lines.length : stop
+  for (let i = 0; i < end; i++) if (/\bbelow\b/i.test(lines[i])) at = i
+  if (at < 0 || !lines.slice(at + 1).some(l => l.trim())) return [text, '']
+  const tidy = (ls) => ls.join('\n').replace(/^\n+|\n+$/g, '')
+  return [tidy(lines.slice(0, at + 1)), tidy(lines.slice(at + 1))]
+}
+
+/** A part answered with a drawing gets blank space, not ruled lines. */
+export function wantsDrawing(text = '') {
+  return /\b(draw|sketch)\s+(?:and label\s+)?(the|a|an|one|two|three|your|its|their|all|each|both)\b/i.test(String(text))
+}
+
+/**
+ * Printed size, in mm, of a figure cropped from an exam paper. The crops are
+ * made at 3 pixels to the point, so their pixel size gives the size they had
+ * on the original page; they are only ever shrunk to fit, never enlarged.
+ */
+export function figureSizeMm(naturalWidth, naturalHeight, maxWidth = 120, maxHeight = 95) {
+  const MM_PER_PX = 25.4 / 72 / 3
+  const w = naturalWidth * MM_PER_PX, h = naturalHeight * MM_PER_PX
+  if (!(w > 0 && h > 0)) return null
+  const k = Math.min(1, maxWidth / w, maxHeight / h)
+  return { width: w * k, height: h * k }
 }

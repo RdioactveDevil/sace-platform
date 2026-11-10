@@ -61,6 +61,7 @@ function InlineMath({ text, style }) {
             <div
               key={i}
               data-tex={part.content}
+              className="mt-display"
               dangerouslySetInnerHTML={{ __html: html }}
               style={{ overflowX: 'auto', textAlign: 'center', margin: '8px 0', maxWidth: '100%' }}
             />
@@ -83,7 +84,7 @@ const cellStyle = { border: '1px solid rgba(127,127,127,0.35)', padding: '4px 12
 
 function MarkdownTable({ header, rows }) {
   return (
-    <div style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0' }}>
+    <div className="mt-table" style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0' }}>
       <table style={{ borderCollapse: 'collapse', fontSize: 'inherit' }}>
         {header && (
           <thead>
