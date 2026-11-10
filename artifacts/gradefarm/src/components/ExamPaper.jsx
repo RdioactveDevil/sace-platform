@@ -39,7 +39,8 @@ const CSS = `
   .xp-fig > div { background: #fff !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
   .xp .katex { font-size: 1.04em; }
   /* On paper nothing scrolls: a scroll box would print its scrollbar and cut off what doesn't fit. */
-  .xp .mt-display, .xp .mt-table, .xp-fig div { overflow: visible !important; }
+  .xp .mt-display, .xp .mt-table, .xp-fig div, .xp .katex-display { overflow: visible !important; }
+  .xp .katex-display { max-width: none !important; }
   .xp-measure { position: absolute; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 
   /* VCE */
@@ -187,25 +188,69 @@ function PartText({ text, src, onLoad }) {
   )
 }
 
+/** Where `node` sits on its page, in the page's own layout pixels (the preview's zoom doesn't matter). */
+function pageOffset(node, page) {
+  let left = 0, top = 0
+  for (let n = node; n && n !== page; n = n.offsetParent) { left += n.offsetLeft; top += n.offsetTop }
+  return { left, top }
+}
+
 /**
- * Shrink any equation that is wider than the space it sits in, so that it
- * prints whole. Sizes are compared within one family of measurements so the
- * preview's zoom doesn't matter.
+ * Let an equation that is wider than its column run out into the page's
+ * margins at its full size, as a printed paper would. A displayed equation
+ * spreads evenly either side of its column; one in a line of text runs on to
+ * the right. Only an equation wider than the sheet itself (10 mm from each
+ * edge, clear of the "Do not write in this area" strip) is made smaller. In
+ * the solutions, where the marks sit in a column on the right, equations are
+ * still shrunk to their column.
  */
 function fitMath(root) {
   if (!root) return
   for (const el of root.querySelectorAll('.mt-display, span[data-tex]')) {
     el.style.fontSize = ''
+    el.style.width = ''
+    el.style.marginLeft = ''
+    el.style.maxWidth = ''
     const display = el.classList.contains('mt-display')
-    let box = el, width = el.scrollWidth
+    let box = el
     if (!display) {
-      width = el.offsetWidth
-      if (width < 150) continue
       box = el.parentElement
       while (box && getComputedStyle(box).display.startsWith('inline')) box = box.parentElement
     }
+    const width = display ? el.scrollWidth : el.offsetWidth
     const room = box?.clientWidth || 0
-    if (room > 0 && width > room + 1) el.style.fontSize = `${Math.max(50, Math.floor((room / width) * 100))}%`
+    if (!(room > 0 && width > room + 1)) continue
+    const page = el.closest('.xp-page')
+    if (!page) continue // the hidden copy that measures heights
+    const shrink = (k) => { el.style.fontSize = `${Math.max(50, Math.floor(k * 100))}%` }
+    if (el.closest('.xp-sol-part')) { shrink(room / width); continue }
+
+    // The part of the sheet an equation may use.
+    let lo = 10 * MM, hi = page.offsetWidth - 10 * MM
+    const strip = page.querySelector('.xv-strip')
+    if (strip) {
+      if (strip.offsetLeft < page.offsetWidth / 2) lo = Math.max(lo, strip.offsetLeft + strip.offsetWidth + 3 * MM)
+      else hi = Math.min(hi, strip.offsetLeft - 3 * MM)
+    }
+    const at = pageOffset(el, page)
+    // Keep clear of a VCE part's "2 marks" beside the text.
+    const mk = el.closest('.xv-part')?.querySelector(':scope > .mk')
+    if (mk?.textContent) {
+      const m = pageOffset(mk, page)
+      if (m.top < at.top + el.offsetHeight && m.top + mk.offsetHeight > at.top) hi = Math.min(hi, m.left - 2 * MM)
+    }
+    const k = Math.min(1, (hi - lo) / width)
+    if (k < 1) shrink(k)
+    const w = width * k
+    if (display) {
+      const boxLeft = pageOffset(box, page).left
+      const left = Math.min(Math.max(boxLeft + (room - w) / 2, lo), hi - w)
+      el.style.maxWidth = 'none'
+      el.style.width = `${w}px`
+      el.style.marginLeft = `${left - boxLeft}px`
+    } else if (k === 1 && at.left + w > hi) {
+      shrink((hi - at.left) / w)
+    }
   }
 }
 
