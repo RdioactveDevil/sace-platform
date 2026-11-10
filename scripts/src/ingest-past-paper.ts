@@ -40,6 +40,7 @@ import { createClient } from "@supabase/supabase-js";
 import { PDFiumLibrary } from "@hyzyla/pdfium";
 import sharp from "sharp";
 import { snapToInk, pctToPx, grow, crop, type Page, type PxBox } from "./lib/figure-crop";
+import { readPages, findPage, renderPage, maskedPage, locateFigure, figureAtTop, hintLine, cropBox, type PageText } from "./lib/figure-find";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 const MODEL = process.env.INGEST_MODEL || "claude-opus-5-5";
@@ -345,6 +346,29 @@ async function placeFigure(client: Anthropic, page: Page, rough: BBox, hint: str
   return crop(page, await snapToInk(page, box));
 }
 
+/**
+ * Find a figure from the part's own text (lib/figure-find.ts): the page its
+ * sentence is printed on, and the ink between that sentence and the next
+ * line of question text. Returns the crop and page, or null if the sentence
+ * isn't found in the paper (then the AI's box is used instead).
+ */
+async function figureFromText(paper: Buffer, pages: PageText[], hint: string): Promise<{ png: Buffer; page: number } | null> {
+  const where = findPage(pages, hintLine(hint).text);
+  if (where.page < 0) return null;
+  const rendered = await renderPage(paper, where.page + 1);
+  const masked = await maskedPage(pages[where.page], rendered);
+  const here = locateFigure(pages[where.page], masked, hint, where.line);
+  if (here) return { png: await cropBox(masked.png, here.box), page: where.page + 1 };
+  if (where.page + 1 < pages.length) {
+    // The part's text ends the page: the figure may be at the top of the next.
+    const r2 = await renderPage(paper, where.page + 2);
+    const m2 = await maskedPage(pages[where.page + 1], r2);
+    const next = figureAtTop(pages[where.page + 1], m2);
+    if (next) return { png: await cropBox(m2.png, next.box), page: where.page + 2 };
+  }
+  return null;
+}
+
 /** A file name that changes when the crop does, so a new crop is never served from a cache. */
 const figurePath = (sourceId: string, name: string, png: Buffer) =>
   `exam-papers/${sourceId}/${name}-${createHash("sha1").update(png).digest("hex").slice(0, 8)}.png`;
@@ -378,8 +402,19 @@ async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buf
   console.log(`${(rows || []).length} question(s) from ${source} in the bank, ${figs.length} with figures.`);
   if (!figs.length) return { questions: 0, marks: 0, figures: 0, skipped: [] };
 
+  // Each figure from its part's own text; only what that can't find is asked of the model.
+  const pagesText = await readPages(paper);
+  const fromText = new Map<string, { png: Buffer; page: number }>();
+  for (const f of figs) {
+    const got = await figureFromText(paper, pagesText, f.hint);
+    if (got) fromText.set(f.key, got);
+  }
+  const rest = figs.filter((f) => !fromText.has(f.key));
+  console.log(`${fromText.size} figure(s) found from their text${rest.length ? `; asking the model about ${rest.length}` : ""}.`);
+  const found = new Map<string, { key: string; figure_page: number; figure_bbox: BBox }>();
+  if (rest.length) {
   // Where each figure is printed.
-  const list = figs.map((f) => `- key ${f.key}: question ${f.row.source_question}${f.part >= 0 ? `, part (${f.row.parts![f.part].label})` : ""}. Printed with: "${f.hint.slice(0, 300).replace(/\s+/g, " ")}"`).join("\n");
+  const list = rest.map((f) => `- key ${f.key}: question ${f.row.source_question}${f.part >= 0 ? `, part (${f.row.parts![f.part].label})` : ""}. Printed with: "${f.hint.slice(0, 300).replace(/\s+/g, " ")}"`).join("\n");
   const message = await client.beta.messages
     .stream({
       model: MODEL,
@@ -419,7 +454,8 @@ async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buf
     })
     .finalMessage();
   const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const found = new Map(((JSON.parse(text) as { figures: { key: string; figure_page: number; figure_bbox: BBox }[] }).figures || []).map((f) => [f.key, f]));
+  for (const f of (JSON.parse(text) as { figures: { key: string; figure_page: number; figure_bbox: BBox }[] }).figures || []) found.set(f.key, f);
+  }
   const pages = [...new Set([...found.values()].filter((f) => hasFigure(f.figure_page, f.figure_bbox)).map((f) => f.figure_page))];
   const rendered = await renderPages(paper, pages);
 
@@ -427,11 +463,19 @@ async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buf
   const skipped: string[] = [];
   let figures = 0;
   for (const f of figs) {
-    const at = found.get(f.key);
-    if (!at || !hasFigure(at.figure_page, at.figure_bbox) || !rendered.has(at.figure_page)) { skipped.push(f.name); continue; }
-    const png = await placeFigure(client, rendered.get(at.figure_page)!, at.figure_bbox, f.hint);
+    let png: Buffer;
+    let pageNo: number;
+    const got = fromText.get(f.key);
+    if (got) {
+      ({ png, page: pageNo } = got);
+    } else {
+      const at = found.get(f.key);
+      if (!at || !hasFigure(at.figure_page, at.figure_bbox) || !rendered.has(at.figure_page)) { skipped.push(f.name); continue; }
+      png = await placeFigure(client, rendered.get(at.figure_page)!, at.figure_bbox, f.hint);
+      pageNo = at.figure_page;
+    }
     figures++;
-    if (!args.apply) { console.log(`  ${f.name}: page ${at.figure_page}, ${png.length}-byte crop`); continue; }
+    if (!args.apply) { console.log(`  ${f.name}: page ${pageNo}${got ? "" : " (model)"}, ${png.length}-byte crop`); continue; }
     const path = figurePath(sourceId, f.name, png);
     const { error: upErr } = await admin.storage.from("question-images").upload(path, png, { contentType: "image/png", upsert: true });
     if (upErr) { console.warn(`  ${f.name}: upload failed: ${upErr.message}`); skipped.push(f.name); continue; }
@@ -440,7 +484,7 @@ async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buf
     if (f.part < 0) row.image_url = url;
     else row.parts![f.part].image_url = url;
     changed.set(f.row.id, row);
-    console.log(`  ${f.name}: page ${at.figure_page} → ${path}`);
+    console.log(`  ${f.name}: page ${pageNo}${got ? "" : " (model)"} → ${path}`);
   }
   if (args.apply) {
     for (const r of changed.values()) {
@@ -486,10 +530,12 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
 
   const sourceId = createHash("sha1").update(`${args.subject}|${source}`).digest("hex").slice(0, 10);
   let figures = 0;
+  const pagesText = await readPages(paper);
   const figure = async (page: number, box: BBox, name: string, hint = ""): Promise<string | null> => {
     if (!hasFigure(page, box) || !rendered.has(page)) return null;
     try {
-      const png = await placeFigure(client, rendered.get(page)!, box, hint);
+      // From the part's own text where that works; the model's box otherwise.
+      const png = (await figureFromText(paper, pagesText, hint))?.png ?? await placeFigure(client, rendered.get(page)!, box, hint);
       figures++;
       if (!args.apply) return `(dry-run: ${png.length}-byte crop)`;
       const path = figurePath(sourceId, name, png);
