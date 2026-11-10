@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { topicsAfter, scopePromptLines, hasScope } from "../src/lib/course-scope";
+import { topicsAfter, topicsBefore, scopePromptLines, hasScope } from "../src/lib/course-scope";
 
 const topics = [
   { name: "Quadratics", order_index: 2 },
@@ -23,4 +23,13 @@ test("the prompt names the later topics; a scope with only those still counts", 
   assert.match(text, /Rates of change; Differentiation/);
   assert.equal(hasScope({ ...scope, laterTopics: [] }), false);
   assert.deepEqual(scopePromptLines({ ...scope, laterTopics: [] }), []);
+});
+
+test("earlier topics are fair game: a later topic may build on them", () => {
+  assert.deepEqual(topicsBefore(topics, 13), ["Quadratics", "A gallery of graphs", "Rates of change"]);
+  assert.deepEqual(topicsBefore(topics, 2), []);
+  const scope = { subject: "Methods 1&2", level: "Year 11", outOfScope: "", topic: "Differentiation", subtopic: "Rules for differentiation", scope: "", laterTopics: [], earlierTopics: ["Quadratics", "A gallery of graphs"] };
+  const text = scopePromptLines({ ...scope, scope: "- Derivatives of polynomials" }).join("\n");
+  assert.match(text, /HAS already learnt these earlier topics.*Quadratics; A gallery of graphs/);
+  assert.doesNotMatch(text, /LATER in the course/);
 });
