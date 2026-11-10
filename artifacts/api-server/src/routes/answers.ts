@@ -100,11 +100,35 @@ async function sessionRun(admin: SupabaseClient, userId: string, sessionId: stri
   return run;
 }
 
+/**
+ * No XP for answering this question right: the student answered it right
+ * recently, or it is in one of their self-marked exams (built_exam_attempts),
+ * where its solution was shown to them.
+ */
 async function answeredRightRecently(admin: SupabaseClient, userId: string, questionId: string): Promise<boolean> {
-  const { data } = await admin.from("answer_log").select("id")
-    .eq("user_id", userId).eq("question_id", questionId).eq("correct", true)
-    .gte("answered_at", new Date(Date.now() - REPEAT_XP_WINDOW_MS).toISOString()).limit(1);
-  return !!data?.length;
+  const [{ data }, inExam] = await Promise.all([
+    admin.from("answer_log").select("id")
+      .eq("user_id", userId).eq("question_id", questionId).eq("correct", true)
+      .gte("answered_at", new Date(Date.now() - REPEAT_XP_WINDOW_MS).toISOString()).limit(1),
+    inOwnExamAttempts(admin, userId, [questionId]),
+  ]);
+  return !!data?.length || inExam.has(questionId);
+}
+
+/** Which of these questions are in the student's own exam attempts. Empty if the table isn't there yet. */
+async function inOwnExamAttempts(admin: SupabaseClient, userId: string, ids: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!ids.length) return out;
+  const want = new Set(ids);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await admin.from("built_exam_attempts").select("question_ids")
+      .eq("user_id", userId).overlaps("question_ids", ids.slice(i, i + 200)).limit(500);
+    if (error) return out;
+    for (const r of (data || []) as { question_ids: string[] | null }[]) {
+      for (const id of r.question_ids || []) if (want.has(id)) out.add(id);
+    }
+  }
+  return out;
 }
 
 async function recordAnswer(admin: SupabaseClient, userId: string, questionId: string, correct: boolean, selected: number | null, sessionId: string | null, ms: number | null) {
@@ -665,9 +689,11 @@ router.post("/answers/tip", async (req, res) => {
 
 // ── Solutions ────────────────────────────────────────────────────────────────
 // Body: { questionIds }. Answers and solutions for questions on an exam the
-// student built (the exam builder's solutions pages). Tutors and admins get
-// them all; students get them for questions they've already answered and for
-// questions from real past or trial papers. → { solutions: { [id]: reveal } }
+// student built (the exam builder's solutions pages and the Exams marking
+// screen). Tutors and admins get them all; students get them for questions
+// they've already answered, for questions from real past or trial papers, and
+// for questions in their own exam attempts (which then earn no practice XP).
+// → { solutions: { [id]: reveal } }
 router.post("/answers/solutions", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
@@ -678,6 +704,7 @@ router.post("/answers/solutions", async (req, res) => {
     const [rows, readable] = await Promise.all([loadQuestions(admin, ids), readableIds(caller, ids)]);
     let answered = new Set<string>();
     if (!isStaff(caller)) {
+      answered = await inOwnExamAttempts(admin, userId, ids);
       for (let i = 0; i < ids.length; i += 200) {
         const { data } = await admin.from("struggle_profiles").select("question_id").eq("user_id", userId).in("question_id", ids.slice(i, i + 200));
         for (const r of (data || []) as { question_id: string }[]) answered = answered.add(r.question_id);

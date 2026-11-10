@@ -3,9 +3,11 @@ import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus
 import { THEMES } from '../lib/theme'
 import { getExamBankForTile, fetchTutorClasses, fetchMyClasses, fetchSolutions } from '../lib/db'
 import { listBuiltExams, getBuiltExam, saveBuiltExam, deleteBuiltExam } from '../lib/builtExams'
+import { ATTEMPT_STORE } from '../lib/examAttempts'
+import { snapshotOf, seenQuestionIds, questionsToRedo } from '../lib/examMarking'
 import {
   bankSummary, examPool, pickExam, swapCandidate, examTotals, writingMinutes, isMathsSubject,
-  sourceLabel, marksOf, BANK_SOURCE,
+  sourceLabel, marksOf, sectionOf, BANK_SOURCE,
 } from '../lib/examBuilder'
 import { groupSubject } from '../lib/homeSubjects'
 import ExamPaper from './ExamPaper'
@@ -49,10 +51,15 @@ const examMinutes = (board, marks) => (board === 'sace' ? (marks >= 90 ? 130 : M
  * Exams can be saved (built_exams) and opened again from the list or a link
  * (/exam-builder?exam=<id>); tutors can share a saved exam with a class, and
  * its students see it under "From your tutor".
+ *
+ * Downloading an exam saves it and adds it to the student's Exams to mark
+ * (built_exam_attempts). New exams prefer questions the student hasn't had in
+ * an exam before. Links from Exams: ?topics=A|B (an exam on those topics) and
+ * ?from=<attempt>&redo=lost|skipped (the questions they lost marks on or skipped).
  */
 const DEFAULT_STORE = { list: listBuiltExams, get: getBuiltExam, save: saveBuiltExam, remove: deleteBuiltExam }
 
-export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions }) {
+export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, onMark = null, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions, attemptStore = ATTEMPT_STORE }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
   const board = boardOf(subject)
@@ -96,27 +103,54 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     return () => { alive = false }
   }, [subjectName, isTutor]) // eslint-disable-line react-hooks/exhaustive-deps
   const className = (id) => classes.find(c => c.id === id)?.name || 'your class'
+
+  // The student's exam attempts: questions in them count as seen, so new exams use others first.
+  const [attempts, setAttempts] = useState(myId ? null : [])
+  useEffect(() => {
+    if (!myId) return
+    let alive = true
+    attemptStore.list(subjectName, myId).then(rows => { if (alive) setAttempts(rows || []) })
+    return () => { alive = false }
+  }, [subjectName, myId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const seen = useMemo(() => seenQuestionIds(attempts || []), [attempts])
   const mine = (saved || []).filter(r => r.owner_id === myId)
   const fromTutor = (saved || []).filter(r => r.owner_id !== myId && r.class_id)
 
   // First load: a saved exam from the link, else the paper with the most real
   // exam questions, its sources and its usual shape.
   useEffect(() => {
-    if (!bank || saved === null || paper !== null) return
-    const want = new URLSearchParams(window.location.search).get('exam')
+    if (!bank || saved === null || attempts === null || paper !== null) return
+    const params = new URLSearchParams(window.location.search)
+    const want = params.get('exam')
+    const from = params.get('from')
+    if (from) {
+      const redo = params.get('redo') === 'skipped' ? 'skipped' : 'lost'
+      Promise.resolve(attempts.find(a => a.id === from) || attemptStore.get(from)).then(a => {
+        const ids = a ? questionsToRedo(a.snapshot, a.marks || {}, redo).filter(id => byIdRef.current.has(id)) : []
+        if (!ids.length) { setNotice("That exam's questions couldn't be found, so here's a new exam."); choosePaper(firstPaper()); return }
+        applyQuestions(ids, `${a.title}: ${redo === 'skipped' ? 'questions I skipped' : 'questions I lost marks on'}`)
+      })
+      return
+    }
+    const wantTopics = (params.get('topics') || '').split('|').map(s => s.trim()).filter(Boolean)
+    if (wantTopics.length && !want) {
+      choosePaper(firstPaper())
+      setTopics(wantTopics.filter(x => summary.topics.some(tp => tp.name === x)))
+      return
+    }
     const open = (row) => {
       if (row && row.subject === subjectName) { applySaved(row); return }
       if (row) setNotice(`That exam is for ${row.subject}. Switch subject to open it.`)
       else if (want) setNotice("That saved exam couldn't be found. It may have been deleted or not shared with you.")
-      const first = [...realPapers].sort((a, b) => b.count - a.count)[0]?.name || ''
-      choosePaper(first)
+      choosePaper(firstPaper())
     }
     if (!want) { open(null); return }
     const row = saved.find(r => r.id === want)
     if (row) open(row)
     else store.get(want).then(open)
-  }, [bank, saved]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bank, saved, attempts]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const firstPaper = () => [...realPapers].sort((a, b) => b.count - a.count)[0]?.name || ''
   const sourcesForPaper = (p) => summary.sources.filter(s => !p || !s.paper || s.paper === p)
   function choosePaper(p) {
     setPaper(p)
@@ -145,7 +179,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     if (!bank || sources === null) return
     if (appliedKey.current === settingsKey) return
     appliedKey.current = null
-    setPicked(pickExam(pool, { mcCount, bMarks, seed, allQuestions: bank }))
+    setPicked(pickExam(pool, { mcCount, bMarks, seed, allQuestions: bank, seen }))
     setEdited(false)
   }, [pool, mcCount, bMarks, seed]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -165,6 +199,22 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     const missing = [...(row.questions?.A || []), ...(row.questions?.B || [])].filter(id => !byIdRef.current.has(id)).length
     setNotice(missing ? `${missing} question${missing === 1 ? ' is' : 's are'} no longer in the bank, so ${missing === 1 ? 'it was' : 'they were'} left out.` : '')
     try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
+  }
+
+  /** An exam of these questions (from Exams: the ones a student lost marks on or skipped), across every paper and source. */
+  function applyQuestions(ids, title) {
+    const qs = ids.map(id => byIdRef.current.get(id)).filter(Boolean)
+    const A = qs.filter(q => sectionOf(q) === 'A').map(q => q.id)
+    const B = qs.filter(q => sectionOf(q) === 'B').map(q => q.id)
+    const allSources = summary.sources.map(x => x.key)
+    const next = { mcCount: A.length, bMarks: qs.filter(q => sectionOf(q) === 'B').reduce((n, q) => n + marksOf(q), 0) }
+    appliedKey.current = JSON.stringify(['', allSources, [], next.mcCount, next.bMarks, seed])
+    setPaper(''); setSources(allSources); setTopics([]); setMcCount(next.mcCount); setBMarks(next.bMarks)
+    setPaperTitle('Examination'); setMaterials(defaultMaterials(board, subjectName, '').join('\n'))
+    setPicked({ A, B })
+    setEdited(false)
+    setCurrent(null)
+    setNotice(`${title}: ${ids.length} question${ids.length === 1 ? '' : 's'}.`)
   }
 
   const exam = useMemo(() => ({
@@ -197,7 +247,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
   const edit = (fn) => { setPicked(prev => fn({ A: [...prev.A], B: [...prev.B] })); setEdited(true) }
   const swap = (section, i) => {
     const current = byId.get(picked[section][i])
-    const next = swapCandidate(pool, current, used, seed + swapSeed.current++)
+    const next = swapCandidate(pool, current, used, seed + swapSeed.current++, seen)
     if (next) edit(p => { p[section][i] = next.id; return p })
   }
   const remove = (section, i) => edit(p => { p[section].splice(i, 1); return p })
@@ -225,13 +275,13 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     setSaveState('')
     setSaveOpen(true)
   }
+  const settingsNow = () => ({ board, paper, sources, topics, mcCount, bMarks, showSources, answerSheet, solutions, subjectTitle, paperTitle, materials })
   const doSave = async (asNew) => {
     if (!myId || !saveTitle.trim()) return
     setSaveState('saving')
     const row = await store.save({
       id: ownsCurrent && !asNew ? current.id : undefined, ownerId: myId, subject: subjectName, title: saveTitle.trim(),
-      questions: picked, classId: isTutor ? saveClass || null : null,
-      settings: { board, paper, sources, topics, mcCount, bMarks, showSources, answerSheet, solutions, subjectTitle, paperTitle, materials },
+      questions: picked, classId: isTutor ? saveClass || null : null, settings: settingsNow(),
     })
     if (!row) { setSaveState('error'); return }
     setSaved(prev => [row, ...(prev || []).filter(r => r.id !== row.id)])
@@ -268,10 +318,52 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     window.print()
     setTimeout(restore, 1000)
   }
+  // Every downloaded exam goes into the student's Exams, to mark once they've
+  // sat it: the exam is saved (or its saved copy updated), and an attempt with
+  // a snapshot of it is started, unless one is already waiting to be marked.
+  const [downloaded, setDownloaded] = useState(null)
+  async function recordAttempt() {
+    if (!myId || !totals.total) return null
+    let examId = current && !edited ? current.id : null
+    let title = current?.title || fileTitle
+    if (!examId) {
+      const row = await store.save({
+        id: ownsCurrent ? current.id : undefined, ownerId: myId, subject: subjectName, title,
+        questions: picked, classId: ownsCurrent ? current.classId || null : null, settings: settingsNow(),
+      })
+      if (row) {
+        setSaved(prev => [row, ...(prev || []).filter(r => r.id !== row.id)])
+        setCurrent({ id: row.id, title: row.title, classId: row.class_id, ownerId: row.owner_id })
+        appliedKey.current = settingsKey
+        setEdited(false)
+        examId = row.id
+        title = row.title
+        try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
+      }
+    }
+    const ids = [...picked.A, ...picked.B]
+    const waiting = examId && (attempts || []).find(a => a.exam_id === examId && a.status === 'not_marked' && (a.question_ids || []).join() === ids.join())
+    if (waiting) return waiting
+    const row = await attemptStore.create({ userId: myId, examId, subject: subjectName, title, snapshot: snapshotOf(exam, { title, subject: subjectName, board }) })
+    if (row) setAttempts(prev => [row, ...(prev || [])])
+    return row
+  }
+
   const download = async () => {
     if (pdfProgress) return
     setPdfProgress({ done: 0, total: 0 })
     try {
+      const attempt = await recordAttempt().catch(() => null)
+      setDownloaded(attempt)
+      // The exam's questions are now the student's to mark, so the server gives
+      // every solution: put them in the solutions pages before drawing them.
+      if (attempt && solutions) {
+        const found = await loadSolutions(attempt.question_ids || []).catch(() => null)
+        if (found && Object.keys(found).length) {
+          setBank(prev => (prev || []).map(q => (found[q.id] ? { ...q, ...found[q.id] } : q)))
+          await new Promise(r => setTimeout(r, 450))
+        }
+      }
       const { downloadExamPdf } = await import('../lib/examPdf')
       await downloadExamPdf(previewRef.current, `${fileTitle.replace(/[^\w .-]+/g, '') || 'Practice exam'}.pdf`, (done, total) => setPdfProgress({ done, total }))
     } catch (err) {
@@ -341,7 +433,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
       <style>{css}</style>
       <div className="eb-bar">
         <button type="button" onClick={onExit} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
-          <ArrowLeft size={16} aria-hidden="true" /> Back to practice
+          <ArrowLeft size={16} aria-hidden="true" /> Exams
         </button>
         <div className="eb-title" style={{ fontSize: 15, fontWeight: 800 }}>{current ? current.title : 'Exam builder'}</div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -394,6 +486,12 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
       ) : (
         <div className="eb-grid">
           <div className="eb-side">
+            {downloaded && (
+              <div className="eb-card" role="status" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: t.borderAccent }}>
+                <div style={{ fontSize: 13, color: t.textSub, lineHeight: 1.55 }}><b style={{ color: t.text }}>Saved to your Exams.</b> When you've sat it, mark it there against the solutions.</div>
+                {onMark && <button type="button" onClick={() => onMark(downloaded.id)} style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 10, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Mark it now</button>}
+              </div>
+            )}
             {notice && <div className="eb-card" role="status" style={{ fontSize: 12.5, color: t.textSub, lineHeight: 1.55 }}>{notice}</div>}
 
             {(mine.length > 0 || fromTutor.length > 0 || current) && (
