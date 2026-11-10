@@ -25,6 +25,7 @@
     "@hyzyla/pdfium": "^2.1.5",
     "@supabase/supabase-js": "^2.105.1",
     "katex": "^0.16.45",
+    "pdfjs-dist": "4.10.38",
     "pg": "^8.13.1",
     "sharp": "^0.33.5"
   }
