@@ -537,7 +537,6 @@ function PhoneScreen({ i }) {
       <div className="lp-ph-top"><span>Next session</span><span>Methods</span></div>
       <div className="lp-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <b style={{ fontSize: 13 }}>Your session</b>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-gold-text)' }}>Start with 3 due reviews</span>
         <div className="lp-goldbar">Start</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Further differentiation</b><span className="lp-pill">Due back</span></div>
