@@ -27,10 +27,10 @@ function Field({ label, hint, children }) {
 const inputStyle = { ...ui.input, width: '100%' }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7, tutor_plans: [
-  { name: 'Starter', price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
-  { name: 'Pro', price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
-  { name: 'Agency', price: 99, students: 999, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, free_daily_marked_answers: 5, student_trial_days: 7, tutor_plans: [
+  { name: 'Starter', price: 59, students: 3, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+  { name: 'Pro', price: 89, students: 10, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: 'Agency', price: 129, students: 20, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
 ], annual_discount: 0.15 }
 
 export default function AdminSettingsTab() {
@@ -136,6 +136,16 @@ export default function AdminSettingsTab() {
               value={pr.free_daily_questions ?? ''}
               onChange={e => setPr(p => ({ ...p, free_daily_questions: e.target.value === '' ? '' : Number(e.target.value) }))}
               placeholder="20"
+            />
+          </Field>
+          <Field label="Free tier: written answers marked a day" hint="Students with no paid subject. 0 makes marking paid only.">
+            <input
+              style={inputStyle}
+              type="number"
+              min={0}
+              value={pr.free_daily_marked_answers ?? ''}
+              onChange={e => setPr(p => ({ ...p, free_daily_marked_answers: e.target.value === '' ? '' : Number(e.target.value) }))}
+              placeholder="5"
             />
           </Field>
           <Field label="Free trial days on a first paid subject" hint="Card required. 0 turns trials off.">

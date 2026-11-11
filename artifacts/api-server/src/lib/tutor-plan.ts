@@ -49,9 +49,9 @@ export type TutorPlanOption = {
 export type TutorFeature = "recordings" | "parentReports";
 
 const DEFAULT_PLANS = [
-  { name: "Starter", price: 29, students: 10, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
-  { name: "Pro", price: 59, students: 25, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
-  { name: "Agency", price: 99, students: null, subjects: null, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: "Starter", price: 59, students: 3, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+  { name: "Pro", price: 89, students: 10, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+  { name: "Agency", price: 129, students: 20, subjects: null, subject_swaps: true, recordings: true, parent_reports: true },
 ];
 const DEFAULT_ANNUAL_DISCOUNT = 0.15;
 /** A limit this high (the settings use 999) means unlimited. */

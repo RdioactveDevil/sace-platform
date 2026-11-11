@@ -22,11 +22,11 @@ import { SITE_CSS, SITE_FONTS, themeVars, Brand, SiteNav, SiteFooter, siteFooter
 
 const DEFAULT_PRICING = {
   student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS,
-  free_daily_questions: 20, free_daily_ai_messages: 10, student_trial_days: 7,
+  free_daily_questions: 20, free_daily_ai_messages: 10, free_daily_marked_answers: 5, student_trial_days: 7,
   tutor_plans: [
-    { name: 'Starter', price: 59, students: 3, subjects: 1, recordings: false, parent_reports: false },
-    { name: 'Pro', price: 89, students: 10, subjects: 3, recordings: true, parent_reports: true },
-    { name: 'Agency', price: 129, students: 20, subjects: 999, recordings: true, parent_reports: true },
+    { name: 'Starter', price: 59, students: 3, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
+    { name: 'Pro', price: 89, students: 10, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
+    { name: 'Agency', price: 129, students: 20, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
   ],
   annual_discount: 0.15,
 }
@@ -163,6 +163,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const saving = monthlySaving(weekTiers[0], monthTiers[0])
   const freeDaily = billing?.freeDailyQuestions ?? pricing.free_daily_questions ?? 20
   const freeAi = pricing.free_daily_ai_messages ?? 10
+  const freeMarked = typeof pricing.free_daily_marked_answers === 'number' && pricing.free_daily_marked_answers >= 0 ? Math.floor(pricing.free_daily_marked_answers) : 5
   // Days free on a first plan: signed in, the server says whether they still get it.
   const settingTrial = Math.max(0, Math.floor(Number(pricing.student_trial_days ?? 7)) || 0)
   const trialDays = billing ? billing.trialDays || 0 : settingTrial
@@ -200,7 +201,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
     price: p.price,
     items: [
       limitText(p.students, 'student', 'students', 'Any number of students'),
-      limitText(p.subjects, 'subject', 'subjects', 'Every subject'),
+      `${limitText(p.subjects, 'subject', 'subjects', 'Every subject')}${typeof p.subjects === 'number' && p.subjects > 0 && p.subjects < 999 && p.subject_swaps === false ? " (can't be swapped)" : ''}`,
       p.recordings !== false && 'Lesson recordings',
       p.parent_reports !== false && 'Weekly parent reports',
     ].filter(Boolean),
@@ -289,7 +290,9 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
                 <tr><th>Titan messages a day</th><td>{freeAi}</td><td className="st">No limit</td></tr>
                 <tr><th>Worked solutions</th><td>Every question</td><td className="st">Every question</td></tr>
                 <tr><th>Wrong answers come back</th><td>Yes</td><td className="st">Yes</td></tr>
+                <tr><th>Written answers marked a day</th><td className={freeMarked ? undefined : 'no'}>{freeMarked || 'No'}</td><td className="st">No limit</td></tr>
                 <tr><th>Exam mode</th><td className="no">No</td><td className="st">Yes</td></tr>
+                <tr><th>Printable practice exams</th><td className="no">No</td><td className="st">Yes</td></tr>
                 <tr><th>Price</th><td>$0</td><td className="st">${money(weekTiers[0])} a week, or ${money(monthTiers[0])} a month</td></tr>
               </tbody>
             </table>

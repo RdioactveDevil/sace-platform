@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireUser, requireAdmin } from "../lib/auth";
 import { checkAiQuota } from "../lib/ai-quota";
+import { checkMarkedAllowance } from "../lib/marked-quota";
 import { blockAwaitingParent, loadStudentContext } from "../lib/parent-consent";
 import { CLAUDE_MARK_MODEL } from "../lib/anthropic-model";
 import { markAnswer, normalizeResponse, responseHash, MAX_RESPONSE_CHARS, type MarkingResult } from "../lib/marking";
@@ -29,7 +30,8 @@ type MarkedRow = {
 //   { awarded, total, marks: [{ point, awarded, of, evidence, found, comment }], summary, cached }
 // Students can use it only in subjects with the 'written_answers' feature on.
 // The same answer to the same question is marked once and then served from
-// answer_markings, so a retry or a reload costs nothing.
+// answer_markings, so a retry or a reload costs nothing. A student with no
+// paid subject gets a few new markings a day (lib/marked-quota.ts).
 router.post("/marked/mark", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
@@ -95,6 +97,17 @@ router.post("/marked/mark", async (req, res) => {
     // A student under 15 waits for their parent to confirm before any AI.
     const student = await loadStudentContext(caller);
     if (blockAwaitingParent(student, res)) return;
+    const allowance = await checkMarkedAllowance(caller);
+    if (allowance.blocked) {
+      res.status(429).json({
+        code: "marked_daily_limit",
+        limit: allowance.limit,
+        error: allowance.limit > 0
+          ? `You've had today's ${allowance.limit} free marked answer${allowance.limit === 1 ? "" : "s"}. More tomorrow, or subscribe to a subject to have every answer marked.`
+          : "Marked written answers come with a paid subject. Subscribe to one to have your answers marked.",
+      });
+      return;
+    }
     const check = await checkAiQuota(caller, false);
     if ("blocked" in check) {
       res.status(429).json({ code: "ai_daily_limit", error: "You've reached today's AI limit, so this answer can't be marked. It resets tomorrow." });
