@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardList, GraduationCap, Target, Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getQuestionCounts, dueQuestionIds, DUE_PER_SESSION } from '../lib/engine'
+import { getQuestionCounts } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsForStudent, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
@@ -187,8 +187,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const formatQuestions = useMemo(() => filterByFormat(questions, startFormat), [questions, startFormat])
 
   const filteredCounts = getQuestionCounts(formatQuestions, currentStruggleMap, effectiveSubtopics)
-  // Questions due back for review open the session (QuizScreen's loadNext); exams pick their own set.
-  const dueCount = dueQuestionIds(formatQuestions, currentStruggleMap, { subtopics: effectiveSubtopics }).length
   const tickedTopicCount = MACRO_GROUPS.reduce((acc, macro) => acc + macro.topics.filter(tn =>
     (normTopicToSubs[tn] || []).some(s => selectedSubtopics.includes(s))).length, 0)
   const answeredCount = Object.values(currentStruggleMap).filter(s => s.attempts > 0).length
@@ -288,11 +286,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
           {tickedTopicCount === 0 || isAllTopicsSelected ? 'All topics' : `${tickedTopicCount} topic${tickedTopicCount !== 1 ? 's' : ''} ticked`}
         </div>
-        {dueCount > 0 && !examOn && (
-          <div style={{ fontSize: 12, color: t.goldText, fontWeight: 700, marginTop: 6 }}>
-            {Math.min(dueCount, DUE_PER_SESSION)} question{Math.min(dueCount, DUE_PER_SESSION) !== 1 ? 's' : ''} due back for review come{Math.min(dueCount, DUE_PER_SESSION) === 1 ? 's' : ''} first
-          </div>
-        )}
       </div>
 
       <div data-tutorial-target="practice-session">
