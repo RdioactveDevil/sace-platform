@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     title: '4. Free and Paid Subjects',
-    body: `Every student can choose one subject to use free of charge, with a daily limit on questions and on Titan AI use, as shown in the app. You can change your free subject at any time. Other subjects require a paid subscription. Prices are shown in the app and on our pricing page, in Australian dollars.`,
+    body: `Every student can choose one subject to use free of charge, with a daily limit on questions, on written answers marked and on Titan AI use, as shown in the app. You can change your free subject at any time. Other subjects require a paid subscription. Prices are shown in the app and on our pricing page, in Australian dollars.`,
   },
   {
     title: '5. Billing, Renewal and Cancellation',
