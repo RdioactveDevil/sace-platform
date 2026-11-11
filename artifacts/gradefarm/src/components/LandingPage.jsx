@@ -493,7 +493,7 @@ const CHAPTERS = [
   ['Practice', 'Questions on the topics you\'re doing.', 'Tick what you\'re on this term, then choose new questions, the ones you got wrong, or a mix. Every question is mapped to a topic in your course.'],
   ['Worked solutions', 'Every question shows the working.', 'Not just the answer: the steps, and the slip most people make, so you know exactly where it went wrong.'],
   ['Titan', 'Stuck at 11 pm? Ask Titan.', 'The AI tutor explains it again, as many times as you need, plainly or with sport, gaming or music. Add a photo of a question or your class notes, or take a guided lesson on a whole topic.'],
-  ['Comes back', 'Get it wrong and it comes back.', 'Every session starts with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. When a topic runs out, new questions are written for it.'],
+  ['Comes back', 'Get it wrong and it comes back.', 'Sessions start with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. Test tomorrow on one topic? Skip them for now. When a topic runs out, new questions are written for it.'],
   ['Progress', 'See yourself improving.', 'Accuracy by week, your next SAC, test or exam counting down, and a plan for this week: the reviews that are due, lessons in progress and your weakest topics.'],
   ['Exam mode', 'Practise under exam conditions.', 'Pick how many questions and a time limit. Answers stay hidden until you finish, then every question shows the working, and the ones you missed come back like any other.'],
 ]
@@ -537,7 +537,7 @@ function PhoneScreen({ i }) {
       <div className="lp-ph-top"><span>Next session</span><span>Methods</span></div>
       <div className="lp-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <b style={{ fontSize: 13 }}>Your session</b>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-gold-text)' }}>3 questions due back for review come first</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-gold-text)' }}>Start with 3 due reviews</span>
         <div className="lp-goldbar">Start</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><b>Further differentiation</b><span className="lp-pill">Due back</span></div>

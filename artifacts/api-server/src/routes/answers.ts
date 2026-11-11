@@ -9,6 +9,7 @@ import { normalizeResponse, responseHash } from "../lib/marking";
 import { unseal } from "../lib/sealed";
 import { VARIANT_SEAL, type SealedVariant } from "./remediation";
 import { logger } from "../lib/logger";
+import { isDueReview } from "../lib/due-review";
 import { createHash } from "node:crypto";
 import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { checkAiQuota } from "../lib/ai-quota";
@@ -30,7 +31,8 @@ import { checkAiQuota } from "../lib/ai-quota";
  * Holds: the question a student is shown in a subject (or an assignment) stays
  * theirs until they answer it. Reloading the page or ending the session and
  * starting again brings back the same question, so a hard one can't be
- * swapped for another.
+ * swapped for another. The one exception is a question due back for review
+ * in practice, which the student can choose to skip (it stays due).
  */
 
 const router = Router();
@@ -150,6 +152,13 @@ async function awardXP(admin: SupabaseClient, userId: string, xp: number, correc
   return ((Array.isArray(data) ? data[0] : data) as ProfileFields) || null;
 }
 
+/** Whether a question is due back for review for this student (see isDueReview). */
+async function dueForReview(admin: SupabaseClient, userId: string, questionId: string): Promise<boolean> {
+  const { data } = await admin.from("struggle_profiles").select("attempts, next_review")
+    .eq("user_id", userId).eq("question_id", questionId).maybeSingle<{ attempts: number; next_review: string | null }>();
+  return isDueReview(data);
+}
+
 /** The hold for this context, or null. */
 async function getHold(admin: SupabaseClient, userId: string, context: string) {
   const { data } = await admin.from("question_holds").select("question_id, shown_at")
@@ -239,15 +248,19 @@ async function mark(caller: Caller, q: QuestionRow, response: unknown): Promise<
 }
 
 // ── Present ──────────────────────────────────────────────────────────────────
-// Body: { questionId, context }. The app calls this when it puts a question on
-// screen. → { questionId, held }: if the student already has a question on
-// screen in this context that they haven't answered, that one comes back
-// (held: true) and the app shows it instead.
+// Body: { questionId, context, skipDue? }. The app calls this when it puts a
+// question on screen. → { questionId, held }: if the student already has a
+// question on screen in this context that they haven't answered, that one
+// comes back (held: true) and the app shows it instead. skipDue: the student
+// chose to skip the review on screen; it's let go if it really is a question
+// due back for review in practice (answered before, so nothing is dodged: it
+// stays due and comes back next time).
 router.post("/answers/present", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
   const questionId = str(req.body?.questionId);
   const context = str(req.body?.context, 200);
+  const skipDue = req.body?.skipDue === true;
   if (!questionId || !context || !CONTEXT_RE.test(context)) {
     res.status(400).json({ error: "questionId and context required" });
     return;
@@ -264,7 +277,8 @@ router.post("/answers/present", async (req, res) => {
       ]);
       const assignmentId = context.startsWith("assignment:") ? context.slice(11) : null;
       const assignmentOpen = !assignmentId || !!(await openAssignment(admin, userId, uuid(assignmentId)));
-      if (readable.has(hold.question_id) && !answered.data?.length && assignmentOpen) {
+      const skipped = skipDue && context.startsWith("practice:") && await dueForReview(admin, userId, hold.question_id);
+      if (readable.has(hold.question_id) && !answered.data?.length && assignmentOpen && !skipped) {
         res.json({ questionId: hold.question_id, held: true });
         return;
       }
