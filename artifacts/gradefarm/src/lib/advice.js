@@ -35,16 +35,40 @@ export function findQuoteRects(container, quote) {
   return mergeLineRects([...range.getClientRects()])
 }
 
+/**
+ * One rectangle per line of what's actually drawn in `container`: its words
+ * and its maths. (A Range over the whole container also returns KaTeX's
+ * invisible sizing boxes, which sit above the maths and look like extra lines.)
+ */
+export function textLineRects(container) {
+  if (!container) return []
+  const rects = []
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement?.closest('[data-tex], .katex') || !n.nodeValue.trim() ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  })
+  const range = document.createRange()
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    range.selectNodeContents(n)
+    rects.push(...range.getClientRects())
+  }
+  container.querySelectorAll('[data-tex]').forEach(el => rects.push(el.getBoundingClientRect()))
+  return mergeLineRects(rects, { overlap: true })
+}
+
 /** Join the per-glyph-run rectangles a Range gives into one rectangle per line. */
-export function mergeLineRects(rects) {
+export function mergeLineRects(rects, { overlap = false } = {}) {
   const lines = []
+  // overlap: join rectangles that share most of their height (words and taller maths on one line).
+  const sameLine = overlap
+    ? (l, r) => Math.min(l.bottom, r.top + r.height) - Math.max(l.top, r.top) > Math.min(l.bottom - l.top, r.height) / 2
+    : (l, r) => Math.abs(l.top - r.top) < r.height / 2
   for (const r of rects) {
     if (!r.width || !r.height) continue
-    const line = lines.find(l => Math.abs(l.top - r.top) < r.height / 2)
+    const line = lines.find(l => sameLine(l, r))
     if (line) {
-      line.left = Math.min(line.left, r.left); line.right = Math.max(line.right, r.right)
-      line.top = Math.min(line.top, r.top); line.bottom = Math.max(line.bottom, r.bottom)
-    } else lines.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom })
+      line.left = Math.min(line.left, r.left); line.right = Math.max(line.right, r.left + r.width)
+      line.top = Math.min(line.top, r.top); line.bottom = Math.max(line.bottom, r.top + r.height)
+    } else lines.push({ left: r.left, right: r.left + r.width, top: r.top, bottom: r.top + r.height })
   }
   return lines.map(l => ({ left: l.left, top: l.top, width: l.right - l.left, height: l.bottom - l.top }))
 }
@@ -54,33 +78,45 @@ export function noteSize(text, size = 20) {
   return { w: Math.ceil(String(text).length * size * 0.46) + 10, h: Math.ceil(size * 1.15) }
 }
 
-const overlaps = (a, b, pad = 0) =>
-  a.x < b.x + b.w - pad && a.x + a.w > b.x + pad && a.y < b.y + b.h - pad && a.y + a.h > b.y + pad
+const overlaps = (a, b, gap = 0) =>
+  a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y
+
+// Clear space kept between a note and any words (or another note), in pixels.
+// No overlap is allowed at all: a note that only just fits at one zoom level
+// would sit on the words at the next.
+export const NOTE_GAP = 3
+// The longest gap between a note and its target: further away, the arrow runs
+// along the line and the note reads as belonging to something else.
+export const MAX_REACH = 120
 
 /**
  * Place each note near its target: just above it where there's room, else
  * just below, at the free spot closest to the target horizontally, so the
  * arrows stay short. targets: [{ x, y, w, h, nw, nh, rects? }] in the
  * container's coordinates (nw/nh: the note's size; rects: every line the
- * quote covers; lines: every line of the question's text, which notes keep
- * off too); returns [{ x, y, above, fits }] (fits: false when there was no
- * clear spot for it).
+ * quote covers, with its pen mark; lines: every line of the question's text,
+ * which notes keep off too); returns [{ x, y, above, fits }] (fits: false
+ * when there was no clear spot for it).
  */
 export function layoutNotes(targets, width, lines = []) {
   const placed = []
   const avoid = targets.map(t => t.rects?.length ? t.rects : [{ x: t.x, y: t.y, w: t.w, h: t.h }])
   const clampX = (x, w) => Math.max(0, Math.min(x, Math.max(0, width - w)))
   return targets.map((t, i) => {
-    const others = avoid.filter((_, j) => j !== i).flat()
-    // Notes may brush the text of other lines a little (handwriting sits low in its box), never other notes.
-    const free = (box) => box.y >= 0 && !placed.some(p => overlaps(p, box)) && !others.some(o => overlaps(o, box, 4)) && !lines.some(l => overlaps(l, box, 4))
+    const words = [...avoid.flat(), ...lines]
+    const free = (box) => box.y >= 0
+      && !placed.some(p => overlaps(p, box, NOTE_GAP + 3))
+      && !words.some(o => overlaps(o, box, NOTE_GAP))
+    const reach = (x) => Math.max(0, x - (t.x + t.w), t.x - (x + t.nw))
     const xs = [t.x, t.x + t.w / 2 - t.nw / 2, t.x + t.w - t.nw]
     for (const p of placed) xs.push(p.x + p.w + 12, p.x - t.nw - 12)
     const centre = t.x + t.w / 2
+    const bottom = Math.max(...avoid[i].map(r => r.y + r.h))
     const tries = []
-    for (const [y, above] of [[t.y - t.nh - 2, true], [t.y + t.h + 8, false]]) {
+    for (const [y, above] of [[t.y - t.nh - NOTE_GAP - 1, true], [bottom + NOTE_GAP + 1, false]]) {
       for (const x0 of xs) {
         const x = clampX(x0, t.nw)
+        if (reach(x) > MAX_REACH) continue
         tries.push({ x, y, above, cost: Math.abs(x + t.nw / 2 - centre) + (above ? 0 : 40) })
       }
     }
@@ -88,7 +124,7 @@ export function layoutNotes(targets, width, lines = []) {
     const pick = tries.find(c => free({ x: c.x, y: c.y, w: t.nw, h: t.nh }))
     // No clear spot (a crowded line, a narrow screen): the caller lists it
     // under the question instead of writing it over the words.
-    if (!pick) return { x: tries[0].x, y: tries[0].y, above: tries[0].above, fits: false }
+    if (!pick) return { x: t.x, y: t.y, above: true, fits: false }
     placed.push({ x: pick.x, y: pick.y, w: t.nw, h: t.nh })
     return { x: pick.x, y: pick.y, above: pick.above, fits: true }
   })
