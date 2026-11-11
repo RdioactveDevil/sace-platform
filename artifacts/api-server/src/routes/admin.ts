@@ -185,6 +185,7 @@ type StudentProfileRow = {
   streak: number;
   best_streak: number;
   last_active: string | null;
+  streak_freezes?: number | null;
   onboarding_completed: boolean;
   is_admin: boolean;
   is_tutor: boolean;
@@ -262,7 +263,7 @@ router.get("/admin/students", async (req, res) => {
       const { data: profChunk, error: profErr } = await admin
         .from("profiles")
         .select(
-          "id, display_name, school, xp, streak, best_streak, last_active, onboarding_completed, is_admin, is_tutor, tutor_application_status, created_at",
+          "id, display_name, school, xp, streak, best_streak, last_active, streak_freezes, onboarding_completed, is_admin, is_tutor, tutor_application_status, created_at",
         )
         .in("id", chunk);
       if (profErr) {
@@ -351,7 +352,7 @@ router.get("/admin/students", async (req, res) => {
           display_name: p?.display_name ?? null,
           school: p?.school ?? null,
           xp: p?.xp ?? 0,
-          streak: currentStreak(p?.streak, p?.last_active),
+          streak: currentStreak(p?.streak, p?.last_active, new Date(), p?.streak_freezes),
           best_streak: p?.best_streak ?? 0,
           last_active: p?.last_active ?? null,
           onboarding_completed: !!(p?.onboarding_completed),
@@ -887,7 +888,7 @@ router.get("/admin/tutors/:id", async (req, res) => {
     type RosterJoinRow = {
       student_id: string;
       invited_at: string | null;
-      profiles: { display_name: string | null; xp: number | null; streak: number | null; last_active: string | null } | null;
+      profiles: { display_name: string | null; xp: number | null; streak: number | null; last_active: string | null; streak_freezes?: number | null } | null;
     };
     type AsgnJoinRow = AssignmentRow & {
       profiles: { display_name: string | null } | null;
@@ -896,7 +897,7 @@ router.get("/admin/tutors/:id", async (req, res) => {
     const [rosterRes, asgnRes, authUsers] = await Promise.all([
       admin
         .from("tutor_students")
-        .select("student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak, last_active)")
+        .select("student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak, last_active, streak_freezes)")
         .eq("tutor_id", id),
       admin
         .from("assignments")
@@ -933,7 +934,7 @@ router.get("/admin/tutors/:id", async (req, res) => {
         display_name: r.profiles?.display_name || null,
         email: emailById.get(r.student_id) || null,
         xp: r.profiles?.xp ?? 0,
-        streak: currentStreak(r.profiles?.streak, r.profiles?.last_active),
+        streak: currentStreak(r.profiles?.streak, r.profiles?.last_active, new Date(), r.profiles?.streak_freezes),
         last_active: r.profiles?.last_active || null,
         total_answers: acc.total,
         accuracy: acc.total > 0 ? Math.round((acc.correct / acc.total) * 100) : null,

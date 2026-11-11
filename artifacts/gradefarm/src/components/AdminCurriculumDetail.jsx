@@ -1331,6 +1331,18 @@ function FeatureSwitches({ features, saving, onChange }) {
           <span style={{ color: 'var(--t-textFaint)' }}>questions. Past the limit, top-ups use the everyday generator.</span>
         </div>
       )}
+
+      <div style={{ ...row, cursor: 'default' }}>
+        <input type="date" aria-label="Exam date" style={{ ...numInput, width: 'auto' }}
+          defaultValue={features.exam_date || ''}
+          onBlur={e => { const v = e.target.value; if (v !== (features.exam_date || '')) onChange({ exam_date: /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined }) }} />
+        <span>
+          <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Exam date</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>
+            The final exam for this subject. Home shows students a countdown to it and their predicted grade. Blank hides the card.
+          </span>
+        </span>
+      </div>
     </div>
   )
 }

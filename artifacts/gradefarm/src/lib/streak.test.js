@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { currentStreak } from './streak.js'
+import { currentStreak, freezesNeeded } from './streak.js'
 
 // 2026-10-24 10:00 in Adelaide (ACDT, UTC+10:30).
 const now = new Date('2026-10-23T23:30:00Z')
@@ -21,4 +21,18 @@ test('no streak, no activity or a bad date shows 0', () => {
   assert.equal(currentStreak(0, '2026-10-23T22:00:00Z', now), 0)
   assert.equal(currentStreak(3, null, now), 0)
   assert.equal(currentStreak(3, 'not a date', now), 0)
+})
+
+test('streak freezes keep a streak alive over missed days', () => {
+  // Last active 3 days ago (the 21st in Adelaide): 2 days missed so far.
+  assert.equal(currentStreak(6, '2026-10-21T01:00:00Z', now, 0), 0)
+  assert.equal(currentStreak(6, '2026-10-21T01:00:00Z', now, 1), 0)
+  assert.equal(currentStreak(6, '2026-10-21T01:00:00Z', now, 2), 6)
+})
+
+test('freezesNeeded counts the days missed since the last active day', () => {
+  assert.equal(freezesNeeded('2026-10-23T22:00:00Z', now), 0) // today
+  assert.equal(freezesNeeded('2026-10-23T05:00:00Z', now), 0) // yesterday
+  assert.equal(freezesNeeded('2026-10-21T01:00:00Z', now), 2)
+  assert.equal(freezesNeeded(null, now), 0)
 })

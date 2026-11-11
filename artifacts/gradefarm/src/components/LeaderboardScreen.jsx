@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { fetchClassLeaderboards } from '../lib/db'
 import { getLevel, rankAccuracy, RANKS } from '../lib/engine'
 import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
 import RankIcon from './RankIcon'
+import LeagueView from './LeagueView'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD = '#f1be43'
@@ -20,6 +22,10 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
     try { return localStorage.getItem(CLASS_KEY) || '' } catch { return '' }
   })
   const t = THEMES[theme]
+  // My class (the class leaderboards) or this week's league (?view=league).
+  const [params, setParams] = useSearchParams()
+  const view = params.get('view') === 'league' ? 'league' : 'class'
+  const pickView = (v) => setParams(v === 'league' ? { view: 'league' } : {}, { replace: true })
 
   useEffect(() => {
     fetchClassLeaderboards()
@@ -55,6 +61,16 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
         @media (max-width: 860px) { .lb-inner { padding: 18px 14px 28px; } .lb-hide { display: none; } }
       `}</style>
       <div className="lb-inner">
+        <div role="group" aria-label="Leaderboard" style={{ display: 'inline-flex', alignSelf: 'flex-start', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
+          {[['class', 'My class'], ['league', 'Weekly league']].map(([id, label]) => (
+            <button key={id} type="button" aria-pressed={view === id} onClick={() => pickView(id)}
+              style={{ padding: '8px 16px', border: 'none', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer', ...(view === id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'league' ? <LeagueView theme={theme} profile={profile} /> : <>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <span style={{ fontSize: 13, color: t.textMuted }}>{active ? `${active.name} · ranked by XP` : 'Ranked by XP within your class'}</span>
           {classes.length > 1 && (
@@ -139,6 +155,7 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
             )}
           </>
         )}
+        </>}
       </div>
     </div>
   )

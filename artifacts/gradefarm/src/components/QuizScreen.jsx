@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useBlocker } from 'react-router-dom'
-import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag } from 'lucide-react'
+import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag, Star, Snowflake } from 'lucide-react'
 import {
   selectNextQuestion,
   dueQuestionIds,
@@ -59,6 +59,12 @@ import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
 import Celebration from './Celebration'
+import SessionBar from './SessionBar'
+import BreakTime from './BreakTime'
+import RankUpModal from './RankUpModal'
+import SessionWins from './SessionWins'
+import { answersToday, breakDue, dailyGoal, nextBreakAt, rankUp, BREAK_EVERY } from '../lib/engagement'
+import { addDays, localDate } from '../lib/streak'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -92,6 +98,10 @@ const FONT_D = "'Sifonn Pro', sans-serif"
  */
 // Session XP can go negative (wrong answers cost XP): show "-12", not "+-12".
 const signedXP = (n) => (n < 0 ? String(n) : `+${n}`)
+// Today in Adelaide (the days award_xp_for counts), and the `n` days before it
+// (the days a streak freeze just covered).
+const todayKey = () => localDate(new Date())
+const recentDays = (n) => Array.from({ length: n }, (_, i) => addDays(todayKey(), -(i + 1)))
 
 function getTargetDifficulty(sessionResults, questions) {
   const mainResults = (sessionResults || []).filter(r => !r.remediation)
@@ -213,6 +223,13 @@ export default function QuizScreen({
       // The day streak (the server works it out), not this quiz's run of right answers.
       ...(streak != null && { streak, best_streak, last_active: new Date().toISOString() }),
       ...(recent_answers != null && { recent_correct, recent_answers }),
+      // Engagement (migration 20261111000001): freezes, bests, today's answers, league.
+      ...(row.streak_freezes != null && { streak_freezes: row.streak_freezes }),
+      ...(row.best_answer_run != null && { best_answer_run: row.best_answer_run }),
+      ...(row.day_answers != null && { day_answers: row.day_answers, day_answers_date: todayKey() }),
+      ...(row.best_day_answers != null && { best_day_answers: row.best_day_answers }),
+      ...(row.league_tier != null && { league_tier: row.league_tier }),
+      ...(row.freeze_used > 0 && { freeze_days: [...(p.freeze_days || []), ...recentDays(row.freeze_used)] }),
     }))
   }
   // Checking an answer with the server: no second check while one is on its way.
@@ -229,6 +246,20 @@ export default function QuizScreen({
   const [floatStreak, setFloatStreak] = useState(null)
   // Bumped when a session ends well, to fire the confetti on the summary.
   const [celebrate, setCelebrate] = useState(0)
+  // The question on screen is a bonus question (2× XP), as the server said.
+  const [bonusId, setBonusId] = useState(null)
+  // Breaks (a mini game every BREAK_EVERY answers) offered this session, and whether one is open.
+  const [breaksOffered, setBreaksOffered] = useState(0)
+  const [breakOpen, setBreakOpen] = useState(false)
+  // A rank just reached (its index), for the rank-up moment.
+  const [rankUpLevel, setRankUpLevel] = useState(null)
+  // Streak freezes earned this session (10 right in a row each).
+  const [freezesEarned, setFreezesEarned] = useState(0)
+  const [freezeNote, setFreezeNote] = useState(false)
+  // The profile and review history as the session started, and when it started:
+  // the summary compares against them (rank bar, what improved, personal bests).
+  const sessionStartRef = useRef(null)
+  if (!sessionStartRef.current) sessionStartRef.current = { at: Date.now(), profile, struggleMap }
   // Written answers: the marks (for the side panel) and Titan's Advice for the question on screen.
   const [marking, setMarking] = useState(null)
   const [adviceOn, setAdviceOn] = useState(false)
@@ -510,7 +541,9 @@ export default function QuizScreen({
       presentQuestion(q.id, holdContext, { skipDue: skippingDue }).then(r => {
         if (r?.held && r.questionId && r.questionId !== q.id && currentQRef.current?.id === q.id && !checkingRef.current) {
           showHeldRef.current?.(r.questionId)
+          return
         }
+        if (r?.bonus && currentQRef.current?.id === (r.questionId || q.id)) setBonusId(r.questionId || q.id)
       })
     }
   }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns, examRun, holdContext])
@@ -712,6 +745,9 @@ export default function QuizScreen({
   // Start a sessions row for the answers that follow. Cleared first, so a
   // failed insert can't leave them filed under the previous session.
   const beginSession = async () => {
+    sessionStartRef.current = { at: Date.now(), profile, struggleMap }
+    setBreaksOffered(0)
+    setFreezesEarned(0)
     setSessionId?.(null)
     try {
       const row = await createSession(profile.id, subjectTile?.name || questions[0]?.subject || 'Unknown')
@@ -1284,6 +1320,16 @@ export default function QuizScreen({
     setStreak(newStreak)
     setSessionXP(sx => sx + xpEarned + bonus)
     setSessionResults(rs => [...rs, { id: q.id, correct: isCorrect, topic: q.topic, subtopic: q.subtopic, remediation: isVariant, response, timeMs: timeTakenMs }])
+    if (r.bonusQuestion) setBonusId(q.id)
+    if (r.profile) {
+      const reached = rankUp(profile, { ...profile, ...r.profile })
+      if (reached != null) setRankUpLevel(reached)
+      if (r.profile.freeze_earned) {
+        setFreezesEarned(n => n + 1)
+        setFreezeNote(true)
+        setTimeout(() => setFreezeNote(false), 2600)
+      }
+    }
     applyProfile(r.profile)
     if (!isVariant) applyAssignmentResult(r.assignment)
 
@@ -1360,6 +1406,12 @@ export default function QuizScreen({
 
   const nextQ = async () => {
     if (!currentQ) return
+    // Every BREAK_EVERY answers, a break with a mini game (not in exams). The
+    // next question loads behind it.
+    if (!examRun && breakDue(sessionResults.length, breaksOffered)) {
+      setBreaksOffered(Math.floor(sessionResults.length / BREAK_EVERY))
+      setBreakOpen(true)
+    }
 
     // The tutor's goal is met: end on the summary instead of serving another
     // question (or starting remediation on the last one).
@@ -1565,7 +1617,7 @@ export default function QuizScreen({
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const tag = (e.target?.tagName || '').toLowerCase()
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
-      if (showExit || showFinishExam || reportMenuOpen) return
+      if (showExit || showFinishExam || reportMenuOpen || breakOpen || rankUpLevel != null) return
       const isMcq = getQuestionType(currentQ) === 'mcq'
       const n = Number(e.key)
       if (isMcq && !showAns && n >= 1 && n <= (currentQ.options?.length || 0)) {
@@ -1617,6 +1669,8 @@ export default function QuizScreen({
     if (examRun) setShowFinishExam(true)
     else setShowExit(true)
   }, [blocker.state]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The break ends (skipped, finished or timed out): back to the questions.
+  const closeBreak = useCallback(() => setBreakOpen(false), [])
   // "Keep going": close the question and stay put.
   const keepGoing = () => {
     setShowExit(false)
@@ -1742,6 +1796,7 @@ export default function QuizScreen({
     return (
       <div style={{ height: '100%', minHeight: '100%', background: t.bg, fontFamily: FONT_B, overflowY: 'auto', color: t.text }}>
         {celebrate > 0 && <Celebration burst={celebrate} />}
+        {rankUpLevel != null && <RankUpModal theme={theme} level={rankUpLevel} profile={profile} onClose={() => setRankUpLevel(null)} />}
         <style>{`
           .ss-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
           .ss-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 180px) 52px 14px; gap: 12px; align-items: center; width: 100%; padding: 11px 16px; border: none; background: transparent; text-align: left; cursor: pointer; font-family: inherit; color: inherit; }
@@ -1780,6 +1835,13 @@ export default function QuizScreen({
             assignmentStand.progress < assignmentStand.goal
               ? `Your progress is saved. Answer ${assignmentStand.goal - assignmentStand.progress} more to ${assignmentStand.oneAttempt ? 'finish' : 'complete'} it${assignmentStand.minAccuracy ? `, scoring at least ${assignmentStand.minAccuracy}%${assignmentStand.oneAttempt ? ' to pass' : ''}` : ''}.`
               : `Score at least ${assignmentStand.minAccuracy}% on your last ${assignmentStand.goal} answers to complete it. You're on ${assignmentStand.accuracy}%. Keep practising.`, Pin)}
+
+          {/* Wins: rank progress, what improved, daily goal, streak, personal bests */}
+          {!examRun && sessTotal > 0 && (
+            <SessionWins theme={theme} profile={profile} startProfile={sessionStartRef.current.profile}
+              startStruggle={sessionStartRef.current.struggleMap} results={sessionResults} questions={questions}
+              freezesEarned={freezesEarned} />
+          )}
 
           {/* AI summary */}
           {(sessionTipLoading || sessionTip) && (
@@ -2040,6 +2102,18 @@ export default function QuizScreen({
         </div>
       )}
 
+      {freezeNote && (
+        <div role="status" className="qz-anim" style={{ position: 'fixed', top: 72, left: '50%', transform: 'translateX(-50%)', zIndex: 9998, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: t.bgCard, border: `1px solid ${t.blue}`, color: t.text, fontSize: 14, fontWeight: 700, boxShadow: t.shadowModal, animation: 'popIn 0.2s ease' }}>
+          <Snowflake size={16} color={t.blue} aria-hidden="true" /> Streak freeze earned for 10 in a row
+        </div>
+      )}
+      {breakOpen && (
+        <BreakTime theme={theme} subject={subjectTile?.name || currentQ?.subject}
+          stats={{ answered: sessionResults.length, right: sessionCorrect, minutes: Math.max(1, Math.round((Date.now() - sessionStartRef.current.at) / 60000)), xp: sessionXP }}
+          onDone={closeBreak} />
+      )}
+      {rankUpLevel != null && <RankUpModal theme={theme} level={rankUpLevel} profile={profile} onClose={() => setRankUpLevel(null)} />}
+
       {showExit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div role="dialog" aria-modal="true" aria-labelledby="gf-end-title" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: '22px', maxWidth: 380, width: '90%', animation: 'popIn 0.2s ease' }}>
@@ -2129,6 +2203,20 @@ export default function QuizScreen({
           )}
           {!examRun && !isMobile && streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: t.text, fontWeight: 700 }} title="Right in a row"><Flame size={14} color={t.goldText} aria-hidden="true" />{streak}</span>}
           {!examRun && !isMobile && <span style={{ whiteSpace: 'nowrap' }}>{signedXP(sessionXP)} XP</span>}
+          {!examRun && (() => {
+            const goal = dailyGoal(profile)
+            const done = answersToday(profile)
+            const frac = Math.min(1, done / goal)
+            return (
+              <span title={`Daily goal: ${done} of ${goal} questions today`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                  <circle cx="10" cy="10" r="7.5" fill="none" stroke={t.border} strokeWidth="3" />
+                  <circle cx="10" cy="10" r="7.5" fill="none" stroke={t.success} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${frac * 47.1} 47.1`} transform="rotate(-90 10 10)" />
+                </svg>
+                <strong style={{ color: done >= goal ? t.success : t.text }}>{Math.min(done, 999)}/{goal}</strong>
+              </span>
+            )
+          })()}
           {timer}
           <QuizToolsDock theme={theme} tools={tools} inline />
           <button type="button" onClick={() => (examRun ? setShowFinishExam(true) : setShowExit(true))}
@@ -2137,6 +2225,14 @@ export default function QuizScreen({
           </button>
         </div>
       </div>
+
+      {!examRun && (
+        <div style={{ flexShrink: 0, padding: isMobile ? '10px 16px 0' : '14px 28px 0', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 640 }}>
+            <SessionBar theme={theme} answered={sessionResults.length} startedAt={sessionStartRef.current.at} breakAt={nextBreakAt(breaksOffered)} compact={isMobile} />
+          </div>
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
         <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '14px' : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2202,7 +2298,16 @@ export default function QuizScreen({
               />
             )}
 
-            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+            {bonusId === currentQ.id && !currentQ.is_variant && !examRun && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: t.accent, color: NAVY, fontSize: 12.5, fontWeight: 800 }}>
+                  <Star size={13} aria-hidden="true" fill={NAVY} /> Bonus question · 2× XP
+                </span>
+                {!showAns && <span style={{ fontSize: 12, color: t.textMuted }}>A right answer is worth double. A wrong one costs the usual amount.</span>}
+              </div>
+            )}
+
+            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ background: t.bgCard, border: `1px solid ${bonusId === currentQ.id && !currentQ.is_variant && !examRun ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
               {markedLayout && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
                   <span style={{ fontSize: 11.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>

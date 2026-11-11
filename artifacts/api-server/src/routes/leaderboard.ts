@@ -19,6 +19,7 @@ interface ProfileRow {
   level: number | null;
   streak: number | null;
   last_active: string | null;
+  streak_freezes?: number | null;
   recent_correct: number | null;
   recent_answers: number | null;
   hide_from_leaderboard: boolean | null;
@@ -83,7 +84,7 @@ router.get("/leaderboard/classes", async (req, res) => {
     if (studentIds.length > 0) {
       const { data: profs, error: pErr } = await admin
         .from("profiles")
-        .select("id, display_name, xp, level, streak, last_active, recent_correct, recent_answers, hide_from_leaderboard")
+        .select("id, display_name, xp, level, streak, last_active, streak_freezes, recent_correct, recent_answers, hide_from_leaderboard")
         .in("id", studentIds)
         .is("deactivated_at", null);
       if (pErr) return res.status(500).json({ error: pErr.message });
@@ -104,7 +105,7 @@ router.get("/leaderboard/classes", async (req, res) => {
           display_name: p.display_name || "Student",
           xp: p.xp ?? 0,
           level: p.level ?? null,
-          streak: currentStreak(p.streak, p.last_active),
+          streak: currentStreak(p.streak, p.last_active, new Date(), p.streak_freezes),
           // Ranks need recent accuracy as well as XP; the app works it out from these.
           recent_correct: p.recent_correct ?? 0,
           recent_answers: p.recent_answers ?? 0,

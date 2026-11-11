@@ -10,6 +10,7 @@ import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/top
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { filterByFormat, questionFormat, isAiMarked } from '../lib/questionTypes'
+import HomeEngagement from './HomeEngagement'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
@@ -24,7 +25,7 @@ function savedFormat() {
   } catch { return 'mixed' }
 }
 
-export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
+export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0, onProfileUpdated }) {
   const t = THEMES[theme]
   const [curriculumMacroGroups, setCurriculumMacroGroups] = useState(null)
   const baseTopicConfig = getTopicConfigForSubject(subject)
@@ -678,6 +679,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <TutorWorkStrip />
+
+          <HomeEngagement theme={theme} profile={profile} subject={subject} questions={questions} onProfileUpdated={onProfileUpdated} />
 
           <div className="hs-mobile-cards" style={{ marginBottom: 14 }}>
             {renderBuilder()}
