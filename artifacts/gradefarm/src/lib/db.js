@@ -615,12 +615,14 @@ export async function getStruggleMap(userId) {
  * Put a question on screen. `context` is 'practice:<subject>' or
  * 'assignment:<id>'. Resolves to { questionId, held }: when the student
  * already had an unanswered question on screen there, that one comes back
- * (held: true) and should be shown instead. Never throws: on failure the
- * question asked for is shown.
+ * (held: true) and should be shown instead, unless `skipDue` and it's a
+ * question due back for review, which the student chose to skip. Never
+ * throws: on failure the question asked for is shown.
  */
-export async function presentQuestion(questionId, context) {
+export async function presentQuestion(questionId, context, { skipDue = false } = {}) {
   try {
-    return await tutorFetch('/api/answers/present', { method: 'POST', body: JSON.stringify({ questionId, context }) })
+    const body = skipDue ? { questionId, context, skipDue: true } : { questionId, context }
+    return await tutorFetch('/api/answers/present', { method: 'POST', body: JSON.stringify(body) })
   } catch {
     return { questionId, held: false }
   }

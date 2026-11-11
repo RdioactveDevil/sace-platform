@@ -1106,6 +1106,8 @@ function AppInner() {
   const [quizMode,        setQuizMode]        = useState('new')
   const [quizSubtopics,   setQuizSubtopics]   = useState([])
   const [quizReviewIds,   setQuizReviewIds]   = useState([])
+  // The student chose to skip the questions due back for review this session.
+  const [quizSkipDue,     setQuizSkipDue]     = useState(false)
   const [quizSessionId,   setQuizSessionId]   = useState(null)
   const [quizRemediationMode,      setQuizRemediationMode]      = useState(false)
   const [quizRemediationStreak,    setQuizRemediationStreak]    = useState(0)
@@ -1304,6 +1306,7 @@ function AppInner() {
     setQuizSessionXP(0)
     setQuizMode('new')
     setQuizReviewIds([])
+    setQuizSkipDue(false)
     setQuizFinished(false)
     setQuizSessionTip('')
     setQuizSessionTipLoading(false)
@@ -1341,6 +1344,7 @@ function AppInner() {
     setQuizSessionXP(0)
     setQuizMode('new')
     setQuizReviewIds([])
+    setQuizSkipDue(false)
     setQuizFinished(false)
     setQuizSessionTip('')
     setQuizSessionTipLoading(false)
@@ -1395,6 +1399,7 @@ function AppInner() {
     quizMode,                  setQuizMode,
     quizSubtopics,             setQuizSubtopics,
     reviewIds: quizReviewIds,  setReviewIds: setQuizReviewIds,
+    skipDue: quizSkipDue,      setSkipDue: setQuizSkipDue,
     sessionId: quizSessionId,  setSessionId: setQuizSessionId,
     aiTip: quizAiTip,          setAiTip: setQuizAiTip,
     loadingTip: quizLoadingTip, setLoadingTip: setQuizLoadingTip,
@@ -1464,7 +1469,7 @@ function AppInner() {
     q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
     earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
     results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
-    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit, format: quizFormat,
+    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, skipDue: quizSkipDue, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit, format: quizFormat,
     assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
     remediation: {
       mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
@@ -1490,6 +1495,7 @@ function AppInner() {
     setQuizMode(saved.mode)
     setQuizSubtopics(saved.subtopics)
     setQuizReviewIds(saved.reviewIds || [])
+    setQuizSkipDue(!!saved.skipDue)
     setQuizSessionId(saved.sessionId ?? null)
     setQuizExamMode(saved.examMode)
     setQuizTimerSeconds(saved.timerSeconds)
@@ -1531,6 +1537,7 @@ function AppInner() {
     setQuizLoadingTip(false)
     setQuizMode('new')
     setQuizReviewIds([])
+    setQuizSkipDue(false)
     setQuizSubtopics([])
     setQuizFinished(false)
     setQuizSessionTip('')
@@ -1934,6 +1941,7 @@ function AppInner() {
 
             setQuizMode(nextMode)
             setQuizReviewIds(nextMode === 'review' && Array.isArray(opts?.reviewIds) ? opts.reviewIds : [])
+            setQuizSkipDue(!!opts?.skipDue)
             setQuizSubtopics(expandedSubtopics)
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)

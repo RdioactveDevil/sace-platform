@@ -173,6 +173,9 @@ export default function QuizScreen({
   quizSubtopics: _quizSubtopics,
   // 'review' mode: the questions to go back over (a finished session's wrong answers).
   reviewIds: _reviewIds, setReviewIds,
+  // The student chose to skip the questions due back for review this session
+  // (on the home screen, or from a due question here).
+  skipDue = false, setSkipDue,
   // This session's sessions row, recorded with each answer so History can group them.
   sessionId: _sessionId, setSessionId,
   remediationMode: _remediationMode, setRemediationMode,
@@ -237,6 +240,12 @@ export default function QuizScreen({
   const adviceForRef = useRef(null)
   // The question on screen was served because it was due back for review.
   const [dueBackId, setDueBackId] = useState(null)
+  // Read when the next question is picked, so a skip counts straight away.
+  const skipDueRef = useRef(skipDue)
+  skipDueRef.current = skipDue
+  // Set while a skipped review is swapped for the next question: the server
+  // lets go of a question held on screen only when it's a review being skipped.
+  const releaseDueRef = useRef(false)
   // Exam mode picks its questions up front so students can move between them,
   // change answers and flag ones to come back to. Everything is graded at the end.
   const [examSet, setExamSet] = useState([])             // the exam's questions, in order
@@ -495,8 +504,10 @@ export default function QuizScreen({
     // here that they left unanswered (a reload, or ending the session), that
     // one comes back instead, so a hard question can't be swapped away.
     // Exams pick their questions up front and mark them at the end.
+    const skippingDue = releaseDueRef.current
+    releaseDueRef.current = false
     if (q && !q.is_variant && !examRun && !held) {
-      presentQuestion(q.id, holdContext).then(r => {
+      presentQuestion(q.id, holdContext, { skipDue: skippingDue }).then(r => {
         if (r?.held && r.questionId && r.questionId !== q.id && currentQRef.current?.id === q.id && !checkingRef.current) {
           showHeldRef.current?.(r.questionId)
         }
@@ -526,8 +537,9 @@ export default function QuizScreen({
     }
     // Practice opens with questions due back for review (up to DUE_PER_SESSION),
     // whatever the mode, then carries on as chosen. Not for reviews, exams
-    // (they pick their set up front), assignments or consolidation rounds.
-    if (mode !== 'review' && !consolidation && !activeAssignment && answered.length < DUE_PER_SESSION) {
+    // (they pick their set up front), assignments or consolidation rounds,
+    // nor when the student chose to skip them this session.
+    if (mode !== 'review' && !consolidation && !activeAssignment && !skipDueRef.current && answered.length < DUE_PER_SESSION) {
       const [dueId] = dueQuestionIds(questions, map, { subtopics, exclude: answered, limit: 1 })
       const dueQ = dueId && questions.find(q => q.id === dueId)
       if (dueQ) {
@@ -549,6 +561,18 @@ export default function QuizScreen({
     }
     setDisplayQuestion(q)
   }, [questions, setDisplayQuestion, assignmentBand, consolidation, sessionResults, reviewIds, activeAssignment])
+
+  // Skip the questions due back for review for the rest of this session: the
+  // one on screen goes unanswered (nothing is recorded, so it stays due and
+  // opens the next session) and the chosen practice carries on.
+  const skipDueReviews = () => {
+    if (!dueBackId || checkingRef.current) return
+    skipDueRef.current = true
+    setSkipDue?.(true)
+    releaseDueRef.current = true
+    loadNext([...sessionAnswered, dueBackId], struggleMap, quizMode, effectiveSubtopics)
+    releaseDueRef.current = false
+  }
 
   const clearRemediation = useCallback(() => {
     setRemediationMode(false)
@@ -2078,6 +2102,13 @@ export default function QuizScreen({
               {!isMobile && currentQ.difficulty != null && <span style={{ whiteSpace: 'nowrap' }} title="How hard this question is, from 1 to 5">Level {currentQ.difficulty}</span>}
               {dueBackId === currentQ.id && !remediationMode && (
                 <span title="You answered this before. It's back on its review schedule." style={{ ...chip, color: t.goldText, borderColor: t.borderAccent, whiteSpace: 'nowrap' }}>Due back</span>
+              )}
+              {dueBackId === currentQ.id && !remediationMode && !showAns && !checking && (
+                <button type="button" onClick={skipDueReviews}
+                  title="Go straight to the topics you chose. Reviews you skip stay due and come first next session."
+                  style={{ border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: t.textMuted, textDecoration: 'underline', textUnderlineOffset: 2, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {isMobile ? 'Skip' : 'Skip reviews'}
+                </button>
               )}
               {heldNote && !showAns && (
                 <span title="You left this question without answering it. Answer it to move on." style={{ ...chip, color: t.goldText, borderColor: t.borderAccent, whiteSpace: 'nowrap' }}>Finish this one first</span>

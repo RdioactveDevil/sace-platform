@@ -266,7 +266,7 @@ test('a wrong answer plus a full remediation still loses XP', () => {
 })
 
 // ─── spaced review ───────────────────────────────────────────────────────────
-import { isDue, dueQuestionIds, stillLearning, DUE_PER_SESSION } from './engine.js'
+import { isDue, dueQuestionIds, stillLearning, DUE_PER_SESSION, nameList } from './engine.js'
 
 const NOW = Date.parse('2026-11-02T09:00:00Z')
 const at = (mins) => new Date(NOW + mins * 60000).toISOString()
@@ -312,4 +312,13 @@ test('Got wrong sessions and counts leave out learned questions', () => {
   assert.equal(getQuestionCounts(qs, map).wrong, 1)
   for (let i = 0; i < 10; i++) assert.equal(selectNextQuestion(qs, map, [], 'wrong').id, 'm')
   assert.equal(selectNextQuestion(qs, map, ['m'], 'wrong'), null)
+})
+
+test('nameList: the topics due reviews come from, in a sentence', () => {
+  assert.equal(nameList([]), '')
+  assert.equal(nameList(['Acids']), 'Acids')
+  assert.equal(nameList(['Acids', 'Bases', 'Acids']), 'Acids and Bases')
+  assert.equal(nameList(['Acids', 'Bases', 'Redox']), 'Acids, Bases and Redox')
+  assert.equal(nameList(['Acids', 'Bases', 'Redox', 'Rates']), 'Acids, Bases and 2 more')
+  assert.equal(nameList(['Acids', null, 'Bases']), 'Acids and Bases')
 })
