@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
@@ -17,6 +17,7 @@ import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, Che
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
+import { filterByFormat } from './lib/questionTypes'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
 import PageTips from './components/PageTips'
@@ -1152,6 +1153,9 @@ function AppInner() {
   const [quizTimerSeconds, setQuizTimerSeconds] = useState(0)
   // Exam mode only: the session ends after this many questions (0 = no limit).
   const [quizQuestionLimit, setQuizQuestionLimit] = useState(0)
+  // Multiple choice ('mcq'), short answer ('saq') or 'mixed', from the session builder.
+  const [quizFormat, setQuizFormat] = useState('mixed')
+  const quizQuestions = useMemo(() => filterByFormat(questions, quizFormat), [questions, quizFormat])
   const [quizFinished, setQuizFinished] = useState(false)
   const [quizSessionTip, setQuizSessionTip] = useState('')
   const [quizSessionTipLoading, setQuizSessionTipLoading] = useState(false)
@@ -1337,6 +1341,7 @@ function AppInner() {
     setQuizExamMode(false)
     setQuizTimerSeconds(0)
     setQuizQuestionLimit(0)
+    setQuizFormat('mixed')
     setQuizRemediationMode(false)
     setQuizRemediationStreak(0)
     setQuizRemediationTarget(3)
@@ -1479,6 +1484,7 @@ function AppInner() {
       setQuizExamMode(false)
       setQuizTimerSeconds(0)
       setQuizQuestionLimit(0)
+      setQuizFormat('mixed')
       resetQuizSession()
       navigate('/quiz')
     },
@@ -1495,7 +1501,7 @@ function AppInner() {
     q: quizQ, selected: quizSelected, showAns: quizShowAns, correct: quizCorrect,
     earnedXP: quizEarnedXP, streak: quizStreak, sessionXP: quizSessionXP,
     results: quizResults, answered: quizAnswered, qNumber: quizQNumber, aiTip: quizAiTip,
-    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit,
+    mode: quizMode, subtopics: quizSubtopics, reviewIds: quizReviewIds, sessionId: quizSessionId, examMode: quizExamMode, timerSeconds: quizTimerSeconds, questionLimit: quizQuestionLimit, format: quizFormat,
     assignment: activeAssignment, finished: quizFinished, sessionTip: quizSessionTip,
     remediation: {
       mode: quizRemediationMode, streak: quizRemediationStreak, target: quizRemediationTarget,
@@ -1525,6 +1531,7 @@ function AppInner() {
     setQuizExamMode(saved.examMode)
     setQuizTimerSeconds(saved.timerSeconds)
     setQuizQuestionLimit(saved.questionLimit || 0)
+    setQuizFormat(saved.format || 'mixed')
     setActiveAssignment(saved.assignment)
     setQuizFinished(saved.finished)
     setQuizSessionTip(saved.sessionTip)
@@ -1811,7 +1818,7 @@ function AppInner() {
               <QuizScreen {...commonProps} {...quizState}
               freeQuota={selectedAccess === 'free' && freeQuota ? { ...freeQuota, onAnswered: onFreeQuestionAnswered, onUpgrade: () => navigate('/get-access', { state: { subject: selectedSubject } }) } : null}
               profile={profile} setProfile={setProfile} subjectTile={selectedSubject}
-              questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
+              questions={quizQuestions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')}
               onOpenLearn={(topic, ctx) => {
                 if (topic) setLearnTopic(topic)
@@ -1969,6 +1976,8 @@ function AppInner() {
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)
             setQuizQuestionLimit(opts?.examMode && opts?.questionLimit > 0 ? opts.questionLimit : 0)
+            // Assignments and reviews keep every question they were set.
+            setQuizFormat(opts?.assignment || nextMode === 'review' ? 'mixed' : (opts?.format || 'mixed'))
             setQuizQ(null)
             setQuizSelected(null)
             setQuizShowAns(false)

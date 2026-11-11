@@ -56,6 +56,23 @@ export function totalMarks(question) {
   return n > 0 ? n : markingScheme(question).reduce((sum, p) => sum + Number(p.marks), 0)
 }
 
+// Question formats a student can pick for a practice session. Short answer
+// is anything they type the answer to; Multiple choice is everything they
+// answer by choosing (options, regions, an order).
+export const QUESTION_FORMATS = ['mcq', 'saq', 'mixed']
+const TYPED_TYPES = new Set(['numeric', 'short_text', 'marked'])
+
+/** 'saq' when the student types the answer, otherwise 'mcq'. */
+export function questionFormat(question) {
+  return TYPED_TYPES.has(getQuestionType(question)) ? 'saq' : 'mcq'
+}
+
+/** The questions in a format; 'mixed' (or anything unknown) keeps them all. */
+export function filterByFormat(questions, format) {
+  if (format !== 'mcq' && format !== 'saq') return questions
+  return questions.filter(q => questionFormat(q) === format)
+}
+
 export function getQuestionType(question) {
   const t = question?.question_type
   return t && QUESTION_TYPES[t] ? t : 'mcq'

@@ -6,6 +6,8 @@ import {
   responseIsComplete,
   gradeResponse,
   describeCorrectAnswer,
+  questionFormat,
+  filterByFormat,
   emptyResponse,
 } from './questionTypes.js'
 
@@ -159,5 +161,28 @@ describe('emptyResponse', () => {
     assert.equal(emptyResponse({ question_type: 'short_text' }), '')
     assert.deepEqual(emptyResponse({ question_type: 'order' }), [])
     assert.equal(emptyResponse({ question_type: 'mcq' }), null)
+  })
+})
+
+describe('questionFormat / filterByFormat', () => {
+  const bank = [
+    { id: 'a' },
+    { id: 'b', question_type: 'mcq' },
+    { id: 'c', question_type: 'multi_select' },
+    { id: 'd', question_type: 'marked' },
+    { id: 'e', question_type: 'numeric' },
+    { id: 'f', question_type: 'short_text' },
+    { id: 'g', question_type: 'order' },
+  ]
+
+  test('typed answers are short answer; chosen answers are multiple choice', () => {
+    assert.deepEqual(bank.map(questionFormat), ['mcq', 'mcq', 'mcq', 'saq', 'saq', 'saq', 'mcq'])
+  })
+
+  test('filters to one format, and mixed keeps everything', () => {
+    assert.deepEqual(filterByFormat(bank, 'saq').map(q => q.id), ['d', 'e', 'f'])
+    assert.deepEqual(filterByFormat(bank, 'mcq').map(q => q.id), ['a', 'b', 'c', 'g'])
+    assert.equal(filterByFormat(bank, 'mixed'), bank)
+    assert.equal(filterByFormat(bank, undefined), bank)
   })
 })

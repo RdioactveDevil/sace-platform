@@ -9,11 +9,20 @@ import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsFo
 import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/topicConfig'
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
+import { filterByFormat, questionFormat, isAiMarked } from '../lib/questionTypes'
 
 const GOLD   = '#f1be43'
 const GOLDL  = '#f9d87a'
 const NAVY_FILL = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const FORMAT_KEY = 'gf-question-format'
+
+function savedFormat() {
+  try {
+    const v = localStorage.getItem(FORMAT_KEY)
+    return v === 'mcq' || v === 'saq' ? v : 'mixed'
+  } catch { return 'mixed' }
+}
 
 export default function HomeScreen({ profile, struggleMap, questions, subject, onStartSession, theme, assignmentsVersion = 0 }) {
   const t = THEMES[theme]
@@ -26,6 +35,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [expandedMacros, setExpandedMacros] = useState(() => new Set(['g1','g2','g3','g4','g5','g6']))
   // Session builder: which questions, and the exam settings.
   const [sessionMode, setSessionMode] = useState('new')
+  // Multiple choice, short answer or both; remembered on this device.
+  const [questionFormatChoice, setQuestionFormatChoice] = useState(savedFormat)
+  const chooseFormat = (v) => {
+    setQuestionFormatChoice(v)
+    try { localStorage.setItem(FORMAT_KEY, v) } catch {}
+  }
   const [examMode, setExamMode] = useState(false)
   const [examCount, setExamCount] = useState(10)
   const [examMinutes, setExamMinutes] = useState(15)
@@ -150,9 +165,30 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   // Nothing ticked, or everything ticked, means the whole bank: an empty filter
   // also takes in questions that have no subtopic.
   const effectiveSubtopics = isAllTopicsSelected ? [] : selectedSubtopics
-  const filteredCounts = getQuestionCounts(questions, currentStruggleMap, effectiveSubtopics)
+  // ── Question format ────────────────────────────────────────────────────
+  // How many of each format the ticked topics hold. Exams leave out written
+  // answers (they're marked by AI one at a time), so those don't count then.
+  const examOnForCounts = subjectHasFeature(subject, 'exam_mode') && examMode
+  const formatCounts = { mcq: 0, saq: 0 }
+  questions.forEach(q => {
+    if (effectiveSubtopics.length > 0 && !effectiveSubtopics.includes(q.subtopic)) return
+    if (examOnForCounts && isAiMarked(q)) return
+    formatCounts[questionFormat(q)]++
+  })
+  // Only offer the choice when the bank has both kinds for this subject.
+  const bankHasBothFormats = useMemo(() => {
+    const seen = new Set(questions.map(questionFormat))
+    return seen.has('mcq') && seen.has('saq')
+  }, [questions])
+  // A format with nothing in the ticked topics falls back to Mixed.
+  const startFormat = !bankHasBothFormats ? 'mixed'
+    : questionFormatChoice !== 'mixed' && formatCounts[questionFormatChoice] === 0 ? 'mixed'
+      : questionFormatChoice
+  const formatQuestions = useMemo(() => filterByFormat(questions, startFormat), [questions, startFormat])
+
+  const filteredCounts = getQuestionCounts(formatQuestions, currentStruggleMap, effectiveSubtopics)
   // Questions due back for review open the session (QuizScreen's loadNext); exams pick their own set.
-  const dueCount = dueQuestionIds(questions, currentStruggleMap, { subtopics: effectiveSubtopics }).length
+  const dueCount = dueQuestionIds(formatQuestions, currentStruggleMap, { subtopics: effectiveSubtopics }).length
   const tickedTopicCount = MACRO_GROUPS.reduce((acc, macro) => acc + macro.topics.filter(tn =>
     (normTopicToSubs[tn] || []).some(s => selectedSubtopics.includes(s))).length, 0)
   const answeredCount = Object.values(currentStruggleMap).filter(s => s.attempts > 0).length
@@ -213,6 +249,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       examMode: examOn,
       timerSeconds: examOn ? examTimerMinutes * 60 : 0,
       questionLimit: examOn ? examCount : 0,
+      format: startFormat,
     })
   }
 
@@ -264,6 +301,17 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           { value: 'all', label: 'Mixed' },
         ], startMode, setSessionMode, 'Questions')}
       </div>
+
+      {bankHasBothFormats && (
+        <div data-tutorial-target="practice-format">
+          <span style={fieldLabel}>Format</span>
+          {segment([
+            { value: 'mcq', label: 'Multiple choice', disabled: formatCounts.mcq === 0 },
+            { value: 'saq', label: `Short answer · ${formatCounts.saq}`, disabled: formatCounts.saq === 0 },
+            { value: 'mixed', label: 'Mixed' },
+          ], startFormat, chooseFormat, 'Format')}
+        </div>
+      )}
 
       {examAvailable && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12, borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
