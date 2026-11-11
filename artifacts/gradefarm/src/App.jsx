@@ -1106,7 +1106,8 @@ function AppInner() {
   const [quizMode,        setQuizMode]        = useState('new')
   const [quizSubtopics,   setQuizSubtopics]   = useState([])
   const [quizReviewIds,   setQuizReviewIds]   = useState([])
-  // The student chose to skip the questions due back for review this session.
+  // The student chose to skip the questions due back for review this session
+  // ("Skip reviews" in the quiz); every new session starts with them again.
   const [quizSkipDue,     setQuizSkipDue]     = useState(false)
   const [quizSessionId,   setQuizSessionId]   = useState(null)
   const [quizRemediationMode,      setQuizRemediationMode]      = useState(false)
@@ -1941,7 +1942,7 @@ function AppInner() {
 
             setQuizMode(nextMode)
             setQuizReviewIds(nextMode === 'review' && Array.isArray(opts?.reviewIds) ? opts.reviewIds : [])
-            setQuizSkipDue(!!opts?.skipDue)
+            setQuizSkipDue(false)
             setQuizSubtopics(expandedSubtopics)
             setQuizExamMode(!!opts?.examMode)
             setQuizTimerSeconds(opts?.examMode && opts?.timerSeconds > 0 ? opts.timerSeconds : 0)

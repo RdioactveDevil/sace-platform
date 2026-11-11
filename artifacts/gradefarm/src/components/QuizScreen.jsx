@@ -174,7 +174,7 @@ export default function QuizScreen({
   // 'review' mode: the questions to go back over (a finished session's wrong answers).
   reviewIds: _reviewIds, setReviewIds,
   // The student chose to skip the questions due back for review this session
-  // (on the home screen, or from a due question here).
+  // ("Skip reviews" on a due question).
   skipDue = false, setSkipDue,
   // This session's sessions row, recorded with each answer so History can group them.
   sessionId: _sessionId, setSessionId,

@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardList, GraduationCap, Target, Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import { getQuestionCounts, dueQuestionIds, DUE_PER_SESSION, nameList } from '../lib/engine'
+import { getQuestionCounts, dueQuestionIds, DUE_PER_SESSION } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
 import { supabase } from '../lib/supabase'
 import { getAssessments, fetchAssignmentsForStudent, fetchCompletedAssignmentsForStudent, fetchMyInvites, respondToInvite, fetchMyDiagnostics } from '../lib/db'
@@ -42,9 +42,6 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     try { localStorage.setItem(FORMAT_KEY, v) } catch {}
   }
   const [examMode, setExamMode] = useState(false)
-  // Open the session with the questions due back for review. On each time: a
-  // student with a test on one topic can turn it off for that session.
-  const [dueFirst, setDueFirst] = useState(true)
   const [examCount, setExamCount] = useState(10)
   const [examMinutes, setExamMinutes] = useState(15)
   const [customMinutes, setCustomMinutes] = useState('45')
@@ -134,20 +131,18 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     })
   }
 
-  // A question's topic, as the topic list names it.
-  const topicOf = (q) => {
-    if (isTwoLevel) return topicNorm(q.subtopic)
-    const n = topicNorm(q.topic)
-    if (n && canonicalTopicKeys.has(n)) return n
-    // Fallback: look up canonical topic via subtopic (handles old DB records with wrong topic strings)
-    return q.subtopic ? subToCanonicalTopic[q.subtopic] : null
-  }
-
   // Pass 2: count every question.
   const normTopicGroups = {}
   questions.forEach(q => {
-    const n = topicOf(q)
-    if (!isTwoLevel) {
+    let n
+    if (isTwoLevel) {
+      n = topicNorm(q.subtopic)
+    } else {
+      n = topicNorm(q.topic)
+      if (!n || !canonicalTopicKeys.has(n)) {
+        // Fallback: look up canonical topic via subtopic (handles old DB records with wrong topic strings)
+        n = q.subtopic ? subToCanonicalTopic[q.subtopic] : null
+      }
       // Ensure normTopicToSubs is populated for questions resolved via subtopic fallback
       if (n) {
         if (!normTopicToSubs[n]) normTopicToSubs[n] = []
@@ -193,15 +188,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const filteredCounts = getQuestionCounts(formatQuestions, currentStruggleMap, effectiveSubtopics)
   // Questions due back for review open the session (QuizScreen's loadNext); exams pick their own set.
-  const dueIds = dueQuestionIds(formatQuestions, currentStruggleMap, { subtopics: effectiveSubtopics })
-  const dueCount = dueIds.length
-  const dueFirstCount = Math.min(dueCount, DUE_PER_SESSION)
-  // The topics the ones that open the session come from, so it's plain when they're off-topic.
-  const dueTopics = useMemo(() => {
-    const byId = new Map(formatQuestions.map(q => [q.id, q]))
-    return nameList(dueIds.slice(0, DUE_PER_SESSION).map(id => byId.get(id)).filter(Boolean).map(q => topicOf(q) || q.subtopic || q.topic))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dueIds.join(','), formatQuestions])
+  const dueCount = dueQuestionIds(formatQuestions, currentStruggleMap, { subtopics: effectiveSubtopics }).length
   const tickedTopicCount = MACRO_GROUPS.reduce((acc, macro) => acc + macro.topics.filter(tn =>
     (normTopicToSubs[tn] || []).some(s => selectedSubtopics.includes(s))).length, 0)
   const answeredCount = Object.values(currentStruggleMap).filter(s => s.attempts > 0).length
@@ -265,10 +252,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       timerSeconds: examOn ? examTimerMinutes * 60 : 0,
       questionLimit: examOn ? examCount : 0,
       format: startFormat,
-      skipDue: !examOn && dueCount > 0 && !dueFirst,
     })
-    // Skipping is for that session only: the next one starts with them again.
-    setDueFirst(true)
   }
 
   const segment = (options, value, onChange, label) => (
@@ -304,26 +288,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
           {tickedTopicCount === 0 || isAllTopicsSelected ? 'All topics' : `${tickedTopicCount} topic${tickedTopicCount !== 1 ? 's' : ''} ticked`}
         </div>
-      </div>
-
-      {dueCount > 0 && !examOn && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', borderRadius: 10, background: t.bgSubtle, border: `1px solid ${dueFirst ? t.borderAccent || t.border : t.border}` }}>
-          <div style={{ minWidth: 0 }}>
-            <div id="due-first-label" style={{ fontSize: 13, fontWeight: 700, color: dueFirst ? t.goldText : t.textMuted }}>
-              Start with {dueFirstCount} due review{dueFirstCount !== 1 ? 's' : ''}
-            </div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2, lineHeight: 1.45 }}>
-              {dueFirst
-                ? <>From {dueTopics}. Questions you answered before, back on their review schedule.</>
-                : <>Skipped this session: they stay due and come first next time.</>}
-            </div>
+        {dueCount > 0 && !examOn && (
+          <div style={{ fontSize: 12, color: t.goldText, fontWeight: 700, marginTop: 6 }}>
+            {Math.min(dueCount, DUE_PER_SESSION)} question{Math.min(dueCount, DUE_PER_SESSION) !== 1 ? 's' : ''} due back for review come{Math.min(dueCount, DUE_PER_SESSION) === 1 ? 's' : ''} first
           </div>
-          <button type="button" role="switch" aria-checked={dueFirst} aria-labelledby="due-first-label" onClick={() => setDueFirst(v => !v)}
-            style={{ width: 36, height: 20, borderRadius: 999, border: 'none', padding: 0, position: 'relative', cursor: 'pointer', background: dueFirst ? segOnBg : t.border, flexShrink: 0, marginTop: 1 }}>
-            <span style={{ position: 'absolute', top: 3, left: dueFirst ? 19 : 3, width: 14, height: 14, borderRadius: '50%', background: dueFirst ? segOnFg : '#fff', transition: 'left 0.15s' }} />
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div data-tutorial-target="practice-session">
         <span style={fieldLabel}>Questions</span>

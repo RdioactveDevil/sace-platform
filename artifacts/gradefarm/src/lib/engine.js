@@ -280,18 +280,6 @@ export function getQuestionCounts(questions, struggleMap, subtopics = []) {
 /** How many due questions open a practice session. */
 export const DUE_PER_SESSION = 5
 
-/**
- * Names in a sentence, the first few in full: "Acids", "Acids and Bases",
- * "Acids, Bases and Redox", "Acids, Bases and 2 more".
- */
-export function nameList(names, shown = 3) {
-  const list = [...new Set((names || []).filter(Boolean))]
-  if (list.length <= 1) return list[0] || ''
-  if (list.length <= shown) return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`
-  const rest = list.length - (shown - 1)
-  return `${list.slice(0, shown - 1).join(', ')} and ${rest} more`
-}
-
 /** True when an answered question's review time has passed. */
 export function isDue(s, now = Date.now()) {
   return !!(s && s.attempts > 0 && s.next_review && new Date(s.next_review).getTime() <= now)
