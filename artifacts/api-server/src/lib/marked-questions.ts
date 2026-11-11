@@ -5,8 +5,10 @@ import { fetchExemplarContext, exemplarSystemLines } from "./curriculum-exemplar
 import { scopeForSubtopic, scopePromptLines } from "./course-scope";
 import { normalizeMathText } from "./normalize-math";
 import { logger } from "./logger";
+import { subjectProfile } from "./subject-profile";
+import { latexPromptRule } from "./math-prompt";
 import { LEARNING_OBJECTIVES } from "../routes/generate-questions";
-import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, isChemSubject, sacStage, sanitizeChemFigure } from "./chem-figures";
+import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, sanitizeChemFigure } from "./chem-figures";
 
 /**
  * Writing 'marked' questions: SACE-style short-answer questions worth several
@@ -152,19 +154,47 @@ function difficultyLine(difficulty: number | "mixed"): string {
   return `Pitch every question at difficulty ${difficulty} out of 5.`;
 }
 
-async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | "mixed", admin: SupabaseClient): Promise<Draft[]> {
-  const exemplars = await fetchExemplarContext(admin, t.subject, t.subtopic);
-  const scope = await scopeForSubtopic(admin, t.subtopicId);
-  const { data: existing } = await admin
-    .from("questions").select("question")
-    .eq("subject", t.subject).eq("subtopic", t.subtopic).eq("question_type", "marked").limit(40);
-  const existingList = ((existing ?? []) as { question: string }[])
-    .slice(0, 15).map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 160)}`).join("\n");
-  const objective = LEARNING_OBJECTIVES[t.subtopic] || t.subtopic;
-  const stage = sacStage(`${t.subject} ${t.levelLabel}`);
+/**
+ * The question writer's rules for a subject: who the questions are for, how
+ * they're set and marked, and how the model answer is written. Chemistry (and
+ * any subject that isn't maths) keeps the SACE short-answer rules; maths is
+ * set out as working, one step per line, the way students type it.
+ */
+export function draftRules(t: Pick<MarkedTarget, "subject" | "levelLabel">): string[] {
+  const p = subjectProfile(t.subject, t.levelLabel);
+  const header = `You write short-answer questions for ${t.subject}${t.levelLabel ? ` (${t.levelLabel})` : ""}, ${p.examStyle}, with a marking scheme of the kind ${p.board ? `${p.board} assessors` : "teachers"} mark to.`;
+  const tail = [
+    "Check every number yourself: solve each question completely before writing its scheme.",
+    "difficulty is 1 to 5, calibrated to the real exam: 3 is a mid-paper question, 5 the hardest questions on the paper.",
+  ];
+  const noFigures = "structures is always [], figure_json is always \"\". Use table_json (a JSON string { \"caption\", \"headers\", \"rows\" }, or \"\") only for a data table the question needs.";
 
-  const system = [
-    `You write short-answer questions for ${t.subject}${t.levelLabel ? ` (${t.levelLabel})` : ""}, ${stage === 1 ? "pitched at SACE Stage 1 (Year 11) tests, written in the style of SACE exams" : "in the style of the SACE end-of-year exam"}, with a marking scheme of the kind SACE assessors mark to.`,
+  if (p.kind === "maths") {
+    const junior = p.year != null && p.year <= 8;
+    return [
+      header,
+      "Each question is answered in writing: working set out step by step, as in a written test, not multiple choice.",
+      "Students type their answer in an equation editor, one step per line. Never ask them to draw, sketch, plot, shade, label or construct anything; ask for what they can write (a value, an expression, an equation, coordinates, a reason).",
+      "Questions:",
+      junior
+        ? `  - Worth 1 to 3 marks. Use plain instructions a ${p.yearText} student reads easily (Work out, Show your working, Explain how you know), everyday contexts, and numbers they can work with by hand.`
+        : "  - Worth 2 to 5 marks. Use the command words of the real exam (Find, Solve, Show that, Hence, Determine, Calculate, Evaluate, Simplify, Expand, Factorise, Explain) and make the marks fit the command word: Find and Solve need working; Show that gives the result and marks the steps that reach it; Explain needs a reason, not just a value.",
+      "  - Whenever more than one form of the answer would be correct, say which is wanted: an exact value (fractions, surds, π) or a rounding (e.g. \"correct to two decimal places\").",
+      "  - Give every number and fact the student needs. Put the mark total at the end in brackets, e.g. \"(3 marks)\".",
+      "  - One task per question (no parts a, b, c).",
+      "Marking scheme (marking_scheme):",
+      "  - One entry per mark point, in the order a good answer would reach them, and the marks add up exactly to total_marks.",
+      "  - Method marks for a correct step shown (a correct derivative, a correct substitution, a correctly set-up equation) and answer marks for a correct result in the form asked for. Each point is one thing a marker can check on its own.",
+      "  - point says what earns the mark. guidance says which equivalent forms to accept (e.g. $\\frac{1}{2}$ or $0.5$ unless an exact value is asked for; expanded or factorised), what not to accept, and that later method marks follow through from an earlier error.",
+      `Model answer (solution): a full-marks answer as a strong ${p.yearText} student would write it, set out one step per line. Each line is either one piece of maths on its own, wrapped in $...$, or a short line of words (e.g. "Stationary points where $f'(x) = 0$"). Every mark point must be visibly earned by it.`,
+      latexPromptRule(),
+      ...tail,
+      noFigures,
+    ];
+  }
+
+  return [
+    header,
     "Each question is answered in writing (sentences, working, equations), not multiple choice.",
     "Questions:",
     "  - Worth 2 to 6 marks. Use SACE command words (State, Identify, Describe, Explain, Calculate, Deduce, Justify, Write an equation for) and make the marks fit the command word: State/Identify is 1 mark per item; Explain needs a cause and an effect; Calculate needs working.",
@@ -174,18 +204,32 @@ async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | 
     "  - One entry per mark point, in the order a good answer would reach them, and the marks add up exactly to total_marks.",
     "  - Each point is one thing an assessor can check on its own: a correct substance named, a correct equation, a correct mole ratio used, a correct link between a cause and an effect, a final answer with correct units and significant figures.",
     "  - point says what earns the mark. guidance says what else to accept, what not to accept, and, for calculations, that later method marks follow through from an earlier error.",
-    `Model answer (solution): a full-marks answer, written as a strong Year ${stage === 1 ? 11 : 12} student would write it, with working for calculations. Every mark point must be visibly earned by it.`,
+    `Model answer (solution): a full-marks answer, written as a strong ${p.yearText} student would write it, with working for calculations. Every mark point must be visibly earned by it.`,
     "Write chemical formulae and equations as $\\ce{...}$ (e.g. $\\ce{CaCO3(s) + 2HCl(aq) -> CaCl2(aq) + H2O(l) + CO2(g)}$), quantities and units in $...$ where they contain maths (e.g. $0.0250\\ \\text{mol L}^{-1}$), and never use Unicode subscripts or arrows.",
-    "Check every number yourself: solve each question completely before writing its scheme.",
-    "difficulty is 1 to 5, calibrated to the real exam: 3 is a mid-paper question, 5 the hardest questions on the paper.",
-    ...(isChemSubject(t.subject)
+    ...tail,
+    ...(p.kind === "chem"
       ? chemPromptLines({
           subject: `${t.subject} ${t.levelLabel}`,
           figureAsJsonString: true,
           writtenAnswers: true,
           tableKey: "table_json (a JSON string: { \"caption\": \"Table 1\", \"headers\": [\"Trial 1\", \"Trial 2\"], \"rows\": [[\"17.46\", \"16.93\"]] }, or \"\")",
         })
-      : ["structures is always [], figure_json is always \"\". Use table_json (a JSON string { \"caption\", \"headers\", \"rows\" }, or \"\") only for a data table the question needs."]),
+      : [noFigures]),
+  ];
+}
+
+async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | "mixed", admin: SupabaseClient): Promise<Draft[]> {
+  const exemplars = await fetchExemplarContext(admin, t.subject, t.subtopic);
+  const scope = await scopeForSubtopic(admin, t.subtopicId);
+  const { data: existing } = await admin
+    .from("questions").select("question")
+    .eq("subject", t.subject).eq("subtopic", t.subtopic).eq("question_type", "marked").limit(40);
+  const existingList = ((existing ?? []) as { question: string }[])
+    .slice(0, 15).map((r, i) => `${i + 1}. ${(r.question || "").slice(0, 160)}`).join("\n");
+  const objective = LEARNING_OBJECTIVES[t.subtopic] || t.subtopic;
+
+  const system = [
+    ...draftRules(t),
     ...(t.examContext ? ["Notes from the curriculum admin about the real exam (follow them):", t.examContext] : []),
     ...exemplarSystemLines(t.subject, exemplars),
     ...scopePromptLines(scope),
@@ -211,17 +255,28 @@ async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | 
   return Array.isArray(out.questions) ? out.questions.slice(0, count) : [];
 }
 
-/** An independent check of the chemistry and the marking scheme. */
-async function checkDraft(t: MarkedTarget, d: Draft, scheme: MarkPoint[]): Promise<{ ok: boolean; problems: string }> {
-  const system = [
-    `You are a senior SACE ${t.subject} assessor checking a new exam question and its marking scheme before students see it.`,
+/** What the independent checker looks for, by subject. */
+export function checkRules(t: Pick<MarkedTarget, "subject" | "levelLabel">): string[] {
+  const p = subjectProfile(t.subject, t.levelLabel);
+  const maths = p.kind === "maths";
+  return [
+    `You are a senior ${p.marker} checking a new ${p.yearText} question and its marking scheme before students see it.`,
     "Solve the question yourself first, from scratch. Then check:",
     "  1. The question is correct, complete and unambiguous, and gives everything needed to answer it.",
-    "  2. The model answer is scientifically correct, and every number in it is right.",
+    `  2. The model answer is ${maths ? "mathematically" : "scientifically"} correct, and every number in it is right.`,
     "  3. The marking scheme credits what the question asks for, each point can be checked on its own, and the marks suit the command word.",
     `  4. It stays within ${t.subject}${t.levelLabel ? ` (${t.levelLabel})` : ""}.`,
+    ...(maths ? [
+      "  5. It can be answered entirely by typing: it asks for nothing to be drawn, sketched, plotted or shaded.",
+      "  6. When more than one form of the answer is correct, the question says which it wants, or the scheme accepts them all.",
+    ] : []),
     "Set ok to false for any real error, not for matters of style.",
-  ].join("\n");
+  ];
+}
+
+/** An independent check of the question and the marking scheme. */
+async function checkDraft(t: MarkedTarget, d: Draft, scheme: MarkPoint[]): Promise<{ ok: boolean; problems: string }> {
+  const system = checkRules(t).join("\n");
   const shown = shownWith(d);
   const user = [
     `QUESTION (${schemeTotal(scheme)} marks):`, d.question, "",

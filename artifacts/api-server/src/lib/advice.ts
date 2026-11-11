@@ -1,6 +1,7 @@
 import { CLAUDE_MARK_MODEL } from "./anthropic-model";
 import { askForJson, sanitizeScheme, type MarkableQuestion } from "./marking";
-import { describeChemDiagram, sacStage } from "./chem-figures";
+import { describeChemDiagram } from "./chem-figures";
+import { subjectProfile } from "./subject-profile";
 
 /**
  * Titan's Advice: how a teacher would annotate a written-answer question.
@@ -132,15 +133,18 @@ function tableText(table: unknown): string {
 /** Ask the AI for a question's annotations and keep the ones that can be drawn. */
 export async function writeAdvice(q: MarkableQuestion): Promise<Advice> {
   const scheme = sanitizeScheme(q.marking_scheme) || [];
-  const year = sacStage(q.subject || "") === 1 ? 11 : 12;
+  const p = subjectProfile(q.subject || "Chemistry");
+  // Notes and steps are plain text, so formulas and maths are written in Unicode.
+  const unicode = p.kind === "chem" ? "CO₂, mol L⁻¹, ×, ÷, →" : "x², √2, ×, ÷, π, ≤";
+  const unicodeSteps = p.kind === "chem" ? "CO₂, mol L⁻¹, 6.67 × 10⁻³" : "f′(x) = 3x² − 12, x = ±2, 6.67 × 10⁻³";
   const system = [
-    `You are Titan, an experienced SACE ${q.subject || "Chemistry"} teacher. A Year ${year} student has just attempted this question. Annotate the question the way a teacher marks up a paper with a pen, to show how its wording leads to the answer.`,
+    `You are Titan, an experienced ${q.subject || "Chemistry"} teacher. A ${p.yearText} student has just attempted this question. Annotate the question the way a teacher marks up a paper with a pen, to show how its wording leads to the answer.`,
     `Choose 3 to ${MAX_NOTES} clues in the question: words that set up the method, quantities to use, units, the thing being asked for. For each give:`,
     "  quote: the exact text to mark, copied character for character from the question. Either a short phrase of plain words (2 to 8 words, no $ signs, nothing inside $...$), or exactly one whole maths segment including its $ signs, e.g. \"$50.0\\ \\text{mL}$\". Quotes must not overlap.",
     "  mark: underline (a key phrase), double_underline (the main thing asked for or a crucial assumption), circle (a quantity or species to use), box (units or a command word).",
-    `  note: what the clue tells the student to do, as a teacher would scribble it: at most ${NOTE_CHARS} characters, plain text, no LaTeX; write formulas with Unicode (CO₂, mol L⁻¹, ×, ÷, →).`,
+    `  note: what the clue tells the student to do, as a teacher would scribble it: at most ${NOTE_CHARS} characters, plain text, no LaTeX; write formulas with Unicode (${unicode}).`,
     `cells: up to ${MAX_CELLS} table cells to circle (row and col numbered from 0 within the table body, as listed), each with a short note or "".`,
-    `steps: ${3}–${MAX_STEPS} short steps from the question to the answer, one sentence each, including the key numbers: plain text, no LaTeX or $ signs, formulas and units in Unicode (CO₂, mol L⁻¹, 6.67 × 10⁻³).`,
+    `steps: ${3}–${MAX_STEPS} short steps from the question to the answer, one sentence each, including the key numbers: plain text, no LaTeX or $ signs, formulas and units in Unicode (${unicodeSteps}).`,
     "Never mark something that isn't in the question. Give the method and the reasoning, not a paragraph of theory.",
   ].join("\n");
   const shown = [tableText(q.table_data), describeChemDiagram(q.diagram)].filter(Boolean).join("\n\n");
