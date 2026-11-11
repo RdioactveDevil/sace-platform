@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { THEMES } from '../lib/theme'
-import { findQuoteRects, mergeLineRects, layoutNotes, noteSize, handPath } from '../lib/advice'
+import { findQuoteRects, mergeLineRects, textLineRects, layoutNotes, noteSize, handPath } from '../lib/advice'
 import MathText from './MathText'
 import TableView from './TableView'
 
@@ -12,6 +12,9 @@ import TableView from './TableView'
 
 const HAND = "'Caveat', 'Comic Sans MS', cursive"
 const NOTE_SIZE = 20
+// The question's line spacing, in pixels: room between two lines for one line
+// of handwriting with clear space above and below it, at every zoom level.
+const annotatedLineHeight = (fontSize) => Math.round(fontSize * 1.5 + NOTE_SIZE * 1.1 + 14)
 // The style a note is written in; notes are measured in it before they're placed.
 const noteStyle = (pen, maxW) => ({ display: 'inline-block', maxWidth: maxW, fontFamily: HAND, fontSize: NOTE_SIZE, fontWeight: 600, lineHeight: 1.1, color: pen, whiteSpace: 'normal' })
 
@@ -21,7 +24,7 @@ function Mark({ kind, rect, seed, pen }) {
   const common = { fill: 'none', stroke: pen, strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }
   const at = (x, y, w, h, k, sd) => <path transform={`translate(${x} ${y})`} d={handPath(k, sd, w, h)} {...common} />
   const { x, y, w, h } = rect
-  if (kind === 'circle') return at(x - 10, y - 6, w + 20, h + 12, 'circle', seed)
+  if (kind === 'circle') return at(x - 7, y - 5, w + 14, h + 10, 'circle', seed)
   if (kind === 'box') return at(x - 4, y - 3, w + 8, h + 6, 'box', seed)
   if (kind === 'double_underline') return <g>{at(x - 2, y + h - 2, w + 4, 5, 'underline', seed)}{at(x - 2, y + h + 3, w + 4, 5, 'underline', seed + 7)}</g>
   return at(x - 2, y + h - 1, w + 4, 6, 'underline', seed)
@@ -91,9 +94,7 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
       if (c.note) cellNotes.push(c.note)
     })
     // Every line of the question, so a note never sits on words, marked or not.
-    const lineRange = document.createRange()
-    if (textRef.current) lineRange.selectNodeContents(textRef.current)
-    const lines = textRef.current ? mergeLineRects([...lineRange.getClientRects()]).map(rel) : []
+    const lines = textLineRects(textRef.current).map(rel)
     const placed = layoutNotes(targets, width, lines)
     const notes = targets.map((tg, i) => {
       const p = placed[i]
@@ -112,16 +113,24 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
   useEffect(() => {
     const box = boxRef.current
     if (!box) return
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measure()) : null
+    // One measure per frame, however many observers fire.
+    let frame = 0
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => measure()) }
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null
     ro?.observe(box)
     if (textRef.current) ro?.observe(textRef.current)
+    // Text that changes without the box changing size (maths re-rendered) moves the words too.
+    const mo = typeof MutationObserver !== 'undefined' ? new MutationObserver(schedule) : null
+    if (textRef.current) mo?.observe(textRef.current, { childList: true, subtree: true, characterData: true })
+    // The page around it settles after the first paint (the marks panel slides in).
+    const late = setTimeout(schedule, 350)
     // KaTeX and the handwriting font load late and change the text's widths: measure again when any font arrives.
     const fonts = document.fonts
     let live = true
-    const again = () => { if (live) measure() }
+    const again = () => { if (live) schedule() }
     fonts?.ready?.then(again)
     fonts?.addEventListener?.('loadingdone', again)
-    return () => { live = false; ro?.disconnect(); fonts?.removeEventListener?.('loadingdone', again) }
+    return () => { live = false; cancelAnimationFrame(frame); clearTimeout(late); ro?.disconnect(); mo?.disconnect(); fonts?.removeEventListener?.('loadingdone', again) }
   }, [measure])
 
   return (
@@ -136,7 +145,7 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
           )}
         </div>
       )}
-      <div ref={textRef} style={{ fontSize, fontWeight: 700, color: t.text, lineHeight: 2.75, paddingTop: 14, marginBottom: 12 }}>
+      <div ref={textRef} style={{ fontSize, fontWeight: 700, color: t.text, lineHeight: `${annotatedLineHeight(fontSize)}px`, paddingTop: 10, marginBottom: 12 }}>
         <MathText text={question.question} />
       </div>
       {layout && (
@@ -157,7 +166,7 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
         <ul style={{ listStyle: 'none', margin: '0 0 12px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {layout.extra.map((n, i) => (
             <li key={i} style={{ ...noteStyle(pen, '100%'), display: 'block' }}>
-              <span style={{ opacity: 0.75 }}>“{n.quote.replace(/\$/g, '')}”</span> → {n.text}
+              <span style={{ opacity: 0.75, fontFamily: 'inherit' }}>“<MathText text={n.quote} />”</span> → {n.text}
             </li>
           ))}
         </ul>

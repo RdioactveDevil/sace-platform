@@ -195,7 +195,12 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const topStruggles = priorityTopics(normTopicGroups)
 
-  const [weekStats, setWeekStats]       = useState({ total: 0, correct: 0 })
+  const [weekAnswers, setWeekAnswers]   = useState([])
+  // This week's answers in the current subject only (the log holds every subject).
+  const weekStats = useMemo(() => {
+    const inSubject = weekAnswers.filter(a => questionIds.has(a.question_id))
+    return { total: inSubject.length, correct: inSubject.filter(a => a.correct).length }
+  }, [weekAnswers, questionIds])
   const [showComeback, setShowComeback] = useState(false)
 
   useEffect(() => {
@@ -215,13 +220,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
     supabase
       .from('answer_log')
-      .select('answered_at, correct')
+      .select('answered_at, correct, question_id')
       .eq('user_id', profile.id)
       .gte('answered_at', monday.toISOString())
-      .then(({ data }) => {
-        if (!data?.length) return
-        setWeekStats({ total: data.length, correct: data.filter(a => a.correct).length })
-      })
+      .then(({ data }) => setWeekAnswers(data || []))
   }, [profile.id, profile.last_active])
 
   const card = {
@@ -307,7 +309,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <span style={fieldLabel}>Format</span>
           {segment([
             { value: 'mcq', label: 'Multiple choice', disabled: formatCounts.mcq === 0 },
-            { value: 'saq', label: `Short answer · ${formatCounts.saq}`, disabled: formatCounts.saq === 0 },
+            { value: 'saq', label: 'Short answer', disabled: formatCounts.saq === 0 },
             { value: 'mixed', label: 'Mixed' },
           ], startFormat, chooseFormat, 'Format')}
         </div>

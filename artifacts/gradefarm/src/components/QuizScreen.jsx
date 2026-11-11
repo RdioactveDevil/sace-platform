@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useBlocker } from 'react-router-dom'
 import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag } from 'lucide-react'
 import {
   selectNextQuestion,
@@ -51,9 +52,9 @@ import PassageView from './PassageView'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import { usesMathInput } from '../lib/subjects'
 import QuestionRenderer from './questions/QuestionRenderer'
-import { MarkPoints } from './questions/WrittenAnswer'
-import { AnnotatedQuestion, AdviceSteps } from './TitanAdvice'
-import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked } from '../lib/questionTypes'
+import { MarksBreakdown } from './questions/WrittenAnswer'
+import { AnnotatedQuestion, AdviceSteps, penColor } from './TitanAdvice'
+import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked, totalMarks } from '../lib/questionTypes'
 import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
@@ -230,6 +231,8 @@ export default function QuizScreen({
   const [adviceOn, setAdviceOn] = useState(false)
   const [advice, setAdvice] = useState(null)
   const [adviceState, setAdviceState] = useState('idle') // idle | loading | error
+  // The marked answer's help panel: 'how' (How to do it) or 'model' (Model answer).
+  const [helpTab, setHelpTab] = useState('how')
   const [adviceError, setAdviceError] = useState('')
   const adviceForRef = useRef(null)
   // The question on screen was served because it was due back for review.
@@ -279,6 +282,9 @@ export default function QuizScreen({
   const [endedForExam, setEndedForExam] = useState(false)
   // The student pressed End Session (also not the bank running out).
   const [endedEarly, setEndedEarly] = useState(false)
+  // Set just before the quiz sends them elsewhere itself, so that isn't asked about.
+  const leavingRef = useRef(false)
+  const openLearn = (...args) => { leavingRef.current = true; onOpenLearn(...args) }
   // Rows opened in the summary's answer list.
   const [openAnswers, setOpenAnswers] = useState(() => new Set())
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
@@ -339,11 +345,21 @@ export default function QuizScreen({
     const saved = currentQ?.advice
     setAdvice(saved && Array.isArray(saved.notes) ? saved : null)
     adviceForRef.current = currentQ?.id ?? null
+    setHelpTab('how')
   }, [currentQ?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Titan's Advice (pen marks on the question, and the steps) is asked for on
+  // demand: from the pen-marks switch, or "Show it step by step".
   const toggleAdvice = async () => {
     if (adviceOn) { setAdviceOn(false); return }
     setAdviceOn(true)
+    await loadAdvice()
+  }
+  const showAdviceSteps = async () => {
+    setAdviceOn(true)
+    await loadAdvice()
+  }
+  const loadAdvice = async () => {
     if (advice || adviceState === 'loading' || !currentQ) return
     const id = currentQ.id
     setAdviceState('loading')
@@ -1161,11 +1177,15 @@ export default function QuizScreen({
     setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
   }
 
-  // End Session: show the summary for what was answered (nothing answered yet
-  // means there's nothing to sum up, so go straight back to Practice).
+  // End Session: show the summary for what was answered. Leaving from the
+  // sidebar asks the same question (see the blocker below); with nothing
+  // answered there, it carries on to where they were going instead.
   const endSession = () => {
     setShowExit(false)
-    if (!sessionResults.some(r => !r.remediation)) { onHome(); return }
+    if (blocker.state === 'blocked') {
+      if (!sessionResults.length) { blocker.proceed(); return }
+      blocker.reset()
+    }
     clearRemediation()
     if (currentQ && showAns && !sessionAnswered.includes(currentQ.id)) setSessionAnswered([...sessionAnswered, currentQ.id])
     setEndedEarly(true)
@@ -1462,6 +1482,7 @@ export default function QuizScreen({
     if (examGradedRef.current || !examSet.length) return
     examGradedRef.current = true
     setShowFinishExam(false)
+    if (blocker.state === 'blocked') blocker.reset()
     setExamMarking('marking')
     const cur = examSet[examIndex]
     const times = cur && startTime.current
@@ -1558,6 +1579,26 @@ export default function QuizScreen({
 
   // The summary opens: a fanfare, and confetti if it went well.
   const showingSummary = finished || (!currentQ && sessionResults.length > 0)
+
+  // Leaving mid-session (the sidebar, the back button) asks the same question
+  // as End session / Finish exam, and ends on the same summary. Links the
+  // quiz itself offers (Ask Titan, Go unlimited) leave without asking: the
+  // session is kept for when they come back.
+  // Only while a question (and so the dialog) is on screen.
+  const questionOnScreen = !showingSummary && !!currentQ && !generatingMore && !(freeQuota && freeQuota.used >= freeQuota.limit && !showAns)
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    !leavingRef.current && questionOnScreen && currentLocation.pathname !== nextLocation.pathname)
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    if (examRun) setShowFinishExam(true)
+    else setShowExit(true)
+  }, [blocker.state]) // eslint-disable-line react-hooks/exhaustive-deps
+  // "Keep going": close the question and stay put.
+  const keepGoing = () => {
+    setShowExit(false)
+    setShowFinishExam(false)
+    if (blocker.state === 'blocked') blocker.reset()
+  }
   useEffect(() => {
     if (!showingSummary) return
     const main = sessionResults.filter(r => !r.remediation)
@@ -1883,7 +1924,10 @@ export default function QuizScreen({
   const sidePassage = !isMobile && questionAreaWidth >= SIDE_PASSAGE_MIN_WIDTH && !!currentQ?.passage?.body
   // A marked written answer on a wide screen: question and answer on the left, marks on the right.
   const writtenAnswer = !examRun && showAns && !!currentQ && isAiMarked(currentQ)
-  const splitFeedback = writtenAnswer && !isMobile && !sidePassage && !!marking
+  // A marked written answer: the question with the answer, the marks under
+  // them, and How to do it / Model answer beside them (below them on a phone).
+  const markedLayout = writtenAnswer && !sidePassage && !!marking
+  const splitFeedback = markedLayout && !isMobile
   // Titan's Advice drawn over the question (after answering).
   const annotated = writtenAnswer && adviceOn && !!advice
   const isMcq = getQuestionType(currentQ) === 'mcq'
@@ -1957,7 +2001,7 @@ export default function QuizScreen({
       {freeQuota && (
         <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '7px 16px', fontSize: 12.5, color: t.textMuted, borderBottom: `1px solid ${t.border}`, background: t.bgSubtle }}>
           <span><strong style={{ color: t.text }}>{Math.max(0, freeQuota.limit - freeQuota.used)}</strong> of {freeQuota.limit} free questions left today</span>
-          <button type="button" onClick={freeQuota.onUpgrade} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>Go unlimited</button>
+          <button type="button" onClick={() => { leavingRef.current = true; freeQuota.onUpgrade() }} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>Go unlimited</button>
         </div>
       )}
 
@@ -1982,7 +2026,7 @@ export default function QuizScreen({
                 : "You haven't answered any questions yet."}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowExit(false)} style={btn('secondary')}>Keep going</button>
+              <button type="button" onClick={keepGoing} style={btn('secondary')}>Keep going</button>
               <button type="button" onClick={endSession} style={{ ...btn('primary'), background: t.danger, color: '#fff' }}>End session</button>
             </div>
           </div>
@@ -2016,7 +2060,7 @@ export default function QuizScreen({
               {examFlagged > 0 && ` ${examFlagged} ${examFlagged === 1 ? 'is' : 'are'} flagged for review.`}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowFinishExam(false)} style={btn('secondary')}>Keep going</button>
+              <button type="button" onClick={keepGoing} style={btn('secondary')}>Keep going</button>
               <button type="button" onClick={finishExam} style={btn('primary')}>Finish exam</button>
             </div>
           </div>
@@ -2065,14 +2109,14 @@ export default function QuizScreen({
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
         <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '14px' : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, display: 'flex', flexDirection: markedLayout && isMobile ? 'column' : 'row', gap: markedLayout && isMobile ? 12 : 24, alignItems: markedLayout && isMobile ? 'stretch' : 'flex-start' }}>
           {sidePassage && (
             // The passage is what students read closely, so it gets ~60% of the row.
             <div style={{ flex: '3 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
               <PassageView passage={currentQ.passage} theme={theme} fill />
             </div>
           )}
-          <div key={currentQ.id} className="qz-anim" style={{ flex: sidePassage ? '2 1 0' : '0 1 640px', minWidth: sidePassage ? 340 : 0, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12, animation: 'fadeUp 0.25s ease' }}>
+          <div key={currentQ.id} className="qz-anim" style={{ flex: sidePassage ? '2 1 0' : splitFeedback ? '1 1 640px' : '0 1 640px', minWidth: sidePassage ? 340 : 0, width: '100%', maxWidth: splitFeedback ? 720 : 640, display: 'flex', flexDirection: 'column', gap: 12, animation: 'fadeUp 0.25s ease' }}>
 
             {/* Exam: every question as a square, to move between them. */}
             {examRun && examSet.length > 0 && (
@@ -2128,6 +2172,14 @@ export default function QuizScreen({
             )}
 
             <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+              {markedLayout && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Question{totalMarks(currentQ) ? ` · ${totalMarks(currentQ)} mark${totalMarks(currentQ) === 1 ? '' : 's'}` : ''}
+                  </span>
+                  {penMarksSwitch()}
+                </div>
+              )}
               {currentQ.passage && !sidePassage && <PassageView passage={currentQ.passage} theme={theme} />}
               {currentQ.graph && <GraphView graph={currentQ.graph} theme={theme} />}
               {currentQ.table_data && !annotated && <TableView table={currentQ.table_data} theme={theme} />}
@@ -2179,7 +2231,7 @@ export default function QuizScreen({
                   theme={theme}
                   hideCheck={examRun}
                   checkLabel="Check answer"
-                  feedbackMode={splitFeedback ? 'answer' : 'full'}
+                  feedbackMode={markedLayout ? 'answer' : 'full'}
                   onMarked={setMarking}
                   busy={checking}
                   mathInput={mathInput}
@@ -2210,7 +2262,7 @@ export default function QuizScreen({
               )}
 
               {/* Practice, after answering: the result, why, and what's next (in the side panel for a marked written answer on a wide screen). */}
-              {!examRun && showAns && !splitFeedback && (
+              {!examRun && showAns && !markedLayout && (
                 <div className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease' }}>
                   {/* Written answers show their marks above, with the feedback. */}
                   {!isAiMarked(currentQ) && (
@@ -2248,7 +2300,7 @@ export default function QuizScreen({
                       {nextButtonLabel}
                     </button>
                     {onOpenLearn && !examMode && (
-                      <button type="button" onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                      <button type="button" onClick={() => openLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
                         {isMobile ? 'Ask Titan' : correct ? 'Ask Titan about this' : 'Ask Titan why'}
                       </button>
                     )}
@@ -2259,38 +2311,43 @@ export default function QuizScreen({
               )}
             </div>
 
-            {!examRun && showAns && (
+            {/* The marks, under the question and answer. */}
+            {markedLayout && (
+              <section aria-label="Your marks" className="qz-anim" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '18px 24px', animation: 'fadeUp 0.25s ease' }}>
+                <MarksBreakdown question={currentQ} result={marking} theme={theme} />
+              </section>
+            )}
+
+            {!examRun && showAns && !markedLayout && (
               <div style={{ fontSize: 12.5, color: t.textFaint, textAlign: 'center' }}>
                 {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
                 {!correct && remediationPendingEntry ? '. The practice questions earn XP back.' : ''}
               </div>
             )}
           </div>
-          {splitFeedback && (
-            <aside aria-label="Your marks" className="qz-anim" style={{ flex: '1 1 380px', minWidth: 0, maxWidth: 480, position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', gap: 12, animation: 'fadeUp 0.25s ease' }}>
-              <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '18px 20px' }}>
-                <MarkPoints question={currentQ} result={marking} theme={theme} />
-              </div>
-              <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <AdviceBlock />
-              </div>
-              {currentQ.solution && (
-                <details style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '14px 18px' }}>
-                  <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 800, color: t.text }}>Model answer</summary>
-                  <div style={{ marginTop: 10, fontSize: 14, color: t.textSub, lineHeight: 1.7 }}><MathText text={currentQ.solution} /></div>
-                </details>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
-                <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={btn('primary', remediationStatus === 'generating')}>
-                  {nextButtonLabel}
-                </button>
-                {onOpenLearn && !examMode && (
-                  <button type="button" onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
-                    {correct ? 'Ask Titan about this' : 'Ask Titan why'}
+          {markedLayout && (
+            <aside aria-label="Help with this question" className="qz-anim" style={{ flex: isMobile ? 'none' : '0 1 400px', minWidth: 0, width: isMobile ? '100%' : undefined, position: isMobile ? 'static' : 'sticky', top: 0, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.25s ease' }}>
+              {helpPanel()}
+              <div style={{ padding: isMobile ? '14px 16px' : '16px 22px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12.5, color: t.textMuted }}>
+                  {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
+                  {!correct && remediationPendingEntry ? ' · the practice questions earn it back' : ''}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
+                  <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), flex: 1 }}>
+                    {nextButtonLabel}
                   </button>
+                  {onOpenLearn && !examMode && (
+                    <button type="button" onClick={() => openLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                      {correct ? 'Ask Titan about this' : 'Ask Titan why'}
+                    </button>
+                  )}
+                </div>
+                {remediationPendingEntry && remediationStatus === 'generating' && (
+                  <div style={{ fontSize: 12.5, color: t.textMuted }}>Getting practice questions like this one ready…</div>
                 )}
+                <ReportLink />
               </div>
-              <ReportLink />
             </aside>
           )}
           </div>
@@ -2298,6 +2355,65 @@ export default function QuizScreen({
       </div>
     </div>
   )
+
+  // The switch on a marked question's card that draws Titan's pen marks on it.
+  function penMarksSwitch() {
+    const loading = adviceState === 'loading'
+    const on = adviceOn && !!advice
+    return (
+      <button type="button" onClick={toggleAdvice} aria-pressed={adviceOn} disabled={loading}
+        style={{ padding: '6px 12px', borderRadius: 999, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: loading ? 'default' : 'pointer', whiteSpace: 'nowrap',
+          border: `1px solid ${t.borderAccent || t.border}`, background: on ? t.accentGlow : t.bgCard, color: t.goldText }}>
+        {loading ? 'Titan is annotating…' : on ? "Titan's pen marks: on" : "Show Titan's pen marks"}
+      </button>
+    )
+  }
+
+  // A marked answer's help: How to do it (Titan's tip, or his steps once
+  // asked for) and the model answer, as tabs.
+  function helpPanel() {
+    const tabs = [['how', 'How to do it'], ...(currentQ.solution ? [['model', 'Model answer']] : [])]
+    const tab = tabs.some(([id]) => id === helpTab) ? helpTab : 'how'
+    const steps = advice?.steps || []
+    const loading = adviceState === 'loading'
+    const pad = isMobile ? '14px 16px' : '18px 22px'
+    return (
+      <>
+        <div role="tablist" aria-label="Help with this question" style={{ display: 'flex', gap: 4, padding: isMobile ? '6px 16px 0' : '8px 22px 0', borderBottom: `1px solid ${t.border}` }}>
+          {tabs.map(([id, label]) => (
+            <button key={id} type="button" role="tab" id={`qz-help-${id}`} aria-selected={tab === id} aria-controls="qz-help-panel" onClick={() => setHelpTab(id)}
+              style={{ padding: '12px 10px 10px', marginBottom: -1, border: 'none', borderBottom: `2px solid ${tab === id ? t.text : 'transparent'}`, background: 'transparent', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: tab === id ? t.text : t.textMuted, cursor: 'pointer' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div id="qz-help-panel" role="tabpanel" aria-labelledby={`qz-help-${tab}`} style={{ padding: pad, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {tab === 'model' ? (
+            <div style={{ fontSize: 14, color: t.textSub, lineHeight: 1.7 }}><MathText text={currentQ.solution} /></div>
+          ) : (
+            <>
+              {steps.length > 0 ? (
+                <>
+                  <div style={{ fontFamily: "'Caveat', 'Comic Sans MS', cursive", fontSize: 24, fontWeight: 700, color: penColor(theme), lineHeight: 1 }}>Titan's steps</div>
+                  <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, lineHeight: 1.6, color: t.textSub }}>
+                    {steps.map((st, i) => <li key={i}><MathText text={st} /></li>)}
+                  </ol>
+                </>
+              ) : marking?.summary ? (
+                <div style={{ fontSize: 14, lineHeight: 1.6, color: t.textSub }}><strong style={{ color: t.text }}>Titan's tip: </strong><MathText text={marking.summary} /></div>
+              ) : null}
+              {!advice && (
+                <button type="button" onClick={showAdviceSteps} disabled={loading} style={{ ...btn('secondary', loading), alignSelf: 'flex-start', borderColor: t.borderAccent || t.border, color: t.goldText }}>
+                  {loading ? 'Titan is working it out…' : 'Show it step by step'}
+                </button>
+              )}
+              {adviceState === 'error' && <div role="alert" style={{ fontSize: 12.5, color: t.danger }}>{adviceError}</div>}
+            </>
+          )}
+        </div>
+      </>
+    )
+  }
 
   // Titan's Advice: a button that draws the annotations on the question, then
   // the steps and where this answer went wrong.

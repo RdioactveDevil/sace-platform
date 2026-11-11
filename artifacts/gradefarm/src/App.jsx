@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useBlocker, createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
@@ -13,7 +13,7 @@ import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
 import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, TriangleAlert, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
+import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { getTopicConfigForSubject } from './lib/topicConfig'
@@ -905,36 +905,6 @@ function RouteFallback({ theme }) {
   )
 }
 
-function NavBlockerModal({ blocker, theme }) {
-  const t = THEMES[theme]
-  if (blocker.state !== 'blocked') return null
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, backdropFilter: 'blur(8px)' }}>
-      <div style={{ background: t?.bgCard || '#0c1037', border: `1px solid rgba(241,190,67,0.3)`, borderRadius: 20, padding: '36px 32px', maxWidth: 360, width: '90%', textAlign: 'center', fontFamily: FONT_B }}>
-        <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}><TriangleAlert size={36} color={GOLD} aria-hidden="true" /></div>
-        <div style={{ fontFamily: FONT_D, fontSize: 20, color: t?.text || '#f1f5f9', marginBottom: 8, letterSpacing: 0.5 }}>LEAVE QUIZ?</div>
-        <div style={{ fontSize: 14, color: t?.textMuted || '#94a3b8', marginBottom: 28, lineHeight: 1.65 }}>
-          Your session progress will be lost if you navigate away now.
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={() => blocker.reset()}
-            style={{ flex: 1, padding: '13px', borderRadius: 11, border: `1px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.05)', color: t?.textMuted || '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
-          >
-            Stay in Quiz
-          </button>
-          <button
-            onClick={() => blocker.proceed()}
-            style={{ flex: 1, padding: '13px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}
-          >
-            Leave Anyway
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function AppInner() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -1447,14 +1417,7 @@ function AppInner() {
     questionLimit: quizQuestionLimit,
   }
 
-  const quizIsActive = location.pathname === '/quiz' && quizAnswered.length > 0 && !quizFinished
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      quizIsActive &&
-      currentLocation.pathname === '/quiz' &&
-      nextLocation.pathname !== '/quiz'
-  )
-
+  // Leaving a quiz mid-session is asked about in QuizScreen (End this session?).
   useEffect(() => {
     if (quizFinished && quizAnswered.length > 0) setLastSessionAt(Date.now())
   }, [quizFinished, quizAnswered.length])
@@ -1633,7 +1596,6 @@ function AppInner() {
 
   return (
     <>
-    <NavBlockerModal blocker={blocker} theme={theme} />
     <ErrorBoundary label="app">
     <Suspense fallback={<RouteFallback theme={theme} />}>
     <Routes>

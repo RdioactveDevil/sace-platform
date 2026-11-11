@@ -59,6 +59,19 @@ export function MarkingFeedback({ question, answer, result, theme }) {
   )
 }
 
+/**
+ * The score and each mark point as rows, for the quiz's Marks card. Titan's
+ * tip isn't here: the quiz shows it under How to do it.
+ */
+export function MarksBreakdown({ question, result, theme }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Score result={result} theme={theme} />
+      <PointList question={question} result={result} theme={theme} flat />
+    </div>
+  )
+}
+
 /** Score, mark points and the AI's summary: the side panel's top. */
 export function MarkPoints({ question, result, theme }) {
   return (
@@ -142,18 +155,22 @@ function MarkedWorking({ answer, ranges, theme }) {
   )
 }
 
-function PointList({ question, result, theme }) {
+// flat: rows split by rules, for inside a card (else a bordered box per point).
+function PointList({ question, result, theme, flat = false }) {
   const t = THEMES[theme]
   const scheme = markingScheme(question)
+  const row = flat
+    ? { display: 'flex', gap: 12, padding: '11px 0', borderTop: `1px solid ${t.border}` }
+    : { display: 'flex', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard }
   return (
-      <ol aria-label="Marks" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <ol aria-label="Marks" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: flat ? 0 : 8 }}>
         {result.marks.map((m) => {
           const p = scheme[m.point]
           const got = m.awarded > 0
           const all = m.awarded >= m.of
           const tone = all ? t.success : got ? t.goldText : t.danger
           return (
-            <li key={m.point} style={{ display: 'flex', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard }}>
+            <li key={m.point} style={row}>
               <span aria-hidden="true" style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: all ? t.successBg : got ? t.accentGlow : t.dangerBg, color: tone }}>
                 {m.point + 1}
               </span>
