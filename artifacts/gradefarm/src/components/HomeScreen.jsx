@@ -309,7 +309,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <span style={fieldLabel}>Format</span>
           {segment([
             { value: 'mcq', label: 'Multiple choice', disabled: formatCounts.mcq === 0 },
-            { value: 'saq', label: `Short answer · ${formatCounts.saq}`, disabled: formatCounts.saq === 0 },
+            { value: 'saq', label: 'Short answer', disabled: formatCounts.saq === 0 },
             { value: 'mixed', label: 'Mixed' },
           ], startFormat, chooseFormat, 'Format')}
         </div>
