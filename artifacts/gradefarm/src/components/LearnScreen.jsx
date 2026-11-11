@@ -8,6 +8,8 @@ import { questionHelpSystemSection, questionHelpOpeningPrompt } from '../lib/que
 import { resolveConsolidation } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration } from '../lib/sounds'
 import Celebration from './Celebration'
+import LessonVisual from './LessonVisual'
+import { visualPromptLines } from '../lib/lessonVisuals'
 import { buildCards, stepOfCard, upgradeLesson, lessonScore, runEndingAt, lessonProgressLabel, parseLessonJson, answerAt, withAnswer, cardLabel, describeLessonCard } from '../lib/lessonCards'
 import { awaitingParent } from '../lib/parentConsent'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
@@ -671,18 +673,21 @@ export default function LearnScreen({
         headers: { 'Content-Type': 'application/json', ...(s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {}) },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 4000,
+          purpose: 'lesson',
+          max_tokens: 6000,
           system: `You write short guided lessons for ${subjectName || 'school'} students at ${yearLevel} level. ${style}
 The student sees one card at a time: each key idea, then straight away a quick question on that idea, then a worked example, then a final challenge. Keep every card short enough to read in under a minute.
 Return ONLY a JSON object, no markdown fences, in exactly this shape:
 {"title": "the topic, a few words",
  "hook": "one sentence on why this topic matters or where it shows up, to open the lesson",
  "ideas": [{"title": "short rule", "text": "one or two plain sentences", "example": "a tiny worked example", "watch_out": "the most common mistake with this idea, in one sentence",
+   "visual": {optional, see VISUALS below},
    "check": {"question": "a quick question on THIS idea only", "options": ["...", "...", "...", "..."], "answer_index": 0, "explanation": "why the answer is right and the likely slip behind the wrong ones"}}],
- "example": {"problem": "one worked problem", "steps": [{"work": "the line of working", "note": "why, in a few words"}]},
+ "example": {"problem": "one worked problem", "visual": {optional, see VISUALS below}, "steps": [{"work": "the line of working", "note": "why, in a few words"}]},
  "checks": [{"question": "...", "options": ["...", "...", "...", "..."], "answer_index": 0, "explanation": "..."}],
  "summary": ["what they learned, one line each"]}
-Give exactly 4 ideas, each with its own quick check (easy: it tests just that idea), 3 to 5 example steps, 2 final checks that combine the ideas and are harder than the quick checks, and 3 summary lines. Every check has 4 options; vary which option is correct. Write all maths in LaTeX inside $...$. Check every answer is correct before you reply.${courseTopics.length ? `\nIf the lesson is about one of these course topics, use its exact name as the title: ${courseTopics.slice(0, 80).join('; ')}` : ''}`,
+Give exactly 4 ideas, each with its own quick check (easy: it tests just that idea), 3 to 5 example steps, 2 final checks that combine the ideas and are harder than the quick checks, and 3 summary lines. Every check has 4 options; vary which option is correct. Write all maths in LaTeX inside $...$. Check every answer is correct before you reply.
+${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the lesson is about one of these course topics, use its exact name as the title: ${courseTopics.slice(0, 80).join('; ')}` : ''}`,
           messages: [{ role: 'user', content: `Topic: ${name || 'work out the topic the student is stuck on from the conversation below'}${recent ? `\n\nConversation so far:\n${recent}` : ''}${docContext ? `\n\nTeach from these class notes where relevant:\n${docContext.slice(0, 3000)}` : ''}` }],
         }),
       })
@@ -1178,6 +1183,7 @@ Give exactly 4 ideas, each with its own quick check (easy: it tests just that id
                         <span className="ls-kick">Key idea {cur.n} of {cur.of}</span>
                         <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.01em', lineHeight: 1.35 }}><MathText text={cur.idea.title} /></div>
                         <div style={{ fontSize: 15.5, color: t.textSub, lineHeight: 1.7 }}><MathText text={cur.idea.text} /></div>
+                        {cur.idea.visual && <LessonVisual visual={cur.idea.visual} theme={theme} />}
                         {cur.idea.example && (
                           <div className="ls-callout" style={{ borderColor: t.accent, background: t.accentGlow2 }}>
                             <span className="ls-callout-h" style={{ color: t.goldText }}>Example</span>
@@ -1203,6 +1209,7 @@ Give exactly 4 ideas, each with its own quick check (easy: it tests just that id
                       <div style={{ ...card, padding: '18px 22px 6px' }}>
                         <span className="ls-kick">Worked example</span>
                         <div style={{ fontSize: 16, fontWeight: 800, margin: '8px 0 6px', lineHeight: 1.45 }}><MathText text={L.example.problem} /></div>
+                        {L.example.visual && <div style={{ margin: '4px 0 12px' }}><LessonVisual visual={L.example.visual} theme={theme} /></div>}
                         {L.example.steps.map((st, i) => (
                           <div key={i} style={{ display: 'grid', gridTemplateColumns: '26px 1fr', gap: 10, padding: '11px 0', borderTop: `1px solid ${t.border}` }}>
                             <span className="ls-num" style={{ opacity: i < (lesson.revealed ?? 1) ? 1 : 0.4 }}>{i + 1}</span>

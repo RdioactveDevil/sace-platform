@@ -1,7 +1,9 @@
 // Renders a structured table embedded in a question.
 // table_data schema: { headers: string[], rows: (string|number)[][], caption?: string }
+// renderCell (optional) draws a header or cell's text, e.g. with MathText.
 
-export default function TableView({ table, theme }) {
+export default function TableView({ table, theme, renderCell }) {
+  const show = (v) => (renderCell ? renderCell(v ?? '') : (v ?? ''))
   const { headers = [], rows = [], caption } = table || {}
   if (!headers.length && !rows.length) return null
 
@@ -39,7 +41,7 @@ export default function TableView({ table, theme }) {
                       letterSpacing: '0.04em',
                     }}
                   >
-                    {h}
+                    {show(h)}
                   </th>
                 ))}
               </tr>
@@ -59,7 +61,7 @@ export default function TableView({ table, theme }) {
                       borderRight: ci < (Array.isArray(row) ? row.length : 1) - 1 ? `1px solid ${borderColor}` : 'none',
                     }}
                   >
-                    {cell ?? ''}
+                    {show(cell)}
                   </td>
                 ))}
               </tr>

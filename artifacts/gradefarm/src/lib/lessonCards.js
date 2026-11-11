@@ -9,6 +9,8 @@
 // check_index is the card, answers holds one entry per question card in order:
 // { ok, picked } (older lessons stored just true/false).
 
+import { cleanVisual, describeVisual } from './lessonVisuals.js'
+
 export const LESSON_VERSION = 2
 
 /** The cards for a lesson's content. Each question card has a `slot` in `answers`. */
@@ -110,6 +112,7 @@ export function parseLessonJson(raw) {
     title: i.title, text: i.text,
     ...(i.example && { example: i.example }),
     ...(i.watch_out && { watch_out: i.watch_out }),
+    ...(cleanVisual(i.visual) && { visual: cleanVisual(i.visual) }),
     ...(cleanCheck(i.check) && { check: cleanCheck(i.check) }),
   }))
   const steps = (d.example?.steps || []).filter(st => st && st.work)
@@ -121,7 +124,7 @@ export function parseLessonJson(raw) {
     title: d.title || '',
     ...(d.hook && { hook: d.hook }),
     ideas,
-    example: { problem: d.example.problem || '', steps },
+    example: { problem: d.example.problem || '', steps, ...(cleanVisual(d.example.visual) && { visual: cleanVisual(d.example.visual) }) },
     checks,
     summary: (d.summary || []).filter(Boolean),
   }
@@ -161,9 +164,12 @@ export function describeLessonCard(lesson) {
     out.push(`Idea: ${c.idea.title}`, `Explanation shown: ${c.idea.text}`)
     if (c.idea.example) out.push(`Example shown: ${c.idea.example}`)
     if (c.idea.watch_out) out.push(`"Watch out" note shown: ${c.idea.watch_out}`)
+    if (c.idea.visual) out.push(describeVisual(cleanVisual(c.idea.visual)))
   } else if (c.type === 'example') {
     const shown = Math.min(lesson.revealed ?? 1, data.example.steps.length)
-    out.push(`Worked example problem: ${data.example.problem}`, `The working is in numbered lines; the student has revealed lines 1 to ${shown} of ${data.example.steps.length}.`)
+    out.push(`Worked example problem: ${data.example.problem}`)
+    if (data.example.visual) out.push(describeVisual(cleanVisual(data.example.visual)))
+    out.push(`The working is in numbered lines; the student has revealed lines 1 to ${shown} of ${data.example.steps.length}.`)
     data.example.steps.forEach((st, i) => out.push(`  Line ${i + 1}${i < shown ? '' : ' (not revealed yet)'}: ${st.work}${st.note ? ` (why: ${st.note})` : ''}`))
     out.push('If the student says "step N" or "line N" here, they mean line N of this worked example. Explain revealed lines fully. For a line not revealed yet, help them work it out with a hint before showing it.')
   } else if (c.type === 'check') {
@@ -183,6 +189,6 @@ export function describeLessonCard(lesson) {
     out.push(`They finished the lesson with ${right} of ${total} questions right.`)
     if (data.summary?.length) out.push(`Summary shown: ${data.summary.join('; ')}`)
   }
-  out.push('', 'Answer about this card unless the student clearly asks about another part of the lesson (use the outline to find it). Refer to things the way the screen does: "the example", "the watch-out note", "option B", "line 3".')
+  out.push('', 'Answer about this card unless the student clearly asks about another part of the lesson (use the outline to find it). Refer to things the way the screen does: "the example", "the watch-out note", "the table", "the graph", "the diagram", "option B", "line 3".')
   return out.join('\n')
 }
