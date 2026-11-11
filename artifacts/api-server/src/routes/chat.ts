@@ -265,7 +265,8 @@ router.post("/chat", async (req, res) => {
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         thinking: CLAUDE_THINKING,
-        max_tokens: Math.min(Number(max_tokens) || 1000, 4000),
+        // Guided lessons are one long JSON reply (with tables, graphs and diagrams), so they get more room.
+        max_tokens: Math.min(Number(max_tokens) || 1000, req.body?.purpose === "lesson" ? 6000 : 4000),
         // Each turn re-sends the same system prompt + history, so cache it up
         // to the last message; later turns read that prefix at ~0.1x price.
         cache_control: { type: "ephemeral" },
