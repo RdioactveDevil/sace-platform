@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useBlocker } from 'react-router-dom'
 import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag } from 'lucide-react'
 import {
   selectNextQuestion,
@@ -279,6 +280,9 @@ export default function QuizScreen({
   const [endedForExam, setEndedForExam] = useState(false)
   // The student pressed End Session (also not the bank running out).
   const [endedEarly, setEndedEarly] = useState(false)
+  // Set just before the quiz sends them elsewhere itself, so that isn't asked about.
+  const leavingRef = useRef(false)
+  const openLearn = (...args) => { leavingRef.current = true; onOpenLearn(...args) }
   // Rows opened in the summary's answer list.
   const [openAnswers, setOpenAnswers] = useState(() => new Set())
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
@@ -1161,11 +1165,15 @@ export default function QuizScreen({
     setSessionAnswered(prev => prev.includes(trackId) ? prev : [...prev, trackId])
   }
 
-  // End Session: show the summary for what was answered (nothing answered yet
-  // means there's nothing to sum up, so go straight back to Practice).
+  // End Session: show the summary for what was answered. Leaving from the
+  // sidebar asks the same question (see the blocker below); with nothing
+  // answered there, it carries on to where they were going instead.
   const endSession = () => {
     setShowExit(false)
-    if (!sessionResults.some(r => !r.remediation)) { onHome(); return }
+    if (blocker.state === 'blocked') {
+      if (!sessionResults.length) { blocker.proceed(); return }
+      blocker.reset()
+    }
     clearRemediation()
     if (currentQ && showAns && !sessionAnswered.includes(currentQ.id)) setSessionAnswered([...sessionAnswered, currentQ.id])
     setEndedEarly(true)
@@ -1462,6 +1470,7 @@ export default function QuizScreen({
     if (examGradedRef.current || !examSet.length) return
     examGradedRef.current = true
     setShowFinishExam(false)
+    if (blocker.state === 'blocked') blocker.reset()
     setExamMarking('marking')
     const cur = examSet[examIndex]
     const times = cur && startTime.current
@@ -1558,6 +1567,26 @@ export default function QuizScreen({
 
   // The summary opens: a fanfare, and confetti if it went well.
   const showingSummary = finished || (!currentQ && sessionResults.length > 0)
+
+  // Leaving mid-session (the sidebar, the back button) asks the same question
+  // as End session / Finish exam, and ends on the same summary. Links the
+  // quiz itself offers (Ask Titan, Go unlimited) leave without asking: the
+  // session is kept for when they come back.
+  // Only while a question (and so the dialog) is on screen.
+  const questionOnScreen = !showingSummary && !!currentQ && !generatingMore && !(freeQuota && freeQuota.used >= freeQuota.limit && !showAns)
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    !leavingRef.current && questionOnScreen && currentLocation.pathname !== nextLocation.pathname)
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    if (examRun) setShowFinishExam(true)
+    else setShowExit(true)
+  }, [blocker.state]) // eslint-disable-line react-hooks/exhaustive-deps
+  // "Keep going": close the question and stay put.
+  const keepGoing = () => {
+    setShowExit(false)
+    setShowFinishExam(false)
+    if (blocker.state === 'blocked') blocker.reset()
+  }
   useEffect(() => {
     if (!showingSummary) return
     const main = sessionResults.filter(r => !r.remediation)
@@ -1957,7 +1986,7 @@ export default function QuizScreen({
       {freeQuota && (
         <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '7px 16px', fontSize: 12.5, color: t.textMuted, borderBottom: `1px solid ${t.border}`, background: t.bgSubtle }}>
           <span><strong style={{ color: t.text }}>{Math.max(0, freeQuota.limit - freeQuota.used)}</strong> of {freeQuota.limit} free questions left today</span>
-          <button type="button" onClick={freeQuota.onUpgrade} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>Go unlimited</button>
+          <button type="button" onClick={() => { leavingRef.current = true; freeQuota.onUpgrade() }} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>Go unlimited</button>
         </div>
       )}
 
@@ -1982,7 +2011,7 @@ export default function QuizScreen({
                 : "You haven't answered any questions yet."}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowExit(false)} style={btn('secondary')}>Keep going</button>
+              <button type="button" onClick={keepGoing} style={btn('secondary')}>Keep going</button>
               <button type="button" onClick={endSession} style={{ ...btn('primary'), background: t.danger, color: '#fff' }}>End session</button>
             </div>
           </div>
@@ -2016,7 +2045,7 @@ export default function QuizScreen({
               {examFlagged > 0 && ` ${examFlagged} ${examFlagged === 1 ? 'is' : 'are'} flagged for review.`}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowFinishExam(false)} style={btn('secondary')}>Keep going</button>
+              <button type="button" onClick={keepGoing} style={btn('secondary')}>Keep going</button>
               <button type="button" onClick={finishExam} style={btn('primary')}>Finish exam</button>
             </div>
           </div>
@@ -2248,7 +2277,7 @@ export default function QuizScreen({
                       {nextButtonLabel}
                     </button>
                     {onOpenLearn && !examMode && (
-                      <button type="button" onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                      <button type="button" onClick={() => openLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
                         {isMobile ? 'Ask Titan' : correct ? 'Ask Titan about this' : 'Ask Titan why'}
                       </button>
                     )}
@@ -2285,7 +2314,7 @@ export default function QuizScreen({
                   {nextButtonLabel}
                 </button>
                 {onOpenLearn && !examMode && (
-                  <button type="button" onClick={() => onOpenLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                  <button type="button" onClick={() => openLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
                     {correct ? 'Ask Titan about this' : 'Ask Titan why'}
                   </button>
                 )}
