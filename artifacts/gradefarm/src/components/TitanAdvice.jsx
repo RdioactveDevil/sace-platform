@@ -1,127 +1,129 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { THEMES } from '../lib/theme'
-import { findQuoteRects, mergeLineRects, textLineRects, layoutNotes, noteSize, handPath } from '../lib/advice'
+import { mergeLineRects, textLineRects, placeNotes, penMarkStyle } from '../lib/advice'
 import MathText from './MathText'
 import TableView from './TableView'
 
 // Titan's Advice: the question drawn with a teacher's pen marks over it —
 // underlines, circles and boxes on the words and quantities that matter, table
-// cells circled, and short handwritten notes with arrows. The marks come from
-// /api/marked/advice ({ notes, cells, steps }); this finds each quoted phrase
-// on screen and draws over it, so it works at any width.
+// cells circled, and short handwritten notes. The marks come from
+// /api/marked/advice ({ notes, cells, steps }).
+//
+// The marks are part of the question's text, not drawn over it: MathText wraps
+// each quoted phrase in a PenMark (its stroke is the element's background) and
+// the phrase's first and last word in NoteAnchors, and each note is positioned
+// inside one of those words. So the browser keeps every mark and note on its
+// words at any zoom, width or font, with nothing to line up; all that's
+// measured is which side of its words a note fits on, and a note with no clear
+// spot is listed under the question instead.
 
 const HAND = "'Caveat', 'Comic Sans MS', cursive"
 const NOTE_SIZE = 20
 // The question's line spacing, in pixels: room between two lines for one line
-// of handwriting with clear space above and below it, at every zoom level.
-const annotatedLineHeight = (fontSize) => Math.round(fontSize * 1.5 + NOTE_SIZE * 1.1 + 14)
+// of handwriting, clear of the pen marks above and below it.
+const annotatedLineHeight = (fontSize) => Math.round(fontSize * 1.5 + NOTE_SIZE * 1.1 + 18)
 // The style a note is written in; notes are measured in it before they're placed.
-const noteStyle = (pen, maxW) => ({ display: 'inline-block', maxWidth: maxW, fontFamily: HAND, fontSize: NOTE_SIZE, fontWeight: 600, lineHeight: 1.1, color: pen, whiteSpace: 'normal' })
+const noteStyle = (pen) => ({
+  fontFamily: HAND, fontSize: NOTE_SIZE, fontWeight: 600, fontStyle: 'normal', lineHeight: 1.1,
+  letterSpacing: 'normal', textDecoration: 'none', textTransform: 'none', textAlign: 'left',
+  color: pen, whiteSpace: 'nowrap', width: 'max-content',
+})
 
 export const penColor = (theme) => (theme === 'light' ? '#c2362d' : '#ff8f80')
 
-function Mark({ kind, rect, seed, pen }) {
-  const common = { fill: 'none', stroke: pen, strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }
-  const at = (x, y, w, h, k, sd) => <path transform={`translate(${x} ${y})`} d={handPath(k, sd, w, h)} {...common} />
-  const { x, y, w, h } = rect
-  if (kind === 'circle') return at(x - 7, y - 5, w + 14, h + 10, 'circle', seed)
-  if (kind === 'box') return at(x - 4, y - 3, w + 8, h + 6, 'box', seed)
-  if (kind === 'double_underline') return <g>{at(x - 2, y + h - 2, w + 4, 5, 'underline', seed)}{at(x - 2, y + h + 3, w + 4, 5, 'underline', seed + 7)}</g>
-  return at(x - 2, y + h - 1, w + 4, 6, 'underline', seed)
+// What the pen marks inside MathText need: the pen, each note and its mark,
+// and where each note goes ({ anchor, left, top } in px from its word, or null).
+const Pen = createContext(null)
+
+function PenMark({ index, block, children }) {
+  const pen = useContext(Pen)
+  const kind = pen?.notes[index]?.mark || 'underline'
+  const style = useMemo(() => penMarkStyle(kind, index * 5 + 1, pen?.color), [kind, index, pen?.color])
+  if (block) return <div data-tm-mark={index} style={{ ...style, display: 'table', margin: '0 auto' }}>{children}</div>
+  return <span data-tm-mark={index} style={style}>{children}</span>
 }
 
-function Arrow({ from, to, pen }) {
-  const midX = (from[0] + to[0]) / 2 + (to[1] > from[1] ? -10 : 10)
-  const midY = (from[1] + to[1]) / 2
-  const ang = Math.atan2(to[1] - midY, to[0] - midX)
-  const head = (a) => `${to[0] + 8 * Math.cos(a)} ${to[1] + 8 * Math.sin(a)}`
+function NoteAnchor({ index, which, block, children }) {
+  const pen = useContext(Pen)
+  const spot = pen?.placement?.[index]
+  const note = pen?.notes[index]
+  const here = spot && note && (which === 'both' || which === spot.anchor)
+  const Tag = block ? 'div' : 'span'
   return (
-    <g fill="none" stroke={pen} strokeWidth={1.8} strokeLinecap="round">
-      <path d={`M ${from[0]} ${from[1]} Q ${midX} ${midY} ${to[0]} ${to[1]}`} />
-      <path d={`M ${head(ang + Math.PI - 0.45)} L ${to[0]} ${to[1]} L ${head(ang + Math.PI + 0.45)}`} />
-    </g>
+    <Tag data-tm-anchor={index} data-tm-which={which} style={{ position: 'relative', whiteSpace: block ? undefined : 'nowrap' }}>
+      {children}
+      {here && (
+        <span
+          data-tm-note={index}
+          aria-hidden="true"
+          style={{ ...noteStyle(pen.color), position: 'absolute', left: spot.left, top: spot.top, transform: `rotate(${index % 2 ? 0.8 : -0.8}deg)`, pointerEvents: 'none', userSelect: 'none' }}
+        >
+          {note.note}
+        </span>
+      )}
+    </Tag>
   )
 }
 
-/** The question (and its table) with Titan's pen marks drawn over it. */
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+/** The question (and its table) with Titan's pen marks on it. */
 export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize = 17 }) {
   const t = THEMES[theme] || THEMES.dark
-  const pen = penColor(theme)
+  const color = penColor(theme)
   const boxRef = useRef(null)
   const textRef = useRef(null)
-  const tableRef = useRef(null)
   const sizerRef = useRef(null)
-  const [layout, setLayout] = useState(null)
+  const [placement, setPlacement] = useState(null)
+  const notes = useMemo(() => advice?.notes || [], [advice])
+  const marks = useMemo(() => ({ quotes: notes.map(n => n.quote), Mark: PenMark, Anchor: NoteAnchor }), [notes])
+  const pen = useMemo(() => ({ color, notes, placement }), [color, notes, placement])
 
+  // Decide which side of its words each note goes. Everything is read in the
+  // screen's pixels, compared only with itself, and turned back into the
+  // page's own pixels (the app is zoomed) as an offset from the note's word.
   const measure = useCallback(() => {
-    const box = boxRef.current
-    if (!box || !advice) return
-    const origin = box.getBoundingClientRect()
-    const width = box.clientWidth
-    // Relative to the box, and cut at its right edge (a long equation can overflow on a phone).
-    const rel = (r) => {
-      const x = r.left - origin.left
-      return { x, y: r.top - origin.top, w: Math.max(0, Math.min(r.width, width - 4 - x)), h: r.height }
-    }
-    const marks = []
-    const targets = []
-    // Each note's real size in the font it's drawn in (a fallback font is far
-    // wider than Titan's handwriting), at most 60% of the width, wrapping beyond.
-    const sized = [...(sizerRef.current?.children || [])].map(el => el.firstChild).map(el => (el ? { w: Math.ceil(el.offsetWidth) + 4, h: Math.ceil(el.offsetHeight) } : null))
-    ;(advice.notes || []).forEach((n, i) => {
-      const rects = findQuoteRects(textRef.current, n.quote).map(rel)
-      if (!rects.length) return
-      // A circle or box around words that wrap onto two lines reads badly: underline those instead.
-      const kind = rects.length > 1 && (n.mark === 'circle' || n.mark === 'box') ? 'underline' : n.mark
-      rects.forEach((r, j) => marks.push({ kind, rect: r, seed: i * 5 + j + 1 }))
-      const first = rects[0]
-      const sz = sized[i]?.w ? sized[i] : noteSize(n.note, NOTE_SIZE)
-      // Notes keep clear of the words and of the pen marks under them.
-      const below = kind === 'double_underline' ? 9 : kind === 'underline' ? 6 : 3
-      const keepOut = rects.map(r => ({ ...r, h: r.h + below }))
-      targets.push({ ...first, rects: keepOut, nw: sz.w, nh: sz.h, text: n.note, quote: n.quote })
+    const text = textRef.current
+    if (!text) return
+    const area = text.getBoundingClientRect()
+    const scale = text.offsetWidth ? area.width / text.offsetWidth : 1
+    const R = (r) => ({ x: r.left, y: r.top, w: r.width, h: r.height })
+    const fragments = (el) => (el ? mergeLineRects([...el.getClientRects()]).map(R) : [])
+    const word = (i, which) => text.querySelector(`[data-tm-anchor="${i}"][data-tm-which="${which}"], [data-tm-anchor="${i}"][data-tm-which="both"]`)
+    const sizes = [...(sizerRef.current?.children || [])].map(el => ({ w: el.offsetWidth * scale, h: el.offsetHeight * scale }))
+    const obstacles = [...textLineRects(text).map(R), ...[...text.querySelectorAll('[data-tm-mark]')].flatMap(fragments)]
+    const wanted = notes.map((n, i) => {
+      const start = word(i, 'start'), end = word(i, 'end')
+      if (!start || !end || !sizes[i]) return null
+      return {
+        ...sizes[i],
+        anchors: { start: R(start.getBoundingClientRect()), end: R(end.getBoundingClientRect()) },
+        frags: fragments(text.querySelector(`[data-tm-mark="${i}"]`)),
+      }
     })
-    const cellNotes = []
-    const rows = tableRef.current?.querySelectorAll('tbody tr') || []
-    ;(advice.cells || []).forEach((c, i) => {
-      const td = rows[c.row]?.children?.[c.col]
-      if (!td) return
-      const range = document.createRange()
-      range.selectNodeContents(td)
-      const [r] = mergeLineRects([...range.getClientRects()])
-      if (!r) return
-      marks.push({ kind: 'circle', rect: rel({ left: r.left, top: r.top, width: r.width, height: r.height }), seed: 50 + i })
-      if (c.note) cellNotes.push(c.note)
+    // Within the question's own text (not up over its table and the table's notes).
+    const bounds = { left: area.left, right: area.right, top: area.top, bottom: area.bottom + 12 * scale }
+    const spots = placeNotes(wanted, obstacles, bounds, { clear: 3 * scale, gap: 10 * scale })
+    const px = (v) => Math.round(v * 2) / 2
+    const next = spots.map((s, i) => {
+      if (!s) return null
+      const a = wanted[i].anchors[s.anchor]
+      return { anchor: s.anchor, left: px((s.x - a.x) / scale), top: px((s.y - a.y) / scale) }
     })
-    // Every line of the question, so a note never sits on words, marked or not.
-    const lines = textLineRects(textRef.current).map(rel)
-    const placed = layoutNotes(targets, width, lines)
-    const notes = targets.map((tg, i) => {
-      const p = placed[i]
-      // Short arrows: point at the part of the target under the note, start from the part of the note over it.
-      const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, Math.max(lo, hi)))
-      const toX = clamp(p.x + tg.nw / 2, tg.x + 8, tg.x + tg.w - 8)
-      const fromX = clamp(toX, p.x + 10, p.x + tg.nw - 10)
-      const from = p.above ? [fromX, p.y + tg.nh] : [fromX, p.y]
-      const to = p.above ? [toX, tg.y - 3] : [toX, tg.y + tg.h + 4]
-      return { ...p, w: tg.nw, h: tg.nh, text: tg.text, quote: tg.quote, from, to, tilt: i % 2 ? 1.5 : -1.5 }
-    })
-    setLayout({ marks, notes: notes.filter(n => n.fits !== false), extra: notes.filter(n => n.fits === false), cellNotes, w: width, h: box.scrollHeight })
-  }, [advice])
+    setPlacement(prev => (same(prev, next) ? prev : next))
+  }, [notes])
 
   useLayoutEffect(() => { measure() }, [measure, question?.question, fontSize])
   useEffect(() => {
     const box = boxRef.current
     if (!box) return
-    // One measure per frame, however many observers fire.
+    // One measure per frame, however many events fire.
     let frame = 0
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => measure()) }
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null
     ro?.observe(box)
     if (textRef.current) ro?.observe(textRef.current)
-    // Text that changes without the box changing size (maths re-rendered) moves the words too.
-    const mo = typeof MutationObserver !== 'undefined' ? new MutationObserver(schedule) : null
-    if (textRef.current) mo?.observe(textRef.current, { childList: true, subtree: true, characterData: true })
+    window.addEventListener('resize', schedule)
     // The page around it settles after the first paint (the marks panel slides in).
     const late = setTimeout(schedule, 350)
     // KaTeX and the handwriting font load late and change the text's widths: measure again when any font arrives.
@@ -130,56 +132,63 @@ export function AnnotatedQuestion({ question, advice, theme = 'dark', fontSize =
     const again = () => { if (live) schedule() }
     fonts?.ready?.then(again)
     fonts?.addEventListener?.('loadingdone', again)
-    return () => { live = false; cancelAnimationFrame(frame); clearTimeout(late); ro?.disconnect(); mo?.disconnect(); fonts?.removeEventListener?.('loadingdone', again) }
+    return () => {
+      live = false
+      cancelAnimationFrame(frame)
+      clearTimeout(late)
+      ro?.disconnect()
+      window.removeEventListener('resize', schedule)
+      fonts?.removeEventListener?.('loadingdone', again)
+    }
   }, [measure])
 
+  // Table cells: circled where they are, with their notes under the table.
+  const table = question.table_data
+  const cells = (advice?.cells || []).filter(c => Array.isArray(table?.rows?.[c.row]) && c.col < table.rows[c.row].length)
+  const circled = new Map(cells.map((c, i) => [`${c.row}:${c.col}`, i]))
+  const renderCell = (v, at) => {
+    const i = at && !at.header ? circled.get(`${at.row}:${at.col}`) : undefined
+    return i === undefined ? v : <span data-tm-cell style={penMarkStyle('circle', 50 + i, color)}>{v}</span>
+  }
+  const cellNotes = cells.map(c => c.note).filter(Boolean)
+  // Notes with no clear spot beside their words (or whose words weren't found), so they don't cover the question.
+  const extra = placement ? notes.filter((_, i) => !placement[i]) : []
+
   return (
-    <div ref={boxRef} style={{ position: 'relative', paddingTop: 6 }}>
-      {question.table_data && (
-        <div ref={tableRef}>
-          <TableView table={question.table_data} theme={theme} />
-          {layout?.cellNotes?.length > 0 && (
-            <div style={{ fontFamily: HAND, fontSize: NOTE_SIZE, color: pen, lineHeight: 1.2, margin: '-6px 0 10px', transform: 'rotate(-1deg)' }}>
-              {layout.cellNotes.map((n, i) => <div key={i}>↑ {n}</div>)}
-            </div>
-          )}
+    <Pen.Provider value={pen}>
+      <div ref={boxRef} style={{ position: 'relative', paddingTop: 6 }}>
+        {table && (
+          <div>
+            <TableView table={table} theme={theme} renderCell={renderCell} />
+            {cellNotes.length > 0 && (
+              <div style={{ fontFamily: HAND, fontSize: NOTE_SIZE, color, lineHeight: 1.2, margin: '-6px 0 10px', transform: 'rotate(-1deg)' }}>
+                {cellNotes.map((n, i) => <div key={i}>↑ {n}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+        <div ref={textRef} style={{ fontSize, fontWeight: 700, color: t.text, lineHeight: `${annotatedLineHeight(fontSize)}px`, paddingTop: 12, marginBottom: 12 }}>
+          <MathText text={question.question} marks={marks} />
         </div>
-      )}
-      <div ref={textRef} style={{ fontSize, fontWeight: 700, color: t.text, lineHeight: `${annotatedLineHeight(fontSize)}px`, paddingTop: 10, marginBottom: 12 }}>
-        <MathText text={question.question} />
-      </div>
-      {layout && (
-        <>
-          <svg width={layout.w} height={layout.h} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}>
-            {layout.marks.map((m, i) => <Mark key={`m${i}`} {...m} pen={pen} />)}
-            {layout.notes.map((n, i) => (Math.hypot(n.to[0] - n.from[0], n.to[1] - n.from[1]) > 16 ? <Arrow key={`a${i}`} from={n.from} to={n.to} pen={pen} /> : null))}
-          </svg>
-          {layout.notes.map((n, i) => (
-            <div key={`n${i}`} style={{ ...noteStyle(pen, n.w), position: 'absolute', left: n.x, top: n.y, width: n.w, transform: `rotate(${n.tilt}deg)`, pointerEvents: 'none' }}>
-              {n.text}
-            </div>
-          ))}
-        </>
-      )}
-      {/* Notes with no clear spot beside their words, so they don't cover the question. */}
-      {layout?.extra?.length > 0 && (
-        <ul style={{ listStyle: 'none', margin: '0 0 12px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {layout.extra.map((n, i) => (
-            <li key={i} style={{ ...noteStyle(pen, '100%'), display: 'block' }}>
-              <span style={{ opacity: 0.75, fontFamily: 'inherit' }}>“<MathText text={n.quote} />”</span> → {n.text}
-            </li>
-          ))}
+        {extra.length > 0 && (
+          <ul style={{ listStyle: 'none', margin: '0 0 12px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {extra.map((n, i) => (
+              <li key={i} style={{ ...noteStyle(color), whiteSpace: 'normal', width: 'auto' }}>
+                <span style={{ opacity: 0.75, fontFamily: 'inherit' }}>“<MathText text={n.quote} />”</span> → {n.note}
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* Hidden copies of the notes, to measure them in the font they're drawn in. */}
+        <div ref={sizerRef} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: 0, overflow: 'hidden', visibility: 'hidden', pointerEvents: 'none' }}>
+          {notes.map((n, i) => <span key={i} style={{ ...noteStyle(color), position: 'absolute', left: 0, top: 0 }}>{n.note}</span>)}
+        </div>
+        {/* The notes, readable by screen readers. */}
+        <ul style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', margin: 0, padding: 0 }}>
+          {notes.map((n, i) => <li key={i}>{n.quote.replace(/\$/g, '')}: {n.note}</li>)}
         </ul>
-      )}
-      {/* Hidden copies of the notes, to measure them in the font they're drawn in. */}
-      <div ref={sizerRef} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, visibility: 'hidden', pointerEvents: 'none', width: '100%' }}>
-        {(advice?.notes || []).map((n, i) => <div key={i}><span style={noteStyle(pen, '60%')}>{n.note}</span></div>)}
       </div>
-      {/* The notes, readable by screen readers and when a phrase couldn't be found on screen. */}
-      <ul style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', margin: 0, padding: 0 }}>
-        {(advice?.notes || []).map((n, i) => <li key={i}>{n.quote.replace(/\$/g, '')}: {n.note}</li>)}
-      </ul>
-    </div>
+    </Pen.Provider>
   )
 }
 
