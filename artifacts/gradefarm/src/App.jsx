@@ -838,6 +838,7 @@ function AppShellScreens({
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
           assignmentsVersion={assignmentsVersion}
+          onProfileUpdated={onProfileUpdated}
           onStartSession={onStartSession} />
       </div>}
       {wasOpened('learn') && <div style={show('learn')}>

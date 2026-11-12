@@ -100,7 +100,7 @@ export async function loadParentReport(
         .eq("tutor_id", tutorId).eq("student_id", studentId).neq("status", "cancelled")
         .gt("scheduled_at", now.toISOString()).order("scheduled_at", { ascending: true }).limit(1)
       : NONE,
-    admin.from("profiles").select("streak, last_active").eq("id", studentId).maybeSingle<{ streak: number | null; last_active: string | null }>(),
+    admin.from("profiles").select("streak, last_active, streak_freezes").eq("id", studentId).maybeSingle<{ streak: number | null; last_active: string | null; streak_freezes: number | null }>(),
   ]);
   for (const r of [answersRes, assignmentsRes, lessonRes]) if (r.error) throw new Error(r.error.message);
 
@@ -119,7 +119,7 @@ export async function loadParentReport(
 
   return {
     report: summarizeWeek(answers, (assignmentsRes.data ?? []) as WeekAssignment[], dayOf(now), since),
-    streak: currentStreak(profileRes.data?.streak, profileRes.data?.last_active, now),
+    streak: currentStreak(profileRes.data?.streak, profileRes.data?.last_active, now, profileRes.data?.streak_freezes),
     nextLesson: ((lessonRes.data ?? []) as { scheduled_at: string }[])[0]?.scheduled_at ?? null,
   };
 }

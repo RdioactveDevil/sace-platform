@@ -1178,14 +1178,14 @@ export async function getVariantCountsByConceptTags(conceptTags) {
 export async function fetchRoster(tutorId, { allTutors = false } = {}) {
   let query = supabase
     .from('tutor_students')
-    .select('tutor_id, student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak, last_active)')
+    .select('tutor_id, student_id, invited_at, profiles!tutor_students_student_id_fkey(display_name, xp, streak, last_active, streak_freezes)')
     .order('invited_at', { ascending: false })
   if (!allTutors) query = query.eq('tutor_id', tutorId)
   const { data, error } = await query
   if (error) throw error
   const rows = (data || []).map(r => ({
     ...r,
-    profiles: r.profiles ? { ...r.profiles, streak: currentStreak(r.profiles.streak, r.profiles.last_active) } : null,
+    profiles: r.profiles ? { ...r.profiles, streak: currentStreak(r.profiles.streak, r.profiles.last_active, new Date(), r.profiles.streak_freezes) } : null,
   }))
   if (!allTutors) return rows
 
@@ -1863,7 +1863,7 @@ export async function fetchStudentProgressForTutor(tutorId, studentId, { allTuto
   // Fetch profile stats (xp, streak)
   const { data: prof, error: profError } = await supabase
     .from('profiles')
-    .select('xp, streak, best_streak, last_active')
+    .select('xp, streak, best_streak, last_active, streak_freezes')
     .eq('id', studentId)
     .single()
   if (profError) throw profError
@@ -1944,7 +1944,7 @@ export async function fetchStudentProgressForTutor(tutorId, studentId, { allTuto
 
   return {
     xp:              prof?.xp ?? 0,
-    streak:          currentStreak(prof?.streak, prof?.last_active),
+    streak:          currentStreak(prof?.streak, prof?.last_active, new Date(), prof?.streak_freezes),
     best_streak:     prof?.best_streak ?? 0,
     accuracy,
     totalAttempts,
@@ -2272,5 +2272,48 @@ export async function fetchMyExamAttempts(userId, limit = 10) {
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw error
+  return data || []
+}
+
+// ─── ENGAGEMENT (daily goal, leagues, predicted grade) ─────────────────────
+/** Set the student's daily goal (questions a day). */
+export async function setDailyGoal(userId, goal) {
+  const g = Math.round(Number(goal))
+  if (!Number.isFinite(g) || g < 5 || g > 200) throw new Error('Pick a goal between 5 and 200')
+  await updateProfile(userId, { daily_goal: g })
+}
+
+/**
+ * The caller's league group this week (my_league(), migration
+ * 20261111000001_engagement): [{ week, ends_at, tier, position, name,
+ * weekly_xp, is_me }], best first. Empty until their first answer of the
+ * week, or when they aren't in leagues. null if leagues aren't set up yet.
+ */
+export async function fetchMyLeague() {
+  const { data, error } = await supabase.rpc('my_league')
+  if (error) {
+    console.warn('[db] fetchMyLeague:', error.message)
+    return null
+  }
+  // `place` in SQL (position is a reserved word there).
+  return (data || []).map(r => ({ ...r, position: r.place }))
+}
+
+/** The most XP the student has earned in one league week (0 if none). */
+export async function fetchBestWeekXP(userId) {
+  const { data, error } = await supabase.from('league_members').select('weekly_xp')
+    .eq('user_id', userId).order('weekly_xp', { ascending: false }).limit(1)
+  if (error) return 0
+  return Math.max(0, data?.[0]?.weekly_xp ?? 0)
+}
+
+/** The student's most recent answers ({ question_id, correct, answered_at }), newest first. */
+export async function fetchRecentAnswers(userId, limit = 600) {
+  const { data, error } = await supabase.from('answer_log').select('question_id, correct, answered_at')
+    .eq('user_id', userId).order('answered_at', { ascending: false }).limit(limit)
+  if (error) {
+    console.warn('[db] fetchRecentAnswers:', error.message)
+    return []
+  }
   return data || []
 }

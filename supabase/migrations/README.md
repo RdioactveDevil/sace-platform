@@ -138,3 +138,18 @@ the `answer_markings` table, where the API keeps each AI-marked answer. Apply
 it **before** deploying the API: `POST /api/marked/mark` and
 `/api/marked/generate` read and write those columns. Nothing changes for
 students until an admin switches on **Written answers** for a subject.
+
+## Engagement (20261111000001)
+
+`20261111000001_engagement` adds the daily goal, today's answer count, streak
+freezes (one per 10 right in a row, up to 2; a missed day uses one), personal
+bests (`best_answer_run`, `best_day_answers`), weekly leagues
+(`league_members`, `my_league()`) and raises the per-answer XP cap to 300 for
+bonus questions. `award_xp_for()` gains `p_run` and returns the new fields; its
+old three-argument form is dropped. Apply it **before** deploying the API.
+Until then the API falls back to the three-argument call, so XP is still
+awarded, but there are no freezes or leagues, and a bonus question above 150 XP
+is capped at 150. Leagues need no cron: a student's first answer of the week
+places them in a group, and the top 5 of last week's group move up a tier.
+Students under 15, students hidden from leaderboards, tutors and admins aren't
+placed in leagues.

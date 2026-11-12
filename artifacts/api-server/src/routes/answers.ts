@@ -13,6 +13,7 @@ import { isDueReview } from "../lib/due-review";
 import { createHash } from "node:crypto";
 import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { checkAiQuota } from "../lib/ai-quota";
+import { bonusXP, isBonusPick } from "../lib/bonus";
 
 /**
  * Answers are marked here, not in the app (migration 20261110000000).
@@ -23,6 +24,7 @@ import { checkAiQuota } from "../lib/ai-quota";
  * and solution to show.
  *
  *   POST /answers/present    the question now on screen; holds it until answered
+ *                            (and says whether it's a bonus question, lib/bonus.ts)
  *   POST /answers/check      mark one answer
  *   POST /answers/exam       mark a whole practice exam and save the attempt
  *   POST /answers/solutions  answers and solutions for the exam builder
@@ -141,15 +143,38 @@ async function recordAnswer(admin: SupabaseClient, userId: string, questionId: s
   if (error) throw error;
 }
 
-type ProfileFields = { xp: number; streak: number; best_streak: number; recent_correct: number; recent_answers: number };
+// What award_xp_for returns (migration 20261111000001_engagement): the totals
+// to show, plus whether a streak freeze was earned or used on this answer.
+type ProfileFields = {
+  xp: number; streak: number; best_streak: number; recent_correct: number; recent_answers: number;
+  streak_freezes?: number; freeze_used?: number; freeze_earned?: boolean; best_answer_run?: number;
+  day_answers?: number; best_day_answers?: number; weekly_xp?: number | null; league_tier?: number;
+};
 
-async function awardXP(admin: SupabaseClient, userId: string, xp: number, correct: boolean | null): Promise<ProfileFields | null> {
-  const { data, error } = await admin.rpc("award_xp_for", { p_user: userId, p_xp_earned: xp, p_correct: correct });
+/** `run`: right answers in a row including this one (0 after a wrong one); earns streak freezes. */
+async function awardXP(admin: SupabaseClient, userId: string, xp: number, correct: boolean | null, run: number | null = null): Promise<ProfileFields | null> {
+  let { data, error } = await admin.rpc("award_xp_for", { p_user: userId, p_xp_earned: xp, p_correct: correct, p_run: run });
+  // Before migration 20261111000001 the function has no p_run: award the XP the old way.
+  if (error && /p_run|award_xp_for\(/.test(error.message || "")) {
+    ({ data, error } = await admin.rpc("award_xp_for", { p_user: userId, p_xp_earned: xp, p_correct: correct }));
+  }
   if (error) {
     logger.warn({ err: error, userId }, "[answers] awarding XP failed");
     return null;
   }
   return ((Array.isArray(data) ? data[0] : data) as ProfileFields) || null;
+}
+
+/**
+ * A bonus question (2× XP for a right answer): picked per student and question
+ * (lib/bonus.ts), in practice only (not a tutor's assignment), and only the
+ * first time the student meets it.
+ */
+async function isBonusQuestion(admin: SupabaseClient, userId: string, questionId: string, context: string | null): Promise<boolean> {
+  if (!context?.startsWith("practice:") || !isBonusPick(userId, questionId)) return false;
+  const { data } = await admin.from("struggle_profiles").select("attempts")
+    .eq("user_id", userId).eq("question_id", questionId).maybeSingle<{ attempts: number }>();
+  return !(data?.attempts && data.attempts > 0);
 }
 
 /** Whether a question is due back for review for this student (see isDueReview). */
@@ -251,7 +276,8 @@ async function mark(caller: Caller, q: QuestionRow, response: unknown): Promise<
 // Body: { questionId, context, skipDue? }. The app calls this when it puts a
 // question on screen. → { questionId, held }: if the student already has a
 // question on screen in this context that they haven't answered, that one
-// comes back (held: true) and the app shows it instead. skipDue: the student
+// comes back (held: true) and the app shows it instead. bonus: it's a bonus
+// question, worth 2× XP if answered right. skipDue: the student
 // chose to skip the review on screen; it's let go if it really is a question
 // due back for review in practice (answered before, so nothing is dodged: it
 // stays due and comes back next time).
@@ -279,7 +305,7 @@ router.post("/answers/present", async (req, res) => {
       const assignmentOpen = !assignmentId || !!(await openAssignment(admin, userId, uuid(assignmentId)));
       const skipped = skipDue && context.startsWith("practice:") && await dueForReview(admin, userId, hold.question_id);
       if (readable.has(hold.question_id) && !answered.data?.length && assignmentOpen && !skipped) {
-        res.json({ questionId: hold.question_id, held: true });
+        res.json({ questionId: hold.question_id, held: true, bonus: await isBonusQuestion(admin, userId, hold.question_id, context) });
         return;
       }
     }
@@ -294,7 +320,7 @@ router.post("/answers/present", async (req, res) => {
       );
       if (error) throw error;
     }
-    res.json({ questionId, held: false });
+    res.json({ questionId, held: false, bonus: await isBonusQuestion(admin, userId, questionId, context) });
   } catch (err) {
     logger.error({ err }, "[answers] present failed");
     res.status(500).json({ error: "Couldn't load that question. Try again." });
@@ -310,7 +336,8 @@ router.post("/answers/present", async (req, res) => {
 // toward the assignment when the context is one and the question is in it.
 // Extra practice after a wrong answer (`remediation`): a bank question
 // (bankId), a saved variant (variantId) or a just-generated one (token).
-// → { correct, marks, xp, bonus, run, reveal, profile, assignment }
+// → { correct, marks, xp, bonus, bonusQuestion, run, reveal, profile, assignment }
+// (bonus: extra practice's completion bonus; bonusQuestion: XP was doubled)
 router.post("/answers/check", async (req, res) => {
   const caller = await requireUser(req, res);
   if (!caller) return;
@@ -368,16 +395,18 @@ router.post("/answers/check", async (req, res) => {
       return;
     }
 
-    const [run, repeat] = await Promise.all([
+    const [run, repeat, bonusQuestion] = await Promise.all([
       sessionRun(admin, userId, sessionId),
       correct || partMarks ? answeredRightRecently(admin, userId, q.id) : Promise.resolve(false),
+      isBonusQuestion(admin, userId, q.id, context),
     ]);
     let xp = partMarks ? partMarksXP(q.difficulty, marks!.awarded, marks!.total) : calcXP(correct, q.difficulty, run);
     if (xp > 0 && repeat) xp = 0;
+    if (bonusQuestion) xp = bonusXP(xp);
 
     const selected = questionType(q) === "mcq" && Number.isInteger(response) ? response as number : null;
     await recordAnswer(admin, userId, q.id, correct, selected, sessionId, ms);
-    const profile = await awardXP(admin, userId, xp, correct);
+    const profile = await awardXP(admin, userId, xp, correct, correct ? run + 1 : 0);
 
     let assignment: Record<string, unknown> | null = null;
     if (context?.startsWith("assignment:")) {
@@ -393,7 +422,7 @@ router.post("/answers/check", async (req, res) => {
 
     if (hold) await admin.from("question_holds").delete().eq("user_id", userId).eq("context", context!).eq("question_id", q.id);
 
-    res.json({ correct, marks, xp, bonus: 0, run: correct ? run + 1 : 0, reveal: revealOf(q), profile, assignment });
+    res.json({ correct, marks, xp, bonus: 0, bonusQuestion, run: correct ? run + 1 : 0, reveal: revealOf(q), profile, assignment });
   } catch (err) {
     logger.error({ err }, "[answers] check failed");
     res.status(500).json({ error: "Your answer couldn't be checked just now. Try again." });
@@ -605,7 +634,7 @@ router.post("/answers/exam-run", async (req, res) => {
       if (keepsRecord) {
         if (xp > 0 && await answeredRightRecently(admin, userId, id)) xp = 0;
         await recordAnswer(admin, userId, id, correct, questionType(q) === "mcq" && Number.isInteger(response) ? response as number : null, sessionId, ms);
-        profile = (await awardXP(admin, userId, xp, correct)) || profile;
+        profile = (await awardXP(admin, userId, xp, correct, correct ? run + 1 : 0)) || profile;
         if (a && fits?.(q)) assignment = (await recordAssignmentAnswer(admin, userId, a.id, q, correct, response, ms)) || assignment;
       }
       run = correct ? run + 1 : 0;
