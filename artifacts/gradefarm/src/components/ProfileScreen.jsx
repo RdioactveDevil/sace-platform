@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import RankIcon from './RankIcon'
+import ProgressLeagueBests from './ProgressLeagueBests'
 import { X } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogSince, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
@@ -256,6 +257,9 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
             </div>
           </div>
         )}
+
+        {/* This week's league and personal bests */}
+        <ProgressLeagueBests theme={theme} profile={profile} />
 
         <div className="po-row">
           {/* Accuracy by week */}
