@@ -59,11 +59,10 @@ import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
 import Celebration from './Celebration'
-import SessionBar from './SessionBar'
 import BreakTime from './BreakTime'
 import RankUpModal from './RankUpModal'
 import SessionWins from './SessionWins'
-import { answersToday, breakDue, dailyGoal, nextBreakAt, rankUp, BREAK_EVERY } from '../lib/engagement'
+import { breakDue, nextBreakAt, rankUp, BREAK_EVERY } from '../lib/engagement'
 import { addDays, localDate } from '../lib/streak'
 
 const GOLD = '#f1be43'
@@ -2017,6 +2016,7 @@ export default function QuizScreen({
   // Titan's Advice drawn over the question (after answering).
   const annotated = writtenAnswer && adviceOn && !!advice
   const isMcq = getQuestionType(currentQ) === 'mcq'
+  const isBonus = bonusId === currentQ.id && !currentQ.is_variant && !examRun
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
   const mathInput = usesMathInput(subjectTile?.name || currentQ?.subject)
   const btn = (kind, disabled = false) => ({
@@ -2166,7 +2166,20 @@ export default function QuizScreen({
       )}
 
       {/* Top bar: where you are on the left; how it's going, tools and the way out on the right. */}
-      <div style={{ background: t.bg, borderBottom: `1px solid ${t.border}`, padding: isMobile ? '10px 16px' : '11px 24px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: 12.5, color: t.textMuted }}>
+      <div style={{ position: 'relative', background: t.bg, borderBottom: `1px solid ${t.border}`, padding: isMobile ? '10px 16px' : '11px 24px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: 12.5, color: t.textMuted }}>
+        {/* Progress to the next break (a mini game every BREAK_EVERY answers): a thin line along the bottom edge. */}
+        {!examRun && (() => {
+          const breakAt = nextBreakAt(breaksOffered)
+          const answered = sessionResults.length
+          const sinceLast = Math.min(BREAK_EVERY, Math.max(0, answered - (breakAt - BREAK_EVERY)))
+          return (
+            <div role="progressbar" aria-label="Progress to your next break" aria-valuemin={0} aria-valuemax={BREAK_EVERY} aria-valuenow={sinceLast}
+              aria-valuetext={`${answered} answered, break at ${breakAt}`} title={`${answered} answered · break at ${breakAt}`}
+              style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: t.border }}>
+              <div style={{ width: `${(sinceLast / BREAK_EVERY) * 100}%`, height: '100%', background: t.accent, transition: 'width 0.35s ease' }} />
+            </div>
+          )
+        })()}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
           {examRun ? (
             <span style={{ fontSize: 13, fontWeight: 800, color: t.text, whiteSpace: 'nowrap' }}>{isMobile ? `Q${examIndex + 1} of ${examSet.length}` : `Exam · Question ${examIndex + 1} of ${examSet.length}`}</span>
@@ -2203,20 +2216,6 @@ export default function QuizScreen({
           )}
           {!examRun && !isMobile && streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: t.text, fontWeight: 700 }} title="Right in a row"><Flame size={14} color={t.goldText} aria-hidden="true" />{streak}</span>}
           {!examRun && !isMobile && <span style={{ whiteSpace: 'nowrap' }}>{signedXP(sessionXP)} XP</span>}
-          {!examRun && (() => {
-            const goal = dailyGoal(profile)
-            const done = answersToday(profile)
-            const frac = Math.min(1, done / goal)
-            return (
-              <span title={`Daily goal: ${done} of ${goal} questions today`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-                  <circle cx="10" cy="10" r="7.5" fill="none" stroke={t.border} strokeWidth="3" />
-                  <circle cx="10" cy="10" r="7.5" fill="none" stroke={t.success} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${frac * 47.1} 47.1`} transform="rotate(-90 10 10)" />
-                </svg>
-                <strong style={{ color: done >= goal ? t.success : t.text }}>{Math.min(done, 999)}/{goal}</strong>
-              </span>
-            )
-          })()}
           {timer}
           <QuizToolsDock theme={theme} tools={tools} inline />
           <button type="button" onClick={() => (examRun ? setShowFinishExam(true) : setShowExit(true))}
@@ -2225,14 +2224,6 @@ export default function QuizScreen({
           </button>
         </div>
       </div>
-
-      {!examRun && (
-        <div style={{ flexShrink: 0, padding: isMobile ? '10px 16px 0' : '14px 28px 0', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: 640 }}>
-            <SessionBar theme={theme} answered={sessionResults.length} startedAt={sessionStartRef.current.at} breakAt={nextBreakAt(breaksOffered)} compact={isMobile} />
-          </div>
-        </div>
-      )}
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
         <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '14px' : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2298,16 +2289,14 @@ export default function QuizScreen({
               />
             )}
 
-            {bonusId === currentQ.id && !currentQ.is_variant && !examRun && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: t.accent, color: NAVY, fontSize: 12.5, fontWeight: 800 }}>
-                  <Star size={13} aria-hidden="true" fill={NAVY} /> Bonus question · 2× XP
+            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ position: 'relative', background: t.bgCard, border: `1px solid ${isBonus ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+              {/* A bonus question: a small tag on the card's corner. */}
+              {isBonus && (
+                <span title="Bonus question: a right answer is worth double. A wrong one costs the usual amount."
+                  style={{ position: 'absolute', top: -11, right: 18, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, background: t.accent, color: NAVY, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                  <Star size={11} aria-hidden="true" fill={NAVY} /> 2× XP<span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}> bonus question</span>
                 </span>
-                {!showAns && <span style={{ fontSize: 12, color: t.textMuted }}>A right answer is worth double. A wrong one costs the usual amount.</span>}
-              </div>
-            )}
-
-            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ background: t.bgCard, border: `1px solid ${bonusId === currentQ.id && !currentQ.is_variant && !examRun ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+              )}
               {markedLayout && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
                   <span style={{ fontSize: 11.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
