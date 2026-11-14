@@ -1095,13 +1095,13 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   const lastChat = recentItems.find(i => i.key === 'current' || i.key.startsWith('chat-'))
   const weakest = struggleTopics[0]
   const firstTopic = (subjectTopicConfig?.macroGroups || []).flatMap(m => m.topics || [])[0]
-  // Each is a one-line title (cut short with … if it's long) and a small note.
+  // Each is one line, cut short with … if it's long.
   const askIdeas = [
-    lastChat && { key: 'carry', Icon: RotateCcw, tone: t.goldText, bg: t.accentGlow, text: `Carry on: ${lastChat.label.replace(/^Chat · /, '')}`, note: 'Your last chat', onClick: lastChat.open },
+    lastChat && { key: 'carry', Icon: RotateCcw, tone: t.goldText, bg: t.accentGlow, text: `Continue: ${lastChat.label.replace(/^Chat · /, '')}`, onClick: lastChat.open },
     weakest
-      ? { key: 'weak', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${weakest.subtopic}`, note: `You got ${Math.round((1 - weakest.rate) * 100)}% in Practice`, onClick: () => askAbout(weakest.subtopic, `Can you explain ${weakest.subtopic}? I keep getting it wrong in Practice.`) }
-      : firstTopic && { key: 'first', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${firstTopic}`, note: 'From the start', onClick: () => askAbout(firstTopic, `Can you explain ${firstTopic} from the start?`) },
-    { key: 'photo', Icon: Camera, tone: t.success, bg: t.successBg, text: 'Check my working', note: 'Add a photo and Titan goes through each step', onClick: () => photoRef.current?.click() },
+      ? { key: 'weak', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${weakest.subtopic}`, onClick: () => askAbout(weakest.subtopic, `Can you explain ${weakest.subtopic}? I keep getting it wrong in Practice.`) }
+      : firstTopic && { key: 'first', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${firstTopic}`, onClick: () => askAbout(firstTopic, `Can you explain ${firstTopic} from the start?`) },
+    { key: 'photo', Icon: Camera, tone: t.success, bg: t.successBg, text: 'Check my working: add a photo', onClick: () => photoRef.current?.click() },
   ].filter(Boolean)
 
   // Lesson: the cards' tags.
@@ -1202,7 +1202,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                 }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromStart() } }}
                 disabled={aiBlocked}
-                placeholder={aiBlocked ? blockedReason : 'Ask Titan anything, or paste a question'}
+                placeholder={aiBlocked ? blockedReason : 'Ask Titan anything'}
                 rows={1}
                 aria-label="Message Titan"
                 className="ls-ask-input"
@@ -1241,14 +1241,11 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
 
             {askIdeas.length > 0 && (
               <div className="ls-ask-ideas" style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {askIdeas.map(({ key, Icon, tone, bg, text, note, onClick }) => (
+                {askIdeas.map(({ key, Icon, tone, bg, text, onClick }) => (
                   <button key={key} type="button" className="ls-idea" onClick={onClick} disabled={aiBlocked && key === 'weak'} title={text}
-                    style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 52, padding: '6px 12px', border: 'none', borderRadius: 12, background: 'transparent', color: t.text, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 48, padding: '6px 12px', border: 'none', borderRadius: 12, background: 'transparent', color: t.text, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
                     <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 9, background: bg, color: tone, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={16} /></span>
-                    <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
-                      <span style={{ fontSize: 12.5, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</span>
-                    </span>
+                    <span style={{ minWidth: 0, fontSize: 15, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
                   </button>
                 ))}
               </div>
