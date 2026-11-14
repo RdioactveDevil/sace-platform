@@ -177,7 +177,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone, needsPass
     password: (
       <>
         <H>Choose a password</H>
-        <Sub>So you can sign in again on any device.</Sub>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 380 }}>
           <Field id="onb-pw-name" label="Your name" theme={theme}>
             <input id="onb-pw-name" className="af-inp" style={bigInput} value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="name" />
