@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
@@ -13,7 +13,7 @@ import { visualPromptLines } from '../lib/lessonVisuals'
 import { buildCards, stepOfCard, upgradeLesson, lessonScore, runEndingAt, lessonProgressLabel, parseLessonJson, answerAt, withAnswer, cardLabel, describeLessonCard } from '../lib/lessonCards'
 import { awaitingParent } from '../lib/parentConsent'
 import { ANALOGY_STYLES, analogyInstruction, analogyLabel, cleanAnalogy, isCustomAnalogy, lessonAnalogyLine } from '../lib/analogy'
-import { ArrowUp, Camera, CircleHelp, Plus, RotateCcw, Search } from 'lucide-react'
+import { ArrowUp, Camera, CircleHelp, History, Plus, RotateCcw, Search } from 'lucide-react'
 import { greetingContext, pickGreeting } from '../lib/greetings'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
 
@@ -559,6 +559,25 @@ export default function LearnScreen({
   const [startMode, setStartMode] = useState('ask')
   const [recentOpen, setRecentOpen] = useState(false)
   const [lessonQuery, setLessonQuery] = useState('')
+  // Phones: the start screen fills the screen below the app's top bar exactly,
+  // so the heading can sit in the middle and the suggestions above the box.
+  const startRef = useRef(null)
+  const [startMinH, setStartMinH] = useState(null)
+  useLayoutEffect(() => {
+    if (phase && phase !== 'setup') return undefined
+    const measure = () => {
+      const el = startRef.current
+      if (!el || el.offsetParent === null) return // not on screen (another page is showing)
+      if (window.innerWidth > 640) { setStartMinH(null); return }
+      const top = el.getBoundingClientRect().top + window.scrollY
+      setStartMinH(Math.max(320, Math.floor(window.innerHeight - top)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    if (ro && startRef.current) ro.observe(startRef.current)
+    return () => { window.removeEventListener('resize', measure); ro?.disconnect() }
+  }, [phase])
   // The start screen's heading: a different one each visit (lib/greetings.js),
   // picked again when a new chat starts, never while the student is typing.
   const [greetSeed, setGreetSeed] = useState(() => Math.random())
@@ -1118,8 +1137,8 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   }
   const canAsk = (input.trim() || attachedImages.length > 0) && !loading && !processingImages && !aiBlocked
   const pill = (on) => ({
-    minWidth: 104, height: 38, padding: '0 18px', borderRadius: 999, border: 'none', fontFamily: FONT_B, fontSize: 14, cursor: on ? 'default' : 'pointer',
-    ...(on ? { ...segOn, fontWeight: 800 } : { background: 'transparent', color: t.textMuted, fontWeight: 700 }),
+    position: 'relative', zIndex: 1, width: 'var(--ls-pill)', height: 38, padding: 0, borderRadius: 999, border: 'none', background: 'transparent', fontFamily: FONT_B, fontSize: 14,
+    fontWeight: on ? 800 : 700, color: on ? segOn.color : t.textMuted, cursor: on ? 'default' : 'pointer', transition: 'color 0.25s ease',
   })
 
   if (!phase || phase === 'setup') return (
@@ -1127,7 +1146,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
       {styles}
       {hiddenInputs}
       <style>{`
-        .ls-start { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 18px 24px 20px; }
+        .ls-start { --ls-pill: 108px; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 18px 24px 20px; }
         .ls-start-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 32px 0 44px; }
         .ls-ask-head { order: 1; } .ls-ask-box { order: 2; } .ls-ask-ideas { order: 3; }
         .ls-idea { transition: background 0.12s ease; }
@@ -1135,12 +1154,25 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         .ls-start button:focus-visible, .ls-start a:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 2px; }
         .ls-lesson-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
         .ls-ask-dock { order: 2; width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 8px; }
+        .ls-pill-thumb { transition: transform 0.3s cubic-bezier(.3,.7,.2,1); }
+        .ls-recent-icon { display: none; }
+        @media (max-width: 380px) {
+          .ls-start { --ls-pill: 88px; }
+          .ls-recent-word { display: none; }
+          .ls-recent-icon { display: block; }
+        }
+        @keyframes lsModeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .ls-mode-in { animation: lsModeIn 0.3s ease both; }
+        @media (prefers-reduced-motion: reduce) { .ls-pill-thumb { transition: none; } .ls-mode-in { animation: none; } }
         .ls-quota-dock { display: none; }
         .ls-ask-input { min-height: 48px; }
         @media (max-width: 640px) {
           .ls-start { padding: 14px 14px 0; }
           .ls-start-main { justify-content: flex-start; gap: 18px; padding: 22px 0 0; }
-          .ls-start-main.ls-ask-mode { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+          /* Balanced: the heading in the middle of the free space, the suggestions just above the box. */
+          .ls-start-main.ls-ask-mode { padding-bottom: calc(140px + env(safe-area-inset-bottom)); gap: 0; }
+          .ls-ask-mode .ls-ask-head { margin: auto 0 !important; }
+          .ls-ask-mode .ls-ask-ideas { margin-top: 12px; }
           .ls-ask-ideas { order: 2; }
           /* The box sits on the bottom edge of the screen, like a messaging app. */
           .ls-ask-dock { order: 3; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-width: none; box-sizing: border-box;
@@ -1154,18 +1186,22 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           .ls-start-lesson { height: 42px !important; padding: 0 16px !important; }
         }
       `}</style>
-      <div className="ls-start">
+      <div className="ls-start" ref={startRef} style={startMinH ? { minHeight: startMinH } : undefined}>
         {/* Ask or Lesson, and recent chats */}
         <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div role="group" aria-label="Ask or lesson" style={{ display: 'inline-flex', padding: 4, borderRadius: 999, background: t.bgCard, border: `1px solid ${t.border}` }}>
+          <div role="group" aria-label="Ask or lesson" style={{ position: 'relative', display: 'inline-flex', padding: 4, borderRadius: 999, background: t.bgCard, border: `1px solid ${t.border}` }}>
+            {/* The highlight slides between Ask and Lesson. */}
+            <span aria-hidden="true" className="ls-pill-thumb"
+              style={{ position: 'absolute', top: 4, left: 4, width: 'var(--ls-pill)', height: 38, borderRadius: 999, background: segOn.background, transform: startMode === 'lesson' ? 'translateX(var(--ls-pill))' : 'none' }} />
             <button type="button" aria-pressed={startMode === 'ask'} onClick={() => setStartMode('ask')} style={pill(startMode === 'ask')}>Ask</button>
             <button type="button" data-tutorial-target="learn-lessons" aria-pressed={startMode === 'lesson'} onClick={() => setStartMode('lesson')} style={pill(startMode === 'lesson')}>Lesson</button>
           </div>
           {recentItems.length > 0 && (
             <div className="ls-recent-btn" style={{ position: 'absolute', right: 0 }}>
-              <button type="button" aria-expanded={recentOpen} onClick={() => setRecentOpen(v => !v)}
-                style={{ border: 'none', background: 'none', padding: '8px 4px', fontFamily: FONT_B, fontSize: 13, fontWeight: 600, color: t.textMuted, cursor: 'pointer' }}>
-                Recent ▾
+              <button type="button" aria-expanded={recentOpen} onClick={() => setRecentOpen(v => !v)} aria-label="Recent chats and lessons"
+                style={{ border: 'none', background: 'none', padding: '8px 4px', fontFamily: FONT_B, fontSize: 13, fontWeight: 600, color: t.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
+                <span className="ls-recent-word">Recent ▾</span>
+                <History className="ls-recent-icon" size={19} aria-hidden="true" />
               </button>
               {recentOpen && (
                 <div style={{ position: 'absolute', right: 0, top: 40, zIndex: 30, width: 320, padding: 6, borderRadius: 12, background: t.bgCard, border: `1px solid ${t.border}`, boxShadow: t.shadowModal }}>
@@ -1183,7 +1219,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         </div>
 
         {startMode === 'ask' ? (
-          <main className="ls-start-main ls-ask-mode">
+          <main key="ask" className="ls-start-main ls-ask-mode ls-mode-in">
             <h1 className="ls-ask-head" style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' }}>{greeting.ask}</h1>
 
             <div className="ls-ask-dock">
@@ -1252,7 +1288,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
             )}
           </main>
         ) : (
-          <main className="ls-start-main">
+          <main key="lesson" className="ls-start-main ls-mode-in">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
               <h1 style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textWrap: 'balance' }}>{greeting.lesson}</h1>
               <p style={{ margin: 0, fontSize: 15, color: t.textMuted }}>10-minute lessons: the key ideas, a worked example, then check questions.</p>
