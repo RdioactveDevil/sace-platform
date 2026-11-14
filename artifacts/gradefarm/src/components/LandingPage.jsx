@@ -649,15 +649,10 @@ function Subjects({ onPick }) {
   const live = usePublicSubjects() // null while loading, [] if it can't be reached
   const grouped = groupSubjects(live)
   const shown = GROUPS.filter(g => grouped[g.id].length > 0)
-  const phrases = shown.map(g => g.phrase)
-  const list = phrases.length > 1 ? `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}` : phrases[0]
   return (
     <section id="subjects" className="lp-in lp-sec" aria-labelledby="lp-subjects">
       <div className="lp-sec-head">
         <h2 id="lp-subjects">Subjects</h2>
-        <p>{shown.length
-          ? `Subjects for ${list}. New subjects appear here as soon as they're ready, and every subject gets new questions as you practise.`
-          : 'Every subject gets new questions as you practise.'}</p>
       </div>
       {live === null ? (
         <p className="lp-muted" style={{ marginTop: 20 }}>Loading subjects…</p>

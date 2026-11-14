@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { Check } from 'lucide-react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { Check, MapPin } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getPlatformSettings, getBillingConfig } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
@@ -16,8 +16,10 @@ import { SITE_CSS, SITE_FONTS, themeVars, SiteNav, SiteFooter, siteFooterLinks }
 // School. A student ticks the subjects they want and a receipt beside the
 // list adds them up at
 // the real per-subject prices (platform_settings.pricing, Admin → Settings),
-// weekly or monthly. With one ticked, the bill shows an empty line for the
-// next subject at its lower price, which takes them back to the list.
+// weekly or monthly. The list sits in the middle until the first tick, then
+// moves aside as the bill slides in. 15 seconds after that, the bill offers
+// a line for the next subject at its lower price, which takes them back to
+// the list.
 //
 // The free trial covers one subject (api-server routes/billing.ts): with one
 // ticked the receipt says "Today $0"; with more, billing starts today.
@@ -43,8 +45,6 @@ const CSS = `${SITE_CSS}
 .pp-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 44px; }
 .pp-head h1 { font-size: clamp(34px, 5vw, 54px); font-weight: 800; line-height: 1.05; letter-spacing: -0.035em; }
 .pp-head p { color: var(--lp-muted); font-size: 17px; max-width: 52ch; }
-.pp-where { font-size: 14.5px; color: var(--lp-muted); }
-.pp-where b { color: var(--lp-ink); }
 /* Which state are you in? The only thing on the page until they answer. */
 .pp-ask { min-height: calc(100vh - 140px); min-height: calc(100svh - 140px); justify-content: center; padding-bottom: 64px; gap: 28px; }
 .pp-states { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 620px; }
@@ -67,14 +67,29 @@ const CSS = `${SITE_CSS}
 .pp-enter ~ .lp-sec { animation: ppRise 0.45s ease 0.16s both; }
 @keyframes ppRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 .pp-head h1:focus { outline: none; }
-.pp-seg { display: inline-flex; border: 1px solid var(--lp-line); border-radius: 10px; overflow: hidden; background: var(--lp-card); margin-top: 4px; }
-.pp-seg button { border: none; background: transparent; color: var(--lp-muted); font-size: 13.5px; font-weight: 800; padding: 9px 18px; cursor: pointer; }
+.pp-seg { position: relative; display: inline-flex; border: 1px solid var(--lp-line); border-radius: 10px; overflow: hidden; background: var(--lp-card); margin-top: 4px; }
+.pp-seg button { position: relative; z-index: 1; border: none; background: transparent; color: var(--lp-muted); font-size: 13.5px; font-weight: 800; padding: 9px 18px; cursor: pointer; transition: color 0.3s; }
 .pp-seg button + button { border-left: 1px solid var(--lp-line); }
 .pp-seg button[aria-pressed="true"] { background: var(--lp-on-bg); color: var(--lp-on-fg); }
-.pp-seg small { font-size: 12px; font-weight: 700; color: var(--lp-ok); margin-left: 5px; }
+.pp-seg small { font-size: 12px; font-weight: 700; color: var(--lp-ok); margin-left: 5px; transition: color 0.3s; }
 .pp-seg button[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
+/* Weekly / Monthly: once measured, a dark pill slides between the two instead of the colour jumping. */
+.pp-seg-thumb { position: absolute; top: 0; bottom: 0; left: 0; z-index: 0; background: var(--lp-on-bg); transition: transform 0.38s cubic-bezier(0.3, 0.8, 0.2, 1), width 0.38s cubic-bezier(0.3, 0.8, 0.2, 1); }
+.pp-seg.live button[aria-pressed="true"] { background: transparent; }
+.pp-seg.live button + button { border-left-color: transparent; }
+/* Prices fade to their new amounts when the billing period changes. */
+.pp-amt { display: inline-block; animation: ppIn 0.3s ease; }
 
 .pp-build { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 22px; margin-top: 34px; padding-bottom: 64px; align-items: start; }
+/* Until a subject is ticked the list sits in the middle (half the bill's column plus the gap
+   to the right); then it slides across to its spot as Your plan comes in. */
+.pp-build .pp-list { transition: translate 0.55s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pp-build.solo .pp-list { translate: calc((380px + 22px) / 2) 0; }
+/* "Subjects for South Australia · Change", at the top of the list it filters. */
+.pp-list-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; font-size: 14px; color: var(--lp-muted); border-bottom: 1px solid var(--lp-line); }
+.pp-list-top span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.pp-list-top b { color: var(--lp-ink); }
+.pp-list-top svg { color: var(--lp-gold-text); flex: none; }
 .pp-list { overflow: hidden; }
 .pp-list fieldset { border: none; margin: 0; padding: 0; min-width: 0; }
 .pp-list fieldset + fieldset { border-top: 1px solid var(--lp-line); }
@@ -88,10 +103,12 @@ const CSS = `${SITE_CSS}
 .pp-list .pp-msg { padding: 22px 18px; color: var(--lp-muted); }
 
 /* Your plan only shows once a subject is ticked, and slides in beside the list (rises in below it on phones). */
-.pp-rcpt { padding: 22px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 76px; animation: ppSlideIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pp-rcpt { padding: 22px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 76px; animation: ppSlideIn 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) 0.12s both; }
 @keyframes ppSlideIn { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
-/* On its first showing, the "2nd subject" line lands after the box. */
-.pp-rcpt .pp-next { animation-delay: 0.25s; animation-fill-mode: both; }
+/* The "2nd subject" line opens up in the bill when it arrives (15 seconds after the first tick). */
+.pp-next-wrap { display: grid; animation: ppOpen 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pp-next-wrap > * { min-height: 0; overflow: hidden; }
+@keyframes ppOpen { from { grid-template-rows: 0fr; opacity: 0; margin-bottom: -13px; } to { grid-template-rows: 1fr; opacity: 1; margin-bottom: 0; } }
 .pp-rcpt > b { font-size: 16px; }
 .pp-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14.5px; font-variant-numeric: tabular-nums; }
 .pp-row > span:first-child { min-width: 0; }
@@ -143,12 +160,13 @@ const CSS = `${SITE_CSS}
 .lp-end h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.03em; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pp-next, .pp-rcpt, .pp-rcpt .pp-next, .pp-list.nudge label, .pp-states button, .pp-tick, .pp-ask, .pp-enter .pp-head, .pp-enter .pp-list, .pp-enter ~ .lp-sec { animation: none; }
-  .pp-states button, .pp-next { transition: none; }
+  .pp-next, .pp-next-wrap, .pp-amt, .pp-rcpt, .pp-list.nudge label, .pp-states button, .pp-tick, .pp-ask, .pp-enter .pp-head, .pp-enter .pp-list, .pp-enter ~ .lp-sec { animation: none; }
+  .pp-states button, .pp-next, .pp-seg-thumb, .pp-seg button, .pp-build .pp-list { transition: none; }
   .pp-states.leaving button:not(.go) { transform: none; }
 }
 @media (max-width: 860px) {
   .pp-build { grid-template-columns: 1fr; }
+  .pp-build.solo .pp-list { translate: none; }
   .pp-rcpt { position: static; animation-name: ppRise; }
   .pp-tplans { grid-template-columns: 1fr; }
 }
@@ -167,6 +185,35 @@ const STATE_KEY = 'gf-pricing-state'
 const isState = (code) => AU_STATES.some(([c]) => c === code)
 function savedState() {
   try { const v = localStorage.getItem(STATE_KEY); return isState(v) ? v : null } catch { return null }
+}
+
+/** How long one subject sits on the bill before "+ Add a 2nd subject" is offered. */
+const NEXT_DELAY_MS = 15000
+
+/**
+ * Weekly / Monthly, with a pill that slides to the one picked. Until the
+ * buttons are measured the picked one just has the dark background.
+ */
+function BillingToggle({ interval, onChange, saving }) {
+  const week = useRef(null), month = useRef(null)
+  const [thumb, setThumb] = useState(null)
+  useLayoutEffect(() => {
+    const el = (interval === 'month' ? month : week).current
+    if (!el) return undefined
+    const measure = () => setThumb({ x: el.offsetLeft, w: el.offsetWidth })
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(measure) // widths change once the font loads
+    ro.observe(el.parentElement)
+    return () => ro.disconnect()
+  }, [interval])
+  return (
+    <div className={`pp-seg${thumb ? ' live' : ''}`} role="group" aria-label="Billing">
+      {thumb && <span className="pp-seg-thumb" aria-hidden="true" style={{ transform: `translateX(${thumb.x}px)`, width: thumb.w }} />}
+      <button ref={week} type="button" aria-pressed={interval === 'week'} onClick={() => onChange('week')}>Weekly</button>
+      <button ref={month} type="button" aria-pressed={interval === 'month'} onClick={() => onChange('month')}>Monthly{saving ? <small>save {saving}%</small> : null}</button>
+    </div>
+  )
 }
 
 /** 2 → "2nd", 3 → "3rd", 11 → "11th". */
@@ -273,7 +320,14 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const total = lines.reduce((a, l) => a + l.price, 0)
   // With one subject ticked the next one is cheaper, so the bill shows a line for it.
   const nextPrice = tierPrice(tiers, already + 2)
-  const moreCostsLess = chosen.length === 1 && nextPrice < lines[0].price
+  // It waits until they've had one subject on the bill for NEXT_DELAY_MS, then stays offered.
+  const [nextReady, setNextReady] = useState(false)
+  useEffect(() => {
+    if (nextReady || chosen.length === 0) return undefined
+    const t = setTimeout(() => setNextReady(true), NEXT_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [nextReady, chosen.length > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+  const moreCostsLess = nextReady && chosen.length === 1 && nextPrice < lines[0].price
   const [nudge, setNudge] = useState(false)
   const listRef = useRef(null)
   // Back to the list (on phones it's above the bill), with focus on the first subject they could add.
@@ -370,17 +424,15 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
         <div className={`lp-in${entering ? ' pp-enter' : ''}`}>
           <div className="pp-head">
             <h1 ref={planHeading} tabIndex={-1}>Build your plan.</h1>
-            <p className="pp-where"><b>{stateLabel(studyState)}</b> · <button type="button" className="lp-link" onClick={() => { setChangingState(true); window.scrollTo(0, 0) }}>Change</button></p>
-            {!onPlan && (
-              <div className="pp-seg" role="group" aria-label="Billing">
-                <button type="button" aria-pressed={interval === 'week'} onClick={() => setBillInterval('week')}>Weekly</button>
-                <button type="button" aria-pressed={interval === 'month'} onClick={() => setBillInterval('month')}>Monthly{saving ? <small>save {saving}%</small> : null}</button>
-              </div>
-            )}
+            {!onPlan && <BillingToggle interval={interval} onChange={setBillInterval} saving={saving} />}
           </div>
 
-          <div className="pp-build">
+          <div className={`pp-build${chosen.length ? '' : ' solo'}`}>
             <div className={`lp-card pp-list${nudge ? ' nudge' : ''}`} ref={listRef} style={{ scrollMarginTop: 76 }}>
+              <div className="pp-list-top">
+                <span><MapPin size={16} aria-hidden="true" />Subjects for <b>{stateLabel(studyState)}</b></span>
+                <button type="button" className="lp-link" onClick={() => { setChangingState(true); window.scrollTo(0, 0) }}>Change</button>
+              </div>
               {subjects === null ? <p className="pp-msg">Loading subjects…</p>
                 : !all.length && subjects.length ? <p className="pp-msg">No subjects for {stateLabel(studyState)} yet. <button type="button" className="lp-link" onClick={() => setChangingState(true)}>Pick another state</button>.</p>
                 : !all.length ? <p className="pp-msg">Couldn't load the subjects just now. <button type="button" className="lp-link" onClick={signUp}>Make an account</button> and pick yours inside.</p>
@@ -407,17 +459,19 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
               <b>Your plan</b>
               {onPlan && <p className="pp-note" style={{ textAlign: 'left' }}>You're on a plan with {already} subject{already === 1 ? '' : 's'}. New ones go on the same bill.</p>}
                   {lines.map(l => (
-                    <div className="pp-row" key={l.id}><span>{l.name}{l.level ? <span className="lv"> · {l.level}</span> : null}</span><span>${money(l.price)}</span></div>
+                    <div className="pp-row" key={l.id}><span>{l.name}{l.level ? <span className="lv"> · {l.level}</span> : null}</span><span className="pp-amt" key={per}>${money(l.price)}</span></div>
                   ))}
                   {moreCostsLess && (
-                    <button type="button" className="pp-next" onClick={addAnother}
-                      aria-label={`Add a ${ordinal(already + 2)} subject for $${money(nextPrice)} ${per} instead of $${money(lines[0].price)}. Each extra subject costs less.`}>
-                      <span><span className="pl" aria-hidden="true">+</span>Add a {ordinal(already + 2)} subject<small>Each extra subject costs less</small></span>
-                      <span className="pr"><s>${money(lines[0].price)}</s><b>${money(nextPrice)}</b></span>
-                    </button>
+                    <div className="pp-next-wrap"><div>
+                      <button type="button" className="pp-next" onClick={addAnother}
+                        aria-label={`Add a ${ordinal(already + 2)} subject for $${money(nextPrice)} ${per} instead of $${money(lines[0].price)}. Each extra subject costs less.`}>
+                        <span><span className="pl" aria-hidden="true">+</span>Add a {ordinal(already + 2)} subject<small>Each extra subject costs less</small></span>
+                        <span className="pr pp-amt" key={per}><s>${money(lines[0].price)}</s><b>${money(nextPrice)}</b></span>
+                      </button>
+                    </div></div>
                   )}
-                  <div className="pp-row tot"><span>{onPlan ? 'Added to your bill' : 'Total'}</span><span>${money(total)} {per}</span></div>
-                  <p className="pp-day">That's just <b>{perDay(total, per === 'a month' ? 'month' : 'week')}</b> a day.</p>
+                  <div className="pp-row tot"><span>{onPlan ? 'Added to your bill' : 'Total'}</span><span className="pp-amt" key={per}>${money(total)} {per}</span></div>
+                  <p className="pp-day">That's just <b className="pp-amt" key={per}>{perDay(total, per === 'a month' ? 'month' : 'week')}</b> a day.</p>
                   {trial && <div className="pp-row free"><span>First {trialDays} days</span><span>Free</span></div>}
                   {!onPlan && <div className="pp-row"><span>Today</span><span><b>${trial ? 0 : money(total)}</b></span></div>}
                   {error && <p className="pp-err" role="alert">{error}</p>}
@@ -425,7 +479,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
                   {trial ? null
                     : !onPlan && chosen.length > 1 && trialDays > 0 ? <p className="pp-note">The {trialDays}-day free trial is for one subject. Start with one to try it free, and add the rest later.</p>
                     : <p className="pp-note">Cancel any time from your Account.</p>}
-                  {!onPlan && <p className="pp-note">Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with one subject.</p>}
+                  {!onPlan && <p className="pp-note">Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with limited features.</p>}
             </div>
             )}
           </div>
