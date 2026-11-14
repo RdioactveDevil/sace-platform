@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, verifyPassword } from "../lib/auth";
 import { cancelAllSubscriptions, getStripe, syncCustomerEmail } from "./billing";
 import { getResend, parentConsentUrl, sendEmail } from "../lib/email";
-import { parentConsentEmail } from "../lib/parent-consent";
+import { parentConsentEmail, needsParentConsent } from "../lib/parent-consent";
 import { r2DeleteObject } from "../lib/r2";
 import { contactEmailForLogin, familyIdOf, familyMembers, isFamilyLogin } from "../lib/family";
 import { logger } from "../lib/logger";
@@ -195,8 +195,8 @@ router.put("/account/parent", async (req: Request, res: Response) => {
   try {
     const [{ data: authUser }, { data: profile, error }] = await Promise.all([
       admin.auth.admin.getUserById(userId),
-      admin.from("profiles").select(`display_name, ${PARENT_COLUMNS}`).eq("id", userId)
-        .maybeSingle<ParentFields & { display_name: string | null }>(),
+      admin.from("profiles").select(`display_name, dob, year_level, ${PARENT_COLUMNS}`).eq("id", userId)
+        .maybeSingle<ParentFields & { display_name: string | null; dob: string | null; year_level: number | null }>(),
     ]);
     if (error) throw new Error(error.message);
     if (!profile) return fail(res, 404, "Account not found");
@@ -270,6 +270,8 @@ router.put("/account/parent", async (req: Request, res: Response) => {
         parentName: next.parent_name,
         studentName: next.display_name?.trim() || "Your child",
         url: parentConsentUrl(userId, next.parent_email),
+        // Only under 15 does the parent's OK matter; anyone older added them for the weekly email.
+        young: needsParentConsent(profile.dob, profile.year_level),
       });
       const { error: sendErr } = await sendEmail(resend, {
         to: next.parent_email, subject, content, idempotencyKey: `parent-consent:${userId}:${next.parent_email}:${now}`,

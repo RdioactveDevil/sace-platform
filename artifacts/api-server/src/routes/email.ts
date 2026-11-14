@@ -1,3 +1,4 @@
+import { needsParentConsent } from "../lib/parent-consent";
 import { Router, type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { getServiceClient } from "../lib/auth";
@@ -222,15 +223,17 @@ router.post("/email/parent-unsubscribe", async (req: Request, res: Response) => 
 });
 
 // ── Parent consent ──────────────────────────────────────────────────────────
-// A student under 15 gave us their parent's email; the parent confirms here
-// (lib/parent-consent.ts). GET explains and asks, POST records it. The link is
+// A student gave us their parent's email; the parent confirms here
+// (lib/parent-consent.ts). Under 15, that OK switches the AI features on;
+// older, it's just for the weekly progress email, and the page says only
+// that. GET explains and asks, POST records it. The link is
 // signed for the email it went to, so it stops working if the student changes
 // the address.
 
 const CONSENT_PATH = "/api/parent/consent";
 const BAD_CONSENT_LINK = "This link is incomplete or out of date: the parent email on the account may have changed since it was sent. Ask your child to send it again from My Account in gradefarm.";
 
-type ConsentProfile = { display_name: string | null; year_level: number | null; parent_email: string | null; parent_consent_at: string | null };
+type ConsentProfile = { display_name: string | null; dob: string | null; year_level: number | null; parent_email: string | null; parent_consent_at: string | null };
 
 /** The student the link is for, or null (and the page sent) when it isn't valid. */
 async function readConsentLink(req: Request, res: Response): Promise<{ s: string; t: string; profile: ConsentProfile } | null> {
@@ -242,7 +245,7 @@ async function readConsentLink(req: Request, res: Response): Promise<{ s: string
   };
   if (!/^[0-9a-f-]{36}$/i.test(s) || !t) return bad();
   const { data: profile, error } = await getServiceClient()
-    .from("profiles").select("display_name, year_level, parent_email, parent_consent_at").eq("id", s)
+    .from("profiles").select("display_name, dob, year_level, parent_email, parent_consent_at").eq("id", s)
     .maybeSingle<ConsentProfile>();
   if (error) throw error;
   if (!profile?.parent_email) return bad();
@@ -257,9 +260,11 @@ async function readConsentLink(req: Request, res: Response): Promise<{ s: string
 const childName = (p: ConsentProfile) => p.display_name?.trim() || "your child";
 const firstName = (p: ConsentProfile) => childName(p).split(" ")[0];
 
+const young = (p: ConsentProfile) => needsParentConsent(p.dob, p.year_level);
+
 function consentDone(res: Response, p: ConsentProfile, already: boolean) {
   page(res, 200, already ? `${firstName(p)}'s account is already confirmed` : `Thanks, ${firstName(p)}'s account is confirmed`, [
-    "Titan AI and the other AI features are now switched on for them.",
+    ...(young(p) ? ["Titan AI and the other AI features are now switched on for them."] : []),
     `Your first weekly progress email arrives on Sunday evening. To stop those, use the link at the bottom of any of them. To close ${firstName(p)}'s account, email support@titaniumtutoring.com.au.`,
   ], undefined, "Confirm your child's account");
 }
@@ -271,6 +276,14 @@ router.get("/parent/consent", async (req: Request, res: Response) => {
     const { profile: p, s, t } = link;
     if (p.parent_consent_at) return consentDone(res, p, true);
     const who = `${childName(p)}${p.year_level ? ` (Year ${p.year_level})` : ""}`;
+    if (!young(p)) {
+      page(res, 200, `Get ${firstName(p)}'s weekly progress`, [
+        `${who} gave us this email address as their parent or guardian, so you can get a short progress email about their week every Sunday.`,
+        "Confirm and the first one arrives this Sunday. You can stop them any time from the link at the bottom of each one.",
+        "If you'd rather not, you don't need to do anything.",
+      ], { action: "confirm", label: "Confirm my email", path: CONSENT_PATH, s, t }, "Confirm your child's account");
+      return;
+    }
     page(res, 200, `Confirm ${firstName(p)}'s gradefarm account`, [
       `${who} gave us this email address as their parent or guardian. Because they're under 15, we ask you before switching on the AI features.`,
       `By confirming, you agree to ${firstName(p)} using gradefarm under our Terms of Service and Privacy Policy (${appUrl()}/terms and ${appUrl()}/privacy). That includes Titan AI, an AI tutor that explains their practice questions. What they type to Titan is sent to our AI provider, Anthropic, to write a reply. Titan is set up to stay on schoolwork, never to ask for personal details, and to point them to a trusted adult if they say they're worried about something.`,
