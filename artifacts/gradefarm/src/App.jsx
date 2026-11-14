@@ -729,7 +729,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
     {/* Desktop: the sidebar sits on the window colour and the page is an inset
         sheet beside it. Phones: the page fills the screen. Wide screens draw
         the whole shell at appZoom(). */}
-    <div style={{ display: 'flex', minHeight: screenH, height: isMobile ? 'auto' : screenH, overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg, zoom }}>
+    <div style={{ display: 'flex', minHeight: isMobile ? '100dvh' : screenH, height: isMobile ? 'auto' : screenH, overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg, zoom }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}@media(min-width:860px){.gf-panel .tutor-desktop-sidebar,.gf-panel .td-main{height:100%!important}}`}</style>
 
       {!isMobile && (
@@ -748,7 +748,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
       )}
 
       <div className="gf-panel" style={{
-        flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100vh' : 0, overflow: isMobile ? 'visible' : 'hidden',
+        flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100dvh' : 0, overflow: isMobile ? 'visible' : 'hidden',
         ...(isMobile ? {} : { background: t.bg, margin: '8px 8px 8px 0', borderRadius: 12, border: `1px solid ${shell.line}` }),
       }}>
         {isMobile && (
@@ -842,7 +842,7 @@ function AppShellScreens({
           onStartSession={onStartSession} />
       </div>}
       {wasOpened('learn') && <div style={show('learn')}>
-        <LearnScreen {...commonProps} {...learnState}
+        <LearnScreen key={subject?.id || 'none'} {...commonProps} {...learnState}
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
           onBack={() => navigate('/question-bank')} />
@@ -1079,6 +1079,22 @@ function AppInner() {
 
   // Titan AI bridge state
   const [questionContext,     setQuestionContext]     = useState(null)  // set from QuizScreen, consumed by LearnScreen
+
+  // Learn's open chat belongs to one subject: switching subject starts Learn
+  // afresh, so a Chemistry chat isn't offered as "Carry on" in Maths.
+  const learnSubjectRef = useRef(selectedSubject?.id ?? null)
+  useEffect(() => {
+    const id = selectedSubject?.id ?? null
+    if (learnSubjectRef.current === id) return
+    learnSubjectRef.current = id
+    setLearnPhase('setup')
+    setLearnMessages([])
+    setLearnTopic('')
+    setLearnDocContext('')
+    setLearnDocName('')
+    setQuestionContext(null)
+    setLearnRequest(null)
+  }, [selectedSubject?.id])
   // A short "Consolidate — practice this topic" round started from Titan AI:
   // { label, subtopics, canReturn }, consumed by QuizScreen.
   const [consolidation, setConsolidationState] = useState(null)

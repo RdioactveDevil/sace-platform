@@ -758,7 +758,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
       const n = buildCards(up?.data).length
       return n ? Math.min(1, ((up.card ?? 0) + 1) / n) : 0
     }
-    if (topic && phase !== 'chat') add(topic, 'Picked for you', null, 'picked')
+    if (topic && phase !== 'chat') add(topic, 'What you were just working on.', null, 'picked')
     lessonsInProgress.forEach(l => add(l.topic, `Resume at ${lessonProgressLabel(l).toLowerCase()}`, null, 'resume', progressOf(l)))
     struggleTopics.forEach(s => add(s.subtopic, `You got ${Math.round((1 - s.rate) * 100)}% of these right in Practice.`, 'danger', 'weak'))
     ;(subjectTopicConfig?.macroGroups || []).flatMap(m => m.topics || []).forEach(n => add(n, 'Next up in your course.', 'faint', 'new'))
@@ -1095,12 +1095,13 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   const lastChat = recentItems.find(i => i.key === 'current' || i.key.startsWith('chat-'))
   const weakest = struggleTopics[0]
   const firstTopic = (subjectTopicConfig?.macroGroups || []).flatMap(m => m.topics || [])[0]
+  // Each is a one-line title (cut short with … if it's long) and a small note.
   const askIdeas = [
-    lastChat && { key: 'carry', Icon: RotateCcw, tone: t.goldText, bg: t.accentGlow, text: `Carry on: ${lastChat.label.replace(/^Chat · /, '')}`, onClick: lastChat.open },
+    lastChat && { key: 'carry', Icon: RotateCcw, tone: t.goldText, bg: t.accentGlow, text: `Carry on: ${lastChat.label.replace(/^Chat · /, '')}`, note: 'Your last chat', onClick: lastChat.open },
     weakest
-      ? { key: 'weak', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${weakest.subtopic}. You got ${Math.round((1 - weakest.rate) * 100)}% in Practice`, onClick: () => askAbout(weakest.subtopic, `Can you explain ${weakest.subtopic}? I keep getting it wrong in Practice.`) }
-      : firstTopic && { key: 'first', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${firstTopic} from the start`, onClick: () => askAbout(firstTopic, `Can you explain ${firstTopic} from the start?`) },
-    { key: 'photo', Icon: Camera, tone: t.success, bg: t.successBg, text: 'Check my working: add a photo and Titan goes through each step', onClick: () => photoRef.current?.click() },
+      ? { key: 'weak', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${weakest.subtopic}`, note: `You got ${Math.round((1 - weakest.rate) * 100)}% in Practice`, onClick: () => askAbout(weakest.subtopic, `Can you explain ${weakest.subtopic}? I keep getting it wrong in Practice.`) }
+      : firstTopic && { key: 'first', Icon: CircleHelp, tone: t.blue, bg: t.blueBg, text: `Explain ${firstTopic}`, note: 'From the start', onClick: () => askAbout(firstTopic, `Can you explain ${firstTopic} from the start?`) },
+    { key: 'photo', Icon: Camera, tone: t.success, bg: t.successBg, text: 'Check my working', note: 'Add a photo and Titan goes through each step', onClick: () => photoRef.current?.click() },
   ].filter(Boolean)
 
   // Lesson: the cards' tags.
@@ -1133,13 +1134,24 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         .ls-idea:hover, .ls-idea:focus-visible { background: ${t.bgCard}; }
         .ls-start button:focus-visible, .ls-start a:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 2px; }
         .ls-lesson-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        .ls-ask-dock { order: 2; width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 8px; }
+        .ls-quota-dock { display: none; }
+        .ls-ask-input { min-height: 48px; }
         @media (max-width: 640px) {
-          .ls-start { padding: 14px 14px 16px; }
-          .ls-start-main { justify-content: flex-start; padding: 26px 0 0; }
+          .ls-start { padding: 14px 14px 0; }
+          .ls-start-main { justify-content: flex-start; gap: 18px; padding: 22px 0 0; }
+          .ls-start-main.ls-ask-mode { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
           .ls-ask-ideas { order: 2; }
-          .ls-ask-box { order: 3; margin-top: auto; position: sticky; bottom: 12px; }
-          .ls-lesson-cards { grid-template-columns: 1fr; }
-          .ls-recent-btn { display: none; }
+          /* The box sits on the bottom edge of the screen, like a messaging app. */
+          .ls-ask-dock { order: 3; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-width: none; box-sizing: border-box;
+            padding: 16px 12px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, ${t.bg} 18px); }
+          .ls-ask-box { border-radius: 24px !important; padding: 12px 10px 8px 16px !important; }
+          .ls-quota-dock { display: block; }
+          .ls-ask-input { min-height: 24px; }
+          .ls-quota-page { display: none; }
+          .ls-lesson-cards { grid-template-columns: 1fr; gap: 8px; }
+          .ls-lesson-card { padding: 12px 14px !important; gap: 6px !important; border-radius: 14px !important; }
+          .ls-start-lesson { height: 42px !important; padding: 0 16px !important; }
         }
       `}</style>
       <div className="ls-start">
@@ -1171,22 +1183,29 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         </div>
 
         {startMode === 'ask' ? (
-          <main className="ls-start-main">
+          <main className="ls-start-main ls-ask-mode">
             <h1 className="ls-ask-head" style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' }}>{greeting.ask}</h1>
 
+            <div className="ls-ask-dock">
             <div className="ls-ask-box" data-tutorial-target="learn-composer"
-              style={{ width: '100%', maxWidth: 760, boxSizing: 'border-box', background: t.bgCard, border: `1px solid ${t.borderMid}`, borderRadius: 28, padding: '16px 12px 10px 20px', display: 'flex', flexDirection: 'column', gap: 10, boxShadow: theme === 'dark' ? 'none' : t.shadowCard }}>
+              style={{ width: '100%', boxSizing: 'border-box', background: t.bgCard, border: `1px solid ${t.borderMid}`, borderRadius: 28, padding: '16px 12px 10px 20px', display: 'flex', flexDirection: 'column', gap: 10, boxShadow: theme === 'dark' ? 'none' : t.shadowCard }}>
               {attachments}
               {notesChip && <div>{notesChip}</div>}
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={e => {
+                  setInput(e.target.value)
+                  // Grow with what's typed, up to about eight lines.
+                  e.target.style.height = 'auto'
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
+                }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromStart() } }}
                 disabled={aiBlocked}
-                placeholder={aiBlocked ? blockedReason : `Ask Titan anything about ${subject?.name || 'your subject'}, or paste a question`}
-                rows={2}
+                placeholder={aiBlocked ? blockedReason : 'Ask Titan anything, or paste a question'}
+                rows={1}
                 aria-label="Message Titan"
+                className="ls-ask-input"
                 style={{ border: 'none', outline: 'none', resize: 'none', background: 'transparent', color: t.text, fontSize: 16, fontFamily: FONT_B, lineHeight: 1.5, padding: 0, maxHeight: 200 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -1217,14 +1236,19 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                 </button>
               </div>
             </div>
+            <div className="ls-quota-dock">{quotaLine}</div>
+            </div>
 
             {askIdeas.length > 0 && (
               <div className="ls-ask-ideas" style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {askIdeas.map(({ key, Icon, tone, bg, text, onClick }) => (
-                  <button key={key} type="button" className="ls-idea" onClick={onClick} disabled={aiBlocked && key === 'weak'}
-                    style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 46, padding: '6px 14px', border: 'none', borderRadius: 12, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 15, textAlign: 'left', cursor: 'pointer' }}>
-                    <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 8, background: bg, color: tone, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} /></span>
-                    <span style={{ minWidth: 0 }}>{text}</span>
+                {askIdeas.map(({ key, Icon, tone, bg, text, note, onClick }) => (
+                  <button key={key} type="button" className="ls-idea" onClick={onClick} disabled={aiBlocked && key === 'weak'} title={text}
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 52, padding: '6px 12px', border: 'none', borderRadius: 12, background: 'transparent', color: t.text, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                    <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 9, background: bg, color: tone, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={16} /></span>
+                    <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+                      <span style={{ fontSize: 12.5, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</span>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1241,9 +1265,9 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
               style={{ width: '100%', maxWidth: 760, boxSizing: 'border-box', background: t.bgCard, border: `1px solid ${t.borderMid}`, borderRadius: 999, padding: '7px 7px 7px 22px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <Search size={18} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0 }} />
               <input value={lessonQuery} onChange={e => setLessonQuery(e.target.value)} aria-label="Lesson topic"
-                placeholder="Type a topic, e.g. Le Chatelier's principle"
+                placeholder="Type any topic"
                 style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: t.text, fontSize: 16, fontFamily: FONT_B }} />
-              <button type="submit" disabled={aiBlocked}
+              <button type="submit" disabled={aiBlocked} className="ls-start-lesson"
                 style={{ height: 46, padding: '0 22px', borderRadius: 999, border: 'none', background: aiBlocked ? t.bgHover : t.accent, color: aiBlocked ? t.textFaint : '#18181b', fontSize: 15, fontWeight: 800, fontFamily: FONT_B, cursor: aiBlocked ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 Start lesson
               </button>
@@ -1259,7 +1283,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                   {lessonCards.map(c => {
                     const tag = kindTag[c.kind] || kindTag.new
                     return (
-                      <button key={c.name} type="button" className="ls-card-btn" onClick={() => openLesson(c.name)}
+                      <button key={c.name} type="button" className="ls-card-btn ls-lesson-card" onClick={() => openLesson(c.name)}
                         style={{ ...card, borderRadius: 18, borderColor: c.kind === 'resume' ? t.borderAccent : t.border, padding: 16, textAlign: 'left', cursor: 'pointer', fontFamily: FONT_B, display: 'flex', flexDirection: 'column', gap: 10, color: t.text }}>
                         <span style={{ alignSelf: 'flex-start', padding: '3px 10px', borderRadius: 999, background: tag.bg, color: tag.color, fontSize: 12, fontWeight: 800 }}>{tag.label}</span>
                         <span style={{ fontSize: 16, fontWeight: 800 }}>{c.name}</span>
@@ -1279,7 +1303,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           </main>
         )}
 
-        {quotaLine}
+        <div className="ls-quota-page">{quotaLine}</div>
       </div>
       {topicPicker}
     </div>

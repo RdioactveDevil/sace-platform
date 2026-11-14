@@ -32,6 +32,20 @@ function adelaideNow(now) {
   return { hour: Number.isFinite(hour) ? hour : 12, day }
 }
 
+/**
+ * A subject's name short enough for a heading: "VCE Mathematical Methods
+ * Units 1 and 2" → "Mathematical Methods", "SACE Stage 2 Chemistry" →
+ * "Chemistry". null when it's still long, so lines that use it are skipped.
+ */
+export function shortSubjectName(name) {
+  const short = String(name || '')
+    .replace(/^\s*(VCE|SACE|HSC|QCE|WACE|NCEA|IB|NAPLAN)\b\s*/i, '')
+    .replace(/^\s*(Stage|Year)\s*\d+\s*/i, '')
+    .replace(/\s*[,(–-]?\s*(Units?\s*\d.*|Stage\s*\d.*|Year\s*\d.*|\(.*\))\s*$/i, '')
+    .trim()
+  return short && short.length <= 22 ? short : null
+}
+
 /** The details the lines can use. */
 export function greetingContext({ displayName, subjectName, now = new Date() } = {}) {
   const name = String(displayName || '').trim().split(/\s+/)[0] || null
@@ -39,7 +53,7 @@ export function greetingContext({ displayName, subjectName, now = new Date() } =
   const partOfDay = hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 17 ? 'afternoon' : hour >= 17 && hour < 22 ? 'evening' : null
   return {
     name,
-    subject: subjectName || null,
+    subject: shortSubjectName(subjectName),
     partOfDay,
     lateNight: hour >= 22 || hour < 4,
     weekend: day === 0 || day === 6,
