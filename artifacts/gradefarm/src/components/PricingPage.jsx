@@ -8,6 +8,7 @@ import { rememberPendingCheckout, startCheckout } from '../lib/pendingCheckout'
 import { AU_STATES, stateLabel, isStateCode, rememberedState, rememberState } from '../lib/subjectFilter'
 import { SITE_CSS, SITE_FONTS, themeVars, SiteNav, SiteFooter, siteFooterLinks } from './SiteChrome'
 import PlanBuilder, { PLAN_CSS, BillingToggle, planGroups } from './PlanBuilder'
+import CitySkyline from './CitySkyline'
 
 // /pricing: "Build your plan". It first asks which state they're in, and
 // nothing else (a signed-in student's profile already says, so they skip
@@ -39,6 +40,14 @@ const DEFAULT_PRICING = {
 
 const CSS = `${SITE_CSS}${PLAN_CSS}
 .pp-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 44px; }
+/* Weekly / Monthly sits halfway between the heading's baseline and the list (32px either side). */
+.pp-head .pp-seg { margin-top: 12px; }
+.pp-build { margin-top: 32px; }
+/* Their state's capital, a faint silhouette along the bottom of the screen behind everything (CitySkyline.jsx). */
+.pp-city { position: fixed; left: 0; right: 0; bottom: 0; height: clamp(150px, 30vh, 280px); z-index: -1; pointer-events: none; color: var(--lp-ink); opacity: var(--pp-city-o);
+  -webkit-mask-image: linear-gradient(to top, #000 45%, transparent); mask-image: linear-gradient(to top, #000 45%, transparent); animation: ppCityIn 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pp-city svg { display: block; width: 100%; height: 100%; }
+@keyframes ppCityIn { from { opacity: 0; transform: translateY(30px); } to { opacity: var(--pp-city-o); transform: none; } }
 .pp-head h1 { font-size: clamp(34px, 5vw, 54px); font-weight: 800; line-height: 1.05; letter-spacing: -0.035em; }
 .pp-head p { color: var(--lp-muted); font-size: 17px; max-width: 52ch; }
 /* Which state are you in? The only thing on the page until they answer. */
@@ -90,6 +99,7 @@ const CSS = `${SITE_CSS}${PLAN_CSS}
 .lp-end h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.03em; }
 
 @media (prefers-reduced-motion: reduce) {
+  .pp-city { animation: none; }
   .pp-states button, .pp-tick, .pp-ask, .pp-enter .pp-head, .pp-enter .pp-list, .pp-enter ~ .lp-sec { animation: none; }
   .pp-states button { transition: none; }
   .pp-states.leaving button:not(.go) { transform: none; }
@@ -227,10 +237,14 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   return (
     <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light',
       // The green a picked state turns: dark enough for white text on light, light enough for navy on dark.
-      '--pp-go': theme === 'dark' ? '#5bb98c' : '#047857', '--pp-go-fg': theme === 'dark' ? '#0c1037' : '#ffffff' }}>
+      '--pp-go': theme === 'dark' ? '#5bb98c' : '#047857', '--pp-go-fg': theme === 'dark' ? '#0c1037' : '#ffffff',
+      // The city skyline sits behind the page's content (z-index -1 inside this stacking context).
+      isolation: 'isolate', '--pp-city-o': theme === 'dark' ? 0.06 : 0.07 }}>
       <style>{SITE_FONTS + CSS}</style>
       <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn || (() => navigate('/auth'))} onStart={signUp}
         onLogo={() => navigate('/home')} links={NAV} />
+
+      {!askState && <CitySkyline key={studyState} state={studyState} className="pp-city" />}
 
       <main>
         {askState ? (
