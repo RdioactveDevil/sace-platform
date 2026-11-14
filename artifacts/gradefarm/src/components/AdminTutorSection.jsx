@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useEffect, useState } from 'react'
 import { adminGetTutor, adminSetTutorIncludeSubject, adminSetTutorBillingExempt, adminRemoveTutorPlanSubject, adminLinkTutor, adminUnlinkTutor } from '../lib/db'
 
@@ -46,8 +47,8 @@ export default function AdminTutorSection({ tutor, students, onChange }) {
     await adminSetTutorBillingExempt(t.id, exempt)
     setT(x => ({ ...x, billing_exempt: exempt, plan_active: exempt || ['active', 'trialing', 'past_due'].includes(x.plan_status) }))
   })
-  const removePlanSubject = (name) => {
-    if (!window.confirm(`Take ${name} off ${t.display_name || 'this tutor'}'s plan? They can then use another subject in its place.`)) return
+  const removePlanSubject = async (name) => {
+    if (!(await confirmDialog(`Take ${name} off ${t.display_name || 'this tutor'}'s plan? They can then use another subject in its place.`, { confirm: 'Take it off', danger: true }))) return
     run('plan', async () => {
       const { plan_subjects } = await adminRemoveTutorPlanSubject(t.id, name)
       setT(x => ({ ...x, plan_subjects }))

@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColumn, FlaskConical, Mail, Flame, Bot, Link, CircleCheck, Zap, Search, PenLine, Bell, User, MessageSquare, IdCard, CreditCard, Repeat, Pause, Play } from 'lucide-react'
@@ -365,7 +366,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
   }
 
   const stopSchedule = async (sch) => {
-    if (!window.confirm('Stop this recurring assignment? Work it has already set stays with the students.')) return
+    if (!(await confirmDialog('Stop this recurring assignment? Work it has already set stays with the students.', { confirm: 'Stop it', danger: true }))) return
     setScheduleBusy(sch.id)
     try {
       await deleteAssignmentSchedule(sch.id)

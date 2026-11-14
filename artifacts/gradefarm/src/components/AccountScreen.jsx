@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../lib/dialog'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
@@ -334,7 +335,7 @@ function BillingCard({ profile, theme, onChangeSubject }) {
     const msg = plan?.trialing
       ? `Switch to ${otherInterval}ly billing? You'll pay $${money(switchedTotal)}/${otherInterval} when your free trial ends on ${shortDate(plan.renewsAt)}.`
       : `Switch to ${otherInterval}ly billing at $${money(switchedTotal)}/${otherInterval}? Your new ${otherInterval} starts today, and the unused part of this ${interval} comes off the first bill.`
-    if (!window.confirm(msg)) return
+    if (!(await confirmDialog(msg, { confirm: `Switch to ${otherInterval}ly` }))) return
     setBusy('interval'); setError('')
     try { await switchBillingInterval(otherInterval); await load() }
     catch (e) { setError(e.message || 'Could not change your billing.') }
@@ -354,7 +355,7 @@ function BillingCard({ profile, theme, onChangeSubject }) {
         ? `Cancel your free trial of ${label}? You keep access until ${shortDate(sub.current_period_end)} and won't be charged.`
         : `Remove ${label}? It's your only paid subject, so your plan ends on ${shortDate(sub.current_period_end)} and you keep access until then.`
       : `Remove ${label} now? Your plan drops to $${money(totalAfterRemoving())}/${interval} and unused time is credited to your next bill.`
-    if (!window.confirm(msg)) return
+    if (!(await confirmDialog(msg, { confirm: paid.length === 1 && sub.status === 'trialing' ? 'Cancel trial' : 'Remove', cancel: 'Keep it', danger: true }))) return
     setBusy(sub.id); setError('')
     try { await removePaidSubject(sub.id); await load() }
     catch (e) { setError(e.message || 'Could not update your plan.') }
@@ -537,7 +538,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   }
 
   const handleSignOutEverywhere = async () => {
-    if (!window.confirm('Sign out on every device, including this one?')) return
+    if (!(await confirmDialog('Sign out on every device, including this one?', { confirm: 'Sign out everywhere' }))) return
     setSigningOutAll(true)
     try { await supabase.auth.signOut({ scope: 'global' }) } catch { /* still sign out locally below */ }
     onSignOut()
@@ -571,7 +572,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       setDeleting(false)
       return
     }
-    window.alert('Your account has been deleted.')
+    await alertDialog('Your account has been deleted.')
     onSignOut()
   }
 

@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
@@ -89,7 +90,7 @@ export default function ExamsScreen({
       <Dashboard t={t} attempts={attempts} error={error} subjectName={subjectName} myId={myId} go={go} newExam={newExam}
         loadBank={loadBank} loadExams={loadExams} subject={subject}
         onRemove={async (a) => {
-          if (!window.confirm(`Remove "${a.title}" from your exams?${a.status === 'marked' ? ' Its score will be deleted.' : ''}`)) return
+          if (!(await confirmDialog(`Remove "${a.title}" from your exams?${a.status === 'marked' ? ' Its score will be deleted.' : ''}`, { confirm: 'Remove', danger: true }))) return
           if (await store.remove(a.id)) setAttempts(prev => prev.filter(x => x.id !== a.id))
         }} />
     )
@@ -382,7 +383,7 @@ function Marking({ t, attempt, store, loadSolutions, onSaved, go }) {
     let next = marks
     const missing = rows.filter(p => cleanMark(marks[p.key], p.marks) === undefined)
     if (missing.length) {
-      if (!window.confirm(`${plural(missing.length, 'part')} ${missing.length === 1 ? 'has' : 'have'} no mark yet. Count ${missing.length === 1 ? 'it' : 'them'} as skipped and finish?`)) return
+      if (!(await confirmDialog(`${plural(missing.length, 'part')} ${missing.length === 1 ? 'has' : 'have'} no mark yet. Count ${missing.length === 1 ? 'it' : 'them'} as skipped and finish?`, { confirm: 'Skip and finish' }))) return
       next = { ...marks }
       for (const p of missing) next[p.key] = SKIP
       current.current = next

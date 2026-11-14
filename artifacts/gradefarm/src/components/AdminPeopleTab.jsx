@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -251,7 +252,7 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
     const msg = deactivating
       ? `Deactivate ${name}?\n\nThey'll be signed out and blocked from logging in until you reactivate them. All their data is kept.`
       : `Reactivate ${name}?\n\nThey'll be able to log in again.`
-    if (!window.confirm(msg)) return
+    if (!(await confirmDialog(msg, { confirm: deactivating ? 'Deactivate' : 'Reactivate', danger: deactivating }))) return
     setAccountBusy(true)
     setAccountError('')
     try {
@@ -270,8 +271,8 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
   const handleDelete = async () => {
     if (!selected) return
     const name = selected.display_name || selected.email
-    if (!window.confirm(`Permanently delete ${name}?\n\nThis removes their account and ALL their data — progress, sessions, subscriptions and assignments. This cannot be undone.`)) return
-    if (!window.confirm('Are you absolutely sure? This is irreversible.')) return
+    if (!(await confirmDialog(`Permanently delete ${name}?\n\nThis removes their account and ALL their data — progress, sessions, subscriptions and assignments. This cannot be undone.`, { confirm: 'Delete', danger: true }))) return
+    if (!(await confirmDialog('Are you absolutely sure? This is irreversible.', { confirm: 'Yes, delete', danger: true }))) return
     setAccountBusy(true)
     setAccountError('')
     try {
@@ -652,7 +653,7 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
                   const msg = sub?.source === 'stripe'
                     ? 'This student is paying for this subject. Removing it takes it off their weekly plan now (ending the plan if it was their only paid subject). Continue?'
                     : 'Remove this subject?'
-                  if (!window.confirm(msg)) return
+                  if (!(await confirmDialog(msg, { confirm: 'Remove', danger: true }))) return
                   setSubsError('')
                   try {
                     await adminRevokeSubscription(selected.id, subId)

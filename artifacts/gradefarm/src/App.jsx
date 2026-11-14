@@ -1,3 +1,4 @@
+import DialogHost from './components/DialogHost'
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
@@ -2005,6 +2006,8 @@ function AppInner() {
     </Routes>
     </Suspense>
     </ErrorBoundary>
+    {/* In-app confirm and alert dialogs (lib/dialog.js), instead of the browser's own. */}
+    <DialogHost theme={theme} />
     </>
   )
 }
