@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
@@ -447,7 +448,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
   const canCancel = session.status === 'scheduled'
 
   const handleCancel = async () => {
-    if (!window.confirm('Cancel this session?')) return
+    if (!(await confirmDialog('Cancel this session?', { confirm: 'Cancel session', cancel: 'Keep it', danger: true }))) return
     setCancelling(true)
     try { await onCancel(session.id) } finally { setCancelling(false) }
   }
@@ -531,7 +532,7 @@ function SeriesCard({ series, theme, onCancel }) {
   const [copied, setCopied] = useState(false)
 
   const handleCancel = async () => {
-    if (!window.confirm('Cancel this recurring series? All future sessions will be cancelled.')) return
+    if (!(await confirmDialog('Cancel this recurring series? All future sessions will be cancelled.', { confirm: 'Cancel series', cancel: 'Keep it', danger: true }))) return
     setCancelling(true)
     try { await onCancel(series.id) } finally { setCancelling(false) }
   }

@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useState, useEffect, useRef } from 'react'
 import {
   getCurriculumDetail,
@@ -213,12 +214,12 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     i !== ti ? t : { ...t, subtopics: t.subtopics.map((s, j) => j === si ? { ...s, name } : s) }
   ))
   const addTopic = () => setTopics(prev => [...prev, { name: 'New Topic', subtopics: [] }])
-  const deleteTopic = (ti) => {
+  const deleteTopic = async (ti) => {
     const t = topics[ti]
     const msg = t.subtopics.length > 0
       ? `Delete "${t.name}" and its ${t.subtopics.length} subtopic(s)?`
       : `Delete "${t.name}"?`
-    if (!window.confirm(msg)) return
+    if (!(await confirmDialog(msg, { confirm: 'Delete', danger: true }))) return
     setTopics(prev => prev.filter((_, i) => i !== ti))
   }
   const moveTopicUp = (ti) => {
@@ -369,10 +370,11 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
       return
     }
     const totalAffected = toProcess.reduce((n, m) => n + m.count, 0)
-    if (!window.confirm(
+    if (!(await confirmDialog(
       `This will remap ${remapCount} subtopic group(s) and delete ${deleteCount} subtopic group(s), ` +
-      `affecting ${totalAffected} questions. This cannot be undone. Proceed?`
-    )) return
+      `affecting ${totalAffected} questions. This cannot be undone. Proceed?`,
+      { confirm: 'Apply', danger: true },
+    ))) return
 
     setRemapApplying(true); setError('')
     try {
@@ -444,12 +446,13 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     const name = (curriculum?.name || '').trim()
     const level = (curriculum?.level_label || '').trim()
     if (!name) return
-    if (!window.confirm(
+    if (!(await confirmDialog(
       `Consolidate question-bank subject spellings onto "${name}"?\n\n` +
       `This merges legacy/alias spellings of this subject — including a bare title ` +
       `without the stage — into "${name}", so every question lines up with this curriculum. ` +
-      `Only this subject's questions are affected, and it's safe to run more than once.`
-    )) return
+      `Only this subject's questions are affected, and it's safe to run more than once.`,
+      { confirm: 'Consolidate' },
+    ))) return
     setConsolidating(true); setError(''); setSaveOk(false)
     try {
       await adminApiPost('/api/admin/curriculum-rename-cascade', {
@@ -476,7 +479,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     const writtenLine = w
       ? ` and ${w} written-answer question${w === 1 ? '' : 's'} (${(w * subtopicCount).toLocaleString()} in all, a few cents each, slower to write)`
       : ''
-    if (!window.confirm(`Generate ${n} multiple-choice question${n === 1 ? '' : 's'} (${(n * subtopicCount).toLocaleString()} in all)${writtenLine} for each of the ${subtopicCount} subtopics? This may take several minutes.`)) return
+    if (!(await confirmDialog(`Generate ${n} multiple-choice question${n === 1 ? '' : 's'} (${(n * subtopicCount).toLocaleString()} in all)${writtenLine} for each of the ${subtopicCount} subtopics? This may take several minutes.`, { confirm: 'Generate' }))) return
     if (!(curriculum.level_label || '').trim()) {
       setError('Select a Stage / year level before generating questions.')
       return

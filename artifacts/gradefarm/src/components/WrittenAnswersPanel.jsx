@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { generateMarkedQuestions, generateMarkedForSubtopic } from '../lib/db'
@@ -80,7 +81,7 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
   const generateAll = async () => {
     if (busy || bulk?.running || bulkTargets.length === 0) return
     const queue = [...bulkTargets]
-    if (!window.confirm(`Write ${bulkPer} written-answer question${bulkPer === 1 ? '' : 's'} for each of ${queue.length} subtopic${queue.length === 1 ? '' : 's'} (${queue.length * bulkPer} in all)? They cost a few cents each and take a minute or more per subtopic. Keep this page open.`)) return
+    if (!(await confirmDialog(`Write ${bulkPer} written-answer question${bulkPer === 1 ? '' : 's'} for each of ${queue.length} subtopic${queue.length === 1 ? '' : 's'} (${queue.length * bulkPer} in all)? They cost a few cents each and take a minute or more per subtopic. Keep this page open.`, { confirm: 'Write them' }))) return
     stopRef.current = false
     setError(''); setOutcome(null)
     setBulk({ running: true, total: queue.length, done: 0, saved: 0, notSaved: 0, failed: [] })
@@ -101,7 +102,7 @@ export default function WrittenAnswersPanel({ curriculumId, topics, enabled }) {
   }
 
   const remove = async (id) => {
-    if (!window.confirm('Remove this question from the bank? Students’ marks for it go too.')) return
+    if (!(await confirmDialog('Remove this question from the bank? Students’ marks for it go too.', { confirm: 'Remove', danger: true }))) return
     try {
       await deleteQuestion(id)
       setQuestions(prev => prev.filter(q => q.id !== id))

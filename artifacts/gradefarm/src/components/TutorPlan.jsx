@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useEffect, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { getTutorBilling, chooseTutorPlan, openTutorBillingPortal, removeTutorPlanSubject, syncCheckout } from '../lib/db'
@@ -50,7 +51,7 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
 
   const choose = async (plan) => {
     const switching = billing.plan && !billing.exempt
-    if (switching && !window.confirm(`Move to ${plan.name}, billed ${period === 'year' ? 'annually' : 'monthly'}? The change is prorated: unused time on your current plan comes off your next bill.`)) return
+    if (switching && !(await confirmDialog(`Move to ${plan.name}, billed ${period === 'year' ? 'annually' : 'monthly'}? The change is prorated: unused time on your current plan comes off your next bill.`, { confirm: `Move to ${plan.name}` }))) return
     setBusy(plan.name); setError('')
     try {
       const result = await chooseTutorPlan(plan.name, period)
@@ -157,7 +158,7 @@ export function TutorPlanTab({ theme }) {
   useEffect(() => { load() }, [])
 
   const dropSubject = async (name) => {
-    if (!window.confirm(`Remove ${name} from your plan's subjects? You can add it back later if there's room.`)) return
+    if (!(await confirmDialog(`Remove ${name} from your plan's subjects? You can add it back later if there's room.`, { confirm: 'Remove', danger: true }))) return
     setBusy(true); setError('')
     try { await removeTutorPlanSubject(name); await load() }
     catch (e) { setError(e.message || 'Could not update your subjects.') }

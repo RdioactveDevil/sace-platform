@@ -112,13 +112,29 @@ export default function SessionWins({ theme = 'dark', profile, startProfile, sta
                 : nextRankHint(xp, acc)}
           </span>
         </div>
-        <div aria-hidden="true" style={{ position: 'relative', height: 12, borderRadius: 999, background: t.bgHover, overflow: 'hidden' }}>
-          <div style={bar(nowPct, t.accent)} />
-          <div style={bar(Math.min(startPct, nowPct), t.textFaint)} />
+        {/* The gold part is what this session added; hovering it (or tapping, or focusing it) says so, just under the bar. */}
+        <style>{`
+          .sw-gold .sw-tip { opacity: 0; transform: translate(-50%, -4px); transition: opacity 0.15s, transform 0.15s; }
+          .sw-gold:hover .sw-tip, .sw-gold:focus-visible .sw-tip, .sw-gold:active .sw-tip { opacity: 1; transform: translate(-50%, 0); }
+          .sw-gold:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 2px; border-radius: 999px; }
+          @media (prefers-reduced-motion: reduce) { .sw-gold .sw-tip { transition: none; } }
+        `}</style>
+        <div style={{ position: 'relative' }}>
+          <div aria-hidden="true" style={{ position: 'relative', height: 12, borderRadius: 999, background: t.bgHover, overflow: 'hidden' }}>
+            <div style={bar(nowPct, t.accent)} />
+            <div style={bar(Math.min(startPct, nowPct), t.textFaint)} />
+          </div>
+          {xp > startXP && nowPct > startPct && (
+            <div className="sw-gold" tabIndex={0} aria-label={`This session: +${(xp - startXP).toLocaleString('en-AU')} XP`}
+              style={{ position: 'absolute', top: -6, bottom: -6, left: `${startPct}%`, width: `${nowPct - startPct}%`, cursor: 'default' }}>
+              <span className="sw-tip" role="tooltip" style={{ position: 'absolute', top: 'calc(100% + 2px)', left: '50%', zIndex: 1, padding: '4px 9px', borderRadius: 7, background: t.text, color: t.bg, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', pointerEvents: 'none', boxShadow: '0 6px 16px -6px rgba(0,0,0,0.35)' }}>
+                This session
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: t.textMuted }}>
           <span>{prog.current.toLocaleString('en-AU')}</span>
-          {xp > startXP && nowPct > startPct && <span>The gold part is this session</span>}
           <span>{prog.next.toLocaleString('en-AU')}</span>
         </div>
       </section>

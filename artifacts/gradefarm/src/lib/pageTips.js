@@ -18,13 +18,6 @@ export const PAGE_TIPS = {
       { target: 'practice-start', title: 'Start', body: "Start when you're ready. You can end a session at any time and see how you went." },
     ],
   },
-  quiz: {
-    path: (p) => p === '/quiz',
-    steps: [
-      { target: 'quiz-answer', title: 'Answering', body: 'Pick an answer, then Check answer. On a keyboard, 1 to 4 picks and Enter checks. You can change your mind before you check.' },
-      { target: 'quiz-bar', title: 'Tools and finishing', body: 'Tools like the calculator sit up here when your subject has them. End session finishes early and shows how you went.' },
-    ],
-  },
   // Shown at the first wrong answer (QuizScreen sends a gf-page-tip event).
   'quiz-wrong': {
     steps: [

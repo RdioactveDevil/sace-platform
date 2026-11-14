@@ -110,20 +110,40 @@ export function studentSafetyRules(ctx: StudentContext): string {
   return lines.join("\n");
 }
 
-/** The email asking a parent to confirm their child's account. */
-export function parentConsentEmail(opts: { parentName: string | null; studentName: string; url: string }): { subject: string; content: EmailContent } {
+/**
+ * The email to the parent or guardian a student added. `young`: the student
+ * is under 15 (needsParentConsent), so the parent's OK switches the AI
+ * features on. Anyone older added them for the weekly progress email only,
+ * so it says nothing about age or consent.
+ */
+export function parentConsentEmail(opts: { parentName: string | null; studentName: string; url: string; young: boolean }): { subject: string; content: EmailContent } {
   const first = opts.studentName.split(" ")[0] || opts.studentName;
-  return {
-    subject: `Please confirm ${first}'s gradefarm account`,
-    content: {
-      heading: `${first} has signed up to gradefarm`,
-      paragraphs: [
-        `Hi ${opts.parentName || "there"}, ${opts.studentName} gave us your email as their parent or guardian. gradefarm is an online study platform by Titanium Tutoring in Adelaide: adaptive practice questions, and Titan AI, an AI tutor that explains the questions they get wrong.`,
-        `Because ${first} is under 15, Titan AI and the other AI features stay off until you confirm. Practice questions work in the meantime.`,
-        "Once you confirm, you'll also get a short progress email every Sunday: how much they practised, how well, and what to work on next. You can stop those any time.",
-      ],
-      cta: { label: "Review and confirm", url: opts.url },
-      footer: `If you don't know ${opts.studentName} or didn't expect this, ignore this email: nothing changes until you confirm.`,
-    },
-  };
+  const intro = `Hi ${opts.parentName || "there"}, ${opts.studentName} gave us your email as their parent or guardian. gradefarm is an online study platform by Titanium Tutoring in Adelaide: adaptive practice questions, and Titan AI, an AI tutor that explains the questions they get wrong.`;
+  const reports = "a short progress email every Sunday: how much they practised, how well, and what to work on next. You can stop those any time.";
+  return opts.young
+    ? {
+      subject: `Please confirm ${first}'s gradefarm account`,
+      content: {
+        heading: `${first} has signed up to gradefarm`,
+        paragraphs: [
+          intro,
+          `Because ${first} is under 15, Titan AI and the other AI features stay off until you confirm. Practice questions work in the meantime.`,
+          `Once you confirm, you'll also get ${reports}`,
+        ],
+        cta: { label: "Review and confirm", url: opts.url },
+        footer: `If you don't know ${opts.studentName} or didn't expect this, ignore this email: nothing changes until you confirm.`,
+      },
+    }
+    : {
+      subject: `${first} would like to send you their gradefarm progress`,
+      content: {
+        heading: `${first} added you to their gradefarm account`,
+        paragraphs: [
+          intro,
+          `Confirm your email and you'll get ${reports}`,
+        ],
+        cta: { label: "Confirm my email", url: opts.url },
+        footer: `If you don't know ${opts.studentName} or didn't expect this, ignore this email: you won't hear from us unless you confirm.`,
+      },
+    };
 }

@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus, Save, Link2, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
@@ -293,7 +294,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
   }
   const removeSaved = async (row) => {
-    if (!window.confirm(`Delete "${row.title}"?${row.class_id ? ' Your class will no longer see it.' : ''}`)) return
+    if (!(await confirmDialog(`Delete "${row.title}"?${row.class_id ? ' Your class will no longer see it.' : ''}`, { confirm: 'Delete', danger: true }))) return
     if (!(await store.remove(row.id))) return
     setSaved(prev => (prev || []).filter(r => r.id !== row.id))
     if (current?.id === row.id) setCurrent(null)

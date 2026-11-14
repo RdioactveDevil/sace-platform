@@ -171,7 +171,7 @@ export default function QuizScreen({
   selected: _selected, setSelected,
   showAns: _showAns, setShowAns,
   correct: _correct, setCorrect,
-  earnedXP: _earnedXP, setEarnedXP,
+  setEarnedXP,
   streak: _streak, setStreak,
   sessionXP: _sessionXP, setSessionXP,
   sessionResults: _sessionResults, setSessionResults,
@@ -423,7 +423,6 @@ export default function QuizScreen({
   }
   const showAns = _showAns ?? false
   const correct = _correct ?? null
-  const earnedXP = _earnedXP ?? 0
   const streak = _streak ?? 0
   const sessionXP = _sessionXP ?? 0
   const sessionResults = _sessionResults ?? []
@@ -2157,7 +2156,7 @@ export default function QuizScreen({
             <div id="gf-end-title" style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 6 }}>End this session?</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
               {sessionResults.some(r => !r.remediation)
-                ? <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>. You'll see a summary of this session next.</>
+                ? <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>.</>
                 : "You haven't answered any questions yet."}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -2247,7 +2246,7 @@ export default function QuizScreen({
             </>
           )}
         </div>
-        <div data-tutorial-target={examRun ? undefined : 'quiz-bar'} style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
           {!examRun && sessionTotal > 0 && (
             <span style={{ whiteSpace: 'nowrap' }}><strong style={{ color: t.success }}>{sessionCorrect}</strong>{isMobile ? ' · ' : ' right · '}<strong style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</strong>{isMobile ? '' : ' wrong'}</span>
           )}
@@ -2332,7 +2331,7 @@ export default function QuizScreen({
               />
             )}
 
-            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ position: 'relative', background: t.bgCard, border: `1px solid ${isBonus ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+            <div style={{ position: 'relative', background: t.bgCard, border: `1px solid ${isBonus ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
               {/* A bonus question: a small tag on the card's corner. */}
               {isBonus && (
                 <span title="Bonus question: a right answer is worth double. A wrong one costs the usual amount."
@@ -2486,21 +2485,11 @@ export default function QuizScreen({
               </section>
             )}
 
-            {!examRun && showAns && !markedLayout && (
-              <div style={{ fontSize: 12.5, color: t.textFaint, textAlign: 'center' }}>
-                {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
-                {!correct && remediationPendingEntry ? '. The practice questions earn XP back.' : ''}
-              </div>
-            )}
           </div>
           {markedLayout && (
             <aside aria-label="Help with this question" className="qz-anim" style={{ flex: isMobile ? 'none' : '0 1 400px', minWidth: 0, width: isMobile ? '100%' : undefined, position: isMobile ? 'static' : 'sticky', top: 0, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.25s ease' }}>
               {helpPanel()}
               <div style={{ padding: isMobile ? '14px 16px' : '16px 22px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 12.5, color: t.textMuted }}>
-                  {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
-                  {!correct && remediationPendingEntry ? ' · the practice questions earn it back' : ''}
-                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
                   <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), flex: 1 }}>
                     {nextButtonLabel}

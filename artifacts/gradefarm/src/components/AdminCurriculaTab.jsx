@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/dialog'
 import { useState, useEffect, useCallback } from 'react'
 import { listCurricula, createCurriculum, setCurriculumArchived } from '../lib/curriculaDb'
 import { fetchSubjectBankCounts } from '../lib/db'
@@ -117,7 +118,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const handleArchive = async (e, c) => {
     e.stopPropagation()
     const archiving = !c.archived_at
-    if (archiving && !window.confirm(`Archive "${c.name}"?\n\nStudents won't see it any more. Its topics, questions and student history are kept, and you can unarchive it any time.`)) return
+    if (archiving && !(await confirmDialog(`Archive "${c.name}"?\n\nStudents won't see it any more. Its topics, questions and student history are kept, and you can unarchive it any time.`, { confirm: 'Archive' }))) return
     try {
       await setCurriculumArchived(c.id, archiving)
       await load(true)
