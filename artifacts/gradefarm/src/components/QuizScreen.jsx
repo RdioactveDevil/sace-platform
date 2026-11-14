@@ -171,7 +171,7 @@ export default function QuizScreen({
   selected: _selected, setSelected,
   showAns: _showAns, setShowAns,
   correct: _correct, setCorrect,
-  earnedXP: _earnedXP, setEarnedXP,
+  setEarnedXP,
   streak: _streak, setStreak,
   sessionXP: _sessionXP, setSessionXP,
   sessionResults: _sessionResults, setSessionResults,
@@ -423,7 +423,6 @@ export default function QuizScreen({
   }
   const showAns = _showAns ?? false
   const correct = _correct ?? null
-  const earnedXP = _earnedXP ?? 0
   const streak = _streak ?? 0
   const sessionXP = _sessionXP ?? 0
   const sessionResults = _sessionResults ?? []
@@ -2486,21 +2485,11 @@ export default function QuizScreen({
               </section>
             )}
 
-            {!examRun && showAns && !markedLayout && (
-              <div style={{ fontSize: 12.5, color: t.textFaint, textAlign: 'center' }}>
-                {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
-                {!correct && remediationPendingEntry ? '. The practice questions earn XP back.' : ''}
-              </div>
-            )}
           </div>
           {markedLayout && (
             <aside aria-label="Help with this question" className="qz-anim" style={{ flex: isMobile ? 'none' : '0 1 400px', minWidth: 0, width: isMobile ? '100%' : undefined, position: isMobile ? 'static' : 'sticky', top: 0, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.25s ease' }}>
               {helpPanel()}
               <div style={{ padding: isMobile ? '14px 16px' : '16px 22px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 12.5, color: t.textMuted }}>
-                  {correct ? `+${earnedXP} XP` : `${signedXP(earnedXP)} XP`}
-                  {!correct && remediationPendingEntry ? ' · the practice questions earn it back' : ''}
-                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
                   <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), flex: 1 }}>
                     {nextButtonLabel}
