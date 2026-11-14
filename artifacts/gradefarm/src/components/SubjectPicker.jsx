@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { curriculumToSubjectTile, subjectAccess } from '../lib/subjects'
 import { fetchSubjectBankCounts, getBillingConfig, updateProfile } from '../lib/db'
-import { AU_STATES, fitsStudent, subjectYear } from '../lib/subjectFilter'
+import { AU_STATES, fitsStudent, subjectYear, stateLabel } from '../lib/subjectFilter'
 import { studentTiers } from '../lib/pricing'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIconByName } from './SubjectIcons'
@@ -32,8 +32,9 @@ function writeCountsCache(counts) {
  * Choosing a subject. One subject gets a big card: the one they used last,
  * else their own, else the one for their year level. Every other subject is
  * a list under it. Subjects they haven't got are only listed if they fit the
- * student's state and year (lib/subjectFilter.js); "Show all subjects" lists
- * the rest. `fullAccess` (tutors/admins) unlocks and lists them all. A calm
+ * student's state and year (lib/subjectFilter.js): never another state's, a
+ * year below theirs, or more than 2 above. Subjects they already have always
+ * show. `fullAccess` (tutors/admins) unlocks and lists them all. A calm
  * moving background (CalmBackground) sits behind the page.
  */
 export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess, onProfileUpdated, theme = 'dark', onToggleTheme }) {
@@ -42,7 +43,6 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const [dynamicSubjects, setDynamic]   = useState([])
   const [loadingCurricula, setLoading]  = useState(true)
   const [billing, setBilling]           = useState(null)
-  const [showAll, setShowAll]           = useState(false)
   const [stateSaving, setStateSaving]   = useState(false)
   const [stateError, setStateError]     = useState('')
 
@@ -105,13 +105,11 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const lastId = (() => { try { return JSON.parse(localStorage.getItem('gf-subject') || 'null')?.id } catch { return null } })()
   const pick = hasOwn
     ? subscribed.find(s => s.id === lastId) || subscribed[0]
-    : forYear[0] || notSubscribed.filter(fits).sort(byYear)[0] || [...notSubscribed].sort(byYear)[0]
+    : forYear[0] || notSubscribed.filter(fits).sort(byYear)[0]
   const ownOthers = subscribed.filter(s => s !== pick).sort(byYear)
   const others = notSubscribed.filter(s => s !== pick).sort(byYear)
-  const more = showAll ? others : others.filter(fits)
-  const allComingSoon = allSubjects.filter(s => !s.available)
-  const comingSoon = showAll ? allComingSoon : allComingSoon.filter(fits)
-  const hiddenCount = others.length - others.filter(fits).length + allComingSoon.length - allComingSoon.filter(fits).length
+  const more = others.filter(fits)
+  const comingSoon = allSubjects.filter(s => !s.available && fits(s))
 
   // Accounts from before onboarding asked for a state: ask here, once.
   const askState = !fullAccess && !profile.state
@@ -223,7 +221,9 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
           <p style={{ margin: 0, fontSize: 14, color: t.textMuted }} role="status">Loading subjects…</p>
         ) : !allSubjects.length || !pick ? (
           <div className="sp-card" style={{ padding: '28px 20px', textAlign: 'center', fontSize: 14, color: t.textMuted }}>
-            No subjects are open yet. Check back soon.
+            {allSubjects.length && (profile.state || year)
+              ? `No subjects for ${[year ? `Year ${year}` : null, stateLabel(profile.state) || null].filter(Boolean).join(' in ')} yet. Check back soon.`
+              : 'No subjects are open yet. Check back soon.'}
           </div>
         ) : (
           <>
@@ -271,14 +271,6 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
               </p>
             )}
 
-            {(hiddenCount > 0 || showAll) && (
-              <div>
-                <button type="button" className="af-btn" onClick={() => setShowAll(v => !v)} aria-expanded={showAll}
-                  style={{ ...authBtn(t, 'secondary'), minHeight: 36, fontSize: 13, padding: '0 14px' }}>
-                  {showAll ? 'Show only subjects for me' : `Show all subjects (${hiddenCount} more)`}
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>

@@ -5,7 +5,7 @@ import { supabase } from './lib/supabase'
 import { initObservability } from './lib/analytics'
 import { notify, notifyError } from './lib/notify'
 import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
-import { takePendingCheckout, startCheckout, subjectTileFor } from './lib/pendingCheckout'
+import { takePendingCheckout, startCheckout, rememberCheckoutRetry, checkoutRetry } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
@@ -1026,6 +1026,8 @@ function AppInner() {
 
   // Signed in after picking a paid subject on the pricing page: on to Stripe
   // Checkout for it, before onboarding (which picks up again on the way back).
+  // If it can't open, the plan is kept and Get Access offers it again (after
+  // onboarding, for a new account), so they don't land on the free plan.
   const [openingCheckout, setOpeningCheckout] = useState(false)
   useEffect(() => {
     if (!user || !profile || profile.is_tutor || user.user_metadata?.signup_path === 'tutor') return
@@ -1036,12 +1038,14 @@ function AppInner() {
       .then((result) => {
         if (!result.hasPlan) return // the browser is on its way to Stripe
         setOpeningCheckout(false)
-        // Already on a plan: Get Access adds subjects one at a time, starting with the first.
-        navigate('/get-access', { state: { subject: subjectTileFor(plan.subjects[0]) } })
+        // Already on a plan: Get Access adds them to it.
+        navigate('/get-access', { state: { plan } })
       })
       .catch((e) => {
         setOpeningCheckout(false)
-        notifyError(e, "Couldn't open checkout. Choose your subject again to pay for it.", { source: 'pendingCheckout' })
+        rememberCheckoutRetry(plan, e?.message || "Checkout couldn't open.")
+        if (profile.onboarding_completed) navigate('/get-access')
+        else notify.error("Checkout didn't open, so you haven't been charged. We've kept your plan for after these questions.")
       })
   }, [user, profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1748,7 +1752,8 @@ function AppInner() {
                   setSubscriptionsLoaded(true)
                 } catch {}
                 setProfile(prev => ({ ...prev, ...updates, onboarding_completed: true }))
-                navigate('/subject-picker', { replace: true })
+                // A plan whose checkout didn't open after sign-up comes back to try again.
+                navigate(checkoutRetry() ? '/get-access' : '/subject-picker', { replace: true })
               }} />
       } />
 
@@ -1790,7 +1795,7 @@ function AppInner() {
           ? <Navigate to="/home" replace />
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
-          : <GetAccessScreen {...commonProps} subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} onStartSubject={handleSelectSubject} />
+          : <GetAccessScreen {...commonProps} profile={profile} subscriptions={subscriptions} onAccessChanged={refreshSubscriptions} onStartSubject={handleSelectSubject} />
       } />
 
       {/* Quiz — wrapped in AppShell so the shared sidebar appears */}

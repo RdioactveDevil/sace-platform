@@ -21,10 +21,10 @@ test('boards and years are read from the subject', () => {
   assert.equal(subjectYear(selective), null)
 })
 
-test('a Year 9 student in Victoria sees VCE and Year 9+ subjects only', () => {
+test('a Year 9 student in Victoria sees VCE and Years 9 to 11 only', () => {
   const me = { state: 'VIC', year: 9 }
   assert.equal(fitsStudent(vceMethods12, me), true)
-  assert.equal(fitsStudent(vceMethods34, me), true)
+  assert.equal(fitsStudent(vceMethods34, me), false) // Year 12: more than 2 above
   assert.equal(fitsStudent(y10Maths, me), true)
   assert.equal(fitsStudent(saceChem, me), false)
   assert.equal(fitsStudent(y6English, me), false)
@@ -37,15 +37,25 @@ test('a South Australian student is not shown VCE subjects', () => {
   assert.equal(fitsStudent(vceMethods12, me), false)
 })
 
-test('other states see both boards; years far above are hidden', () => {
-  assert.equal(fitsStudent(saceChem, { state: 'NSW', year: 11 }), true)
-  assert.equal(fitsStudent(vceMethods12, { state: 'NSW', year: 11 }), true)
-  assert.equal(fitsStudent(saceChem, { state: 'NSW', year: 6 }), false)
+test("other states see neither board; outside Australia sees both", () => {
+  assert.equal(fitsStudent(saceChem, { state: 'NSW', year: 11 }), false)
+  assert.equal(fitsStudent(vceMethods12, { state: 'NSW', year: 11 }), false)
+  assert.equal(fitsStudent(y10Maths, { state: 'NSW', year: 10 }), true)
+  assert.equal(fitsStudent(saceChem, { state: 'INTL', year: 11 }), true)
+  assert.equal(fitsStudent(vceMethods12, { state: 'INTL', year: 11 }), true)
+})
+
+test('years below theirs, or more than 2 above, are hidden', () => {
+  assert.equal(fitsStudent(y10Maths, { state: 'SA', year: 8 }), true)
+  assert.equal(fitsStudent(y10Maths, { state: 'SA', year: 7 }), false)
+  assert.equal(fitsStudent(y6English, { state: 'SA', year: 7 }), false)
+  assert.equal(fitsStudent(saceChem, { state: 'SA', year: 10 }), true)
+  assert.equal(fitsStudent(saceChem, { state: 'SA', year: 9 }), false)
 })
 
 test('with no state or year nothing is hidden', () => {
   for (const s of [vceMethods12, saceChem, y6English, selective]) assert.equal(fitsStudent(s, {}), true)
-  assert.equal(fitsStudent(saceChem, { year: 9 }), true)
+  assert.equal(fitsStudent(saceChem, { year: 10 }), true) // no state: no board filter
   assert.equal(fitsStudent(vceMethods12, { state: 'SA' }), false)
 })
 
