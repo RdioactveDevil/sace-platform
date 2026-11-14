@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { Lock } from 'lucide-react'
 import { tierPrice, money, perDay } from '../lib/pricing'
 import { groupSubject } from '../lib/homeSubjects'
 import { fitsStudent, stateBoard, subjectBoard, subjectYear, schoolStage, SCHOOL_STAGES } from '../lib/subjectFilter'
@@ -82,6 +83,24 @@ export const PLAN_CSS = `
 .pp-note { font-size: 13px; color: var(--lp-muted); text-align: center; }
 .pp-err { font-size: 13.5px; color: var(--lp-bad); background: var(--lp-bad-bg); border-radius: 9px; padding: 9px 12px; }
 .pp-rcpt .lp-btn { width: 100%; }
+/* Step 2, signed out: their name and email, then on to payment. */
+.pp-step-top { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--lp-muted); }
+.pp-step-top .lp-link { font-size: 13px; }
+.pp-sum { background: var(--lp-sel-row); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; }
+.pp-sum b { display: block; font-size: 14.5px; }
+.pp-sum span { color: var(--lp-muted); }
+.pp-form { display: flex; flex-direction: column; gap: 11px; animation: ppIn 0.3s ease; }
+.pp-form label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; color: var(--lp-ink-2); }
+.pp-form input { height: 46px; padding: 0 13px; border-radius: 10px; border: 1px solid var(--lp-line-2); background: var(--lp-card); color: var(--lp-ink); font: inherit; font-size: 15.5px; font-weight: 500; }
+.pp-form input::placeholder { color: var(--lp-faint); }
+.pp-form input:focus { outline: none; border-color: var(--lp-on-bg); box-shadow: 0 0 0 1px var(--lp-on-bg); }
+.pp-form input[aria-invalid="true"] { border-color: var(--lp-bad); }
+.pp-form .pp-ferr { font-size: 12.5px; font-weight: 600; color: var(--lp-bad); }
+.pp-form .lp-btn { width: 100%; margin-top: 3px; }
+.pp-secure { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; color: var(--lp-muted); }
+.pp-fine { font-size: 12px; color: var(--lp-muted); text-align: center; line-height: 1.5; }
+.pp-alt { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--lp-muted); border-top: 1px solid var(--lp-line); padding-top: 11px; }
+.pp-alt .lp-link, .pp-fine .lp-link, .pp-err .lp-link { font-size: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .pp-next, .pp-next-wrap, .pp-amt, .pp-rcpt, .pp-list.nudge label { animation: none; }
@@ -163,11 +182,14 @@ const ordinal = (n) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st
  *   `trialDays` a first plan starts with, `trialing` (adding ends the trial).
  * - `onCheckout(chosenItems)`, `busy`, `error`; `unavailable`: why paying can't happen now.
  * - `footer`: under the button (the free option).
+ * - `details` (signed out): after the button, the bill turns into step 2,
+ *   "Your details" (name and email), with { onBack, onSubmit({ name, email },
+ *   chosen), busy, error, onSignIn(email, chosen), onParent(chosen) }.
  */
 export default function PlanBuilder({
   groups, loading = false, empty = null, top = null, picked, onPick,
   tiers, per, onPlan = false, already = 0, trialDays = 0, trialing = false,
-  onCheckout, busy = false, error = '', unavailable = '', footer = null,
+  onCheckout, busy = false, error = '', unavailable = '', footer = null, details = null,
 }) {
   const all = groups.flatMap(g => g.items)
   const chosen = all.filter(x => picked.includes(x.id))
@@ -240,6 +262,12 @@ export default function PlanBuilder({
       {/* Your plan comes in once there's something on it. */}
       {n > 0 && (
         <div className="lp-card pp-rcpt" aria-live="polite">
+          {details ? (
+            <DetailsStep details={details} chosen={chosen}
+              names={lines.map(l => l.name).join(', ')}
+              summary={trial ? `${trialDays} days free, then $${money(total)} ${per} from ${dayAfter(trialDays)}` : `$${money(total)} ${per}`}
+              today={`$${trial ? 0 : money(total)} today.`} />
+          ) : (<>
           <b>Your plan</b>
           {onPlan && <p className="pp-note" style={{ textAlign: 'left' }}>You're on a plan with {already} subject{already === 1 ? '' : 's'}. New ones go on the same bill.</p>}
           {lines.map(l => (
@@ -262,8 +290,59 @@ export default function PlanBuilder({
           <button type="button" className="lp-btn gold lg" onClick={() => onCheckout(chosen)} disabled={busy || !!unavailable}>{cta}</button>
           {(unavailable || note) && <p className="pp-note">{unavailable || note}</p>}
           {footer}
+          </>)}
         </div>
       )}
     </div>
+  )
+}
+
+/** "Sat 21 Nov": the day `days` from today. */
+const dayAfter = (days) => new Date(Date.now() + days * 86_400_000).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Step 2 of the bill, signed out: their name and email, then on to payment. */
+function DetailsStep({ details, chosen, names, summary, today }) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [tried, setTried] = useState(false)
+  const nameErr = tried && !name.trim() ? 'Enter your name.' : ''
+  const emailErr = tried && !EMAIL_RE.test(email.trim()) ? 'Enter your email address.' : ''
+  const submit = (e) => {
+    e.preventDefault()
+    setTried(true)
+    if (!name.trim() || !EMAIL_RE.test(email.trim())) return
+    details.onSubmit({ name: name.trim(), email: email.trim().toLowerCase() }, chosen)
+  }
+  const { busy } = details
+  return (
+    <>
+      <div className="pp-step-top">
+        <button type="button" className="lp-link" onClick={details.onBack} disabled={busy}>← Your plan</button>
+        <span>Step 2 of 2</span>
+      </div>
+      <b>Your details</b>
+      <div className="pp-sum"><b>{names}</b><span>{summary}</span></div>
+      <form className="pp-form" noValidate onSubmit={submit}>
+        <label>Your name
+          <input autoComplete="name" autoFocus value={name} onChange={e => setName(e.target.value)} disabled={busy} aria-invalid={!!nameErr} />
+          {nameErr && <small className="pp-ferr">{nameErr}</small>}
+        </label>
+        <label>Email
+          <input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="you@example.com"
+            value={email} onChange={e => setEmail(e.target.value)} disabled={busy} aria-invalid={!!emailErr} />
+          {emailErr && <small className="pp-ferr">{emailErr}</small>}
+        </label>
+        {details.error && <div className="pp-err" role="alert">{details.error}</div>}
+        <button type="submit" className="lp-btn gold lg" disabled={busy}>{busy ? 'Opening payment…' : 'Continue to payment'}</button>
+        <p className="pp-secure"><Lock size={12} aria-hidden="true" />{today}</p>
+        <p className="pp-fine">By continuing you agree to the <a className="lp-link" href="/terms" target="_blank" rel="noreferrer">terms</a> and <a className="lp-link" href="/privacy" target="_blank" rel="noreferrer">privacy policy</a>.</p>
+        <div className="pp-alt">
+          <button type="button" className="lp-link" onClick={() => details.onParent(chosen)} disabled={busy}>Setting this up for your child?</button>
+          <span>Have an account? <button type="button" className="lp-link" onClick={() => details.onSignIn(email.trim(), chosen)} disabled={busy}>Sign in</button></span>
+        </div>
+      </form>
+    </>
   )
 }

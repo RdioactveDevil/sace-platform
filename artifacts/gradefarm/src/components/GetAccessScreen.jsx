@@ -26,7 +26,9 @@ const CSS = `${SITE_CSS}${PLAN_CSS}
 .ga-msg { max-width: 560px; font-size: 14px; line-height: 1.5; border-radius: 10px; padding: 10px 14px; }
 .ga-msg.bad { color: var(--lp-bad); background: var(--lp-bad-bg); }
 .ga-msg.info { color: var(--lp-ink-2); background: var(--lp-sel-row); }
-.ga .pp-build { margin-top: 26px; padding-bottom: 24px; }
+/* Weekly / Monthly halfway between the heading's baseline and the list. */
+.ga-head .pp-seg { margin-top: 10px; }
+.ga .pp-build { margin-top: 28px; padding-bottom: 24px; }
 .ga .pp-rcpt { top: 20px; }
 `
 

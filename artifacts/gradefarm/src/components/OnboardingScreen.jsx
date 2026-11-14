@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { completeOnboarding, saveParentDetails } from '../lib/db'
+import { completeOnboarding, saveParentDetails, updatePassword } from '../lib/db'
 import { needsParentConsent } from '../lib/parentConsent'
 import { AU_STATES, rememberedState } from '../lib/subjectFilter'
 import { THEMES } from '../lib/theme'
@@ -25,11 +25,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * parent's email if they're under 15, school, and what they're aiming for
  * (with the terms). Name and email come from sign-up.
  *
+ * `needsPassword`: the account was made on the pricing page from just a name
+ * and email (lib/db.js quickSignUp), so the first question is a password,
+ * with their name and email filled in. It's saved as soon as they move on.
  * `suggestedYearLevel`: from the subjects their tutor included, pre-selected until they pick one.
  * `asParent`: they signed up as a parent setting the account up for their child
  * (`parentName` is theirs); they can still switch on the first step.
  */
-export default function OnboardingScreen({ profile, userEmail, onDone, suggestedYearLevel = null, asParent = false, parentName: initialParentName = '', theme = 'dark', onToggleTheme }) {
+export default function OnboardingScreen({ profile, userEmail, onDone, needsPassword = false, suggestedYearLevel = null, asParent = false, parentName: initialParentName = '', theme = 'dark', onToggleTheme }) {
   const t = THEMES[theme]
   const [saving, setSaving]   = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -65,9 +68,17 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const firstName = displayName.trim().split(' ')[0]
   const child = firstName || 'your child'
 
+  // Asked once: saving it updates the account, which shouldn't make the screen vanish mid-way.
+  const [askPassword] = useState(!!needsPassword)
+  const [password, setPassword] = useState('')
+  const [savedPassword, setSavedPassword] = useState(null)
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwError, setPwError] = useState('')
+
   // Sign-up asks for names, so the name screen only shows when one is missing.
   const [askNames] = useState(() => !(profile.display_name || '').trim() || !(initialParentName || '').trim())
   const screens = [
+    askPassword && 'password',
     askNames && (!(profile.display_name || '').trim() || isParent) && 'name',
     'year', 'state', 'dob', askParentEmail && 'parent', 'school', 'goal',
   ].filter(Boolean)
@@ -120,6 +131,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const today = new Date().toISOString().split('T')[0]
   const dobValid = !!dob && dob <= today && dob >= '1920-01-01'
   const valid = {
+    password: password.length >= 6 && !pwSaving && !!displayName.trim(),
     name: !!displayName.trim() && (!isParent || !!parentName.trim()),
     year: !!yearLevel,
     state: !!studyState,
@@ -129,7 +141,23 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
     goal: termsAccepted && !saving,
   }[screen]
   const isLast = at === screens.length - 1
-  const advance = () => { if (!valid) return; if (isLast) finish(); else next() }
+  const advance = async () => {
+    if (!valid) return
+    if (screen === 'password' && password !== savedPassword) {
+      setPwSaving(true)
+      setPwError('')
+      try {
+        await updatePassword(password)
+        setSavedPassword(password)
+        setPwSaving(false)
+      } catch (e) {
+        setPwError(e?.message && !/fetch/i.test(e.message) ? e.message : "We couldn't save your password. Check your connection and try again.")
+        setPwSaving(false)
+        return
+      }
+    }
+    if (isLast) finish(); else next()
+  }
 
   const you = (student, parent) => (isParent ? parent : student)
   const H = ({ children }) => <h1 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 30px)', fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.2, color: t.text, textWrap: 'balance' }}>{children}</h1>
@@ -146,6 +174,23 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   )
 
   const body = {
+    password: (
+      <>
+        <H>Choose a password</H>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 380 }}>
+          <Field id="onb-pw-name" label="Your name" theme={theme}>
+            <input id="onb-pw-name" className="af-inp" style={bigInput} value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="name" />
+          </Field>
+          <Field id="onb-pw-email" label="Email" theme={theme}>
+            <input id="onb-pw-email" className="af-inp" style={{ ...bigInput, color: t.textMuted }} value={userEmail || ''} readOnly autoComplete="username" />
+          </Field>
+          <Field id="onb-pw" label="Password" hint={savedPassword && password === savedPassword ? 'Saved.' : 'At least 6 characters.'} error={pwError} theme={theme}>
+            <input id="onb-pw" className="af-inp" style={bigInput} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" autoFocus
+              aria-invalid={!!pwError || undefined} aria-describedby={pwError ? 'onb-pw-err' : undefined} />
+          </Field>
+        </div>
+      </>
+    ),
     name: (
       <>
         <H>{you("What's your name?", "What's your child's name?")}</H>
@@ -285,7 +330,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         {!chipScreen && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
             <button type="submit" className="af-btn" disabled={!valid} style={authBtn(t, 'primary', { disabled: !valid })}>
-              {isLast ? (saving ? 'Setting up…' : 'Start') : 'Next'}
+              {isLast ? (saving ? 'Setting up…' : 'Start') : pwSaving ? 'Saving…' : 'Next'}
             </button>
             {optionalScreen && !school.trim() && <button type="button" className="af-btn" onClick={next} style={authBtn(t, 'secondary')}>Skip</button>}
             {at > 0 && <button type="button" className="af-link" onClick={back} style={{ ...linkStyle(t), fontSize: 13.5, fontWeight: 600, textDecorationColor: t.border, color: t.textMuted, marginLeft: 6 }}>Back</button>}
