@@ -1645,6 +1645,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   // Quick replies Titan suggested with its latest message (lib/quickReplies.js).
   const lastMessage = messages[messages.length - 1]
   const lastReplies = lastMessage?.role === 'assistant' && Array.isArray(lastMessage.replies) ? lastMessage.replies : []
+  const showChips = lastReplies.length > 0 && !loading && attachedImages.length === 0 && !aiBlocked
   const showPractise = consolidateTarget && onConsolidate && messages.filter(m => m.role === 'assistant').length >= 2 && !loading
   return (
     <div ref={chatRef} className="ls-chat" style={{ display: 'flex', flexDirection: 'column', height: startMinH || '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, overflow: 'hidden', background: t.bg }}>
@@ -1666,6 +1667,8 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           .ls-new-word { display: none; }
           .ls-chat .ls-hist { display: block; }
           .ls-chat-row .ls-explain-word { display: none; }
+          .ls-practise-topic { display: none; }
+          .ls-chat-chips { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 20px; }
         }
         @media (max-width: 380px) { .ls-chat { --ls-pill: 88px; } }
       `}</style>
@@ -1710,15 +1713,6 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           {messageList(messages)}
           {typing && <div style={{ paddingLeft: 40 }}>{typing}</div>}
 
-          {showPractise && (
-            <div style={{ paddingLeft: 40 }}>
-              <button type="button" onClick={() => onConsolidate(consolidateTarget)}
-                style={{ height: 36, padding: '0 14px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow, color: t.goldText, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
-                Practise {consolidateTarget.label}
-              </button>
-            </div>
-          )}
-
           {showLessonOffer && (
             <div className="msg-in" style={{ marginLeft: 40, ...card, borderRadius: 16, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 700, flex: '1 1 200px' }}>Want to go through it step by step in a lesson?</span>
@@ -1737,14 +1731,23 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
       {/* Quick replies and the reply row */}
       <div className="ls-chat-bottom" style={{ flexShrink: 0, padding: '6px 24px 18px' }}>
         <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {lastReplies.length > 0 && !loading && attachedImages.length === 0 && !aiBlocked && (
-            <div className="ls-chat-chips" style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
-              {lastReplies.map(sTxt => (
+          {/* Titan's suggested replies on the left, "Practise <topic>" on the right. */}
+          {(showChips || showPractise) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="ls-chat-chips" style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto' }}>
+              {showChips && lastReplies.map(sTxt => (
                 <button key={sTxt} type="button" onClick={() => sendPresetMessage(sTxt)}
                   style={{ padding: '7px 13px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {sTxt}
                 </button>
               ))}
+              </div>
+              {showPractise && (
+                <button type="button" onClick={() => onConsolidate(consolidateTarget)} aria-label={`Practise ${consolidateTarget.label}`}
+                  style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: 999, border: `1px solid ${t.borderAccent}`, background: t.accentGlow, color: t.goldText, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  Practise<span className="ls-practise-topic"> {consolidateTarget.label}</span>
+                </button>
+              )}
             </div>
           )}
           <div style={{ background: t.bgCard, border: `1px solid ${t.borderMid}`, borderRadius: 26, padding: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
