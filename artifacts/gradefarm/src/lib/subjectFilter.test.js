@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fitsStudent, subjectBoard, subjectYear, stateLabel } from './subjectFilter.js'
+import { fitsStudent, subjectBoard, subjectYear, stateLabel, stateBoard, schoolStage } from './subjectFilter.js'
 
 const vceMethods12 = { name: 'VCE Mathematical Methods Units 1 and 2', stage: 'Year 11' }
 const vceMethods34 = { name: 'VCE Mathematical Methods', stage: 'Units 3 & 4' }
@@ -52,4 +52,24 @@ test('with no state or year nothing is hidden', () => {
 test('state labels', () => {
   assert.equal(stateLabel('VIC'), 'Victoria')
   assert.equal(stateLabel('nope'), '')
+})
+
+test('subjects sort into primary, middle and high school', () => {
+  assert.equal(schoolStage(y6English), 'primary')
+  assert.equal(schoolStage(y10Maths), 'middle')
+  assert.equal(schoolStage(selective), 'middle')
+  assert.equal(schoolStage(vceMethods12), 'high')
+  assert.equal(schoolStage(vceMethods34), 'high')
+  assert.equal(schoolStage(saceChem), 'high')
+  assert.equal(schoolStage({ name: 'SACE Specialist Mathematics Stage 1', stage: 'Year 11' }), 'high')
+  assert.equal(schoolStage({ name: 'Year 7 Science', stage: 'Year 7' }), 'middle')
+  assert.equal(schoolStage({ name: 'Reading', stage: 'Foundation' }), 'primary')
+  assert.equal(schoolStage({ name: 'Debating', stage: '' }), 'other')
+})
+
+test('only Victoria and South Australia have a board of their own', () => {
+  assert.equal(stateBoard('VIC'), 'vce')
+  assert.equal(stateBoard('SA'), 'sace')
+  assert.equal(stateBoard('NSW'), null)
+  assert.equal(stateBoard(null), null)
 })

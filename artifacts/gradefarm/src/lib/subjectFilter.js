@@ -24,6 +24,9 @@ export const stateLabel = (code) => AU_STATES.find(([c]) => c === code)?.[1] || 
 /** The senior board each state studies, if we have subjects for it. */
 const BOARD_OF_STATE = { VIC: 'vce', SA: 'sace' }
 
+/** 'vce' | 'sace' for a state with its own senior board, else null. */
+export const stateBoard = (state) => BOARD_OF_STATE[state] || null
+
 /** How far above their own year a student might study (accelerated students). */
 const YEARS_AHEAD = 3
 
@@ -53,4 +56,26 @@ export function fitsStudent(subj, { state, year } = {}) {
   const sy = subjectYear(subj)
   if (y && sy && (sy < y || sy > y + YEARS_AHEAD)) return false
   return true
+}
+
+/** The school stages the pricing page lists subjects under, youngest first. */
+export const SCHOOL_STAGES = [
+  { id: 'primary', title: 'Primary School' },
+  { id: 'middle', title: 'Middle School' },
+  { id: 'high', title: 'High School' },
+  { id: 'other', title: 'More subjects' },
+]
+
+/**
+ * Which school stage a subject ({ name, stage }) is for: 'primary' up to
+ * Year 6, 'middle' for Years 7 to 10 and selective entry, 'high' for Years
+ * 11 and 12 (every VCE and SACE subject), and 'other' if it can't be placed.
+ */
+export function schoolStage(subj) {
+  if (subjectBoard(subj)) return 'high'
+  const y = subjectYear(subj)
+  if (y) return y <= 6 ? 'primary' : y <= 10 ? 'middle' : 'high'
+  const stage = String(subj?.stage || '')
+  if (/foundation|prep|reception|kindergarten/i.test(stage)) return 'primary'
+  return /selective/i.test(stage) ? 'middle' : 'other'
 }

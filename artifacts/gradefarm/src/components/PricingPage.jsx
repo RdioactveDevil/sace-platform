@@ -2,17 +2,18 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getPlatformSettings, getBillingConfig } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
-import { SUBJECT_GROUPS, groupSubject } from '../lib/homeSubjects'
+import { groupSubject } from '../lib/homeSubjects'
 import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, tierPrice, monthlySaving, money, perDay } from '../lib/pricing'
 import { rememberPendingCheckout, startCheckout, subjectTileFor } from '../lib/pendingCheckout'
-import { AU_STATES, stateLabel, fitsStudent } from '../lib/subjectFilter'
+import { AU_STATES, stateLabel, fitsStudent, stateBoard, subjectBoard, subjectYear, schoolStage, SCHOOL_STAGES } from '../lib/subjectFilter'
 import { SITE_CSS, SITE_FONTS, themeVars, SiteNav, SiteFooter, siteFooterLinks } from './SiteChrome'
 
 // /pricing: "Build your plan". It first asks which state they're in, and
 // nothing else (a signed-in student's profile already says, so they skip
 // it). The list then shows that state's subjects and the ones every state
-// shares, like middle school (lib/subjectFilter.js fitsStudent). A student
-// ticks the subjects they want and a receipt beside the list adds them up at
+// shares (lib/subjectFilter.js fitsStudent), under Primary, Middle and High
+// School. A student ticks the subjects they want and a receipt beside the
+// list adds them up at
 // the real per-subject prices (platform_settings.pricing, Admin → Settings),
 // weekly or monthly. With one ticked, a hint says each extra one costs less.
 //
@@ -60,7 +61,6 @@ const CSS = `${SITE_CSS}
 .pp-list fieldset { border: none; margin: 0; padding: 0; min-width: 0; }
 .pp-list fieldset + fieldset { border-top: 1px solid var(--lp-line); }
 .pp-list legend { float: left; width: 100%; padding: 11px 18px; font-size: 13px; font-weight: 800; color: var(--lp-muted); background: var(--lp-subtle); border-bottom: 1px solid var(--lp-line); }
-.pp-list legend span { font-weight: 600; margin-left: 8px; }
 .pp-list label { clear: both; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--lp-line); cursor: pointer; font-weight: 700; }
 .pp-list fieldset label:last-child { border-bottom: none; }
 .pp-list label:hover { background: var(--lp-subtle); }
@@ -142,7 +142,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const [pricing, setPricing] = useState(DEFAULT_PRICING)
   const [billing, setBilling] = useState(null) // signed in: /api/billing/config
   const [interval, setBillInterval] = useState('week')
-  const [picked, setPicked] = useState(null) // ids; null until the first subject is ticked for them
+  const [picked, setPicked] = useState([]) // ids of the ticked subjects
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [showTutors, setShowTutors] = useState(false)
@@ -155,7 +155,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const pickState = (code) => {
     setStudyState(code)
     setChangingState(false)
-    setPicked(null)
+    setPicked([])
     setError('')
     try { localStorage.setItem(STATE_KEY, code) } catch {}
     window.scrollTo(0, 0)
@@ -172,18 +172,29 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
     getBillingConfig().then(setBilling).catch(() => {})
   }, [signedIn])
 
-  // The live subjects for their state in their groups, with the first one ticked to start with.
+  // The live subjects for their state under Primary, Middle and High School, youngest year first.
   const groups = useMemo(() => {
-    const out = SUBJECT_GROUPS.map(g => ({ ...g, items: [] }))
+    const own = stateBoard(studyState)
+    const out = SCHOOL_STAGES.map(g => ({ ...g, items: [] }))
     for (const s of subjects || []) {
-      if (!fitsStudent({ name: s.name, stage: s.level }, { state: studyState })) continue
+      const subj = { name: s.name, stage: s.level }
+      if (!fitsStudent(subj, { state: studyState })) continue
       const g = groupSubject(s)
-      if (g.name) out.find(x => x.id === g.group).items.push({ ...g, id: s.id, subject: { curriculumId: s.id, name: s.name, level: s.level || '' } })
+      if (!g.name) continue
+      // In Victoria or South Australia the board goes without saying. Elsewhere
+      // both boards are listed, so each says which it is.
+      const board = subjectBoard(subj)
+      const level = board && !own ? [board.toUpperCase(), g.level].filter(Boolean).join(' · ') : g.level
+      out.find(x => x.id === schoolStage(subj)).items.push({
+        id: s.id, name: g.name, level, year: subjectYear(subj) ?? 99,
+        subject: { curriculumId: s.id, name: s.name, level: s.level || '' },
+      })
     }
+    for (const g of out) g.items.sort((a, b) => a.year - b.year || a.name.localeCompare(b.name))
     return out.filter(g => g.items.length)
   }, [subjects, studyState])
   const all = groups.flatMap(g => g.items)
-  const chosenIds = picked ?? (all[0] ? [all[0].id] : [])
+  const chosenIds = picked
   const chosen = all.filter(x => chosenIds.includes(x.id))
   const toggle = (id) => {
     setError('')
@@ -292,7 +303,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
                 : !all.length ? <p className="pp-msg">Couldn't load the subjects just now. <button type="button" className="lp-link" onClick={signUp}>Make an account</button> and pick yours inside.</p>
                 : groups.map(g => (
                   <fieldset key={g.id}>
-                    <legend>{g.title}{g.note ? <span>{g.note}</span> : null}</legend>
+                    <legend>{g.title}</legend>
                     {g.items.map(x => {
                       const on = chosenIds.includes(x.id)
                       return (
