@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useBlocker } from 'react-router-dom'
-import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag, Star, Snowflake } from 'lucide-react'
+import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag, Star, Snowflake, PenLine } from 'lucide-react'
 import {
   selectNextQuestion,
   dueQuestionIds,
@@ -55,7 +55,8 @@ import QuestionRenderer from './questions/QuestionRenderer'
 import { MarksBreakdown } from './questions/WrittenAnswer'
 import { AnnotatedQuestion, AdviceSteps, penColor } from './TitanAdvice'
 import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked, totalMarks } from '../lib/questionTypes'
-import { buildQuestionHelpContext, describeResponse } from '../lib/questionHelp'
+import { buildQuestionHelpContext, describeResponse, questionHelpSystemSection } from '../lib/questionHelp'
+import RoughWork from './RoughWork'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
 import Celebration from './Celebration'
@@ -294,6 +295,12 @@ export default function QuizScreen({
   // Width of the question area, to decide whether a passage fits beside the question.
   const [questionAreaEl, setQuestionAreaEl] = useState(null)
   const [questionAreaWidth, setQuestionAreaWidth] = useState(0)
+  // Rough work: a board over the question (a sheet on phones), kept per
+  // question. In practice it clears when the question changes; in an exam each
+  // question keeps its own board while the student moves between them.
+  const [roughOpen, setRoughOpen] = useState(false)
+  const [roughInk, setRoughInk] = useState(false)
+  const roughBoards = useRef(new Map())
   const [generatingMore, setGeneratingMore] = useState(false)
   // Human-readable reason the last auto-generation attempt failed, shown on the
   // session summary so a silent empty/errored top-up is diagnosable.
@@ -1617,6 +1624,11 @@ export default function QuizScreen({
       const tag = (e.target?.tagName || '').toLowerCase()
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
       if (showExit || showFinishExam || reportMenuOpen || breakOpen || rankUpLevel != null) return
+      if (e.key === 'w' || e.key === 'W') {
+        e.preventDefault()
+        setRoughOpen(o => !o)
+        return
+      }
       const isMcq = getQuestionType(currentQ) === 'mcq'
       const n = Number(e.key)
       if (isMcq && !showAns && n >= 1 && n <= (currentQ.options?.length || 0)) {
@@ -1642,6 +1654,22 @@ export default function QuizScreen({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  // A new question: practice starts a clean board; an exam brings back that question's.
+  const roughQid = currentQ?.id
+  useEffect(() => {
+    if (!examRun) {
+      roughBoards.current = new Map()
+      setRoughOpen(false)
+    }
+    setRoughInk(!!roughBoards.current.get(roughQid)?.items.length)
+  }, [roughQid]) // eslint-disable-line react-hooks/exhaustive-deps
+  const saveRoughBoard = useCallback((board) => {
+    if (roughQid == null) return
+    roughBoards.current.set(roughQid, board)
+    setRoughInk(board.items.length > 0)
+  }, [roughQid])
+  const closeRough = useCallback(() => setRoughOpen(false), [])
 
   // The first wrong answer that offers extra practice asks for its page tip (App's PageTips).
   const offersExtraPractice = !examRun && showAns && !correct && remediationMode && !currentQ?.is_variant && remediationOriginalQ?.id === currentQ?.id
@@ -2019,6 +2047,15 @@ export default function QuizScreen({
   const isBonus = bonusId === currentQ.id && !currentQ.is_variant && !examRun
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
   const mathInput = usesMathInput(subjectTile?.name || currentQ?.subject)
+  const roughSheetH = Math.min(520, Math.round(window.innerHeight * 0.68))
+  // Titan checks rough work in practice (not in an exam), where Titan is offered.
+  const roughTitan = onOpenLearn && !examMode ? {
+    subject: subjectTile?.name || currentQ.subject || '',
+    topic: currentQ.subtopic || currentQ.topic || '',
+    questionSection: questionHelpSystemSection(buildQuestionHelpContext(currentQ, showAns ? selected : null, showAns ? correct : null)),
+    answered: showAns,
+    firstName: profile?.display_name?.split(' ')[0] || '',
+  } : null
   const btn = (kind, disabled = false) => ({
     padding: '9px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap',
     cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
@@ -2218,6 +2255,12 @@ export default function QuizScreen({
           {!examRun && !isMobile && <span style={{ whiteSpace: 'nowrap' }}>{signedXP(sessionXP)} XP</span>}
           {timer}
           <QuizToolsDock theme={theme} tools={tools} inline />
+          <button type="button" onClick={() => setRoughOpen(o => !o)} aria-pressed={roughOpen}
+            aria-label={isMobile ? 'Rough work' : undefined} title="Rough work: draw or type your working (W)"
+            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${roughOpen ? t.text : t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <PenLine size={14} aria-hidden="true" />{!isMobile && 'Rough work'}
+            {roughInk && !roughOpen && <span aria-hidden="true" style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 99, background: t.accent, border: `2px solid ${t.bg}` }} />}
+          </button>
           <button type="button" onClick={() => (examRun ? setShowFinishExam(true) : setShowExit(true))}
             style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' }}>
             {examRun ? (isMobile ? 'Finish' : 'Finish exam') : isMobile ? 'End' : 'End session'}
@@ -2226,7 +2269,7 @@ export default function QuizScreen({
       </div>
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
-        <div ref={setQuestionAreaEl} style={{ flex: 1, padding: isMobile ? '14px' : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div ref={setQuestionAreaEl} style={{ position: 'relative', flex: 1, padding: isMobile ? (roughOpen ? `14px 14px ${roughSheetH + 16}px` : '14px') : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, display: 'flex', flexDirection: markedLayout && isMobile ? 'column' : 'row', gap: markedLayout && isMobile ? 12 : 24, alignItems: markedLayout && isMobile ? 'stretch' : 'flex-start' }}>
           {sidePassage && (
             // The passage is what students read closely, so it gets ~60% of the row.
@@ -2476,6 +2519,21 @@ export default function QuizScreen({
             </aside>
           )}
           </div>
+          {/* Rough work: over the question on wider screens, a sheet on phones. */}
+          {!isMobile && (
+            <RoughWork key={`rw-${currentQ.id}`} mode="overlay" open={roughOpen} onClose={closeRough} theme={theme}
+              initial={roughBoards.current.get(currentQ.id)} onChange={saveRoughBoard}
+              questionText={currentQ.question} topic={currentQ.subtopic || currentQ.topic}
+              titan={roughTitan} captureHost={questionAreaEl} />
+          )}
+          {isMobile && roughOpen && (
+            <RoughWork key={`rws-${currentQ.id}`} mode="sheet" open onClose={closeRough} theme={theme}
+              initial={roughBoards.current.get(currentQ.id)} onChange={saveRoughBoard} gridDefault={mathInput}
+              questionText={currentQ.question} topic={currentQ.subtopic || currentQ.topic}
+              titan={roughTitan} sheetHeight={roughSheetH}
+              onCheckAnswer={isMcq && !examRun && !showAns ? () => { setRoughOpen(false); handleAnswer(selected) } : null}
+              canCheckAnswer={selected != null} />
+          )}
         </div>
       </div>
     </div>
