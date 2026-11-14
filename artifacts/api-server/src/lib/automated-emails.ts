@@ -275,6 +275,9 @@ async function deliver(
   }
 }
 
+/** First word of a display name, for greetings ("Hi Mia,"). */
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
 // ── Welcome ─────────────────────────────────────────────────────────────────
 
 type WelcomeRow = {
@@ -472,7 +475,7 @@ function sessionReminderEmail(
     content: {
       heading: soon ? `Your session starts in ${minutes} minutes` : "Your session is coming up",
       paragraphs: [
-        `Hi ${r.name}, this is a reminder about your ${s.session_type === "group" ? "group " : ""}session with ${withWhom}.`,
+        `Hi ${firstName(r.name)}, this is a reminder about your ${s.session_type === "group" ? "group " : ""}session with ${withWhom}.`,
       ],
       details: [
         ["When", formatWhen(s.scheduled_at)],
@@ -569,8 +572,8 @@ function assignmentEmail(
       heading: overdue ? (many ? "These assignments are overdue" : "This assignment is overdue") : `Due tomorrow, ${dueText}`,
       paragraphs: [
         overdue
-          ? `Hi ${r.name}, ${many ? "these were" : "this was"} due on ${dueText} and ${many ? "aren't" : "isn't"} finished yet. It's not too late to get ${many ? "them" : "it"} done.`
-          : `Hi ${r.name}, just a heads up that ${many ? "these are" : "this is"} due tomorrow and not finished yet.`,
+          ? `Hi ${firstName(r.name)}, ${many ? "these were" : "this was"} due on ${dueText} and ${many ? "aren't" : "isn't"} finished yet. It's not too late to get ${many ? "them" : "it"} done.`
+          : `Hi ${firstName(r.name)}, just a heads up that ${many ? "these are" : "this is"} due tomorrow and not finished yet.`,
       ],
       details,
       cta: { label: overdue ? "Finish now" : "Start now", url: `${appUrl()}/home` },
@@ -649,7 +652,7 @@ function assignmentSetEmail(
     content: {
       heading: many ? "You have new work" : `New ${first.type}`,
       paragraphs: [
-        `Hi ${r.name}, here's your regular work from ${from}.`,
+        `Hi ${firstName(r.name)}, here's your regular work from ${from}.`,
       ],
       details,
       cta: { label: "Start now", url: `${appUrl()}/home` },
@@ -807,7 +810,7 @@ async function runDiagnosticReminders(job: Job) {
       content: {
         heading: "Your check-in is waiting",
         paragraphs: [
-          `Hi ${r.name}, ${tutorName} has set you a short diagnostic on ${diagnosticSubject(d)}: 20 questions, no time limit. It shows where you're at so your practice starts in the right place.`,
+          `Hi ${firstName(r.name)}, ${tutorName} has set you a short diagnostic on ${diagnosticSubject(d)}: 20 questions, no time limit. It shows where you're at so your practice starts in the right place.`,
           `You can practise ${diagnosticSubject(d)} as soon as it's done.`,
         ],
         cta: { label: "Start the diagnostic", url: `${appUrl()}/diagnostic/${encodeURIComponent(d.token)}` },
@@ -850,7 +853,7 @@ async function runDiagnosticDone(job: Job) {
       subject: `${studentName} finished their ${diagnosticSubject(d)} diagnostic: ${sum.percentage}%`,
       content: {
         heading: `${studentName}'s diagnostic is in`,
-        paragraphs: [`Hi ${tutor.name}, ${studentName} has finished their ${diagnosticSubject(d)} diagnostic.`],
+        paragraphs: [`Hi ${firstName(tutor.name)}, ${studentName} has finished their ${diagnosticSubject(d)} diagnostic.`],
         details: [
           ["Score", `${sum.percentage}% (${sum.band})`],
           ...(sum.work_on.length ? ([["Work on", sum.work_on.join(", ")]] as Array<[string, string]>) : []),

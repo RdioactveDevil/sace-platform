@@ -2,10 +2,9 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import { Resend } from "resend";
-import { EMAIL_FROM } from "../lib/email";
+import { appUrl, sendEmail } from "../lib/email";
+import { seriesBookedEmail } from "../lib/tutor-emails";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
-import { contactEmailForLogin } from "../lib/family";
-import { getServiceClient } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -36,11 +35,6 @@ function getLiveKitConfig() {
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   return key ? new Resend(key) : null;
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 interface CallerContext {
@@ -266,50 +260,27 @@ router.post("/series", async (req: Request, res: Response) => {
     const { data: profiles } = await ctx.admin.from("profiles")
       .select("id, display_name").in("id", participantIds);
     const nameMap = Object.fromEntries(
-      (profiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name ?? "Student"])
+      (profiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name || "there"])
     );
 
-    const permanentLink = `${process.env.APP_URL ?? "https://gradefarm.com.au"}/room/${roomName}`;
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const recurrenceLabel = { weekly: "Every", fortnightly: "Every second", monthly: "Monthly on" }[recurrence_type];
-    const scheduleDesc = `${recurrenceLabel} ${dayNames[day_of_week]} at ${time_of_day}`;
-    const safeTitle = escapeHtml(title ?? (isGroup ? "Group Tutoring Series" : "Tutoring Series"));
-    const safeTutor = escapeHtml(ctx.displayName);
-    const safeSchedule = escapeHtml(scheduleDesc);
-
+    const link = `${appUrl()}/room/${roomName}`;
     await Promise.allSettled(participantIds.map(async (sid) => {
       const { data: authUser } = await ctx.admin.auth.admin.getUserById(sid);
       const email = authUser?.user?.email;
       if (!email) return;
-      const safeStudent = escapeHtml(nameMap[sid] ?? "Student");
-      // A child added to a family signs in with a hidden address: their mail goes to the parent.
-      const recipient = (await contactEmailForLogin(getServiceClient(), email)) ?? email;
-      await resend.emails.send({
-        from: EMAIL_FROM,
-        to: [recipient],
-        subject: `Recurring ${isGroup ? "group " : ""}sessions booked: ${safeTitle}`,
-        html: `
-          <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:560px;margin:auto;color:#1a1a2e">
-            <div style="background:#0d0d1a;padding:24px 32px;border-radius:12px 12px 0 0">
-              <span style="font-size:22px;font-weight:700;color:#f1be43;letter-spacing:-0.5px">gradefarm.</span>
-            </div>
-            <div style="background:#f9f9fb;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e5e5ea">
-              <h2 style="margin:0 0 8px;font-size:20px">Hi ${safeStudent},</h2>
-              <p style="margin:0 0 20px;color:#555">${safeTutor} has set up a recurring ${isGroup ? "group " : ""}tutoring series with you.</p>
-              <div style="background:#fff;border:1px solid #e5e5ea;border-radius:8px;padding:20px;margin-bottom:24px">
-                <p style="margin:0 0 6px"><strong>📅 Schedule:</strong> ${safeSchedule}</p>
-                <p style="margin:0 0 6px"><strong>⏱ Duration:</strong> ${duration_minutes} minutes</p>
-                ${title ? `<p style="margin:0"><strong>📝 Topic:</strong> ${safeTitle}</p>` : ""}
-              </div>
-              <p style="margin:0 0 16px;font-weight:600;color:#1a1a2e">Your permanent session link — bookmark this:</p>
-              <a href="${permanentLink}" style="display:inline-block;background:#f1be43;color:#1a1a2e;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px">
-                Join Every Session →
-              </a>
-              <p style="margin:20px 0 0;font-size:13px;color:#888">This link works for every session in the series. No new links each week.</p>
-            </div>
-          </div>
-        `,
+      const { subject, content } = seriesBookedEmail({
+        studentName: nameMap[sid] ?? "there",
+        tutorName: ctx.displayName,
+        title: title ?? null,
+        recurrence: recurrence_type,
+        dayOfWeek: day_of_week,
+        timeOfDay: time_of_day,
+        durationMinutes: duration_minutes,
+        isGroup,
+        link,
       });
+      // sendEmail sends a family child's mail to their parent.
+      await sendEmail(resend, { to: email, subject, content, idempotencyKey: `series-booked:${series.id}:${sid}` });
     }));
   }
 

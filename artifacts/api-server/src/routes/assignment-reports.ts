@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
-import { EMAIL_FROM, appUrl, escapeHtml, getResend } from "../lib/email";
+import { appUrl, getResend, sendEmail } from "../lib/email";
+import { assignmentFinishedEmail } from "../lib/tutor-emails";
 import { logger } from "../lib/logger";
 import { rosterTutorIds, tutorsToNotify } from "../lib/student-tutors";
 
@@ -377,12 +378,7 @@ router.post("/assignments/:id/finished", async (req: Request, res: Response) => 
       displayName(caller.admin, claimed.tutor_id, "another tutor"),
     ]);
     const score = scoreOf(claimed);
-    const outcome = claimed.passed == null ? "finished" : claimed.passed ? "passed" : "did not pass";
-    const scoreText = score.pct != null ? `${score.correct}/${score.total} (${score.pct}%)` : "—";
-    const markText = claimed.min_accuracy != null ? `${claimed.min_accuracy}%` : "None";
     const reportUrl = `${appUrl()}/tutor?tab=assignments&report=${encodeURIComponent(claimed.id)}`;
-    const row = (label: string, value: string, color = "#f0f4ff") =>
-      `<tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px; width: 110px;">${label}</td><td style="padding: 6px 0; color: ${color}; font-size: 13px; font-weight: 700;">${escapeHtml(value)}</td></tr>`;
 
     let notified = false;
     for (const tutorId of tutorIds) {
@@ -394,38 +390,23 @@ router.post("/assignments/:id/finished", async (req: Request, res: Response) => 
       ]);
       if (!tutorUser?.user?.email || tutorProfile?.deactivated_at) continue;
       const tutorName = tutorProfile?.display_name || "there";
-      const setBy = setter ? "you set" : `${setterName} set`;
-
-      const { error: sendErr } = await resend.emails.send({
-        from: EMAIL_FROM,
-        to: tutorUser.user.email,
-        subject: `${studentName} ${outcome} their ${claimed.type} — ${claimed.subject}`,
-        html: `
-        <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
-          <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
-            <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
-          </div>
-          <div style="padding: 32px;">
-            <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">Assignment ${escapeHtml(outcome)}</h2>
-            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${escapeHtml(tutorName)}, ${escapeHtml(studentName)} has finished the ${escapeHtml(claimed.type.toLowerCase())} ${escapeHtml(setBy)}.</p>
-            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-              <table style="width: 100%; border-collapse: collapse;">
-                ${row("Subject", claimed.subject)}
-                ${row("Topics", (claimed.topics ?? []).join(", ") || claimed.subject)}
-                ${row("Score", scoreText, "#f1be43")}
-                ${row("Pass mark", markText)}
-                ${claimed.passed != null ? row("Result", claimed.passed ? "Passed" : "Not passed", claimed.passed ? "#4ade80" : "#f87171") : ""}
-              </table>
-            </div>
-            <a href="${reportUrl}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">View the report</a>
-          </div>
-          <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
-            ${setter ? "You're receiving this because you set this assignment on gradefarm." : `You're receiving this because ${escapeHtml(studentName)} is one of your students on gradefarm.`}
-          </div>
-        </div>
-      `,
+      const { subject, content } = assignmentFinishedEmail({
+        tutorName,
+        studentName,
+        ownAssignment: setter,
+        setterName,
+        type: claimed.type,
+        subject: claimed.subject,
+        topics: claimed.topics ?? [],
+        score,
+        minAccuracy: claimed.min_accuracy,
+        passed: claimed.passed,
+        reportUrl,
       });
-      if (sendErr) logger.warn({ err: sendErr.message, tutorId }, "assignment finished: email failed");
+      const { error: sendErr } = await sendEmail(resend, {
+        to: tutorUser.user.email, subject, content, idempotencyKey: `assignment-finished:${claimed.id}:${tutorId}`,
+      });
+      if (sendErr) logger.warn({ err: sendErr, tutorId }, "assignment finished: email failed");
       else notified = true;
     }
     return res.json({ ok: true, notified });

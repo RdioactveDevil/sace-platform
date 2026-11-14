@@ -12,10 +12,9 @@ import {
 } from "livekit-server-sdk";
 import { Resend } from "resend";
 import { getR2Config } from "../lib/r2";
-import { EMAIL_FROM } from "../lib/email";
+import { appUrl, sendEmail } from "../lib/email";
+import { sessionBookedEmail } from "../lib/tutor-emails";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
-import { contactEmailForLogin } from "../lib/family";
-import { getServiceClient } from "../lib/auth";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -179,15 +178,6 @@ async function stopSessionRecording(egressId: string): Promise<void> {
   }
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 interface CallerContext {
   admin: SupabaseClient & { auth: SupabaseAdminAuth };
   userId: string;
@@ -271,50 +261,18 @@ async function sendSessionInvite(
     participantCount?: number;
   }
 ) {
-  const sessionLink = `${process.env.APP_URL ?? "https://gradefarm.com.au"}/session/${opts.sessionId}`;
-  const sessionDate = new Date(opts.scheduledAt).toLocaleString("en-AU", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-    hour: "2-digit", minute: "2-digit", timeZone: "Australia/Adelaide",
+  const { subject, content } = sessionBookedEmail({
+    studentName: opts.studentName,
+    tutorName: opts.tutorName,
+    title: opts.title,
+    scheduledAt: opts.scheduledAt,
+    durationMinutes: opts.durationMinutes,
+    isGroup: opts.isGroup,
+    participantCount: opts.participantCount,
+    link: `${appUrl()}/session/${opts.sessionId}`,
   });
-
-  const safeTitle = escapeHtml(opts.title ?? (opts.isGroup ? "Group Tutoring Session" : "Tutoring Session"));
-  const safeTutor = escapeHtml(opts.tutorName);
-  const safeStudent = escapeHtml(opts.studentName);
-  const safeDate = escapeHtml(sessionDate);
-  const groupLine = opts.isGroup && opts.participantCount
-    ? `<p style="margin:0 0 6px"><strong>👥 Participants:</strong> ${opts.participantCount} students</p>`
-    : "";
-
-  // A child added to a family signs in with a hidden address: their mail goes to the parent.
-  const recipient = (await contactEmailForLogin(getServiceClient(), opts.studentEmail)) ?? opts.studentEmail;
-  await resend.emails.send({
-    from: EMAIL_FROM,
-    to: [recipient],
-    subject: `${opts.isGroup ? "Group session" : "Session"} booked: ${safeTitle} on ${safeDate}`,
-    html: `
-      <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:560px;margin:auto;color:#1a1a2e">
-        <div style="background:#0d0d1a;padding:24px 32px;border-radius:12px 12px 0 0">
-          <span style="font-size:22px;font-weight:700;color:#f1be43;letter-spacing:-0.5px">gradefarm.</span>
-        </div>
-        <div style="background:#f9f9fb;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e5e5ea">
-          <h2 style="margin:0 0 8px;font-size:20px">Hi ${safeStudent},</h2>
-          <p style="margin:0 0 20px;color:#555">
-            ${safeTutor} has booked a ${opts.isGroup ? "group " : ""}tutoring session${opts.isGroup ? " that you're invited to" : " with you"}.
-          </p>
-          <div style="background:#fff;border:1px solid #e5e5ea;border-radius:8px;padding:20px;margin-bottom:24px">
-            <p style="margin:0 0 6px"><strong>📅 When:</strong> ${safeDate} (ACST)</p>
-            <p style="margin:0 0 6px"><strong>⏱ Duration:</strong> ${opts.durationMinutes} minutes</p>
-            ${groupLine}
-            ${opts.title ? `<p style="margin:0"><strong>📝 Topic:</strong> ${safeTitle}</p>` : ""}
-          </div>
-          <a href="${sessionLink}" style="display:inline-block;background:#f1be43;color:#1a1a2e;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px">
-            Join Session
-          </a>
-          <p style="margin:20px 0 0;font-size:13px;color:#888">Opens in your browser — no downloads needed.</p>
-        </div>
-      </div>
-    `,
-  });
+  // sendEmail sends a family child's mail to their parent.
+  await sendEmail(resend, { to: opts.studentEmail, subject, content, idempotencyKey: `session-booked:${opts.sessionId}:${opts.studentId}` });
 }
 
 // POST /sessions — tutor creates an individual or group session

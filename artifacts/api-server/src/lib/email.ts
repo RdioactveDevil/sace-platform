@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Resend } from "resend";
 import { getServiceClient } from "./auth";
 import { contactEmailForLogin, isFamilyLogin } from "./family";
+import { BODY, button, CARD, FONT, footer, footerText, LINE, MUTED, NAVY, page, wordmarkRow } from "./email-layout";
 
 /** Sender for every email the API sends. Must be on a domain verified in Resend. */
 export const EMAIL_FROM = process.env.EMAIL_FROM ?? "gradefarm. <notifications@gradefarm.com.au>";
@@ -117,8 +118,10 @@ export interface EmailContent {
   /** Extra pre-built, already-escaped HTML shown after the details panel. */
   extraHtml?: string;
   cta?: { label: string; url: string };
-  /** Why the recipient is getting this email. Plain text. */
+  /** Why the recipient is getting this email. Plain text; the footer adds who we are and the support address. */
   footer: string;
+  /** Inbox preview text shown after the subject. Defaults to the start of the email. */
+  preview?: string;
   /** Adds an unsubscribe link for automated emails. */
   unsubscribe?: string;
   /** The unsubscribe link's text (default "Unsubscribe from reminder emails"). */
@@ -139,46 +142,41 @@ export interface PrebuiltEmail {
 const isPrebuilt = (c: EmailContent | PrebuiltEmail): c is PrebuiltEmail =>
   typeof (c as PrebuiltEmail).html === "string";
 
-/** Render the shared gradefarm. email layout as HTML plus a plain-text copy. */
+/** Render the shared gradefarm. email layout (email-layout.ts) as HTML plus a plain-text copy. */
 export function renderEmail(c: EmailContent): { html: string; text: string } {
+  const unsub = c.unsubscribe ? { url: c.unsubscribe, label: c.unsubscribeLabel ?? "Unsubscribe from reminder emails" } : undefined;
+  const cell = `font-family:${FONT};padding:12px 16px`;
   const paragraphs = c.paragraphs
-    .map((p) => `<p style="margin:0 0 16px;color:#4a5068;font-size:15px;line-height:1.6">${escapeHtml(p)}</p>`)
+    .map((p) => `<p style="margin:14px 0 0;font-size:15.5px;line-height:1.65;color:${BODY}">${escapeHtml(p)}</p>`)
     .join("");
   const details = c.details?.length
-    ? `<table role="presentation" style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #e5e5ea;border-radius:8px;margin:8px 0 24px">
-        ${c.details
-          .map(
-            ([label, value]) => `<tr>
-              <td style="padding:10px 16px;color:#6b7290;font-size:13px;width:110px;vertical-align:top">${escapeHtml(label)}</td>
-              <td style="padding:10px 16px;color:#0c1037;font-size:14px;font-weight:700">${escapeHtml(value)}</td>
-            </tr>`,
-          )
-          .join("")}
-      </table>`
-    : "";
-  const cta = c.cta
-    ? `<a href="${escapeHtml(c.cta.url)}" style="display:inline-block;background:#f1be43;color:#0c1037;font-weight:800;font-size:15px;padding:13px 26px;border-radius:9px;text-decoration:none">${escapeHtml(c.cta.label)}</a>`
-    : "";
-  const unsubscribe = c.unsubscribe
-    ? ` <a href="${escapeHtml(c.unsubscribe)}" style="color:#8a90a8;text-decoration:underline">${escapeHtml(c.unsubscribeLabel ?? "Unsubscribe from reminder emails")}</a>`
+    ? `<tr><td class="gf-pad" style="padding:24px 40px 0">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${CARD};border:1px solid ${LINE};border-radius:12px;border-collapse:separate">
+${c.details
+  .map(([label, value], i) => {
+    const rule = i ? `border-top:1px solid ${LINE};` : "";
+    return `<tr>
+<td class="gf-dl" width="128" valign="top" style="width:128px;${cell};${rule}font-size:13px;line-height:1.45;color:${MUTED}">${escapeHtml(label)}</td>
+<td class="gf-dv" valign="top" style="${cell};${rule}font-size:14.5px;font-weight:700;line-height:1.45;color:${NAVY}">${escapeHtml(value)}</td>
+</tr>`;
+  })
+  .join("\n")}
+</table>
+</td></tr>`
     : "";
 
-  const html = `<!doctype html>
-<html><body style="margin:0;padding:24px 12px;background:#eef0f6">
-  <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;max-width:560px;margin:0 auto">
-    <div style="background:#0c1037;padding:22px 32px;border-radius:12px 12px 0 0">
-      <span style="font-size:22px;font-weight:900;color:#f1be43;letter-spacing:-0.5px">gradefarm.</span>
-    </div>
-    <div style="background:#f9f9fb;padding:32px;border:1px solid #e5e5ea;border-top:0;border-radius:0 0 12px 12px">
-      <h1 style="margin:0 0 16px;font-size:21px;font-weight:800;color:#0c1037">${escapeHtml(c.heading)}</h1>
-      ${paragraphs}
-      ${details}
-      ${c.extraHtml ?? ""}
-      ${cta}
-    </div>
-    <p style="margin:16px 8px 0;color:#8a90a8;font-size:12px;line-height:1.5">${escapeHtml(c.footer)}${unsubscribe}</p>
-  </div>
-</body></html>`;
+  const body = `
+${wordmarkRow()}
+<tr><td class="gf-pad" style="padding:28px 40px 0;font-family:${FONT}">
+<h1 class="gf-h1s" style="margin:0;font-family:${FONT};font-size:26px;font-weight:800;line-height:1.2;letter-spacing:-0.5px;color:${NAVY}">${escapeHtml(c.heading)}</h1>
+${paragraphs}
+</td></tr>
+${details}
+${c.extraHtml ? `<tr><td class="gf-pad" style="padding:20px 40px 0;font-family:${FONT}">${c.extraHtml}</td></tr>` : ""}
+${c.cta ? `<tr><td class="gf-pad" style="padding:28px 40px 0">${button(c.cta.label, c.cta.url)}</td></tr>` : ""}
+<tr><td style="height:36px;font-size:0;line-height:0">&nbsp;</td></tr>`;
+
+  const html = page({ title: c.heading, preheader: c.preview, body, footer: footer(c.footer, unsub) });
 
   const text = [
     c.heading,
@@ -187,8 +185,8 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
     ...(c.details ?? []).map(([label, value]) => `${label}: ${value}`),
     ...(c.details?.length ? [""] : []),
     ...(c.cta ? [`${c.cta.label}: ${c.cta.url}`, ""] : []),
-    c.footer,
-    ...(c.unsubscribe ? [`${c.unsubscribeLabel ?? "Unsubscribe from reminder emails"}: ${c.unsubscribe}`] : []),
+    "---",
+    footerText(c.footer, unsub),
   ].join("\n");
 
   return { html, text };
@@ -201,18 +199,23 @@ export interface OutgoingEmail {
   subject: string;
   content: EmailContent | PrebuiltEmail;
   /** Resend drops a repeat send with the same key within 24 hours. */
-  idempotencyKey: string;
+  idempotencyKey?: string;
 }
 
 /** Resend's default limit is 2 requests per second per team. */
 const MIN_SEND_INTERVAL_MS = 550;
-let lastSendAt = 0;
+let nextSendAt = 0;
 
-/** Send one email, spacing calls to stay under Resend's rate limit. */
+/**
+ * Send one email, spacing calls to stay under Resend's rate limit. Each call
+ * takes the next free slot before it waits, so emails sent together (a class
+ * assignment, a series booking) queue up instead of all going at once.
+ */
 export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{ id: string | null; error: string | null }> {
-  const wait = lastSendAt + MIN_SEND_INTERVAL_MS - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastSendAt = Date.now();
+  const now = Date.now();
+  const slot = Math.max(now, nextSendAt);
+  nextSendAt = slot + MIN_SEND_INTERVAL_MS;
+  if (slot > now) await new Promise((r) => setTimeout(r, slot - now));
 
   // A child added to a family signs in with a hidden address: their mail goes to the parent.
   let to = email.to;
@@ -233,7 +236,7 @@ export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{
   try {
     const { data, error } = await resend.emails.send(
       { from: EMAIL_FROM, to: [to], subject: email.subject, html, text, headers },
-      { idempotencyKey: email.idempotencyKey.slice(0, 256) },
+      email.idempotencyKey ? { idempotencyKey: email.idempotencyKey.slice(0, 256) } : undefined,
     );
     if (error) return { id: null, error: error.message || String(error) };
     return { id: data?.id ?? null, error: null };

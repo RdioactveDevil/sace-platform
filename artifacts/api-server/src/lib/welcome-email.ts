@@ -17,24 +17,13 @@
  * served from the web app's public/email folder.
  */
 import { appUrl, escapeHtml, type PrebuiltEmail } from "./email";
+import { BODY, button, CARD, FONT, footer, footerText, GOLD, GOLD_TEXT, img, label, LINE, MUTED, NAVY, page, PAGE, wordmarkRow } from "./email-layout";
 import type { TutorPlanOption } from "./tutor-plan";
-
-const FONT = "'Plus Jakarta Sans',Arial,Helvetica,sans-serif";
-const NAVY = "#0c1037";
-const GOLD = "#f1be43";
-const GOLD_TEXT = "#a16207";
-const BODY = "#475069";
-const MUTED = "#5a6178";
-const LINE = "#e2e6f0";
-const CARD = "#f6f7fb";
-const PAGE = "#eef0f6";
 
 /** Who signs the student email. */
 const SIGN_OFF = { name: "Adhyayan", role: "Founder, gradefarm." };
-const SUPPORT_EMAIL = "support@titaniumtutoring.com.au";
-
-const img = (file: string) => `${appUrl()}/email/${file}`;
 const url = (path: string) => `${appUrl()}${path}`;
+const UNSUBSCRIBE = "Unsubscribe from gradefarm. emails";
 
 // ── Pricing ─────────────────────────────────────────────────────────────────
 
@@ -112,78 +101,33 @@ const EXAMPLES: Record<TitanExample["key"], TitanExample> = {
   },
 };
 
+/** Calculus is Year 11–12 work; below that, maths students get the fractions example. */
+const SENIOR_YEAR = 11;
+/** Catalysts make sense from Year 9 science on. */
+const CHEMISTRY_FROM_YEAR = 9;
+
 /**
- * A Titan reply from the student's subject, so a Year 6 English student
- * doesn't get calculus. Falls back on year level when no subject is picked yet.
+ * A Titan reply from the student's subject, so a Year 6 English or Year 10
+ * maths student doesn't get calculus. The year comes from the subject's name
+ * ("Year 10 Mathematics") when it has one, else the student's year level.
+ * Other sciences (biology, physics, psychology) get the catalyst one. Falls
+ * back on year level when no subject is picked yet.
  */
 export function titanExample(subjects: string[], yearLevel: number | null | undefined): TitanExample {
+  const level = typeof yearLevel === "number" ? yearLevel : null;
   for (const s of subjects) {
-    if (/chem/i.test(s)) return EXAMPLES.chemistry;
+    const named = /\byear\s*(\d{1,2})\b/i.exec(s);
+    const year = named ? Number(named[1]) : level;
     if (/english|literacy|reading|writing/i.test(s)) return EXAMPLES.english;
-    if (/\byear\s*[3-8]\b/i.test(s) && /math|numeracy/i.test(s)) return EXAMPLES.maths6;
-    if (/math|method/i.test(s)) return EXAMPLES.methods;
+    if (/math|method|numeracy/i.test(s)) return year !== null && year < SENIOR_YEAR ? EXAMPLES.maths6 : EXAMPLES.methods;
+    if (/chem|bio|phys|psych|science/i.test(s) && (year === null || year >= CHEMISTRY_FROM_YEAR)) return EXAMPLES.chemistry;
   }
-  return typeof yearLevel === "number" && yearLevel <= 8 ? EXAMPLES.maths6 : EXAMPLES.methods;
+  return level !== null && level < SENIOR_YEAR ? EXAMPLES.maths6 : EXAMPLES.methods;
 }
 
 // ── Building blocks ─────────────────────────────────────────────────────────
 
 const esc = escapeHtml;
-
-/** Hidden inbox preview text, padded so the client doesn't pull body text in after it. */
-const preheader = (text: string) =>
-  `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px;color:${PAGE}">${esc(text)}${"&#847;&zwnj;&nbsp;".repeat(60)}</div>`;
-
-function page(opts: { title: string; preheader: string; body: string; footer: string }): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="x-apple-disable-message-reformatting">
-<meta name="color-scheme" content="light">
-<meta name="supported-color-schemes" content="light">
-<title>${esc(opts.title)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&amp;display=swap" rel="stylesheet">
-<style>
-  body{margin:0;padding:0;-webkit-text-size-adjust:100%}
-  img{border:0;outline:none;text-decoration:none}
-  a{color:${GOLD_TEXT}}
-  @media (max-width:620px){
-    .gf-pad{padding-left:24px!important;padding-right:24px!important}
-    .gf-card{padding:18px 14px!important}
-    .gf-h1{font-size:28px!important}
-    .gf-sq{width:40px!important;height:40px!important}
-    .gf-col{display:block!important;width:100%!important;padding:0 0 10px!important}
-    .gf-line{padding:0 4px!important}
-  }
-</style>
-</head>
-<body style="margin:0;padding:0;background:${PAGE}">
-${preheader(opts.preheader)}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${PAGE}">
-<tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid ${LINE};border-radius:14px;border-collapse:separate;font-family:${FONT};color:${NAVY}">
-${opts.body}
-</table>
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px">
-<tr><td style="padding:16px 8px 0;font-family:${FONT};font-size:12px;line-height:1.6;color:${MUTED}">${opts.footer}</td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
-}
-
-/** A gold button that still looks like one where padding on links is ignored. */
-function button(label: string, href: string): string {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="border-radius:10px;background:${GOLD}"><a href="${esc(href)}" style="display:inline-block;padding:15px 28px;font-family:${FONT};font-size:15px;font-weight:800;line-height:1;color:${NAVY};text-decoration:none;border-radius:10px">${esc(label)}</a></td>
-</tr></table>`;
-}
-
-const label = (text: string) =>
-  `<div style="font-family:${FONT};font-size:12px;font-weight:800;letter-spacing:1.4px;color:${GOLD_TEXT}">${esc(text)}</div>`;
 
 /** An icon beside a heading and a line or two of text. */
 function featureRow(icon: string, title: string, text: string, gap = 22): string {
@@ -274,7 +218,7 @@ export function studentWelcomeEmail(w: StudentWelcome): { subject: string; conte
     : "You're receiving this because you created a gradefarm. account.";
 
   const body = `
-<tr><td class="gf-pad" style="padding:28px 40px 0"><img src="${img("wordmark-light.png")}" width="144" height="24" alt="gradefarm." style="display:block;width:144px;height:24px"></td></tr>
+${wordmarkRow()}
 
 <tr><td class="gf-pad" style="padding:32px 40px 28px;font-family:${FONT}">
 <div style="font-size:15px;font-weight:700;color:${BODY}">${esc(greeting)}</div>
@@ -326,7 +270,7 @@ ${freeLine ? `<div style="padding-top:12px;font-size:13.5px;line-height:1.5;colo
 <div style="font-size:13px;color:${MUTED}">${esc(SIGN_OFF.role)}</div>
 </td></tr>`;
 
-  const html = page({ title: subject, preheader: preview, body, footer: footer(why, w.unsubscribeUrl) });
+  const html = page({ title: subject, preheader: preview, body, footer: footer(why, { url: w.unsubscribeUrl, label: UNSUBSCRIBE }) });
 
   const text = [
     greeting,
@@ -354,7 +298,7 @@ ${freeLine ? `<div style="padding-top:12px;font-size:13.5px;line-height:1.5;colo
     SIGN_OFF.role,
     "",
     "---",
-    footerText(why, w.unsubscribeUrl),
+    footerText(why, { url: w.unsubscribeUrl, label: UNSUBSCRIBE }),
   ].join("\n");
 
   return { subject, content: { html, text, unsubscribe: w.unsubscribeUrl } };
@@ -479,12 +423,12 @@ ${annualPct > 0 ? `<div style="padding-top:12px;font-size:13px;color:${MUTED}">P
 
 <tr><td class="gf-pad" style="padding:30px 40px 34px;background:${CARD};border-top:1px solid ${LINE};border-radius:0 0 13px 13px;font-family:${FONT}">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td>${button("Open gradefarm.", url("/tutor"))}</td>
-${w.portalOpen ? "" : `<td style="padding-left:18px"><a href="${esc(url("/pricing"))}" style="font-family:${FONT};font-size:14px;font-weight:700;color:${GOLD_TEXT}">Compare tutor plans</a></td>`}
+<td class="gf-stack">${button("Open gradefarm.", url("/tutor"))}</td>
+${w.portalOpen ? "" : `<td class="gf-stack" style="padding-left:18px"><a href="${esc(url("/pricing"))}" style="font-family:${FONT};font-size:14px;font-weight:700;color:${GOLD_TEXT}">Compare tutor plans</a></td>`}
 </tr></table>
 </td></tr>`;
 
-  const html = page({ title: subject, preheader: preview, body, footer: footer(why, w.unsubscribeUrl) });
+  const html = page({ title: subject, preheader: preview, body, footer: footer(why, { url: w.unsubscribeUrl, label: UNSUBSCRIBE }) });
 
   const text = [
     heading,
@@ -505,18 +449,8 @@ ${w.portalOpen ? "" : `<td style="padding-left:18px"><a href="${esc(url("/pricin
     ...(w.portalOpen ? [] : [`Compare tutor plans: ${url("/pricing")}`]),
     "",
     "---",
-    footerText(why, w.unsubscribeUrl),
+    footerText(why, { url: w.unsubscribeUrl, label: UNSUBSCRIBE }),
   ].join("\n");
 
   return { subject, content: { html, text, unsubscribe: w.unsubscribeUrl } };
-}
-
-// ── Footer ──────────────────────────────────────────────────────────────────
-
-function footer(why: string, unsubscribe: string): string {
-  return `${esc(why)} gradefarm. is run by Titanium Tutoring, Adelaide, SA. Questions? <a href="mailto:${SUPPORT_EMAIL}" style="color:${MUTED}">${SUPPORT_EMAIL}</a><br><a href="${esc(unsubscribe)}" style="color:${MUTED};text-decoration:underline">Unsubscribe from gradefarm. emails</a>`;
-}
-
-function footerText(why: string, unsubscribe: string): string {
-  return `${why} gradefarm. is run by Titanium Tutoring, Adelaide, SA. Questions? ${SUPPORT_EMAIL}\nUnsubscribe from gradefarm. emails: ${unsubscribe}`;
 }
