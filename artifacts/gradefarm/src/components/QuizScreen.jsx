@@ -2247,7 +2247,7 @@ export default function QuizScreen({
             </>
           )}
         </div>
-        <div data-tutorial-target={examRun ? undefined : 'quiz-bar'} style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexShrink: 0 }}>
           {!examRun && sessionTotal > 0 && (
             <span style={{ whiteSpace: 'nowrap' }}><strong style={{ color: t.success }}>{sessionCorrect}</strong>{isMobile ? ' · ' : ' right · '}<strong style={{ color: t.danger }}>{sessionTotal - sessionCorrect}</strong>{isMobile ? '' : ' wrong'}</span>
           )}
@@ -2332,7 +2332,7 @@ export default function QuizScreen({
               />
             )}
 
-            <div data-tutorial-target={!examRun && !showAns ? 'quiz-answer' : undefined} style={{ position: 'relative', background: t.bgCard, border: `1px solid ${isBonus ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
+            <div style={{ position: 'relative', background: t.bgCard, border: `1px solid ${isBonus ? t.borderAccent : t.border}`, borderRadius: 12, padding: isMobile ? '16px' : '22px 24px' }}>
               {/* A bonus question: a small tag on the card's corner. */}
               {isBonus && (
                 <span title="Bonus question: a right answer is worth double. A wrong one costs the usual amount."
