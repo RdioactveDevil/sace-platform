@@ -36,6 +36,37 @@ export async function signUp(email, password, displayName, school, applyForTutor
   return data
 }
 
+/**
+ * A student account from just a name and email (the pricing page's "Your
+ * details" step), so they reach payment without choosing a password first.
+ * It gets a long random password nobody sees and password_set: false in its
+ * metadata; onboarding asks them to choose one first (updatePassword).
+ * Throws with code 'user_already_exists' if the email already has an account.
+ * Resolves to Supabase's { user, session } (no session if the project asks
+ * for email confirmation).
+ */
+export async function quickSignUp(email, displayName) {
+  const bytes = crypto.getRandomValues(new Uint8Array(24))
+  // Letters, digits and a symbol whatever the project's password rules.
+  const password = `${btoa(String.fromCharCode(...bytes))}aA1!`
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName, signup_path: 'student', password_set: false } },
+  })
+  if (error) {
+    if (error.code === 'user_already_exists' || /already (registered|exists)/i.test(error.message || '')) error.code = 'user_already_exists'
+    throw error
+  }
+  // With email confirmation on, an email that's taken comes back as a user with no identities.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    const taken = new Error('That email already has an account.')
+    taken.code = 'user_already_exists'
+    throw taken
+  }
+  return data
+}
+
 /** Tutor signup entry: tags auth metadata so the post-auth tutorial can tailor copy. */
 /**
  * Create a tutor's account. `application` (profile fields such as
@@ -250,8 +281,9 @@ export async function sendPasswordReset(email) {
   if (error) throw error
 }
 
+/** Set the signed-in user's password (also marks it chosen, for accounts made by quickSignUp). */
 export async function updatePassword(password) {
-  const { error } = await supabase.auth.updateUser({ password })
+  const { error } = await supabase.auth.updateUser({ password, data: { password_set: true } })
   if (error) throw error
 }
 

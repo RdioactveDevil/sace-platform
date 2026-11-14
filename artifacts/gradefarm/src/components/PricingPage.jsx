@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Check, MapPin } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getPlatformSettings, getBillingConfig } from '../lib/db'
+import { getPlatformSettings, getBillingConfig, quickSignUp } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { DEFAULT_STUDENT_TIERS, DEFAULT_MONTHLY_TIERS, studentTiers, monthlySaving, money } from '../lib/pricing'
-import { rememberPendingCheckout, startCheckout } from '../lib/pendingCheckout'
+import { rememberPendingCheckout, takePendingCheckout, startCheckout } from '../lib/pendingCheckout'
 import { AU_STATES, stateLabel, isStateCode, rememberedState, rememberState } from '../lib/subjectFilter'
 import { SITE_CSS, SITE_FONTS, themeVars, SiteNav, SiteFooter, siteFooterLinks } from './SiteChrome'
 import PlanBuilder, { PLAN_CSS, BillingToggle, planGroups } from './PlanBuilder'
@@ -17,6 +17,12 @@ import CitySkyline from './CitySkyline'
 // School, and the bill beside it adds them up at the real per-subject prices
 // (platform_settings.pricing, Admin → Settings), weekly or monthly. The list
 // and bill are PlanBuilder.jsx, shared with Get Access.
+//
+// Signed out, the bill's button turns it into step 2: just their name and
+// email. That makes their account (lib/db.js quickSignUp, no password yet)
+// with the plan kept (lib/pendingCheckout.js), and App.jsx takes them
+// straight on to Stripe Checkout; onboarding then asks them to choose a
+// password. Signing in, or a parent's sign-up, keeps the plan the same way.
 //
 // The free trial covers one subject (api-server routes/billing.ts): with one
 // ticked the receipt says "Today $0"; with more, billing starts today.
@@ -139,6 +145,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
     setChangingState(false)
     setPicked([])
     setError('')
+    setDetails(false)
     rememberState(code)
     window.scrollTo(0, 0)
   }
@@ -179,7 +186,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
 
   // The live subjects for their state under Primary, Middle and High School, youngest year first.
   const groups = useMemo(() => planGroups(subjects, { state: studyState }), [subjects, studyState])
-  const pick = (ids) => { setError(''); setPicked(ids) }
+  const pick = (ids) => { setError(''); setPicked(ids); if (!ids.length) setDetails(false) }
 
   const weekTiers = studentTiers(billing?.tiers || pricing.student_tiers)
   const monthTiers = studentTiers(billing?.monthlyTiers || pricing.student_monthly_tiers, 'month')
@@ -199,13 +206,43 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const signUp = () => navigate('/auth', { state: { mode: 'signup' } })
   const homeSection = (id) => navigate('/home', { state: { scrollTo: id } })
 
+  // Signed out: step 2 of the bill, their name and email.
+  const [details, setDetails] = useState(false)
+  const [detailsBusy, setDetailsBusy] = useState(false)
+  const [detailsError, setDetailsError] = useState(null)
+  const planOf = (chosen) => ({ subjects: chosen.map(x => x.subject), interval })
+  const signInWith = (email, chosen) => { rememberPendingCheckout(planOf(chosen)); navigate('/auth', { state: email ? { email } : undefined }) }
+  const parentSignUp = (chosen) => { rememberPendingCheckout(planOf(chosen)); navigate('/auth', { state: { mode: 'signup', as: 'parent' } }) }
+  const submitDetails = async ({ name, email }, chosen) => {
+    setDetailsBusy(true)
+    setDetailsError(null)
+    // Kept first: once the account exists, App.jsx opens Checkout for it.
+    rememberPendingCheckout(planOf(chosen))
+    try {
+      const data = await quickSignUp(email, name)
+      if (!data.session) {
+        // Only if the project asks for email confirmation: the link signs them in, then Checkout.
+        setDetailsError(`We've sent a link to ${email}. Open it to confirm your email and you'll go on to payment.`)
+        setDetailsBusy(false)
+      }
+    } catch (e) {
+      if (e.code === 'user_already_exists') {
+        setDetailsError(<>That email already has an account. <button type="button" className="lp-link" onClick={() => navigate('/auth', { state: { email } })}>Sign in</button> to carry on with this plan.</>)
+      } else {
+        takePendingCheckout() // nothing was made, so forget it
+        setDetailsError(e.message || "We couldn't set that up. Please try again.")
+      }
+      setDetailsBusy(false)
+    }
+  }
+
   const checkout = async (chosen) => {
     if (!chosen.length) return
-    const plan = { subjects: chosen.map(x => x.subject), interval }
+    const plan = planOf(chosen)
     setError('')
     if (!signedIn) {
-      rememberPendingCheckout(plan)
-      signUp()
+      setDetailsError(null)
+      setDetails(true)
       return
     }
     setBusy(true)
@@ -281,6 +318,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
               : <>Couldn't load the subjects just now. <button type="button" className="lp-link" onClick={signUp}>Make an account</button> and pick yours inside.</>}
             tiers={tiers} per={per} onPlan={onPlan} already={already} trialDays={trialDays} trialing={!!billing?.trialing}
             onCheckout={checkout} busy={busy} error={error}
+            details={details && !signedIn ? { onBack: () => setDetails(false), onSubmit: submitDetails, busy: detailsBusy, error: detailsError, onSignIn: signInWith, onParent: parentSignUp } : null}
             unavailable={billing?.enabled === false ? "Payments aren't switched on yet. You can start free in the meantime." : ''}
             footer={!onPlan && <p className="pp-note">Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with limited features.</p>} />
         </div>

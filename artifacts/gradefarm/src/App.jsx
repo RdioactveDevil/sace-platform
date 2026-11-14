@@ -1742,6 +1742,7 @@ function AppInner() {
           : user?.user_metadata?.signup_path === 'tutor'
             ? <Navigate to="/onboarding/tutor" replace />
             : <OnboardingScreen {...commonProps} profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
+                needsPassword={user?.user_metadata?.password_set === false}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
                 asParent={user?.user_metadata?.signup_path === 'parent'}
                 parentName={user?.user_metadata?.parent_name || ''}
