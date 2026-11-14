@@ -1291,7 +1291,6 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           <main key="lesson" className="ls-start-main ls-mode-in">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
               <h1 style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textWrap: 'balance' }}>{greeting.lesson}</h1>
-              <p style={{ margin: 0, fontSize: 15, color: t.textMuted }}>10-minute lessons: the key ideas, a worked example, then check questions.</p>
             </div>
 
             <form onSubmit={e => { e.preventDefault(); startLesson() }}
