@@ -1,13 +1,13 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { EMAIL_FROM, appUrl } from "../lib/email";
+import { appUrl, sendEmail } from "../lib/email";
+import { assignmentSetEmail, tutorMessageEmail } from "../lib/tutor-emails";
 import { IncludedSubjectError, canIncludeSubject, includeSubject, removeIncludedSubject } from "../lib/included-subject";
 import { createStudentDiagnostic, waiveDiagnostic } from "../lib/student-diagnostic";
 import { FEATURE_MISSING, claimTutorSubjects, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
 import { liveCurriculum } from "./billing";
 import { contactEmailForLogin, isFamilyLogin } from "../lib/family";
-import { getServiceClient } from "../lib/auth";
 import { localDate } from "../lib/automated-emails";
 import {
   issueSchedule, issuesOn, missingScheduleTable, nextIssueOn, type ScheduleRow,
@@ -40,15 +40,6 @@ function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   if (!key) return null;
   return new Resend(key);
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 interface TutorContext {
@@ -194,65 +185,19 @@ router.post("/tutor/notify-assignment", async (req: Request, res: Response) => {
     }
 
     const studentName = await getStudentName(admin, student_id);
-    const topicsList = (assignment.topics ?? []).join(", ") || assignment.subject;
-    const dueDate = assignment.due_date
-      ? new Date(assignment.due_date).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
-      : "No due date set";
-
-    const safeStudentName = escapeHtml(studentName);
-    const safeTutorName = escapeHtml(tutorName);
-    const safeType = escapeHtml(assignment.type);
-    const safeSubject = escapeHtml(assignment.subject);
-    const safeTopics = escapeHtml(topicsList);
-    const safeDueDate = escapeHtml(dueDate);
-
-    // A child added to a family signs in with a hidden address: their mail goes to the parent.
-    const recipient = (await contactEmailForLogin(getServiceClient(), studentEmail)) ?? studentEmail;
-    const { error: sendErr } = await resend.emails.send({
-      from: EMAIL_FROM,
-      to: recipient,
-      subject: `New ${safeType} assigned — ${safeSubject}`,
-      html: `
-        <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
-          <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
-            <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
-          </div>
-          <div style="padding: 32px;">
-            <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">New Assignment</h2>
-            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${safeStudentName}, your tutor ${safeTutorName} has assigned you new work.</p>
-            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px; width: 90px;">Type</td>
-                  <td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeType}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Subject</td>
-                  <td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeSubject}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Topics</td>
-                  <td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeTopics}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Due</td>
-                  <td style="padding: 6px 0; color: #f1be43; font-size: 13px; font-weight: 700;">${safeDueDate}</td>
-                </tr>
-              </table>
-            </div>
-            <a href="${appUrl()}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
-          </div>
-          <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
-            You're receiving this because your tutor ${safeTutorName} sent you an assignment via gradefarm.
-          </div>
-        </div>
-      `,
+    const { subject, content } = assignmentSetEmail({
+      studentName,
+      tutorName,
+      type: assignment.type,
+      subject: assignment.subject,
+      topics: assignment.topics ?? [],
+      dueDate: assignment.due_date || null,
+      link: `${appUrl()}/portal`,
     });
+    // sendEmail sends a family child's mail to their parent.
+    const { error: sendErr } = await sendEmail(resend, { to: studentEmail, subject, content });
 
-    if (sendErr) {
-      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-      return res.status(500).json({ error: msg || "Failed to send email" });
-    }
+    if (sendErr) return res.status(500).json({ error: sendErr || "Failed to send email" });
 
     return res.json({ ok: true });
   } catch (err) {
@@ -284,41 +229,11 @@ router.post("/tutor/notify-student", async (req: Request, res: Response) => {
 
     const studentName = await getStudentName(admin, student_id);
     const customMessage = message?.trim() || "You have assignments waiting. Log in to gradefarm. to check your progress and complete your work.";
+    const { subject, content } = tutorMessageEmail({ studentName, tutorName, message: customMessage, link: `${appUrl()}/portal` });
+    // sendEmail sends a family child's mail to their parent.
+    const { error: sendErr } = await sendEmail(resend, { to: studentEmail, subject, content });
 
-    const safeStudentName = escapeHtml(studentName);
-    const safeTutorName = escapeHtml(tutorName);
-    const safeMessage = escapeHtml(customMessage);
-
-    // A child added to a family signs in with a hidden address: their mail goes to the parent.
-    const recipient = (await contactEmailForLogin(getServiceClient(), studentEmail)) ?? studentEmail;
-    const { error: sendErr } = await resend.emails.send({
-      from: EMAIL_FROM,
-      to: recipient,
-      subject: `Message from your tutor — ${safeTutorName}`,
-      html: `
-        <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
-          <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
-            <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
-          </div>
-          <div style="padding: 32px;">
-            <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">Message from ${safeTutorName}</h2>
-            <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${safeStudentName},</p>
-            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-              <p style="margin: 0; color: #f0f4ff; font-size: 15px; line-height: 1.6;">${safeMessage}</p>
-            </div>
-            <a href="${appUrl()}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
-          </div>
-          <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
-            You're receiving this because your tutor ${safeTutorName} sent you a notification via gradefarm.
-          </div>
-        </div>
-      `,
-    });
-
-    if (sendErr) {
-      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-      return res.status(500).json({ error: msg || "Failed to send email" });
-    }
+    if (sendErr) return res.status(500).json({ error: sendErr || "Failed to send email" });
 
     return res.json({ ok: true });
   } catch (err) {
@@ -906,56 +821,18 @@ router.post("/tutor/assignments/batch", async (req: Request, res: Response) => {
         for (const u of listData?.users ?? []) {
           if (u.id && u.email) emailMap.set(u.id, u.email);
         }
-        const topicsList = topics.join(", ") || subject;
-        const dueLabel = new Date(due_date).toLocaleDateString("en-AU", {
-          day: "numeric", month: "long", year: "numeric",
-        });
-        const safeTutorName = escapeHtml(tutorName);
-        const safeType = escapeHtml(type);
-        const safeSubject = escapeHtml(subject);
-        const safeTopics = escapeHtml(topicsList);
-        const safeDueDate = escapeHtml(dueLabel);
-        const safeGoal = escapeHtml(
-          `${questionCount} question${questionCount === 1 ? "" : "s"} · ${DIFFICULTY_LABELS[difficulty]}` +
-          (minAccuracy !== null ? ` · ${minAccuracy}% pass mark${passMode === "one_attempt" ? " (one attempt)" : ""}` : ""),
-        );
+        const goal = `${questionCount} question${questionCount === 1 ? "" : "s"} · ${DIFFICULTY_LABELS[difficulty]}` +
+          (minAccuracy !== null ? ` · ${minAccuracy}% pass mark${passMode === "one_attempt" ? " (one attempt)" : ""}` : "");
 
         await Promise.all(targets.map(async (sid) => {
           const studentEmail = emailMap.get(sid);
           if (!studentEmail) return;
           const studentName = await getStudentName(admin, sid);
-          const safeStudentName = escapeHtml(studentName);
-          // A child added to a family signs in with a hidden address: their mail goes to the parent.
-          const recipient = (await contactEmailForLogin(getServiceClient(), studentEmail)) ?? studentEmail;
-          const { error: sendErr } = await resend.emails.send({
-            from: EMAIL_FROM,
-            to: recipient,
-            subject: `New ${safeType} assigned — ${safeSubject}`,
-            html: `
-              <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
-                <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
-                  <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
-                </div>
-                <div style="padding: 32px;">
-                  <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">New Assignment</h2>
-                  <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Hi ${safeStudentName}, your tutor ${safeTutorName} has assigned you new work.</p>
-                  <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                      <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px; width: 90px;">Type</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeType}</td></tr>
-                      <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Subject</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeSubject}</td></tr>
-                      <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Topics</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeTopics}</td></tr>
-                      <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Goal</td><td style="padding: 6px 0; color: #f0f4ff; font-size: 13px; font-weight: 700;">${safeGoal}</td></tr>
-                      <tr><td style="padding: 6px 0; color: #a3aec2; font-size: 13px;">Due</td><td style="padding: 6px 0; color: #f1be43; font-size: 13px; font-weight: 700;">${safeDueDate}</td></tr>
-                    </table>
-                  </div>
-                  <a href="${appUrl()}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
-                </div>
-                <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
-                  You're receiving this because your tutor ${safeTutorName} sent you an assignment via gradefarm.
-                </div>
-              </div>
-            `,
+          const email = assignmentSetEmail({
+            studentName, tutorName, type, subject, topics, dueDate: due_date, goal, link: `${appUrl()}/portal`,
           });
+          // sendEmail queues sends under Resend's rate limit and sends a family child's mail to their parent.
+          const { error: sendErr } = await sendEmail(resend, { to: studentEmail, subject: email.subject, content: email.content });
           if (sendErr) notifyErrors++;
           else notified++;
         }));

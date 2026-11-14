@@ -295,7 +295,7 @@ export function readinessEmail(opts: {
       details,
       extraHtml: table,
       cta: { label: "See the full report", url: opts.reportUrl },
-      footer: `You're getting this because you asked for ${name}'s free readiness check at gradefarm.com.au. If that wasn't you, you can ignore this email. Questions? support@titaniumtutoring.com.au`,
+      footer: `You're getting this because you asked for ${name}'s free readiness check at gradefarm.com.au. If that wasn't you, you can ignore this email.`,
     },
   };
 }

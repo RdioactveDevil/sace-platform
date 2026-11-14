@@ -178,7 +178,7 @@ export function parentReportEmail(opts: {
       details,
       footer: tutorName
         ? `You're receiving this because ${tutorName} added your email to ${studentName}'s tutoring on gradefarm. With any questions, contact ${tutorName} directly.`
-        : `You're receiving this because you're the parent or guardian on ${studentName}'s gradefarm account. Questions? support@titaniumtutoring.com.au`,
+        : `You're receiving this because you're the parent or guardian on ${studentName}'s gradefarm account.`,
       unsubscribe,
       unsubscribeLabel: "Stop these weekly reports",
     },

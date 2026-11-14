@@ -2,10 +2,9 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { r2DeleteObject, r2SignedUrl } from "../lib/r2";
-import { EMAIL_FROM, appUrl } from "../lib/email";
+import { appUrl, sendEmail } from "../lib/email";
+import { resourceSharedEmail } from "../lib/tutor-emails";
 import { requireTutorPlan } from "../lib/tutor-plan";
-import { contactEmailForLogin } from "../lib/family";
-import { getServiceClient } from "../lib/auth";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -38,15 +37,6 @@ function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   if (!key) return null;
   return new Resend(key);
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 interface UserContext {
@@ -267,35 +257,13 @@ router.post("/tutor/resources", async (req: Request, res: Response) => {
         for (const u of listData?.users ?? []) {
           if (u.id && u.email) emailMap.set(u.id, u.email);
         }
-        const safeTutor = escapeHtml(displayName);
-        const safeTitle = escapeHtml(title);
-        const safeType = escapeHtml(type);
+        const email = resourceSharedEmail({ tutorName: displayName, title, type, link: `${appUrl()}/lessons` });
         await Promise.all(
           recipients.map(async (sid) => {
             const to = emailMap.get(sid);
             if (!to) return;
-            // A child added to a family signs in with a hidden address: their mail goes to the parent.
-            const recipient = (await contactEmailForLogin(getServiceClient(), to)) ?? to;
-            const { error: sendErr } = await resend.emails.send({
-              from: EMAIL_FROM,
-              to: recipient,
-              subject: `New ${safeType} from your tutor — ${safeTitle}`,
-              html: `
-                <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0c1037; color: #f0f4ff; border-radius: 16px; overflow: hidden;">
-                  <div style="background: linear-gradient(135deg, #f1be43, #f9d87a); padding: 28px 32px;">
-                    <h1 style="margin: 0; font-size: 24px; color: #0c1037; font-weight: 900; letter-spacing: -0.5px;">gradefarm.</h1>
-                  </div>
-                  <div style="padding: 32px;">
-                    <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #f0f4ff;">New class resource</h2>
-                    <p style="margin: 0 0 24px; color: #a3aec2; font-size: 15px;">Your tutor ${safeTutor} shared <strong style="color:#f0f4ff;">${safeTitle}</strong> with you.</p>
-                    <a href="${appUrl()}" style="display: inline-block; background: linear-gradient(135deg, #f1be43, #f9d87a); color: #0c1037; font-weight: 800; font-size: 14px; padding: 13px 26px; border-radius: 9px; text-decoration: none;">Open gradefarm.</a>
-                  </div>
-                  <div style="padding: 20px 32px; border-top: 1px solid rgba(255,255,255,0.08); color: #5a6480; font-size: 11px;">
-                    You're receiving this because your tutor ${safeTutor} shared a resource with you via gradefarm.
-                  </div>
-                </div>
-              `,
-            });
+            // sendEmail queues sends under Resend's rate limit and sends a family child's mail to their parent.
+            const { error: sendErr } = await sendEmail(resend, { to, subject: email.subject, content: email.content });
             if (sendErr) notifyErrors++;
             else notified++;
           }),

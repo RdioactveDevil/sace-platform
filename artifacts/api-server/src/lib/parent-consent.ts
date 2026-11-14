@@ -123,7 +123,7 @@ export function parentConsentEmail(opts: { parentName: string | null; studentNam
         "Once you confirm, you'll also get a short progress email every Sunday: how much they practised, how well, and what to work on next. You can stop those any time.",
       ],
       cta: { label: "Review and confirm", url: opts.url },
-      footer: `If you don't know ${opts.studentName} or didn't expect this, ignore this email: nothing changes until you confirm. Questions? support@titaniumtutoring.com.au`,
+      footer: `If you don't know ${opts.studentName} or didn't expect this, ignore this email: nothing changes until you confirm.`,
     },
   };
 }
