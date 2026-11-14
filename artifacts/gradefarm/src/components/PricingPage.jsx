@@ -62,10 +62,9 @@ const CSS = `${SITE_CSS}
 .pp-ask.out { animation: ppOut 0.22s ease forwards; }
 @keyframes ppOut { to { opacity: 0; transform: translateY(-16px); } }
 /* Then the plan comes up: heading, list, bill, one after another. */
-.pp-enter .pp-head, .pp-enter .pp-list, .pp-enter .pp-rcpt { animation: ppRise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pp-enter .pp-head, .pp-enter .pp-list { animation: ppRise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .pp-enter .pp-list { animation-delay: 0.08s; }
-.pp-enter .pp-rcpt { animation-delay: 0.16s; }
-.pp-enter ~ .lp-sec { animation: ppRise 0.45s ease 0.24s both; }
+.pp-enter ~ .lp-sec { animation: ppRise 0.45s ease 0.16s both; }
 @keyframes ppRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 .pp-head h1:focus { outline: none; }
 .pp-seg { display: inline-flex; border: 1px solid var(--lp-line); border-radius: 10px; overflow: hidden; background: var(--lp-card); margin-top: 4px; }
@@ -88,7 +87,11 @@ const CSS = `${SITE_CSS}
 .pp-list input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--lp-on-bg); }
 .pp-list .pp-msg { padding: 22px 18px; color: var(--lp-muted); }
 
-.pp-rcpt { padding: 22px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 76px; }
+/* Your plan only shows once a subject is ticked, and slides in beside the list (rises in below it on phones). */
+.pp-rcpt { padding: 22px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 76px; animation: ppSlideIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes ppSlideIn { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+/* On its first showing, the "2nd subject" line lands after the box. */
+.pp-rcpt .pp-next { animation-delay: 0.25s; animation-fill-mode: both; }
 .pp-rcpt > b { font-size: 16px; }
 .pp-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14.5px; font-variant-numeric: tabular-nums; }
 .pp-row > span:first-child { min-width: 0; }
@@ -140,13 +143,13 @@ const CSS = `${SITE_CSS}
 .lp-end h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.03em; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pp-next, .pp-list.nudge label, .pp-states button, .pp-tick, .pp-ask, .pp-enter .pp-head, .pp-enter .pp-list, .pp-enter .pp-rcpt, .pp-enter ~ .lp-sec { animation: none; }
+  .pp-next, .pp-rcpt, .pp-rcpt .pp-next, .pp-list.nudge label, .pp-states button, .pp-tick, .pp-ask, .pp-enter .pp-head, .pp-enter .pp-list, .pp-enter ~ .lp-sec { animation: none; }
   .pp-states button, .pp-next { transition: none; }
   .pp-states.leaving button:not(.go) { transform: none; }
 }
 @media (max-width: 860px) {
   .pp-build { grid-template-columns: 1fr; }
-  .pp-rcpt { position: static; }
+  .pp-rcpt { position: static; animation-name: ppRise; }
   .pp-tplans { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
@@ -398,15 +401,11 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
                 ))}
             </div>
 
+            {/* Your plan comes in once there's something on it. */}
+            {chosen.length > 0 && (
             <div className="lp-card pp-rcpt" aria-live="polite">
               <b>Your plan</b>
               {onPlan && <p className="pp-note" style={{ textAlign: 'left' }}>You're on a plan with {already} subject{already === 1 ? '' : 's'}. New ones go on the same bill.</p>}
-              {!chosen.length ? (
-                <p className="pp-note" style={{ textAlign: 'left', fontSize: 14 }}>
-                  {all.length ? 'Pick at least one subject.' : 'Your subjects will show here.'} Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with one subject, {freeDaily} questions a day.
-                </p>
-              ) : (
-                <>
                   {lines.map(l => (
                     <div className="pp-row" key={l.id}><span>{l.name}{l.level ? <span className="lv"> · {l.level}</span> : null}</span><span>${money(l.price)}</span></div>
                   ))}
@@ -427,9 +426,8 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
                     : !onPlan && chosen.length > 1 && trialDays > 0 ? <p className="pp-note">The {trialDays}-day free trial is for one subject. Start with one to try it free, and add the rest later.</p>
                     : <p className="pp-note">Cancel any time from your Account.</p>}
                   {!onPlan && <p className="pp-note">Or <button type="button" className="lp-link" onClick={signUp}>start free</button> with one subject.</p>}
-                </>
-              )}
             </div>
+            )}
           </div>
         </div>
 
