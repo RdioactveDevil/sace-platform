@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import RankIcon from './RankIcon'
 import ProgressLeagueBests from './ProgressLeagueBests'
+import { daysUntil, predictGrade } from '../lib/engagement'
+import { localDate } from '../lib/streak'
+import { lessonProgressLabel } from '../lib/lessonCards'
 import { X } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getAnswerLogSince, getAssessments, addAssessment, deleteAssessment } from '../lib/db'
@@ -67,7 +70,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       if (idx < 0 || idx >= WEEKS) return
       buckets[idx].total++
       if (a.correct) buckets[idx].correct++
-      buckets[idx].days.add(at.toDateString())
+      buckets[idx].days.add(localDate(at)) // Adelaide days, like streaks
     })
     return buckets.map(b => ({ ...b, pct: b.total ? Math.round((b.correct / b.total) * 100) : null }))
   }, [answerLog, questionIds])
@@ -126,7 +129,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       .filter(l => l?.data && !l.finishedAt)
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, 2)
-      .forEach(l => items.push({ id: `lesson:${l.topic.toLowerCase()}`, label: `Lesson: ${l.topic}`, note: `Resume at step ${Math.min(l.step + 1, 4)} of 4`, action: 'Resume', secondary: true,
+      .forEach(l => items.push({ id: `lesson:${l.topic.toLowerCase()}`, label: `Lesson: ${l.topic}`, note: `Resume at ${lessonProgressLabel(l).toLowerCase() || 'where you left off'}`, action: 'Resume', secondary: true,
         run: () => onOpenLesson?.(l.topic) }))
     // Weakest topics practised so far.
     Object.entries(topicStats)
@@ -149,10 +152,29 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       return { label: g.label, topics: g.topics.filter(tp => topicStats[tp]), pct: accuracyOf(sum) }
     })
     .filter(r => r.topics.length > 0)
+    // Weakest first; topics not started yet last.
+    .sort((a, b) => (a.pct ?? 101) - (b.pct ?? 101))
 
   // ── Assessments ───────────────────────────────────────────────────────────
   const today = new Date(new Date().toDateString())
-  const upcoming = assessments.filter(a => new Date(a.date) >= today)
+  // The subject's exam date (Admin → Curricula → Student features) joins the
+  // student's own tests and exams, unless they've added an exam on that day.
+  const subjectExamDate = subject?.features?.exam_date
+  const subjectExamDays = daysUntil(subjectExamDate)
+  const prediction = useMemo(() => {
+    if (subjectExamDays == null || subjectExamDays < 0) return null
+    const byId = new Map(questions.map(q => [q.id, q]))
+    return predictGrade(answerLog.filter(a => byId.has(a.question_id)).map(a => {
+      const q = byId.get(a.question_id)
+      return { correct: !!a.correct, answered_at: a.answered_at, difficulty: q.difficulty, topic: q.subtopic || q.topic }
+    }))
+  }, [answerLog, questions, subjectExamDays])
+  const subjectExam = subjectExamDays != null && subjectExamDays >= 0
+    && !assessments.some(a => a.type === 'Exam' && String(a.date).slice(0, 10) === subjectExamDate)
+    ? { id: 'subject-exam', type: 'Final exam', label: `${subjectName || 'Subject'} exam`, date: subjectExamDate, fixed: true, grade: prediction?.grade || null }
+    : null
+  const upcoming = [...assessments.filter(a => new Date(a.date) >= today), ...(subjectExam ? [subjectExam] : [])]
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = assessments.filter(a => new Date(a.date) < today)
   const handleAddAssessment = async () => {
     if (!addFormType || !addFormLabel.trim() || !addFormDate) return
@@ -218,7 +240,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
         {/* This week, and rank */}
         <div data-tutorial-target="progress-week" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
-            {fact(now.pct == null ? '—' : `${now.pct}%`, now.pct == null ? 'correct this week' : delta == null ? 'correct this week' : `correct this week, ${delta >= 0 ? 'up' : 'down'} from ${prev.pct}%`)}
+            {fact(now.pct == null ? '—' : `${now.pct}%`, now.pct == null ? 'correct this week' : delta == null ? 'correct this week' : delta === 0 ? 'correct this week, same as last week' : `correct this week, ${delta > 0 ? 'up' : 'down'} from ${prev.pct}%`)}
             {fact(now.total, 'answered this week')}
             {fact(`${now.days.size} day${now.days.size !== 1 ? 's' : ''}`, 'active this week')}
           </div>
@@ -258,8 +280,89 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           </div>
         )}
 
-        {/* This week's league and personal bests */}
-        <ProgressLeagueBests theme={theme} profile={profile} />
+        {/* What to do this week, and what's coming up */}
+        <div className="po-row">
+          {/* This week's plan */}
+          <div id="plan" data-tutorial-target="progress-plan" style={{ ...card, padding: '12px 16px', ...(plan.length > 0 && { borderColor: t.borderAccent }) }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+              <span style={cardTitle}>This week's plan</span>
+              {plan.length > 0 && <span style={{ fontSize: 12, color: t.textFaint }}>{doneCount} of {plan.length} done</span>}
+            </div>
+            {plan.length === 0 ? (
+              <div style={{ fontSize: 13, color: t.textMuted, padding: '10px 0 4px', lineHeight: 1.55 }}>Answer some questions in Practice and your plan for the week will appear here.</div>
+            ) : (
+              <div>
+                {plan.map(item => {
+                  const done = doneIds.includes(item.id)
+                  return (
+                    <div key={item.id} className="po-item">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={done} onChange={() => toggleDone(item.id)} style={{ width: 16, height: 16, accentColor: theme === 'dark' ? t.text : '#0c1037', flexShrink: 0 }} />
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: done ? t.textFaint : t.text, textDecoration: done ? 'line-through' : 'none' }}>{item.label}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: t.textFaint }}>{item.note}</span>
+                        </span>
+                      </label>
+                      {!done && <button type="button" style={btn(!item.secondary)} onClick={item.run}>{item.action}</button>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Coming up */}
+          <div style={{ ...card, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+              <span style={cardTitle}>Coming up</span>
+              <button type="button" style={linkBtn} onClick={() => setAddOpen(v => !v)} aria-expanded={addOpen}>{addOpen ? 'Cancel' : 'Add'}</button>
+            </div>
+            {addOpen && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '10px 0', alignItems: 'center' }}>
+                <select id="po-add-type" aria-label="Type" value={addFormType} onChange={e => setAddFormType(e.target.value)} style={input}>
+                  {['Test', 'Exam', 'Assignment', 'Revision Test'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <input id="po-add-label" aria-label="Name" value={addFormLabel} onChange={e => setAddFormLabel(e.target.value)} placeholder="e.g. Term 4 test" style={{ ...input, flex: '1 1 140px', minWidth: 0 }} />
+                <input id="po-add-date" aria-label="Date" type="date" value={addFormDate} onChange={e => setAddFormDate(e.target.value)} style={input} />
+                <button type="button" style={btn(true)} disabled={!addFormLabel.trim() || !addFormDate || addingAssessment} onClick={handleAddAssessment}>{addingAssessment ? 'Saving…' : 'Save'}</button>
+                {addFormError && <div role="alert" style={{ width: '100%', fontSize: 12, color: t.danger }}>{addFormError}</div>}
+              </div>
+            )}
+            {upcoming.length === 0 && !addOpen && (
+              <div style={{ fontSize: 13, color: t.textMuted, padding: '10px 0 4px', lineHeight: 1.55 }}>Add your tests and exams to see a countdown here and on Practice.</div>
+            )}
+            <div>
+              {[...upcoming, ...(showPast ? past : [])].map(a => {
+                const days = Math.ceil((new Date(a.date) - today) / DAY_MS)
+                const isPast = days < 0
+                const tone = isPast ? t.textFaint : days <= 14 ? t.danger : days <= 28 ? t.goldText : t.textMuted
+                return (
+                  <div key={a.id} className="po-item" style={{ opacity: isPast ? 0.6 : 1 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</div>
+                      <div style={{ fontSize: 12, color: t.textFaint }}>
+                        {a.type} · {new Date(a.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {a.grade && <> · predicted <strong style={{ color: t.success }} title="A rough estimate from your recent answers, not an official SACE grade">{a.grade}</strong></>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: tone, fontVariantNumeric: 'tabular-nums' }}>{isPast ? 'Done' : days === 0 ? 'Today' : `${days} day${days !== 1 ? 's' : ''}`}</span>
+                      {a.fixed ? <span style={{ width: 18 }} aria-hidden="true" /> : (
+                        <button type="button" onClick={() => handleDeleteAssessment(a.id)} aria-label={`Remove ${a.label}`} title="Remove"
+                          style={{ border: 'none', background: 'transparent', color: t.textFaint, cursor: 'pointer', padding: 2, display: 'flex' }}><X size={14} aria-hidden="true" /></button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {past.length > 0 && (
+              <button type="button" style={{ ...linkBtn, fontSize: 12, marginTop: 8, textDecorationThickness: 1 }} onClick={() => setShowPast(v => !v)}>
+                {showPast ? 'Hide past' : `Show past (${past.length})`}
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="po-row">
           {/* Accuracy by week */}
@@ -300,84 +403,6 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
             )}
           </div>
 
-          {/* Coming up */}
-          <div style={{ ...card, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-              <span style={cardTitle}>Coming up</span>
-              <button type="button" style={linkBtn} onClick={() => setAddOpen(v => !v)} aria-expanded={addOpen}>{addOpen ? 'Cancel' : 'Add'}</button>
-            </div>
-            {addOpen && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '10px 0', alignItems: 'center' }}>
-                <select id="po-add-type" aria-label="Type" value={addFormType} onChange={e => setAddFormType(e.target.value)} style={input}>
-                  {['Test', 'Exam', 'Assignment', 'Revision Test'].map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <input id="po-add-label" aria-label="Name" value={addFormLabel} onChange={e => setAddFormLabel(e.target.value)} placeholder="e.g. Term 4 test" style={{ ...input, flex: '1 1 140px', minWidth: 0 }} />
-                <input id="po-add-date" aria-label="Date" type="date" value={addFormDate} onChange={e => setAddFormDate(e.target.value)} style={input} />
-                <button type="button" style={btn(true)} disabled={!addFormLabel.trim() || !addFormDate || addingAssessment} onClick={handleAddAssessment}>{addingAssessment ? 'Saving…' : 'Save'}</button>
-                {addFormError && <div role="alert" style={{ width: '100%', fontSize: 12, color: t.danger }}>{addFormError}</div>}
-              </div>
-            )}
-            {upcoming.length === 0 && !addOpen && (
-              <div style={{ fontSize: 13, color: t.textMuted, padding: '10px 0 4px', lineHeight: 1.55 }}>Add your tests and exams to see a countdown here and on Practice.</div>
-            )}
-            <div>
-              {[...upcoming, ...(showPast ? past : [])].map(a => {
-                const days = Math.ceil((new Date(a.date) - today) / DAY_MS)
-                const isPast = days < 0
-                const tone = isPast ? t.textFaint : days <= 14 ? t.danger : days <= 28 ? t.goldText : t.textMuted
-                return (
-                  <div key={a.id} className="po-item" style={{ opacity: isPast ? 0.6 : 1 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</div>
-                      <div style={{ fontSize: 12, color: t.textFaint }}>{a.type} · {new Date(a.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: tone, fontVariantNumeric: 'tabular-nums' }}>{isPast ? 'Done' : days === 0 ? 'Today' : `${days} day${days !== 1 ? 's' : ''}`}</span>
-                      <button type="button" onClick={() => handleDeleteAssessment(a.id)} aria-label={`Remove ${a.label}`} title="Remove"
-                        style={{ border: 'none', background: 'transparent', color: t.textFaint, cursor: 'pointer', padding: 2, display: 'flex' }}><X size={14} aria-hidden="true" /></button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {past.length > 0 && (
-              <button type="button" style={{ ...linkBtn, fontSize: 12, marginTop: 8, textDecorationThickness: 1 }} onClick={() => setShowPast(v => !v)}>
-                {showPast ? 'Hide past' : `Show past (${past.length})`}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="po-row even">
-          {/* This week's plan */}
-          <div id="plan" data-tutorial-target="progress-plan" style={{ ...card, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-              <span style={cardTitle}>This week's plan</span>
-              {plan.length > 0 && <span style={{ fontSize: 12, color: t.textFaint }}>{doneCount} of {plan.length} done</span>}
-            </div>
-            {plan.length === 0 ? (
-              <div style={{ fontSize: 13, color: t.textMuted, padding: '10px 0 4px', lineHeight: 1.55 }}>Answer some questions in Practice and your plan for the week will appear here.</div>
-            ) : (
-              <div>
-                {plan.map(item => {
-                  const done = doneIds.includes(item.id)
-                  return (
-                    <div key={item.id} className="po-item">
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={done} onChange={() => toggleDone(item.id)} style={{ width: 16, height: 16, accentColor: theme === 'dark' ? t.text : '#0c1037', flexShrink: 0 }} />
-                        <span style={{ minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: done ? t.textFaint : t.text, textDecoration: done ? 'line-through' : 'none' }}>{item.label}</span>
-                          <span style={{ display: 'block', fontSize: 12, color: t.textFaint }}>{item.note}</span>
-                        </span>
-                      </label>
-                      {!done && <button type="button" style={btn(!item.secondary)} onClick={item.run}>{item.action}</button>}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
           {/* Topic mastery */}
           <div style={{ ...card, padding: '12px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
@@ -393,9 +418,13 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                 <button key={r.label} type="button" className="po-click po-item" title={`Practise ${r.label}`}
                   onClick={() => onStartSession?.({ mode: 'new', subtopics: r.topics.flatMap(subsOf) })}>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
-                  {r.topics.length > 1 && (
+                  {r.topics.length > 1 ? (
                     <span aria-hidden="true" style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 160, justifyContent: 'flex-end' }}>
                       {r.topics.map(tp => <span key={tp} title={tp} style={{ width: 13, height: 13, borderRadius: 3, background: accuracyOf(topicStats[tp]) == null ? t.bgHover : toneOf(accuracyOf(topicStats[tp])) }} />)}
+                    </span>
+                  ) : (
+                    <span aria-hidden="true" style={{ width: 80, height: 6, borderRadius: 999, background: t.bgHover, overflow: 'hidden', flexShrink: 0 }}>
+                      <span style={{ display: 'block', height: '100%', width: `${r.pct ?? 0}%`, background: toneOf(r.pct) }} />
                     </span>
                   )}
                   <span style={{ width: 52, textAlign: 'right', fontSize: 13, fontWeight: 800, color: toneOf(r.pct), fontVariantNumeric: 'tabular-nums' }}>{r.pct == null ? 'New' : `${r.pct}%`}</span>
@@ -404,6 +433,9 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
             </div>
           </div>
         </div>
+
+        {/* This week's league and personal bests */}
+        <ProgressLeagueBests theme={theme} profile={profile} />
 
       </div>
     </div>
