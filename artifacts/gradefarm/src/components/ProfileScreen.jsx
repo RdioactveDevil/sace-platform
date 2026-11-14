@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import RankIcon from './RankIcon'
 import ProgressLeagueBests from './ProgressLeagueBests'
@@ -205,7 +205,18 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const input = { padding: '8px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', colorScheme: theme === 'dark' ? 'dark' : 'light' }
 
   // Accuracy-by-week chart: line on a 0–100% scale, bars scaled to the busiest week.
-  const W = 540, H = 170, L = 36, R = 14, TOP = 16, BOT = 136
+  // Drawn at the card's real width so its labels stay readable on a phone
+  // instead of shrinking with a fixed-size picture.
+  const chartRef = useRef(null)
+  const [chartW, setChartW] = useState(540)
+  useEffect(() => {
+    const el = chartRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(([entry]) => { const w = Math.round(entry.contentRect.width); if (w > 0) setChartW(w) })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const W = Math.max(260, chartW), H = 170, L = 36, R = 14, TOP = 18, BOT = 136
   const colW = (W - L - R) / WEEKS
   const yOf = (pct) => BOT - (pct / 100) * (BOT - TOP)
   const maxTotal = Math.max(1, ...weeks.map(w => w.total))
@@ -215,10 +226,10 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const label = (ms) => new Date(ms).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 
   const delta = now.pct != null && prev.pct != null ? now.pct - prev.pct : null
-  const fact = (value, text) => (
-    <div style={{ minWidth: 0 }}>
+  const fact = (value, text, extra) => (
+    <div className="po-fact">
       <div style={{ fontSize: 20, fontWeight: 800, color: t.text, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      <div style={{ fontSize: 12.5, color: t.textMuted }}>{text}</div>
+      <div style={{ fontSize: 12.5, color: t.textMuted, lineHeight: 1.4 }}>{text}{extra}</div>
     </div>
   )
 
@@ -226,6 +237,14 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
     <div style={{ height: embedded ? '100%' : '100vh', minHeight: 0, background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: FONT_B, overflowY: 'auto' }}>
       <style>{`
         .po-inner { max-width: 1180px; margin: 0 auto; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 16px; }
+        .po-facts { display: flex; gap: 28px; flex-wrap: wrap; }
+        .po-fact { min-width: 0; }
+        .po-delta { display: block; font-size: 12px; font-weight: 700; }
+        .po-check { position: relative; width: 18px; height: 18px; flex-shrink: 0; border-radius: 5px; border: 1.5px solid ${t.borderStrong}; display: flex; align-items: center; justify-content: center; transition: background 0.18s ease, border-color 0.18s ease; }
+        .po-check.on { background: ${t.success}; border-color: ${t.success}; }
+        .po-check input { position: absolute; inset: -4px; opacity: 0; margin: 0; cursor: pointer; }
+        .po-check:has(input:focus-visible) { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+        .po-label { transition: color 0.2s ease; }
         .po-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
         .po-row.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
         .po-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid ${t.border}; }
@@ -233,16 +252,28 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
         .po-click { width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; color: inherit; }
         .po-click:focus-visible, .po-inner button:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
         @media (max-width: 960px) { .po-row, .po-row.even { grid-template-columns: 1fr; } }
-        @media (max-width: 860px) { .po-inner { padding: 18px 14px 28px; } }
+        @media (max-width: 860px) {
+          .po-inner { padding: 16px 14px 28px; gap: 14px; }
+          .po-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
+          .po-fact { background: ${t.bgCard}; border: 1px solid ${t.border}; border-radius: 12px; padding: 10px 12px; }
+          .po-item { gap: 10px; }
+          .po-item .po-act { padding: 6px 11px; }
+        }
       `}</style>
-      <div className="po-inner">
+      <div className="po-inner gf-stagger">
 
         {/* This week, and rank */}
         <div data-tutorial-target="progress-week" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
-            {fact(now.pct == null ? '—' : `${now.pct}%`, now.pct == null ? 'correct this week' : delta == null ? 'correct this week' : delta === 0 ? 'correct this week, same as last week' : `correct this week, ${delta > 0 ? 'up' : 'down'} from ${prev.pct}%`)}
-            {fact(now.total, 'answered this week')}
-            {fact(`${now.days.size} day${now.days.size !== 1 ? 's' : ''}`, 'active this week')}
+          <div className="po-facts">
+            {fact(now.pct == null ? '—' : <CountUp value={now.pct} suffix="%" />, 'correct this week',
+              delta == null ? null : (
+                <span className="po-delta" title={delta === 0 ? 'Same as last week' : `${delta > 0 ? 'Up' : 'Down'} from ${prev.pct}% last week`}
+                  style={{ color: delta > 0 ? t.success : delta < 0 ? t.danger : t.textFaint }}>
+                  {delta === 0 ? 'same as last week' : `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)} vs last week`}
+                </span>
+              ))}
+            {fact(<CountUp value={now.total} />, 'answered this week')}
+            {fact(<><CountUp value={now.days.size} /> day{now.days.size !== 1 ? 's' : ''}</>, 'active this week')}
           </div>
           <div style={{ fontSize: 12.5, color: t.textMuted }}>
             <strong style={{ color: t.text }}>{rank}</strong> · {profile.xp.toLocaleString()} XP · {nextRankHint(profile.xp, recentAccuracy)}
@@ -286,7 +317,9 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           <div id="plan" data-tutorial-target="progress-plan" style={{ ...card, padding: '12px 16px', ...(plan.length > 0 && { borderColor: t.borderAccent }) }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
               <span style={cardTitle}>This week's plan</span>
-              {plan.length > 0 && <span style={{ fontSize: 12, color: t.textFaint }}>{doneCount} of {plan.length} done</span>}
+              {plan.length > 0 && (doneCount === plan.length
+                ? <span key="all" className="gf-pop" style={{ fontSize: 12, fontWeight: 800, color: t.success }}>All done this week</span>
+                : <span style={{ fontSize: 12, color: t.textFaint }}>{doneCount} of {plan.length} done</span>)}
             </div>
             {plan.length === 0 ? (
               <div style={{ fontSize: 13, color: t.textMuted, padding: '10px 0 4px', lineHeight: 1.55 }}>Answer some questions in Practice and your plan for the week will appear here.</div>
@@ -297,13 +330,20 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                   return (
                     <div key={item.id} className="po-item">
                       <label style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={done} onChange={() => toggleDone(item.id)} style={{ width: 16, height: 16, accentColor: theme === 'dark' ? t.text : '#0c1037', flexShrink: 0 }} />
+                        <span className={`po-check${done ? ' on' : ''}`}>
+                          <input type="checkbox" checked={done} onChange={() => toggleDone(item.id)} />
+                          {done && (
+                            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="gf-pop">
+                              <path d="M2.5 6.4 5 8.8 9.6 3.6" pathLength="1" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="gf-tick-draw" />
+                            </svg>
+                          )}
+                        </span>
                         <span style={{ minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: done ? t.textFaint : t.text, textDecoration: done ? 'line-through' : 'none' }}>{item.label}</span>
+                          <span className="po-label" style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: done ? t.textFaint : t.text, textDecoration: done ? 'line-through' : 'none' }}>{item.label}</span>
                           <span style={{ display: 'block', fontSize: 12, color: t.textFaint }}>{item.note}</span>
                         </span>
                       </label>
-                      {!done && <button type="button" style={btn(!item.secondary)} onClick={item.run}>{item.action}</button>}
+                      {!done && <button type="button" className="po-act gf-press" style={btn(!item.secondary)} onClick={item.run}>{item.action}</button>}
                     </div>
                   )
                 })}
@@ -366,7 +406,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
 
         <div className="po-row">
           {/* Accuracy by week */}
-          <div style={{ ...card, padding: '14px 16px' }}>
+          <div ref={chartRef} style={{ ...card, padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <span style={cardTitle}>Accuracy by week</span>
               <span style={{ fontSize: 12, color: t.textFaint }}>Line: % correct · Bars: questions answered</span>
@@ -385,16 +425,16 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                 ))}
                 {points.map((p, i) => {
                   const h = (p.w.total / maxTotal) * (BOT - TOP) * 0.55
-                  return <rect key={i} x={p.x - colW * 0.3} y={BOT - h} width={colW * 0.6} height={h} rx="2" fill={t.bgHover}><title>{`${label(p.w.start)}: ${p.w.total} answered${p.w.pct != null ? `, ${p.w.pct}% correct` : ''}`}</title></rect>
+                  return <rect key={i} className="gf-grow-y" style={{ animationDelay: `${i * 40}ms` }} x={p.x - colW * 0.3} y={BOT - h} width={colW * 0.6} height={h} rx="2" fill={t.bgHover}><title>{`${label(p.w.start)}: ${p.w.total} answered${p.w.pct != null ? `, ${p.w.pct}% correct` : ''}`}</title></rect>
                 })}
-                <polyline points={linePts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={t.text} strokeWidth="2" strokeLinejoin="round" />
+                <polyline className="gf-line-draw" pathLength="1" points={linePts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={t.text} strokeWidth="2" strokeLinejoin="round" />
                 {linePts.map((p, i) => {
                   const last = i === linePts.length - 1
-                  return <circle key={i} cx={p.x} cy={p.y} r={last ? 4.5 : 2.5} fill={last ? t.accent : t.text} stroke={last ? t.text : 'none'} strokeWidth="1.5" />
+                  return <circle key={i} className={last ? 'gf-fade-late' : undefined} cx={p.x} cy={p.y} r={last ? 4.5 : 2.5} fill={last ? t.accent : t.text} stroke={last ? t.text : 'none'} strokeWidth="1.5" />
                 })}
                 {linePts.length > 0 && (() => {
                   const p = linePts[linePts.length - 1]
-                  return <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="11" fontWeight="700" fill={t.text}>{p.w.pct}%</text>
+                  return <text className="gf-fade-late" x={p.x} y={p.y - 10} textAnchor="middle" fontSize="11" fontWeight="700" fill={t.text}>{p.w.pct}%</text>
                 })()}
                 {[0, Math.floor(WEEKS / 2), WEEKS - 1].map(i => (
                   <text key={i} x={points[i].x} y={H - 14} textAnchor="middle" fontSize="10" fill={t.textFaint}>{i === WEEKS - 1 ? 'This week' : label(points[i].w.start)}</text>
@@ -424,7 +464,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                     </span>
                   ) : (
                     <span aria-hidden="true" style={{ width: 80, height: 6, borderRadius: 999, background: t.bgHover, overflow: 'hidden', flexShrink: 0 }}>
-                      <span style={{ display: 'block', height: '100%', width: `${r.pct ?? 0}%`, background: toneOf(r.pct) }} />
+                      <span className="gf-grow-x" style={{ display: 'block', height: '100%', width: `${r.pct ?? 0}%`, background: toneOf(r.pct), borderRadius: 999 }} />
                     </span>
                   )}
                   <span style={{ width: 52, textAlign: 'right', fontSize: 13, fontWeight: 800, color: toneOf(r.pct), fontVariantNumeric: 'tabular-nums' }}>{r.pct == null ? 'New' : `${r.pct}%`}</span>
@@ -440,4 +480,27 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       </div>
     </div>
   )
+}
+
+/** A number that counts up to its value when it first appears (straight to it for reduced motion). */
+function CountUp({ value, suffix = '' }) {
+  const target = Number(value) || 0
+  const [shown, setShown] = useState(() => (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? target : 0))
+  const from = useRef(shown)
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setShown(target); return undefined }
+    const start = performance.now()
+    const begin = from.current
+    let raf = 0
+    const tick = (now) => {
+      const k = Math.min(1, (now - start) / 700)
+      const v = Math.round(begin + (target - begin) * (1 - Math.pow(1 - k, 3)))
+      from.current = v
+      setShown(v)
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target])
+  return <>{shown.toLocaleString('en-AU')}{suffix}</>
 }

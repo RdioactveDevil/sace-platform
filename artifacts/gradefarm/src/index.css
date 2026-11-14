@@ -354,3 +354,56 @@
 /* Tailwind's preflight makes every svg display:block, which pushes an icon set
    inline with text onto its own line. Icons sit in the text flow instead. */
 svg.lucide { display: inline-block; }
+
+/* ── Motion ─────────────────────────────────────────────────────────────────
+   Small, quick movements that show what changed. Everything here is switched
+   off for people who ask for reduced motion (bottom of this block). */
+
+/* A screen fades up when its tab opens. Screens stay mounted and toggle
+   display, and an animation replays each time an element is shown again. */
+@keyframes gf-screen-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.gf-screen { animation: gf-screen-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
+
+/* A page's cards arrive one after another, top to bottom. */
+.gf-stagger > * { animation: gf-screen-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.gf-stagger > :nth-child(2) { animation-delay: 45ms; }
+.gf-stagger > :nth-child(3) { animation-delay: 90ms; }
+.gf-stagger > :nth-child(4) { animation-delay: 135ms; }
+.gf-stagger > :nth-child(n+5) { animation-delay: 180ms; }
+
+/* A tick that draws itself: put pathLength="1" on the path. */
+@keyframes gf-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.gf-tick-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: gf-draw 0.35s 0.12s ease-out forwards; }
+
+/* A quick overshoot for something just completed. */
+@keyframes gf-pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+.gf-pop { animation: gf-pop 0.38s cubic-bezier(0.3, 1.4, 0.5, 1) both; transform-origin: center; transform-box: fill-box; }
+
+/* Buttons give a little under the finger. */
+.gf-press { transition: transform 0.12s ease, filter 0.15s ease; }
+.gf-press:active { transform: scale(0.96); }
+@media (hover: hover) { .gf-press:hover { filter: brightness(1.06); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gf-screen, .gf-stagger > *, .gf-pop { animation: none !important; }
+  .gf-tick-draw { animation: none !important; stroke-dashoffset: 0; }
+  .gf-press, .gf-section-tabs [data-indicator] { transition: none !important; }
+  .gf-press:active { transform: none; }
+}
+
+/* Bars that grow in from their start: horizontal from the left, vertical from the bottom. */
+@keyframes gf-grow-x { from { transform: scaleX(0); } }
+@keyframes gf-grow-y { from { transform: scaleY(0); } }
+.gf-grow-x { transform-origin: left center; animation: gf-grow-x 0.6s cubic-bezier(0.3, 0.8, 0.3, 1) both; }
+.gf-grow-y { transform-box: fill-box; transform-origin: center bottom; animation: gf-grow-y 0.5s cubic-bezier(0.3, 0.8, 0.3, 1) both; }
+/* A line that draws itself from start to end: put pathLength="1" on it. */
+.gf-line-draw { stroke-dasharray: 1; animation: gf-draw 0.9s 0.15s cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes gf-fade { from { opacity: 0; } }
+.gf-fade-late { animation: gf-fade 0.3s 0.8s both; }
+@media (prefers-reduced-motion: reduce) {
+  .gf-grow-x, .gf-grow-y, .gf-line-draw, .gf-fade-late { animation: none !important; }
+  .gf-line-draw { stroke-dasharray: none; }
+}

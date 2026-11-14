@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
@@ -592,6 +592,25 @@ function SectionTabs({ theme, subject }) {
   const section = sectionForPath(location.pathname)
   const pages = section ? visiblePages(section, subject) : []
   const current = tabPath(location.pathname)
+  // The gold underline is one bar that slides to the tab just chosen. It's
+  // placed without a transition the first time so it doesn't fly in from the left.
+  const [bar, setBar] = useState(null) // { left, width, animate }
+  useLayoutEffect(() => {
+    const el = activeRef.current
+    if (!el) { setBar(null); return }
+    const sectionId = section?.id
+    setBar(prev => ({ left: el.offsetLeft, width: el.offsetWidth, sectionId, animate: prev?.sectionId === sectionId }))
+  }, [current, pages.length, section?.id])
+  // Tab widths change when the web font arrives or the window resizes.
+  useEffect(() => {
+    const remeasure = () => {
+      const el = activeRef.current
+      if (el) setBar(prev => prev && { ...prev, left: el.offsetLeft, width: el.offsetWidth, animate: false })
+    }
+    document.fonts?.ready.then(remeasure).catch(() => {})
+    window.addEventListener('resize', remeasure)
+    return () => window.removeEventListener('resize', remeasure)
+  }, [])
   // On narrow screens the strip scrolls sideways; keep the current tab in view.
   useEffect(() => {
     const el = activeRef.current
@@ -607,7 +626,7 @@ function SectionTabs({ theme, subject }) {
     // border the active underline overlaps with a negative margin: that 1px
     // overflow gave the strip a scrollbar on Windows.
     <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`} className="gf-section-tabs"
-      style={{ display: 'flex', gap: 4, padding: '10px 20px 0', boxShadow: `inset 0 -1px 0 ${t.border}`, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', fontFamily: FONT_B }}>
+      style={{ position: 'relative', display: 'flex', gap: 4, padding: '10px 20px 0', boxShadow: `inset 0 -1px 0 ${t.border}`, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', fontFamily: FONT_B }}>
       {pages.map(page => {
         const active = page.path === current
         return (
@@ -616,13 +635,18 @@ function SectionTabs({ theme, subject }) {
             style={{
               padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
               fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? GOLD : t.textMuted,
-              borderBottom: `2px solid ${active ? GOLD : 'transparent'}`,
+              color: active ? GOLD : t.textMuted, transition: 'color 0.2s ease',
+              borderBottom: '2px solid transparent',
             }}>
             {page.label}
           </button>
         )
       })}
+      {bar && (
+        <span aria-hidden="true" data-indicator=""
+          style={{ position: 'absolute', bottom: 0, left: 0, height: 2, width: bar.width, borderRadius: 2, background: GOLD, pointerEvents: 'none',
+            transform: `translateX(${bar.left}px)`, transition: bar.animate ? 'transform 0.28s cubic-bezier(0.3, 0.8, 0.3, 1), width 0.28s cubic-bezier(0.3, 0.8, 0.3, 1)' : 'none' }} />
+      )}
     </div>
   )
 }
@@ -829,11 +853,11 @@ function AppShellScreens({
   return (
     <AppShell {...shellProps}>
       {writingSubject && (
-        <div style={onWriting ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }}>
+        <div className="gf-screen" style={onWriting ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }}>
           <WritingScreen subject={writingSubject} profile={profile} theme={theme} onBack={onChangeSubject} />
         </div>
       )}
-      {wasOpened('question-bank') && <div style={show('question-bank')}>
+      {wasOpened('question-bank') && <div className="gf-screen" style={show('question-bank')}>
         <HomeScreen {...commonProps}
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
@@ -841,35 +865,35 @@ function AppShellScreens({
           onProfileUpdated={onProfileUpdated}
           onStartSession={onStartSession} />
       </div>}
-      {wasOpened('learn') && <div style={show('learn')}>
+      {wasOpened('learn') && <div className="gf-screen" style={show('learn')}>
         <LearnScreen key={subject?.id || 'none'} {...commonProps} {...learnState}
           profile={profile} struggleMap={struggleMap}
           questions={questions} subject={subject}
           onBack={() => navigate('/question-bank')} />
       </div>}
-      {wasOpened('leaderboard') && <div style={show('leaderboard')}>
+      {wasOpened('leaderboard') && <div className="gf-screen" style={show('leaderboard')}>
         <LeaderboardScreen {...commonProps} profile={profile} embedded />
       </div>}
-      {wasOpened('my-progress') && <div style={show('my-progress')}>
+      {wasOpened('my-progress') && <div className="gf-screen" style={show('my-progress')}>
         <ProfileScreen {...commonProps}
           profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
           onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
-      <div style={onPortal ? show(screen) : { display: 'none' }}>
+      <div className="gf-screen" style={onPortal ? show(screen) : { display: 'none' }}>
         <StudentPortalScreen profile={profile} theme={theme} active={onPortal} hasTutoring={hasTutoring} onStartSession={onStartSession} />
       </div>
-      <div style={onLessons ? show(screen) : { display: 'none' }}>
+      <div className="gf-screen" style={onLessons ? show(screen) : { display: 'none' }}>
         <StudentLessonsScreen theme={theme} active={onLessons} />
       </div>
-      {wasOpened('history') && <div style={show('history')}>
+      {wasOpened('history') && <div className="gf-screen" style={show('history')}>
         <HistoryScreen {...commonProps} profile={profile} subject={subject} questions={questions} embedded
           active={screen === 'history'} onStartSession={onStartSession}
           onOpenChat={(id) => openInLearn({ type: 'chat', id })}
           onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
-      {wasOpened('my-account') && <div style={show('my-account')}>
+      {wasOpened('my-account') && <div className="gf-screen" style={show('my-account')}>
         <AccountScreen {...commonProps} profile={profile} onSignOut={onSignOut} onChangeSubject={onChangeSubject} onReplayFeatureTour={onReplayFeatureTour} onProfileUpdated={onProfileUpdated} />
       </div>}
     </AppShell>
