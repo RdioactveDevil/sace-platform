@@ -125,6 +125,20 @@ export interface EmailContent {
   unsubscribeLabel?: string;
 }
 
+/**
+ * An email with its own layout, already rendered (the welcome email,
+ * lib/welcome-email.ts). Its HTML and text must carry the unsubscribe link
+ * themselves; `unsubscribe` only adds the one-click headers.
+ */
+export interface PrebuiltEmail {
+  html: string;
+  text: string;
+  unsubscribe?: string;
+}
+
+const isPrebuilt = (c: EmailContent | PrebuiltEmail): c is PrebuiltEmail =>
+  typeof (c as PrebuiltEmail).html === "string";
+
 /** Render the shared gradefarm. email layout as HTML plus a plain-text copy. */
 export function renderEmail(c: EmailContent): { html: string; text: string } {
   const paragraphs = c.paragraphs
@@ -185,7 +199,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
 export interface OutgoingEmail {
   to: string;
   subject: string;
-  content: EmailContent;
+  content: EmailContent | PrebuiltEmail;
   /** Resend drops a repeat send with the same key within 24 hours. */
   idempotencyKey: string;
 }
@@ -208,7 +222,7 @@ export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{
     to = parent;
   }
 
-  const { html, text } = renderEmail(email.content);
+  const { html, text } = isPrebuilt(email.content) ? email.content : renderEmail(email.content);
   const headers: Record<string, string> = {};
   if (email.content.unsubscribe) {
     // One-click unsubscribe (RFC 8058): mail clients show their own
