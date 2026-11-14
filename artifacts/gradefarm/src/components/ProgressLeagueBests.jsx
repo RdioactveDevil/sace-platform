@@ -43,7 +43,7 @@ export default function ProgressLeagueBests({ theme = 'dark', profile }) {
 
   return (
     <div className="po-row" style={{ fontFamily: FONT_B }}>
-      <section aria-label="Weekly league" style={{ ...card, borderColor: me ? t.borderAccent : t.border }}>
+      <section aria-label="Weekly league" style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ ...title, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 2, background: LEAGUE_TIERS[tier]?.color, transform: 'rotate(45deg)' }} />
