@@ -1629,7 +1629,7 @@ function AppInner() {
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
-      <Route path="/pricing" element={<PricingPage {...commonProps} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} />} />
+      <Route path="/pricing" element={<PricingPage {...commonProps} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} profileState={(user && profile?.state) || null} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
       <Route path="/selective" element={<Navigate to="/year-6" replace />} />

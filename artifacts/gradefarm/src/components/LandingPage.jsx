@@ -4,7 +4,7 @@ import { getPlatformSettings } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { SUBJECT_GROUPS as GROUPS, groupSubjects } from '../lib/homeSubjects'
 import { studentTiers, extraLadder } from '../lib/pricing'
-import { SITE_CSS, SITE_FONTS, NAVY, themeVars, Brand, SiteNav, SiteFooter, siteFooterLinks } from './SiteChrome'
+import { SITE_CSS, SITE_FONTS, NAVY, themeVars, Brand, SiteNav, SiteFooter, siteFooterLinks, StartButton } from './SiteChrome'
 import MathText from './MathText'
 
 // The public homepage (/home).
@@ -176,7 +176,6 @@ const CSS = `${SITE_CSS}
 .lp-why-pts div { padding-left: 14px; border-left: 3px solid var(--lp-sq3); }
 .lp-why-pts b { display: block; font-size: 15px; }
 .lp-why-pts span { font-size: 14.5px; color: var(--lp-muted); }
-.lp-why-src { font-size: 12.5px; color: var(--lp-faint); margin-top: 18px !important; }
 .lp-curve { padding: 16px 16px 12px; min-width: 0; }
 .lp-curve-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .lp-curve-key { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--lp-muted); }
@@ -185,7 +184,6 @@ const CSS = `${SITE_CSS}
 .lp-curve svg { display: block; width: 100%; height: auto; }
 .lp-curve .lbl { font-size: 12px; fill: var(--lp-muted); font-family: ${FONT_B}; }
 .lp-curve .lbl.strong { fill: var(--lp-ink); font-weight: 700; }
-.lp-curve-note { font-size: 12px; color: var(--lp-faint); margin-top: 4px !important; }
 
 @media (max-width: 960px) {
   .lp-why-body { grid-template-columns: 1fr; gap: 24px; }
@@ -358,7 +356,7 @@ function AndHero({ onStart, onDone, onSeeInside, done }) {
         </div>
         <div className="lp-and-ctl">
           {last
-            ? <><button type="button" className="lp-btn gold lg" onClick={onStart}>Start free</button><button type="button" className="lp-btn lg" onClick={onSeeInside}>How it works ↓</button></>
+            ? <><StartButton onClick={onStart} /><button type="button" className="lp-btn lg" onClick={onSeeInside}>How it works ↓</button></>
             : <button type="button" className="lp-btn gold lg" onClick={() => setN(n + 1)} aria-label="And? Show the next part">And?</button>}
           {/* Once they've answered the sample question, point them at And? */}
           {n === 1 && picked !== null && (
@@ -463,7 +461,6 @@ function ForgettingCurve() {
         </g>
         {!narrow && <text x={x(SPAN_H)} y={y(endCram) - 10} textAnchor="end" className="lbl" opacity={dim('cram')}>Mostly gone</text>}
       </svg>
-      <p className="lp-curve-note">An illustration of the forgetting curve, not your data. The review times are the ones gradefarm. uses.</p>
     </div>
   )
 }
@@ -474,12 +471,11 @@ function SpacedRepetition() {
       <h2 id="lp-why">This is spaced repetition.</h2>
       <div className="lp-why-body">
       <div>
-        <p className="lp-why-lead">You forget most of what you learn within days. Answering a question again just as you start to forget is what makes it stick, and each time it lasts longer. gradefarm. works out when that is for every question you answer.</p>
+        <p className="lp-why-lead">Psychologists have studied the forgetting curve since the 1880s. You forget most of what you learn within days. Answering a question again just as you start to forget is what makes it stick, and each time it lasts longer. gradefarm. works out when that is for every question you answer.</p>
         <div className="lp-why-pts">
           <div><b>Active recall</b><span>You answer questions instead of re-reading notes, because getting it out of your head is what builds the memory.</span></div>
           <div><b>Spaced repetition</b><span>Each question comes back an hour after you miss it, then days, then weeks later, just before you'd forget.</span></div>
         </div>
-        <p className="lp-why-src">Psychologists have studied the forgetting curve since the 1880s.</p>
       </div>
       <ForgettingCurve />
       </div>
@@ -489,13 +485,14 @@ function SpacedRepetition() {
 
 /* ─── 2 · What's inside: the scrolling phone ───────────────────────────── */
 
+// [key, heading, line under it (optional)]
 const CHAPTERS = [
-  ['Practice', 'Questions on the topics you\'re doing.', 'Tick what you\'re on this term, then choose new questions, the ones you got wrong, or a mix. Every question is mapped to a topic in your course.'],
-  ['Worked solutions', 'Every question shows the working.', 'Not just the answer: the steps, and the slip most people make, so you know exactly where it went wrong.'],
-  ['Titan', 'Stuck at 11 pm? Ask Titan.', 'The AI tutor explains it again, as many times as you need, plainly or with sport, gaming or music. Add a photo of a question or your class notes, or take a guided lesson on a whole topic.'],
-  ['Comes back', 'Get it wrong and it comes back.', 'Sessions start with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time. Test tomorrow on one topic? Skip them for now. When a topic runs out, new questions are written for it.'],
-  ['Progress', 'See yourself improving.', 'Accuracy by week, your next SAC, test or exam counting down, and a plan for this week: the reviews that are due, lessons in progress and your weakest topics.'],
-  ['Exam mode', 'Practise under exam conditions.', 'Pick how many questions and a time limit. Answers stay hidden until you finish, then every question shows the working, and the ones you missed come back like any other.'],
+  ['Practice', 'Questions on the topics you\'re doing.'],
+  ['Worked solutions', 'Every question shows the working.'],
+  ['Titan', 'Stuck at 11 pm? Ask Titan.'],
+  ['Comes back', 'Get it wrong and it comes back.', 'Sessions start with the questions that are due back: an hour after a miss, then a few days later, then weeks later, until you get it right every time.'],
+  ['Progress', 'See yourself improving.'],
+  ['Exam mode', 'Practise under exam conditions.'],
 ]
 
 function PhoneScreen({ i }) {
@@ -595,7 +592,6 @@ function Inside() {
     <section id="inside" className="lp-in lp-sec" aria-labelledby="lp-inside">
       <div className="lp-sec-head">
         <h2 id="lp-inside">What's inside, one screen at a time</h2>
-        <p>Everything you need to practise, in one app.</p>
       </div>
       <div className="lp-stk">
         <div className="lp-ph-col" aria-hidden="true"><div className="lp-ph"><div className="lp-ph-s anim" key={active}><PhoneScreen i={active} /></div></div></div>
@@ -603,7 +599,7 @@ function Inside() {
           {CHAPTERS.map(([k, h, p], i) => (
             <div key={k} ref={el => { refs.current[i] = el }} data-i={i} className={`lp-chap${active === i ? ' on' : ''}`}>
               <h3>{h}</h3>
-              <p>{p}</p>
+              {p && <p>{p}</p>}
               <div className="lp-chap-screen" aria-hidden="true"><div className="lp-ph-s"><PhoneScreen i={i} /></div></div>
             </div>
           ))}
@@ -628,7 +624,6 @@ function WhereItFits({ weekly }) {
     <section id="fits" className="lp-in lp-sec" aria-labelledby="lp-fits">
       <div className="lp-sec-head">
         <h2 id="lp-fits" style={{ maxWidth: '32ch' }}>Your textbook has the questions. Your tutor has an hour a week. <span style={{ display: 'block' }}><Brand /> is the rest.</span></h2>
-        <p>It doesn't replace your tutor. It's the practice between lessons.</p>
       </div>
       <div className="lp-card lp-cmp">
         <table>
@@ -766,7 +761,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         <section className="lp-in lp-sec">
           <div className="lp-end">
             <h2>Start with one subject, free.</h2>
-            <button type="button" className="lp-btn gold lg" onClick={start}>Start free</button>
+            <StartButton onClick={start} />
           </div>
         </section>
         </div>
