@@ -2,10 +2,10 @@
 // LandingPage.jsx): each subject goes in a group by its level.
 
 export const SUBJECT_GROUPS = [
-  { id: 'vce', title: 'VCE', note: 'Victoria', phrase: 'VCE in Victoria' },
-  { id: 'sace', title: 'SACE', note: 'South Australia', phrase: 'SACE in South Australia' },
-  { id: 'middle', title: 'Middle School', note: 'Selective Entry', phrase: 'middle school' },
-  { id: 'other', title: 'More subjects', note: '', phrase: 'more' },
+  { id: 'vce', title: 'VCE', note: 'Victoria' },
+  { id: 'sace', title: 'SACE', note: 'South Australia' },
+  { id: 'middle', title: 'Middle School', note: 'Selective Entry' },
+  { id: 'other', title: 'More subjects', note: '' },
 ]
 
 /** Which group a live subject belongs in, with the name and level to show. */

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { completeOnboarding, saveParentDetails } from '../lib/db'
 import { needsParentConsent } from '../lib/parentConsent'
-import { AU_STATES } from '../lib/subjectFilter'
+import { AU_STATES, rememberedState } from '../lib/subjectFilter'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, Note, authBtn, linkStyle, choiceChip } from './AuthLayout'
 import CalmBackground from './CalmBackground'
+import DobPicker from './DobPicker'
+import SchoolPicker from './SchoolPicker'
 
 const YEAR_LEVELS = [6, 7, 8, 9, 10, 11, 12]
 
@@ -35,7 +37,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [dob, setDob]                 = useState('')
   const [school, setSchool]           = useState(profile.school || '')
-  const [studyState, setStudyState]   = useState(profile.state || null)
+  // Pre-selected from their profile, or the state they picked on the pricing page.
+  const [studyState, setStudyState]   = useState(() => profile.state || rememberedState())
   // Until they choose, the year their tutor's subjects suggest (those can
   // arrive just after this mounts, as the invite is accepted in the background).
   const [chosenYear, setYearLevel]    = useState(null)
@@ -71,8 +74,10 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
   // Subjects are chosen (and paid for) on the subject picker after onboarding.
   const [screen, setScreen] = useState(screens[0])
   const at = Math.max(0, screens.indexOf(screen))
-  const next = () => setScreen(screens[Math.min(at + 1, screens.length - 1)])
-  const back = () => setScreen(screens[Math.max(at - 1, 0)])
+  // A chip just tapped on this screen: it moves on by itself, so no Next button.
+  const [tapped, setTapped] = useState(false)
+  const next = () => { setTapped(false); setScreen(screens[Math.min(at + 1, screens.length - 1)]) }
+  const back = () => { setTapped(false); setScreen(screens[Math.max(at - 1, 0)]) }
 
   const finish = async () => {
     setSaving(true)
@@ -160,11 +165,10 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
     year: (
       <>
         <H>{you(`What year are you in${firstName ? `, ${firstName}` : ''}?`, `What year is ${child} in?`)}</H>
-        <Sub>{you("We'll start you on questions for that year.", "We'll start them on questions for that year.")}</Sub>
         <div role="radiogroup" aria-label="Year level" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {YEAR_LEVELS.map(y => (
             <button key={y} type="button" role="radio" aria-checked={yearLevel === y} className="af-chip"
-              onClick={() => { setYearLevel(y); setTimeout(next, 160) }}
+              onClick={() => { setTapped(true); setYearLevel(y); setTimeout(next, 160) }}
               aria-label={`Year ${y}`} style={{ ...choiceChip(t, yearLevel === y, 'lg'), minWidth: 58 }}>
               {y}
             </button>
@@ -176,11 +180,10 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
     state: (
       <>
         <H>{you('Which state do you study in?', `Which state does ${child} study in?`)}</H>
-        <Sub>{you("We'll show you subjects for your state, like VCE in Victoria or SACE in South Australia.", "We'll show them subjects for their state, like VCE in Victoria or SACE in South Australia.")}</Sub>
         <div role="radiogroup" aria-label="State" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {AU_STATES.map(([code, label]) => (
             <button key={code} type="button" role="radio" aria-checked={studyState === code} className="af-chip"
-              onClick={() => { setStudyState(code); setTimeout(next, 160) }}
+              onClick={() => { setTapped(true); setStudyState(code); setTimeout(next, 160) }}
               style={choiceChip(t, studyState === code, 'lg')}>
               {label}
             </button>
@@ -192,9 +195,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
       <>
         <H>{you("When's your birthday?", `When's ${child}'s birthday?`)}</H>
         {!isParent && <Sub>Under 15? We'll ask a parent or guardian to OK Titan AI. Practice questions work straight away.</Sub>}
-        <Field id="onb-dob" label="Date of birth" theme={theme}>
-          <input id="onb-dob" className="af-inp" style={bigInput} type="date" value={dob} onChange={e => setDob(e.target.value)} max={today} min="1920-01-01" autoFocus />
-        </Field>
+        {/* Opens on the year most students in their school year were born (Year 11 in 2026: 2009). */}
+        <DobPicker value={dob} onChange={setDob} min="1920-01-01" max={today} theme={theme}
+          startYear={yearLevel ? new Date().getFullYear() - yearLevel - 6 : undefined} />
       </>
     ),
     parent: (
@@ -217,7 +220,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
         <H>{you('Which school do you go to?', `Which school does ${child} go to?`)}</H>
         <Sub>Optional.</Sub>
         <Field id="onb-school" label="School" theme={theme}>
-          <input id="onb-school" className="af-inp" style={bigInput} value={school} onChange={e => setSchool(e.target.value)} autoComplete="organization" autoFocus />
+          {/* Their state's schools, so it's a real school; "isn't listed" lets them type one. */}
+          <SchoolPicker id="onb-school" state={studyState} value={school} onChange={setSchool} theme={theme} autoFocus />
         </Field>
       </>
     ),
@@ -265,7 +269,8 @@ export default function OnboardingScreen({ profile, userEmail, onDone, suggested
 
   const optionalScreen = screen === 'school'
   // Year and state are one tap each: picking a chip moves on, so no Next button.
-  const chipScreen = screen === 'year' || screen === 'state'
+  // One already picked (the state from the pricing page, or coming Back) gets Next.
+  const chipScreen = (screen === 'year' || screen === 'state') && (!valid || tapped)
   return (
     <AuthLayout theme={theme} backdrop={<CalmBackground theme={theme} />} onToggleTheme={onToggleTheme} align="top"
       center={(

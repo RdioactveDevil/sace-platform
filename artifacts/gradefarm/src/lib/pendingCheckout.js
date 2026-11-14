@@ -53,3 +53,30 @@ export async function startCheckout(planOrSubject) {
 
 /** A subject as Get Access expects it (a subject tile). */
 export const subjectTileFor = (subject) => ({ id: subject.curriculumId, name: subject.name, stage: subject.level || '' })
+
+// A plan whose checkout couldn't open once they were signed in (payments
+// down, a network blip): kept for this tab, with why, so Get Access offers it
+// again after onboarding instead of them landing on the free plan by default.
+const RETRY_KEY = 'gf-checkout-retry'
+
+export function rememberCheckoutRetry(plan, error) {
+  const saved = normalizePlan(plan)
+  if (!saved) return
+  try { sessionStorage.setItem(RETRY_KEY, JSON.stringify({ ...saved, error: String(error || '') })) } catch {}
+}
+
+/** The plan to offer again ({ subjects, interval, error }), or null. Reading it doesn't forget it. */
+export function checkoutRetry() {
+  try {
+    const raw = sessionStorage.getItem(RETRY_KEY)
+    const saved = raw ? JSON.parse(raw) : null
+    const plan = normalizePlan(saved)
+    return plan ? { ...plan, error: saved.error || '' } : null
+  } catch {
+    return null
+  }
+}
+
+export function clearCheckoutRetry() {
+  try { sessionStorage.removeItem(RETRY_KEY) } catch {}
+}

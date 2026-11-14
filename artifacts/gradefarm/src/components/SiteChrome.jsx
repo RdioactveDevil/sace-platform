@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Sun, Moon, Menu, X } from 'lucide-react'
+import { Sun, Moon, Menu, X, ArrowRight } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 // The public site's shared pieces (homepage, pricing): colours from the app's
@@ -53,6 +53,14 @@ export const SITE_CSS = `
 .lp-btn.sm { min-height: 34px; padding: 0 13px; font-size: 13px; border-radius: 9px; }
 .lp-btn.lg { min-height: 50px; padding: 0 26px; font-size: 16px; border-radius: 12px; }
 .lp-btn:disabled { opacity: 0.5; cursor: default; }
+/* The main call to action (StartButton): bigger than any other button, with a gold glow and a soft pulse around it. */
+.lp-btn.cta { position: relative; min-height: 60px; padding: 0 28px 0 32px; gap: 10px; font-size: 18px; border-radius: 14px; letter-spacing: -0.01em; box-shadow: 0 10px 28px -8px rgba(224,169,31,0.75), 0 2px 0 rgba(12,16,55,0.12); transition: transform 0.15s, box-shadow 0.15s; }
+.lp-btn.cta:hover { filter: brightness(1.05); transform: translateY(-2px); box-shadow: 0 16px 34px -8px rgba(224,169,31,0.85), 0 2px 0 rgba(12,16,55,0.12); }
+.lp-btn.cta:active { transform: translateY(0); }
+.lp-btn.cta::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: lpCtaPulse 2.6s ease-out infinite; }
+@keyframes lpCtaPulse { 0% { box-shadow: 0 0 0 0 rgba(241,190,67,0.55); } 70%, 100% { box-shadow: 0 0 0 14px rgba(241,190,67,0); } }
+.lp-btn.cta svg { transition: transform 0.15s; }
+.lp-btn.cta:hover svg { transform: translateX(3px); }
 .lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 /* The logo keeps its own font (Sifonn Pro) and spacing; the .lp prefix puts it above the rule that gives buttons the body font. */
 .lp-brand { white-space: nowrap; } .lp-brand .g { color: var(--lp-logo-g); } .lp-brand .f { color: var(--lp-logo-f); }
@@ -70,6 +78,7 @@ export const SITE_CSS = `
 .lp-nav-links button:hover { color: var(--lp-ink); }
 .lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .lp-menu-btn { display: none; }
+.lp-nav-start .short { display: none; }
 .lp-menu { border-top: 1px solid var(--lp-line); padding: 6px 0 12px; }
 .lp-menu button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 12px 0; font-size: 15px; font-weight: 700; color: var(--lp-ink); cursor: pointer; border-bottom: 1px solid var(--lp-line); }
 .lp-menu button:last-child { border-bottom: none; }
@@ -95,10 +104,14 @@ export const SITE_CSS = `
 .lp-foot-links button { border: none; background: none; padding: 0; font-size: 12.5px; color: var(--lp-muted); cursor: pointer; }
 .lp-foot-links button:hover { color: var(--lp-ink); }
 .lp-copy { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta::after, .lp-btn.cta svg { animation: none; transition: none; } }
 @media (max-width: 760px) {
   .lp-in { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .lp-nav-links, .lp-nav-signin { display: none; }
   .lp-menu-btn { display: grid; }
+  /* The full "Start GradeFarming" doesn't fit beside the logo on a phone. */
+  .lp-nav-start .long { display: none; }
+  .lp-nav-start .short { display: inline; }
   .lp-sec { padding-top: 52px; padding-bottom: 52px; }
   .lp-copy { margin-left: 0; }
 }
@@ -109,6 +122,11 @@ export function Brand() {
   return <span className="lp-brand"><span className="g">grade</span><span className="f">farm.</span></span>
 }
 
+/** The main call to action on the public pages: "Start GradeFarming". */
+export function StartButton({ onClick, children = 'Start GradeFarming' }) {
+  return <button type="button" className="lp-btn gold cta" onClick={onClick}>{children}<ArrowRight size={20} strokeWidth={2.75} aria-hidden="true" /></button>
+}
+
 /** The wordmark as a button, at the size given. */
 export function Wordmark({ size = 28, onClick, label = 'gradefarm. home' }) {
   return <button type="button" className="lp-wordmark" style={{ fontSize: size }} aria-label={label} onClick={onClick}><span className="g">grade</span><span className="f">farm.</span></button>
@@ -116,7 +134,7 @@ export function Wordmark({ size = 28, onClick, label = 'gradefarm. home' }) {
 
 /**
  * The top nav: wordmark, `links` ([label, onClick, current?]), Sign in,
- * Start free, the light/dark switch, and a menu on phones.
+ * Start GradeFarming, the light/dark switch, and a menu on phones.
  */
 export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links }) {
   const [scrolled, setScrolled] = useState(false)
@@ -143,7 +161,7 @@ export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links
         </div>
         <div className="lp-nav-right">
           <button type="button" className="lp-btn sm lp-nav-signin" onClick={onSignIn}>Sign in</button>
-          <button type="button" className="lp-btn sm gold" onClick={onStart}>Start free</button>
+          <button type="button" className="lp-btn sm gold lp-nav-start" onClick={onStart} aria-label="Start GradeFarming"><span className="long">Start GradeFarming</span><span className="short" aria-hidden="true">Start</span></button>
           {onToggleTheme && (
             <button type="button" className="lp-icon-btn" onClick={onToggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
@@ -177,7 +195,7 @@ export function SiteFooter({ links, hidden }) {
         <div className="lp-foot-links">
           {links.map(([label, fn]) => <button key={label} type="button" onClick={fn}>{label}</button>)}
         </div>
-        <span className="lp-copy">© 2026 Titanium Tutoring · Adelaide, SA</span>
+        <span className="lp-copy">© 2026 Titanium Tutoring</span>
       </div>
     </footer>
   )
