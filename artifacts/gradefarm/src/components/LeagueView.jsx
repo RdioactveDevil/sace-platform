@@ -90,7 +90,7 @@ export default function LeagueView({ theme = 'dark', profile }) {
         <section style={{ ...card, padding: 14 }}>
           <h3 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: t.text }}>How it works</h3>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: t.textSub }}>
-            Each week (Monday to Sunday) you're grouped with about 20 students at a similar level. XP from your answers counts, bonus questions count double, and break games count for nothing. The top {LEAGUE_PROMOTE} move up a league. Nobody drops down.
+            Each week (Monday to Sunday) you're grouped with about 20 students at a similar level. XP from your answers counts and bonus questions count double. The top {LEAGUE_PROMOTE} move up a league.
           </p>
         </section>
       </aside>
