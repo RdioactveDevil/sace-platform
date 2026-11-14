@@ -193,24 +193,45 @@ export const MATH_SNIPPETS = [
 
 /**
  * Titan's instructions for "Check my working". `questionSection` describes the
- * question (lib/questionHelp's questionHelpSystemSection). Before the student
- * has answered, Titan never gives away the answer.
+ * question (lib/questionHelp's questionHelpSystemSection). Titan first checks
+ * every line in a hidden <check> block (the chat model runs without thinking,
+ * and judging algebra in one go makes it invent mistakes), then writes the
+ * short reply the student sees. Before the student answers, Titan never gives
+ * away the answer.
  */
 export function checkWorkingSystem({ questionSection = '', answered = false, firstName = '' } = {}) {
   return [
-    `You are Titan, a friendly, encouraging tutor${firstName ? ` helping ${firstName}` : ''}. The student is in a practice quiz and has sent a picture of their rough work for the question below: handwriting and anything they typed (typed maths is also given as LaTeX).`,
+    `You are Titan, a friendly, encouraging tutor${firstName ? ` helping ${firstName}` : ''}. The student is in a practice quiz and has sent a picture of their rough work for the question below: handwriting and anything they typed (typed lines are also given as text).`,
     questionSection,
     '',
     'HOW TO CHECK THEIR WORKING:',
-    '- Reply in at most 3 short sentences.',
-    '- Say what is right so far, then point to the FIRST line that goes wrong and why, as a hint they can act on. Don\'t redo the working for them.',
-    '- If everything so far is right, say so and tell them what to do next.',
+    'First, inside <check>...</check> (the student never sees this):',
+    '- Copy each line of their working, then check it follows from the line before by doing the algebra or arithmetic yourself, step by step (expand, simplify, move terms, substitute). Write "OK" or exactly what is wrong.',
+    '- A line that starts with "=" or "→" is just their next step, not a claim that it equals everything above it. Moving a term to the other side and collecting like terms (e.g. 3x − 3 = 5x + 10 → −3 − 10 = 2x) is correct when the result is equivalent.',
+    '- Then carry on from their last line and see where it leads. If it leads to the correct answer, none of their lines is wrong.',
+    '- Working that stops early is unfinished, not wrong.',
+    'Then, after </check>, write the reply the student sees:',
+    '- Only say a line is wrong if your check showed it does not follow. Never invent a mistake. If every line is right, say so clearly.',
+    '- At most 3 short sentences.',
+    '- All right so far: say so, and hint at the next step.',
+    '- A line is wrong: quote it, say what is right before it, and give a hint about the slip. Don\'t redo the working for them.',
     '- If part of the handwriting is unreadable, say which part.',
     answered
       ? '- They have already answered, so you may mention the correct answer if it helps.'
       : '- They have NOT answered yet. Never say which option is correct and never give the final value, even if asked.',
     '- Write any maths with $...$ (KaTeX). No headings or lists.',
   ].filter(s => s !== null).join('\n')
+}
+
+/**
+ * The part of Titan's answer the student sees: the hidden <check> block is
+ * taken out. '' if the answer was cut off inside it.
+ */
+export function checkWorkingReply(raw) {
+  let text = String(raw ?? '').replace(/<check>[\s\S]*?<\/check>/gi, '')
+  const open = text.search(/<check>/i)
+  if (open >= 0) text = text.slice(0, open)
+  return text.replace(/<\/?check>/gi, '').trim()
 }
 
 /** The student's message: the picture plus their typed lines. */

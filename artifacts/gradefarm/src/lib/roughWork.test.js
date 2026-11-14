@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   EMPTY_BOARD, HISTORY_LIMIT, boardReducer, widthAt, smoothPoints, strokePath, strokeHit, inkBottom,
-  displayText, typedLines, insertSnippet, checkWorkingSystem, checkWorkingMessage, roughWorkFileName, inkColor,
+  displayText, typedLines, insertSnippet, checkWorkingSystem, checkWorkingMessage, checkWorkingReply, roughWorkFileName, inkColor,
 } from './roughWork.js'
 
 const stroke = (id, points, extra = {}) => ({ id, type: 'stroke', color: 'ink', size: 3, points, ...extra })
@@ -99,4 +99,17 @@ test('file names and ink colours', () => {
   assert.equal(inkColor('ink', t), '#fff')
   assert.equal(inkColor('gold', t), '#e2b54c')
   assert.equal(inkColor('blue', t, 'light'), '#2563eb')
+})
+
+test("Titan checks every line in a hidden block before replying, and never invents a mistake", () => {
+  const sys = checkWorkingSystem({ answered: false })
+  assert.match(sys, /<check>/)
+  assert.match(sys, /Never invent a mistake/)
+  assert.match(sys, /unfinished, not wrong/)
+  // Only what follows the check reaches the student.
+  assert.equal(checkWorkingReply('<check>\n3x-3=5x+10 OK\n-13=2x OK\n</check>\nAll correct so far! Now divide by $2$.'), 'All correct so far! Now divide by $2$.')
+  assert.equal(checkWorkingReply('<CHECK>a</CHECK> Fine.'), 'Fine.')
+  assert.equal(checkWorkingReply('<check>cut off mid-way'), '')
+  assert.equal(checkWorkingReply('Plain reply'), 'Plain reply')
+  assert.equal(checkWorkingReply(null), '')
 })

@@ -6,7 +6,7 @@ import { THEMES } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 import {
   EMPTY_BOARD, INKS, boardReducer, strokePath, strokeHit, inkBottom, inkColor, newId, displayText, typedLines,
-  insertSnippet, MATH_SNIPPETS, checkWorkingSystem, checkWorkingMessage, roughWorkFileName,
+  insertSnippet, MATH_SNIPPETS, checkWorkingSystem, checkWorkingMessage, checkWorkingReply, roughWorkFileName,
 } from '../lib/roughWork'
 
 // Rough work on the quiz screen.
@@ -401,7 +401,7 @@ export default function RoughWork({
         headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 400,
+          max_tokens: 1500, // room for the hidden line-by-line check
           purpose: 'titan_chat',
           subject: titan.subject || '',
           topic: titan.topic || '',
@@ -412,7 +412,7 @@ export default function RoughWork({
       const data = await res.json().catch(() => ({}))
       const text = data?.code === 'parent_consent_required' || !res.ok
         ? (data?.error || "Titan couldn't check that just now. Try again in a moment.")
-        : ((Array.isArray(data?.content) && data.content.find(b => b?.type === 'text')?.text) || '')
+        : checkWorkingReply((Array.isArray(data?.content) && data.content.find(b => b?.type === 'text')?.text) || '')
       setReply({ status: res.ok && data?.code !== 'parent_consent_required' ? 'done' : 'error', text: text || "Titan couldn't read that. Try again?" })
     } catch {
       setReply({ status: 'error', text: "Couldn't reach Titan. Check your connection and try again." })
