@@ -62,7 +62,7 @@ pnpm workspace monorepo using TypeScript. This is the **gradefarm.** adaptive SA
   - `POST /api/tutor/notify-assignment` — sends styled HTML assignment email (type, subject, topics, due date)
   - `POST /api/tutor/notify-student` — sends a custom message email from tutor to student
 - **Automated emails** (Resend): `POST /api/cron/emails` sends whatever is due, run every 15 min by the "Automated emails" GitHub Action (`.github/workflows/automated-emails.yml`)
-  - Welcome email once a new account confirms its email (student or tutor version)
+  - Welcome email once a new account confirms its email (`lib/welcome-email.ts`, its own table-based layout; images in `artifacts/gradefarm/public/email/`). Student version: why we forget, how a question turns gold, what the account includes, a Titan example picked for the student's subject, and a note from the founder; worded for a parent when a parent reads it (parent-held account or a family child). Tutor version: where the application is up to, what the Tutor portal does, and the plans. The free allowance and tutor plans come from `platform_settings.pricing`; it carries the unsubscribe link and headers
   - Session reminders ≈24h before (students; only for sessions booked ≥36h ahead) and ≈1h before (students + tutor)
   - Assignment reminders the day before it's due and the day after if still unfinished, one email per student listing them all, sent 8am–8pm Adelaide time
   - Every email is claimed in `email_log` (`claim_email()` RPC) before sending, so a late or repeated run never sends it twice; failed sends retry up to 3 times

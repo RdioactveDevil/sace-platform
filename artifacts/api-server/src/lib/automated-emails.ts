@@ -27,12 +27,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Resend } from "resend";
 import { logger } from "./logger";
-import { accountParentUnsubscribeUrl, appUrl, parentUnsubscribeUrl, sendEmail, unsubscribeUrl, type EmailContent } from "./email";
+import { accountParentUnsubscribeUrl, appUrl, parentUnsubscribeUrl, sendEmail, unsubscribeUrl, type EmailContent, type PrebuiltEmail } from "./email";
+import { isFamilyLogin } from "./family";
+import { needsParentConsent } from "./parent-consent";
+import { freeAllowance, studentWelcomeEmail, tutorWelcomeEmail } from "./welcome-email";
 import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
 import { rosterTutorIds, tutorsToNotify } from "./student-tutors";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
-import { planIsLive, type TutorBillingRow } from "./tutor-plan";
+import { planIsLive, tutorBillingRow, tutorPlanOptions, type TutorBillingRow } from "./tutor-plan";
 
 export const TIME_ZONE = "Australia/Adelaide";
 
@@ -219,7 +222,7 @@ async function deliver(
   kind: EmailKind,
   recipient: Recipient,
   refIds: string[],
-  build: (claimed: string[]) => { subject: string; content: EmailContent },
+  build: (claimed: string[]) => { subject: string; content: EmailContent | PrebuiltEmail },
 ): Promise<void> {
   if (job.budget <= 0) {
     job.summary.budgetExhausted = true;
@@ -274,69 +277,91 @@ async function deliver(
 
 // ── Welcome ─────────────────────────────────────────────────────────────────
 
+type WelcomeRow = {
+  id: string;
+  is_tutor: boolean;
+  tutor_application_status: string | null;
+  account_holder: string | null;
+  parent_name: string | null;
+  parent_consent_at: string | null;
+  dob: string | null;
+  year_level: number | null;
+};
+
+async function readPricingSetting(job: Job): Promise<Record<string, unknown>> {
+  const { data, error } = await job.admin.from("platform_settings").select("value").eq("key", "pricing").maybeSingle();
+  // The defaults match the pricing page's, so a failed read still sends a correct email.
+  if (error) logger.warn({ err: error }, "emails: could not read pricing, using the defaults");
+  return ((data as { value?: Record<string, unknown> } | null)?.value) ?? {};
+}
+
+/** The student's active subjects, and whether any is paid, included by a tutor or beta. */
+async function welcomeSubjects(job: Job, userId: string): Promise<{ subjects: string[]; hasPlan: boolean }> {
+  const { data, error } = await job.admin
+    .from("user_subscriptions")
+    .select("subject_name, source, beta")
+    .eq("user_id", userId)
+    .eq("active", true);
+  if (error) throw new Error(`user_subscriptions: ${error.message}`);
+  const rows = (data ?? []) as Array<{ subject_name: string | null; source: string | null; beta: boolean | null }>;
+  return {
+    subjects: rows.map((s) => s.subject_name ?? "").filter(Boolean),
+    hasPlan: rows.some((s) => s.beta === true || (s.source ?? "free") !== "free"),
+  };
+}
+
 async function runWelcome(job: Job) {
   const since = new Date(job.now.getTime() - WELCOME_WINDOW).toISOString();
   const { data, error } = await job.admin
     .from("profiles")
-    .select("id, is_tutor, tutor_application_status")
+    .select("id, is_tutor, tutor_application_status, account_holder, parent_name, parent_consent_at, dob, year_level")
     .gte("created_at", since)
     .is("deactivated_at", null)
     .limit(500);
   if (error) throw new Error(`profiles: ${error.message}`);
-  const rows = (data ?? []) as Array<{ id: string; is_tutor: boolean; tutor_application_status: string | null }>;
+  const rows = (data ?? []) as WelcomeRow[];
   if (rows.length === 0) return;
 
   const done = await loadDone(job, "welcome", rows.map((r) => r.id));
   const pending = rows.filter((r) => !done.has(`${r.id}:${r.id}`));
   const recipients = await loadRecipients(job, pending.map((r) => r.id));
 
+  let pricing: Record<string, unknown> | null = null;
   for (const row of pending) {
     const r = recipients.get(row.id);
     if (!r || r.unsubscribed) continue;
     // Wait until the address is confirmed so we don't mail typos.
     if (!(await authEmail(job, row.id)).confirmed) continue;
-    const isTutor = row.is_tutor || (row.tutor_application_status ?? "none") !== "none";
-    await deliver(job, "welcome", r, [row.id], () => welcomeEmail(r, isTutor));
-  }
-}
+    pricing ??= await readPricingSetting(job);
+    const unsubscribe = unsubscribeUrl(row.id);
 
-function welcomeEmail(r: Recipient, isTutor: boolean): { subject: string; content: EmailContent } {
-  if (isTutor) {
-    return {
-      subject: "Welcome to gradefarm.",
-      content: {
-        heading: `Welcome to gradefarm., ${r.name}`,
-        paragraphs: [
-          "Thanks for signing up as a tutor. Once your account is approved you'll have the Tutor portal, where you can:",
-        ],
-        details: [
-          ["Students", "Add students and classes to your roster"],
-          ["Assignments", "Set quizzes and homework with due dates"],
-          ["Sessions", "Book one-off or weekly video sessions"],
-          ["Progress", "See each student's accuracy and weak topics"],
-        ],
-        cta: { label: "Open gradefarm.", url: `${appUrl()}/tutor` },
-        footer: "You're receiving this because you created a gradefarm. tutor account.",
-      },
-    };
+    const status = row.tutor_application_status ?? "none";
+    const approved = row.is_tutor || status === "approved";
+    if (approved || status === "pending") {
+      const billing = approved ? await tutorBillingRow(job.admin, row.id).catch(() => null) : null;
+      const { plans, annualDiscount } = tutorPlanOptions(pricing);
+      await deliver(job, "welcome", r, [row.id], () => tutorWelcomeEmail({
+        name: r.name, approved, portalOpen: approved && planIsLive(billing), plans, annualDiscount, unsubscribeUrl: unsubscribe,
+      }));
+      continue;
+    }
+
+    // A parent reads it when they hold the account, or for a child added to
+    // their family (that mail goes to the parent).
+    const reader = row.account_holder === "parent" || isFamilyLogin(r.email) ? "parent" : "student";
+    const { subjects, hasPlan } = await welcomeSubjects(job, row.id);
+    await deliver(job, "welcome", r, [row.id], () => studentWelcomeEmail({
+      name: r.name,
+      reader,
+      parentName: row.parent_name,
+      subjects,
+      yearLevel: row.year_level,
+      hasPlan,
+      awaitingParent: reader === "student" && !row.parent_consent_at && needsParentConsent(row.dob, row.year_level, job.now),
+      free: freeAllowance(pricing),
+      unsubscribeUrl: unsubscribe,
+    }));
   }
-  return {
-    subject: "Welcome to gradefarm.",
-    content: {
-      heading: `Welcome to gradefarm., ${r.name}`,
-      paragraphs: [
-        "Your account is ready. Here's how to get the most out of it:",
-      ],
-      details: [
-        ["1. Pick a subject", "Choose the SACE subjects you're studying"],
-        ["2. Practise", "Questions adapt to you, and you get similar ones to retry when you miss one"],
-        ["3. Ask Titan", "Get step-by-step help on any question you're stuck on"],
-        ["4. Keep a streak", "A few questions a day builds XP and keeps your streak going"],
-      ],
-      cta: { label: "Start practising", url: `${appUrl()}/home` },
-      footer: "You're receiving this because you created a gradefarm. account.",
-    },
-  };
 }
 
 // ── Session reminders ───────────────────────────────────────────────────────
