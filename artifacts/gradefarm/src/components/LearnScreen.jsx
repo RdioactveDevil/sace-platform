@@ -14,6 +14,7 @@ import { buildCards, stepOfCard, upgradeLesson, lessonScore, runEndingAt, lesson
 import { awaitingParent } from '../lib/parentConsent'
 import { ANALOGY_STYLES, analogyInstruction, analogyLabel, cleanAnalogy, isCustomAnalogy, lessonAnalogyLine } from '../lib/analogy'
 import { ArrowUp, Camera, CircleHelp, Plus, RotateCcw, Search } from 'lucide-react'
+import { greetingContext, pickGreeting } from '../lib/greetings'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
 
 const GOLD   = '#f1be43'
@@ -558,6 +559,13 @@ export default function LearnScreen({
   const [startMode, setStartMode] = useState('ask')
   const [recentOpen, setRecentOpen] = useState(false)
   const [lessonQuery, setLessonQuery] = useState('')
+  // The start screen's heading: a different one each visit (lib/greetings.js),
+  // picked again when a new chat starts, never while the student is typing.
+  const [greetSeed, setGreetSeed] = useState(() => Math.random())
+  const greeting = useMemo(() => {
+    const ctx = greetingContext({ displayName: profile?.display_name, subjectName: subject?.name })
+    return { ask: pickGreeting('ask', ctx, () => greetSeed), lesson: pickGreeting('lesson', ctx, () => greetSeed) }
+  }, [greetSeed, profile?.display_name, subject?.name])
   // "Explain it with your own analogy": typing one, and the last one used (this browser).
   const [analogyEditing, setAnalogyEditing] = useState(false)
   const [analogyDraft, setAnalogyDraft] = useState(() => { try { return localStorage.getItem(CUSTOM_ANALOGY_KEY) || '' } catch { return '' } })
@@ -777,6 +785,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
     setSessionId(null)
     chatIdRef.current = null
     savedCountRef.current = 0
+    setGreetSeed(Math.random())
     setPhase('setup')
   }
 
@@ -1163,7 +1172,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
 
         {startMode === 'ask' ? (
           <main className="ls-start-main">
-            <h1 className="ls-ask-head" style={{ margin: 0, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center' }}>What are you stuck on?</h1>
+            <h1 className="ls-ask-head" style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' }}>{greeting.ask}</h1>
 
             <div className="ls-ask-box" data-tutorial-target="learn-composer"
               style={{ width: '100%', maxWidth: 760, boxSizing: 'border-box', background: t.bgCard, border: `1px solid ${t.borderMid}`, borderRadius: 28, padding: '16px 12px 10px 20px', display: 'flex', flexDirection: 'column', gap: 10, boxShadow: theme === 'dark' ? 'none' : t.shadowCard }}>
@@ -1224,7 +1233,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         ) : (
           <main className="ls-start-main">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
-              <h1 style={{ margin: 0, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em' }}>What should we learn today?</h1>
+              <h1 style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textWrap: 'balance' }}>{greeting.lesson}</h1>
               <p style={{ margin: 0, fontSize: 15, color: t.textMuted }}>10-minute lessons: the key ideas, a worked example, then check questions.</p>
             </div>
 
