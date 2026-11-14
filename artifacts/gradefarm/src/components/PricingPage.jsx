@@ -51,10 +51,10 @@ const CSS = `${SITE_CSS}
 .pp-states button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); font-size: 15.5px; font-weight: 700; cursor: pointer; transition: border-color 0.15s, transform 0.2s, background 0.2s, color 0.2s, opacity 0.25s; }
 .pp-states button:hover { border-color: var(--lp-gold); transform: translateY(-1px); }
 .pp-states button[aria-pressed="true"] { border-color: var(--lp-on-bg); box-shadow: 0 0 0 1px var(--lp-on-bg); background: var(--lp-sel-row); }
-/* Picking a state: it turns green with a tick, the rest fall back, then the question slides away. */
+/* Picking a state: it takes the selected look with a tick, the rest fall back, then the question slides away. */
 .pp-states.leaving button { cursor: default; }
 .pp-states.leaving button:not(.go) { opacity: 0.35; transform: scale(0.97); }
-.pp-states button.go { background: var(--pp-go); border-color: var(--pp-go); color: var(--pp-go-fg); box-shadow: 0 10px 24px -10px var(--pp-go); animation: ppPop 0.4s ease; }
+.pp-states button.go { background: var(--lp-sel-row); border-color: var(--lp-on-bg); box-shadow: 0 0 0 1px var(--lp-on-bg); color: var(--lp-ink); animation: ppPop 0.4s ease; }
 .pp-tick { animation: ppTick 0.35s ease 0.05s both; }
 @keyframes ppPop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.06); } }
 @keyframes ppTick { from { opacity: 0; transform: scale(0.3) rotate(-25deg); } to { opacity: 1; transform: none; } }
@@ -195,7 +195,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
     try { localStorage.setItem(STATE_KEY, code) } catch {}
     window.scrollTo(0, 0)
   }
-  // Tapping a state: it goes green with a tick (leaving), the question slides
+  // Tapping a state: it's selected with a tick (leaving), the question slides
   // out (askOut), then the plan comes up (entering) with focus on its heading.
   const [leaving, setLeaving] = useState(null)
   const [askOut, setAskOut] = useState(false)
@@ -339,9 +339,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const NAV = [['How it works', () => homeSection('how')], ['Subjects', () => homeSection('subjects')], ['Questions', () => homeSection('questions')], ['Pricing', () => window.scrollTo({ top: 0, behavior: 'smooth' }), true]]
 
   return (
-    <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light',
-      // The green a picked state turns: dark enough for white text on light, light enough for navy on dark.
-      '--pp-go': theme === 'dark' ? '#5bb98c' : '#047857', '--pp-go-fg': theme === 'dark' ? '#0c1037' : '#ffffff' }}>
+    <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
       <style>{SITE_FONTS + CSS}</style>
       <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn || (() => navigate('/auth'))} onStart={signUp}
         onLogo={() => navigate('/home')} links={NAV} />
