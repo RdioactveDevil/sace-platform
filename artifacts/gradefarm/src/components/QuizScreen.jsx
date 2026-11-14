@@ -2156,7 +2156,7 @@ export default function QuizScreen({
             <div id="gf-end-title" style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 6 }}>End this session?</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
               {sessionResults.some(r => !r.remediation)
-                ? <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>. You'll see a summary of this session next.</>
+                ? <>You've earned <strong style={{ color: t.text }}>{signedXP(sessionXP)} XP</strong>.</>
                 : "You haven't answered any questions yet."}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
