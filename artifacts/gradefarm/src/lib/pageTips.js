@@ -35,7 +35,7 @@ export const PAGE_TIPS = {
     path: (p) => p === '/learn',
     steps: [
       { target: 'learn-composer', title: 'Ask Titan', body: 'Type a question, paste a problem, or add a photo of your working or your class notes. Titan explains it step by step.' },
-      { target: 'learn-lessons', title: 'Guided lessons', body: 'About 10 minutes each: the key ideas, a worked example and check questions.' },
+      { target: 'learn-lessons', title: 'Guided lessons', body: 'Switch to Lesson for a 10-minute lesson on any topic: the key ideas, a worked example and check questions.' },
     ],
   },
   progress: {
