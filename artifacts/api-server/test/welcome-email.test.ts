@@ -54,6 +54,18 @@ test("Titan's example follows the student's subject, then their year level", () 
   assert.equal(titanExample([], 6).key, "maths6");
   assert.equal(titanExample([], 11).key, "methods");
   assert.equal(titanExample([], null).key, "methods");
+  // No calculus before Year 11, whether the year is in the subject's name or the profile.
+  assert.equal(titanExample(["Year 10 Mathematics"], 10).key, "maths6");
+  assert.equal(titanExample(["Year 10 Mathematics"], null).key, "maths6");
+  assert.equal(titanExample(["General Mathematics"], 9).key, "maths6");
+  assert.equal(titanExample([], 10).key, "maths6");
+  // Other sciences get the catalyst example, not the chain rule.
+  assert.equal(titanExample(["SACE Biology Stage 2"], 12).key, "chemistry");
+  assert.equal(titanExample(["SACE Physics Stage 1"], 11).key, "chemistry");
+  assert.equal(titanExample(["Year 10 Science"], 10).key, "chemistry");
+  assert.equal(titanExample(["Year 7 Science"], 7).key, "maths6");
+  // The first subject with an example wins.
+  assert.equal(titanExample(["SACE Legal Studies Stage 2", "SACE English Stage 2"], 12).key, "english");
 });
 
 test("the student email: subject, unsubscribe, free plan and a plain-text copy", () => {

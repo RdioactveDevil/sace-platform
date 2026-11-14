@@ -112,18 +112,28 @@ const EXAMPLES: Record<TitanExample["key"], TitanExample> = {
   },
 };
 
+/** Calculus is Year 11–12 work; below that, maths students get the fractions example. */
+const SENIOR_YEAR = 11;
+/** Catalysts make sense from Year 9 science on. */
+const CHEMISTRY_FROM_YEAR = 9;
+
 /**
- * A Titan reply from the student's subject, so a Year 6 English student
- * doesn't get calculus. Falls back on year level when no subject is picked yet.
+ * A Titan reply from the student's subject, so a Year 6 English or Year 10
+ * maths student doesn't get calculus. The year comes from the subject's name
+ * ("Year 10 Mathematics") when it has one, else the student's year level.
+ * Other sciences (biology, physics, psychology) get the catalyst one. Falls
+ * back on year level when no subject is picked yet.
  */
 export function titanExample(subjects: string[], yearLevel: number | null | undefined): TitanExample {
+  const level = typeof yearLevel === "number" ? yearLevel : null;
   for (const s of subjects) {
-    if (/chem/i.test(s)) return EXAMPLES.chemistry;
+    const named = /\byear\s*(\d{1,2})\b/i.exec(s);
+    const year = named ? Number(named[1]) : level;
     if (/english|literacy|reading|writing/i.test(s)) return EXAMPLES.english;
-    if (/\byear\s*[3-8]\b/i.test(s) && /math|numeracy/i.test(s)) return EXAMPLES.maths6;
-    if (/math|method/i.test(s)) return EXAMPLES.methods;
+    if (/math|method|numeracy/i.test(s)) return year !== null && year < SENIOR_YEAR ? EXAMPLES.maths6 : EXAMPLES.methods;
+    if (/chem|bio|phys|psych|science/i.test(s) && (year === null || year >= CHEMISTRY_FROM_YEAR)) return EXAMPLES.chemistry;
   }
-  return typeof yearLevel === "number" && yearLevel <= 8 ? EXAMPLES.maths6 : EXAMPLES.methods;
+  return level !== null && level < SENIOR_YEAR ? EXAMPLES.maths6 : EXAMPLES.methods;
 }
 
 // ── Building blocks ─────────────────────────────────────────────────────────
@@ -156,6 +166,7 @@ function page(opts: { title: string; preheader: string; body: string; footer: st
     .gf-sq{width:40px!important;height:40px!important}
     .gf-col{display:block!important;width:100%!important;padding:0 0 10px!important}
     .gf-line{padding:0 4px!important}
+    .gf-stack{display:block!important;padding:14px 0 0!important}
   }
 </style>
 </head>
@@ -178,7 +189,7 @@ ${opts.body}
 /** A gold button that still looks like one where padding on links is ignored. */
 function button(label: string, href: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="border-radius:10px;background:${GOLD}"><a href="${esc(href)}" style="display:inline-block;padding:15px 28px;font-family:${FONT};font-size:15px;font-weight:800;line-height:1;color:${NAVY};text-decoration:none;border-radius:10px">${esc(label)}</a></td>
+<td style="border-radius:10px;background:${GOLD}"><a href="${esc(href)}" style="display:inline-block;padding:15px 28px;font-family:${FONT};font-size:15px;font-weight:800;line-height:1;color:${NAVY};text-decoration:none;white-space:nowrap;border-radius:10px">${esc(label)}</a></td>
 </tr></table>`;
 }
 
@@ -479,8 +490,8 @@ ${annualPct > 0 ? `<div style="padding-top:12px;font-size:13px;color:${MUTED}">P
 
 <tr><td class="gf-pad" style="padding:30px 40px 34px;background:${CARD};border-top:1px solid ${LINE};border-radius:0 0 13px 13px;font-family:${FONT}">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td>${button("Open gradefarm.", url("/tutor"))}</td>
-${w.portalOpen ? "" : `<td style="padding-left:18px"><a href="${esc(url("/pricing"))}" style="font-family:${FONT};font-size:14px;font-weight:700;color:${GOLD_TEXT}">Compare tutor plans</a></td>`}
+<td class="gf-stack">${button("Open gradefarm.", url("/tutor"))}</td>
+${w.portalOpen ? "" : `<td class="gf-stack" style="padding-left:18px"><a href="${esc(url("/pricing"))}" style="font-family:${FONT};font-size:14px;font-weight:700;color:${GOLD_TEXT}">Compare tutor plans</a></td>`}
 </tr></table>
 </td></tr>`;
 
