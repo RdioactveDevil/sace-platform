@@ -8,7 +8,7 @@ import { applySoundsSetting, playSound } from '../lib/sounds'
 import { useFamily } from './FamilySwitcher'
 import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
-import { studentTiers, planTotal, extraLadder, monthlySaving, money } from '../lib/pricing'
+import { studentTiers, planTotal, monthlySaving, money } from '../lib/pricing'
 import { supabase } from '../lib/supabase'
 import DobPicker from './DobPicker'
 import SchoolPicker from './SchoolPicker'
@@ -365,11 +365,10 @@ function BillingCard({ profile, theme, onChangeSubject }) {
   const toneColour = { success: t.success, danger: t.danger, muted: t.textMuted }
 
   const toneOf = (line) => line.tone === 'danger' ? 'danger' : line.tone === 'success' ? 'success' : null
-  const pricing = `$${tiers[0]}/${plan?.hasPlan ? interval : 'week'} for your first paid subject${tiers.length > 1 ? `, then $${extraLadder(tiers)}/${plan?.hasPlan ? interval : 'week'} for each extra one` : ''}. One free subject has ${freeDaily} questions a day.`
   let first = true
   const isFirst = () => { const f = first; first = false; return f }
   return (
-    <Section id="billing" title="Subjects and billing" sub={pricing} t={t}>
+    <Section id="billing" title="Subjects and billing" t={t}>
       {subs === null ? (
         <Row t={t} first={isFirst()} label="Subjects" note="Loading…" />
       ) : subs.length === 0 ? (
@@ -682,7 +681,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const profileSection = (
     <Section id="profile" title="Profile" t={t}>
       <Row t={t} first label="Name" value={profile.display_name || 'Not set'}
-        note={saved('name') || (isStudent ? (profile.hide_from_leaderboard ? 'Hidden from class leaderboards.' : 'Shows on class leaderboards.') : 'Shows to students and on class leaderboards.')} noteTone={saved('name') ? 'success' : null}
+        note={saved('name') || (isStudent ? (profile.hide_from_leaderboard ? 'Hidden from class leaderboards.' : null) : 'Shows to students and on class leaderboards.')} noteTone={saved('name') ? 'success' : null}
         action={change('name', { display_name: profile.display_name || '' })}
         editor={editing === 'name' && (
           <>
@@ -703,7 +702,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
                 {saveCancel('year', () => saveRow('year', { year_level: draft.year_level === '' ? null : Number(draft.year_level) }))}
               </>
             )} />
-          <Row t={t} label="State" value={stateLabel(profile.state) || 'Not set'} note={saved('state') || 'Decides whether you see VCE or SACE subjects.'} noteTone={saved('state') ? 'success' : null}
+          <Row t={t} label="State" value={stateLabel(profile.state) || 'Not set'} note={saved('state') || null} noteTone={saved('state') ? 'success' : null}
             action={change('state', { state: profile.state || '' })}
             editor={editing === 'state' && (
               <>
@@ -825,13 +824,13 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const preferencesSection = (
     <Section id="preferences" title="Preferences" t={t}>
       {'emails_unsubscribed_at' in profile && (
-        <Row t={t} first label="Email reminders" note={remindersMsg || 'Lesson reminders and assignment due dates. Emails your tutor sends you directly always arrive.'} noteTone={remindersMsg ? 'danger' : null}
+        <Row t={t} first label="Email reminders" note={remindersMsg || 'Lesson reminders, assignment due dates and emails from your tutor.'} noteTone={remindersMsg ? 'danger' : null}
           action={<Toggle on={remindersOn} onClick={handleToggleReminders} disabled={savingReminders} label="Email reminders" />} />
       )}
-      <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Sound effects" note={soundsMsg || 'Chimes for right answers, streaks and finishing. Saved on your account.'} noteTone={soundsMsg ? 'danger' : null}
+      <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Sound effects" note={soundsMsg || 'Chimes for right answers, streaks and finishing.'} noteTone={soundsMsg ? 'danger' : null}
         action={<Toggle on={soundsOn} onClick={handleToggleSounds} disabled={savingSounds} label="Sound effects" />} />
       {typeof onToggleTheme === 'function' && (
-        <Row t={t} label="Dark mode" note="Saved on this device. Also in the sidebar."
+        <Row t={t} label="Dark mode"
           action={<Toggle on={theme === 'dark'} onClick={onToggleTheme} label="Dark mode" />} />
       )}
       {isStudent && 'hide_from_leaderboard' in profile && (
@@ -846,7 +845,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
           action={<RowLink t={t} onClick={onChangeSubject}>Change subject</RowLink>} />
       )}
       {typeof onReplayFeatureTour === 'function' && (
-        <Row t={t} label="Page tips" note="Each page shows a few tips the first time you open it. Show them again takes you to Practice to start."
+        <Row t={t} label="Page tips" note="Each page shows a few tips the first time you open it."
           action={<RowLink t={t} onClick={handleReplayFeatureTour} disabled={replayTourBusy}>Show them again</RowLink>} />
       )}
     </Section>
@@ -863,7 +862,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
           : "Deletes your account and everything tied to it. This can't be undone."
   const dataSection = (
     <Section id="data" title="Your data" t={t}>
-      <Row t={t} first label="A copy of your data" note="Ask for a copy of the information we hold about you. We reply within 30 days."
+      <Row t={t} first label="A copy of your data" note="Ask for a copy of the information we hold about you."
         action={<RowLink t={t} href={exportMailto}>Ask for a copy</RowLink>} />
       <Row t={t} label="Policies" note={<>Questions? Email <span style={{ color: t.text, fontWeight: 600, userSelect: 'all' }}>{SUPPORT_EMAIL}</span></>}
         action={(
@@ -938,7 +937,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       <div className="acct-wrap">
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>Account</h1>
         <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>
-          {[email, memberSince && `member since ${new Date(memberSince).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}`].filter(Boolean).join(' · ')}
+          {memberSince && `Member since ${new Date(memberSince).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}`}
         </div>
         <div className="acct-grid">
           <nav className="acct-nav" aria-label="Account sections">
