@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { Check } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getPlatformSettings, getBillingConfig } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
@@ -47,9 +48,26 @@ const CSS = `${SITE_CSS}
 /* Which state are you in? The only thing on the page until they answer. */
 .pp-ask { min-height: calc(100vh - 140px); min-height: calc(100svh - 140px); justify-content: center; padding-bottom: 64px; gap: 28px; }
 .pp-states { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 620px; }
-.pp-states button { min-height: 56px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); font-size: 15.5px; font-weight: 700; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.pp-states button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); font-size: 15.5px; font-weight: 700; cursor: pointer; transition: border-color 0.15s, transform 0.2s, background 0.2s, color 0.2s, opacity 0.25s; }
 .pp-states button:hover { border-color: var(--lp-gold); transform: translateY(-1px); }
 .pp-states button[aria-pressed="true"] { border-color: var(--lp-on-bg); box-shadow: 0 0 0 1px var(--lp-on-bg); background: var(--lp-sel-row); }
+/* Picking a state: it turns green with a tick, the rest fall back, then the question slides away. */
+.pp-states.leaving button { cursor: default; }
+.pp-states.leaving button:not(.go) { opacity: 0.35; transform: scale(0.97); }
+.pp-states button.go { background: var(--pp-go); border-color: var(--pp-go); color: var(--pp-go-fg); box-shadow: 0 10px 24px -10px var(--pp-go); animation: ppPop 0.4s ease; }
+.pp-tick { animation: ppTick 0.35s ease 0.05s both; }
+@keyframes ppPop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.06); } }
+@keyframes ppTick { from { opacity: 0; transform: scale(0.3) rotate(-25deg); } to { opacity: 1; transform: none; } }
+.pp-ask { animation: ppRise 0.35s ease both; }
+.pp-ask.out { animation: ppOut 0.22s ease forwards; }
+@keyframes ppOut { to { opacity: 0; transform: translateY(-16px); } }
+/* Then the plan comes up: heading, list, bill, one after another. */
+.pp-enter .pp-head, .pp-enter .pp-list, .pp-enter .pp-rcpt { animation: ppRise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pp-enter .pp-list { animation-delay: 0.08s; }
+.pp-enter .pp-rcpt { animation-delay: 0.16s; }
+.pp-enter ~ .lp-sec { animation: ppRise 0.45s ease 0.24s both; }
+@keyframes ppRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.pp-head h1:focus { outline: none; }
 .pp-seg { display: inline-flex; border: 1px solid var(--lp-line); border-radius: 10px; overflow: hidden; background: var(--lp-card); margin-top: 4px; }
 .pp-seg button { border: none; background: transparent; color: var(--lp-muted); font-size: 13.5px; font-weight: 800; padding: 9px 18px; cursor: pointer; }
 .pp-seg button + button { border-left: 1px solid var(--lp-line); }
@@ -121,7 +139,11 @@ const CSS = `${SITE_CSS}
 .lp-end { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
 .lp-end h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.03em; }
 
-@media (prefers-reduced-motion: reduce) { .pp-next, .pp-list.nudge label { animation: none; } .pp-states button, .pp-next { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pp-next, .pp-list.nudge label, .pp-states button, .pp-tick, .pp-ask, .pp-enter .pp-head, .pp-enter .pp-list, .pp-enter .pp-rcpt, .pp-enter ~ .lp-sec { animation: none; }
+  .pp-states button, .pp-next { transition: none; }
+  .pp-states.leaving button:not(.go) { transform: none; }
+}
 @media (max-width: 860px) {
   .pp-build { grid-template-columns: 1fr; }
   .pp-rcpt { position: static; }
@@ -173,6 +195,29 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
     try { localStorage.setItem(STATE_KEY, code) } catch {}
     window.scrollTo(0, 0)
   }
+  // Tapping a state: it goes green with a tick (leaving), the question slides
+  // out (askOut), then the plan comes up (entering) with focus on its heading.
+  const [leaving, setLeaving] = useState(null)
+  const [askOut, setAskOut] = useState(false)
+  const [entering, setEntering] = useState(false)
+  const timers = useRef([])
+  const planHeading = useRef(null)
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
+  const chooseState = (code) => {
+    if (leaving) return
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const later = (ms, fn) => timers.current.push(setTimeout(fn, ms))
+    setLeaving(code)
+    later(calm ? 250 : 480, () => setAskOut(true))
+    later(calm ? 250 : 700, () => {
+      pickState(code)
+      setLeaving(null)
+      setAskOut(false)
+      setEntering(true)
+    })
+    later(calm ? 300 : 1500, () => setEntering(false))
+  }
+  useEffect(() => { if (entering) planHeading.current?.focus({ preventScroll: true }) }, [entering])
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
   useEffect(() => {
@@ -294,7 +339,9 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const NAV = [['How it works', () => homeSection('how')], ['Subjects', () => homeSection('subjects')], ['Questions', () => homeSection('questions')], ['Pricing', () => window.scrollTo({ top: 0, behavior: 'smooth' }), true]]
 
   return (
-    <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
+    <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light',
+      // The green a picked state turns: dark enough for white text on light, light enough for navy on dark.
+      '--pp-go': theme === 'dark' ? '#5bb98c' : '#047857', '--pp-go-fg': theme === 'dark' ? '#0c1037' : '#ffffff' }}>
       <style>{SITE_FONTS + CSS}</style>
       <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn || (() => navigate('/auth'))} onStart={signUp}
         onLogo={() => navigate('/home')} links={NAV} />
@@ -302,20 +349,24 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
       <main>
         {askState ? (
           <div className="lp-in">
-            <div className="pp-head pp-ask">
+            <div className={`pp-head pp-ask${askOut ? ' out' : ''}`}>
               <h1 id="pp-ask">Which state are you in?</h1>
-              <div className="pp-states" role="group" aria-labelledby="pp-ask">
+              <div className={`pp-states${leaving ? ' leaving' : ''}`} role="group" aria-labelledby="pp-ask">
                 {AU_STATES.map(([code, label]) => (
-                  <button key={code} type="button" aria-pressed={studyState === code} onClick={() => pickState(code)}>{label}</button>
+                  <button key={code} type="button" className={leaving === code ? 'go' : undefined}
+                    aria-pressed={(leaving || studyState) === code} aria-disabled={leaving ? true : undefined} onClick={() => chooseState(code)}>
+                    {leaving === code && <Check className="pp-tick" size={19} strokeWidth={3} aria-hidden="true" />}
+                    {label}
+                  </button>
                 ))}
               </div>
             </div>
           </div>
         ) : (
         <>
-        <div className="lp-in">
+        <div className={`lp-in${entering ? ' pp-enter' : ''}`}>
           <div className="pp-head">
-            <h1>Build your plan.</h1>
+            <h1 ref={planHeading} tabIndex={-1}>Build your plan.</h1>
             <p className="pp-where"><b>{stateLabel(studyState)}</b> · <button type="button" className="lp-link" onClick={() => { setChangingState(true); window.scrollTo(0, 0) }}>Change</button></p>
             {!onPlan && (
               <div className="pp-seg" role="group" aria-label="Billing">
