@@ -9,6 +9,8 @@ import { awaitingParent, needsParentConsent } from '../lib/parentConsent'
 import { formatSubjectLabel } from '../lib/subjects'
 import { studentTiers, planTotal, extraLadder, monthlySaving, money } from '../lib/pricing'
 import { supabase } from '../lib/supabase'
+import DobPicker from './DobPicker'
+import SchoolPicker from './SchoolPicker'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const SUPPORT_EMAIL = 'support@titaniumtutoring.com.au'
@@ -712,10 +714,11 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
             action={change('school', { school: profile.school || '' })}
             editor={editing === 'school' && (
               <>
-                <Field t={t} label="School">
-                  <input value={draft.school} onChange={e => setDraft(d => ({ ...d, school: e.target.value }))} maxLength={120} autoFocus autoComplete="organization" style={inputStyle}
-                    onKeyDown={e => { if (e.key === 'Enter') saveRow('school', { school: draft.school.trim() || null }) }} />
-                </Field>
+                {/* Not Field: a <label> around the list would send stray clicks to the search box. */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                  <label htmlFor="acc-school" style={{ fontSize: 12.5, fontWeight: 700, color: t.textSub }}>School</label>
+                  <SchoolPicker id="acc-school" state={profile.state} value={draft.school} onChange={v => setDraft(d => ({ ...d, school: v }))} theme={theme} autoFocus />
+                </div>
                 {saveCancel('school', () => saveRow('school', { school: draft.school.trim() || null }))}
               </>
             )} />
@@ -723,9 +726,12 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
             action={!dobLocked && change('dob', { dob: profile.dob || '' })}
             editor={editing === 'dob' && (
               <>
-                <Field t={t} label="Date of birth">
-                  <input type="date" value={draft.dob} onChange={e => setDraft(d => ({ ...d, dob: e.target.value }))} max={new Date().toISOString().split('T')[0]} autoFocus style={{ ...inputStyle, maxWidth: 240 }} />
-                </Field>
+                {/* Not Field: a <label> around the calendar would turn clicks on its gaps into "Previous month". */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                  <span id="acc-dob-l" style={{ fontSize: 12.5, fontWeight: 700, color: t.textSub }}>Date of birth</span>
+                  <DobPicker value={draft.dob} onChange={v => setDraft(d => ({ ...d, dob: v }))} max={new Date().toISOString().split('T')[0]} theme={theme} labelledBy="acc-dob-l"
+                    startYear={profile.year_level ? new Date().getFullYear() - Number(profile.year_level) - 6 : undefined} />
+                </div>
                 {saveCancel('dob', () => saveRow('dob', { dob: draft.dob || null }))}
               </>
             )} />

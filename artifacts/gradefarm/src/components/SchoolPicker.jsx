@@ -64,7 +64,12 @@ export default function SchoolPicker({ id, state, value, onChange, theme = 'dark
     .scp { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 8px; }
     .scp-search { position: relative; }
     .scp-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${t.textFaint}; pointer-events: none; }
-    .scp-search .af-inp { padding-left: 42px; font-size: 16px; padding-top: 13px; padding-bottom: 13px; border-radius: 11px; }
+    .scp-inp { width: 100%; box-sizing: border-box; padding: 13px 15px; border-radius: 11px; border: 1px solid ${t.border}; background: ${t.bgCard}; color: ${t.text}; font: inherit; font-size: 16px; outline: none; transition: border-color 0.12s, box-shadow 0.12s; }
+    .scp-inp::placeholder { color: ${t.textFaint}; }
+    .scp-inp:hover { border-color: ${t.borderMid}; }
+    .scp-inp:focus { border-color: ${t.text}; box-shadow: 0 0 0 1px ${t.text}; }
+    .scp-inp:disabled { opacity: 0.6; }
+    .scp-search .scp-inp { padding-left: 42px; }
     .scp-list { list-style: none; margin: 0; padding: 4px; max-height: 300px; overflow-y: auto; background: ${t.bgCard}; border: 1px solid ${t.border}; border-radius: 12px; box-shadow: 0 12px 30px -18px rgba(12,16,55,0.4); }
     .scp-opt { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border-radius: 9px; cursor: pointer; color: ${t.text}; }
     .scp-opt b { font-size: 14.5px; font-weight: 700; line-height: 1.35; }
@@ -88,7 +93,7 @@ export default function SchoolPicker({ id, state, value, onChange, theme = 'dark
   if (schools === null) {
     return (
       <div className="scp"><style>{css}</style>
-        <input id={id} className="af-inp" style={{ fontSize: 16, padding: '13px 15px', borderRadius: 11 }} value={value} onChange={e => onChange(e.target.value)}
+        <input id={id} className="scp-inp" value={value} onChange={e => onChange(e.target.value)}
           autoComplete="organization" placeholder="Your school's name" autoFocus={autoFocus} />
       </div>
     )
@@ -108,7 +113,7 @@ export default function SchoolPicker({ id, state, value, onChange, theme = 'dark
   if (own) {
     return (
       <div className="scp"><style>{css}</style>
-        <input id={id} ref={ownInput} className="af-inp" style={{ fontSize: 16, padding: '13px 15px', borderRadius: 11 }} value={value}
+        <input id={id} ref={ownInput} className="scp-inp" value={value}
           onChange={e => onChange(e.target.value)} autoComplete="off" placeholder="Your school's name" />
         <span className="scp-hint">Not on the list? Type its name here.</span>
         {schools && <button type="button" className="scp-link" onClick={backToList}>Back to the list</button>}
@@ -121,7 +126,7 @@ export default function SchoolPicker({ id, state, value, onChange, theme = 'dark
     <div className="scp"><style>{css}</style>
       <div className="scp-search">
         <Search size={17} aria-hidden="true" />
-        <input id={id} ref={input} className="af-inp" type="text" role="combobox" aria-expanded={open} aria-controls={listId}
+        <input id={id} ref={input} className="scp-inp" type="text" role="combobox" aria-expanded={open} aria-controls={listId}
           aria-autocomplete="list" aria-activedescendant={activeId} autoComplete="off" spellCheck={false} autoFocus={autoFocus}
           disabled={schools === undefined} placeholder={schools === undefined ? 'Loading schools…' : 'Start typing its name'}
           value={query} onChange={e => setQuery(e.target.value)} onKeyDown={onKey} />
