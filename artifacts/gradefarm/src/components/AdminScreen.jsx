@@ -17,19 +17,28 @@ import { getDraftQuestions, fetchQuestionReports, isOpenReport } from '../lib/ad
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
+/**
+ * Subjects: the list at /admin/subjects, and one subject at
+ * /admin/subjects/<id>/<page> (its menu is AdminSubjectLayout).
+ */
 function SubjectsRouter() {
-  const [selectedId, setSelectedId] = useState(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [, , , id, page] = location.pathname.split('/')
 
-  if (selectedId) {
+  if (id) {
     return (
       <AdminCurriculumDetail
-        curriculumId={selectedId}
-        onBack={() => setSelectedId(null)}
+        key={id}
+        curriculumId={id}
+        section={page || 'topics'}
+        onSection={(next) => navigate(`/admin/subjects/${id}/${next}`)}
+        onBack={() => navigate('/admin/subjects')}
         onGoLive={() => {}}
       />
     )
   }
-  return <AdminCurriculaTab onSelectCurriculum={setSelectedId} />
+  return <AdminCurriculaTab onSelectCurriculum={(next) => navigate(`/admin/subjects/${next}`)} />
 }
 
 // The sections are in the app sidebar (lib/portalNav ADMIN_NAV) and live at
@@ -75,6 +84,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
   }, [section]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const meta = NAV_ITEMS.find(i => i.id === section) || NAV_ITEMS[0]
+  const inSubject = section === 'subjects' && /^\/admin\/subjects\/[^/]+/.test(location.pathname)
   const tabs = TABS[section]
   const tab = tabs ? (tabs.some(([id]) => id === params.get('tab')) ? params.get('tab') : tabs[0][0]) : null
   const setTab = (id) => navigate(`/admin/${section}${id === tabs[0][0] ? '' : `?tab=${id}`}`)
@@ -92,7 +102,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
 
   return (
     <div className="td-root" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--t-bg)', fontFamily: FONT_B, color: 'var(--t-text)', colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
-      <header className="td-header" style={{ padding: tabs ? '18px 28px 0' : '18px 28px', borderBottom: '1px solid var(--t-border)', flexShrink: 0 }}>
+      {!inSubject && <header className="td-header" style={{ padding: tabs ? '18px 28px 0' : '18px 28px', borderBottom: '1px solid var(--t-border)', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--t-text)', lineHeight: 1.2 }}>{meta.label}</h1>
         <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 2 }}>{context}</div>
         {tabs && (
@@ -106,16 +116,16 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
             ))}
           </div>
         )}
-      </header>
+      </header>}
 
       {/* Section content */}
       <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 56px' }}>
-        <div key={`${section}-${tab || ''}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+        <div key={inSubject ? 'subject' : `${section}-${tab || ''}`} className="td-content-enter" style={{ maxWidth: inSubject ? 1480 : 1320, width: '100%', margin: '0 auto' }}>
           <Routes>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview"  element={<AdminOverviewTab />} />
             <Route path="people"    element={<AdminPeopleTab profile={profile} pendingApps={pendingApps} onApplicationsChange={loadBadges} />} />
-            <Route path="subjects"  element={<SubjectsRouter />} />
+            <Route path="subjects/*" element={<SubjectsRouter />} />
             <Route path="questions" element={<AdminQuestionsScreen profile={profile} tab={tab} onReviewChange={loadBadges} theme={theme} />} />
             <Route path="reports"   element={<AdminReportsScreen onChange={loadBadges} />} />
             <Route path="exam-papers" element={<AdminExamPapersTab />} />
