@@ -191,15 +191,19 @@ router.post("/bulk-scan-questions", async (req, res) => {
   if (!ctx) return;
   const { adminDb, userId } = ctx;
 
-  const { subject, limit = 50 } = req.body as { subject?: string; limit?: number };
+  const { subject, limit = 50, ids } = req.body as { subject?: string; limit?: number; ids?: unknown };
+  // Picked questions (the Questions page in a subject): at most 10 a request,
+  // so the checks finish inside the function's time limit.
+  const picked = Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string" && !!x).slice(0, 10) : null;
 
   // Skip questions already being processed
   const { data: inFlight } = await adminDb
     .from("question_reports").select("question_id").in("ai_status", ["pending", "processing"]);
   const skipIds = (inFlight || []).map((r: any) => r.question_id);
 
-  let query = adminDb.from("questions").select("id").limit(Math.min(Number(limit), 200));
-  if (subject) query = (query as any).eq("subject", subject);
+  let query = adminDb.from("questions").select("id").limit(picked ? 10 : Math.min(Number(limit), 200));
+  if (picked) query = (query as any).in("id", picked.length ? picked : ["-"]);
+  else if (subject) query = (query as any).eq("subject", subject);
   if (skipIds.length) query = (query as any).not("id", "in", `(${skipIds.map((id: string) => `"${id}"`).join(",")})`);
 
   const { data: questions } = await query;

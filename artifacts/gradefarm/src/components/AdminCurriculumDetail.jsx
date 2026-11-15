@@ -17,6 +17,8 @@ import SharedQuestionsPanel from './SharedQuestionsPanel'
 import CourseScopePanel from './CourseScopePanel'
 import WrittenAnswersPanel from './WrittenAnswersPanel'
 import AdminSubjectLayout from './AdminSubjectLayout'
+import AdminSubjectQuestions from './AdminSubjectQuestions'
+import { countSubjectQuestions } from '../lib/adminDb'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS, usesMathAnswers } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
@@ -105,7 +107,7 @@ function subtopicProgress(detail) {
   })))
 }
 
-export default function AdminCurriculumDetail({ curriculumId, section = 'topics', onSection = () => {}, onBack, onGoLive }) {
+export default function AdminCurriculumDetail({ curriculumId, section = 'topics', onSection = () => {}, query = '', onSearch = () => {}, onBack, onGoLive }) {
   const [curriculum, setCurriculum]   = useState(null)
   const [topics, setTopics]           = useState([])
   const [loading, setLoading]         = useState(true)
@@ -158,6 +160,14 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
   useEffect(() => {
     loadDetail()
     return () => { clearInterval(pollRef.current); stopRef.current = true }
+  }, [curriculumId])
+
+  // For the header and the menu; the Questions page updates it as it changes.
+  const [questionCount, setQuestionCount] = useState(null)
+  const [search, setSearch] = useState(query)
+  useEffect(() => { setSearch(query) }, [query])
+  useEffect(() => {
+    countSubjectQuestions(curriculumId).then(setQuestionCount).catch(() => {})
   }, [curriculumId])
 
   // Leaving the page stops generation, so ask first while it is running.
@@ -668,6 +678,12 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
   )
 
   const pages = {
+    questions: (
+      <>
+        {pageTitle('Questions', "This subject's own questions. Tick some to fix them together, or open one to edit it.")}
+        <AdminSubjectQuestions curriculumId={curriculumId} topics={curriculum.topics} initialText={query} onCount={setQuestionCount} />
+      </>
+    ),
     topics: (
       <>
         {pageTitle('Topics', 'The plan students practise from. Rename, reorder, add or remove topics and subtopics, then Save.')}
@@ -1009,9 +1025,14 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
           <span style={{ ...pill, color: statusColor }}>{generating ? `Writing questions · ${doneCount + failedCount} of ${(progress || []).length}` : statusLabel}</span>
           {curriculum.level_label && <span style={pill}>{curriculum.level_label}</span>}
           <span style={pill}>{topics.length} topic{topics.length === 1 ? '' : 's'} · {totalSubtopics} subtopic{totalSubtopics === 1 ? '' : 's'}</span>
+          {questionCount != null && <span style={pill}>{questionCount.toLocaleString('en-AU')} question{questionCount === 1 ? '' : 's'}</span>}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <form role="search" onSubmit={e => { e.preventDefault(); onSearch(search.trim()) }} style={{ display: 'flex' }}>
+          <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search this subject's questions"
+            aria-label="Search this subject's questions" style={{ ...ui.input, width: 280, maxWidth: '100%' }} />
+        </form>
         {saveOk && <span role="status" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--t-success)' }}>Saved</span>}
         <button
           onClick={handleSave}
@@ -1030,7 +1051,7 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
       section={current}
       onSection={onSection}
       available={available}
-      counts={{ topics: { text: topics.length } }}
+      counts={{ topics: { text: topics.length }, ...(questionCount != null ? { questions: { text: questionCount.toLocaleString('en-AU') } } : {}) }}
       header={header}
     >
       {error && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{error}</div>}

@@ -33,6 +33,8 @@ function SubjectsRouter() {
         curriculumId={id}
         section={page || 'topics'}
         onSection={(next) => navigate(`/admin/subjects/${id}/${next}`)}
+        query={new URLSearchParams(location.search).get('q') || ''}
+        onSearch={(q) => navigate(`/admin/subjects/${id}/questions${q ? `?q=${encodeURIComponent(q)}` : ''}`)}
         onBack={() => navigate('/admin/subjects')}
         onGoLive={() => {}}
       />

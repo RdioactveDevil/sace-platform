@@ -146,10 +146,61 @@ export async function fetchQuestionReports(status = 'all') {
   return json.reports || []
 }
 
-export async function bulkScanQuestions({ subject, limit = 50 } = {}) {
+/** The AI check on a subject's questions (`limit` of them), or on up to 10 picked `ids`. */
+export async function bulkScanQuestions({ subject, limit = 50, ids } = {}) {
   return adminAuthFetch('/api/bulk-scan-questions', {
     method: 'POST',
-    body: JSON.stringify({ subject, limit }),
+    body: JSON.stringify(ids ? { ids } : { subject, limit }),
+  })
+}
+
+// ─── A SUBJECT'S QUESTIONS (Admin → Subjects → a subject → Questions) ─────────
+
+const SUBJECT_QUESTION_FIELDS = 'id, topic, subtopic, subtopic_id, question, question_type, difficulty, source, source_kind, created_at'
+
+/** Every question that belongs to a subject (curriculum_id), a page of 1,000 at a time. */
+export async function fetchSubjectQuestions(curriculumId) {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('questions').select(SUBJECT_QUESTION_FIELDS)
+      .eq('curriculum_id', curriculumId).order('id').range(from, from + 999)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
+
+/** How many questions belong to a subject. */
+export async function countSubjectQuestions(curriculumId) {
+  const { count, error } = await supabase.from('questions').select('id', { count: 'exact', head: true }).eq('curriculum_id', curriculumId)
+  if (error) throw error
+  return count || 0
+}
+
+/** Ids of the questions an admin has hidden from a subject. */
+export async function fetchHiddenQuestionIds(curriculumId) {
+  const { data, error } = await supabase.from('curriculum_hidden_questions').select('question_id').eq('curriculum_id', curriculumId)
+  if (error) throw error
+  return new Set((data || []).map(r => r.question_id))
+}
+
+/** One question with everything, for the editor. */
+export async function fetchQuestionRow(id) {
+  const { data, error } = await supabase.from('questions').select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+/**
+ * Fix many of a subject's questions at once: action 'move' ({ subtopicId }),
+ * 'difficulty' ({ difficulty }), 'hide', 'unhide' or 'delete'.
+ * Resolves to { changed, skipped } (skipped: borrowed from another subject).
+ */
+export async function bulkEditQuestions({ curriculumId, ids, action, subtopicId, difficulty }) {
+  return adminAuthFetch('/api/admin/questions/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ curriculumId, ids, action, subtopicId, difficulty }),
   })
 }
 
