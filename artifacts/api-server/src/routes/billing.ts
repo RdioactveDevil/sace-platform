@@ -67,7 +67,7 @@ const positiveNumbers = (raw: unknown) =>
   Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number" && n > 0) : [];
 
 /** $ per week and per month for the 1st, 2nd, … subject; the last tier applies to every further subject. */
-async function readTiers(admin: SupabaseClient): Promise<Record<Interval, number[]>> {
+export async function readTiers(admin: SupabaseClient): Promise<Record<Interval, number[]>> {
   const pricing = await readPricing(admin);
   const week = positiveNumbers(pricing.student_tiers);
   const month = positiveNumbers(pricing.student_monthly_tiers);
@@ -105,13 +105,13 @@ async function planPriceId(stripe: Stripe, tiers: number[], interval: Interval):
 }
 
 /** Whether the plan bills weekly or monthly. */
-const subscriptionInterval = (sub: Stripe.Subscription): Interval => {
+export const subscriptionInterval = (sub: Stripe.Subscription): Interval => {
   const interval = sub.items.data[0]?.price.recurring?.interval;
   return isInterval(interval) ? interval : "week";
 };
 
 /** $ per subject on the plan's own Stripe price (needs `items.data.price.tiers` expanded). */
-function subscriptionTiers(sub: Stripe.Subscription): number[] | null {
+export function subscriptionTiers(sub: Stripe.Subscription): number[] | null {
   const tiers = sub.items.data[0]?.price.tiers;
   if (!tiers?.length) return null;
   return tiers.map((t) => (t.unit_amount ?? 0) / 100);
@@ -167,7 +167,7 @@ export async function customerFor(admin: SupabaseClient, stripe: Stripe, userId:
 }
 
 /** The student's subscription if it can still carry subjects (not cancelled / expired), with its price's tiers. */
-async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<Stripe.Subscription | null> {
+export async function liveSubscription(admin: SupabaseClient, stripe: Stripe, userId: string): Promise<Stripe.Subscription | null> {
   const row = await customerRow(admin, userId);
   if (!row?.stripe_subscription_id) return null;
   const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id, { expand: ["items.data.price.tiers"] }).catch((err) => {

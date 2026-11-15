@@ -299,3 +299,40 @@ export async function loadSubjectHealth(curriculumId, subjectName) {
   const openReports = new Set(reports.filter(r => isOpenReport(r) && (ids.has(r.question_id) || r.questions?.subject === subjectName)).map(r => r.question_id)).size
   return { rows, openReports, drafts: pending.length + needsReview.length, papers }
 }
+
+// ─── ONE PERSON (Admin → People → a person) ──────────────────────────────────
+
+/** { profile, signIn, parentConsentNeeded, billing } for one account. */
+export async function getPerson(id) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}`)
+}
+
+/** Any of { displayName, email, yearLevel, state, school, dob }. */
+export async function savePersonDetails(id, fields) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/details`, { method: 'PATCH', body: JSON.stringify(fields) })
+}
+
+/** { parentName, parentEmail } and/or { resend: true } and/or { confirmed: boolean }. */
+export async function savePersonParent(id, body) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/parent`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+/** Email them a link to choose a new password. */
+export async function sendPersonPasswordReset(id) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/password-reset`, { method: 'POST' })
+}
+
+/** End every session they have. */
+export async function signOutPerson(id) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/sign-out`, { method: 'POST' })
+}
+
+/** Any of { reminders, sounds, leaderboard } (booleans). */
+export async function savePersonSettings(id, body) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/settings`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+/** 'cancel_at_period_end', 'resume' or 'cancel_now'. */
+export async function changePersonBilling(id, action) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/billing`, { method: 'POST', body: JSON.stringify({ action }) })
+}
