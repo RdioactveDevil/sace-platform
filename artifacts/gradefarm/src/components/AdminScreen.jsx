@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ADMIN_NAV, ADMIN_LEGACY, reportPortalBadges } from '../lib/portalNav'
+import { ADMIN_NAV, ADMIN_UNLISTED, ADMIN_LEGACY, reportPortalBadges } from '../lib/portalNav'
 import './TutorDashboard.css'
 import AdminOverviewTab          from './AdminOverviewTab'
 import AdminPeopleTab            from './AdminPeopleTab'
@@ -21,7 +21,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
  * Subjects: the list at /admin/subjects, and one subject at
  * /admin/subjects/<id>/<page> (its menu is AdminSubjectLayout).
  */
-function SubjectsRouter() {
+function SubjectsRouter({ profile, onChange }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [, , , id, page] = location.pathname.split('/')
@@ -31,7 +31,8 @@ function SubjectsRouter() {
       <AdminCurriculumDetail
         key={id}
         curriculumId={id}
-        section={page || 'topics'}
+        profile={profile}
+        section={page || 'overview'}
         onSection={(next) => navigate(`/admin/subjects/${id}/${next}`)}
         query={new URLSearchParams(location.search).get('q') || ''}
         onSearch={(q) => navigate(`/admin/subjects/${id}/questions${q ? `?q=${encodeURIComponent(q)}` : ''}`)}
@@ -46,7 +47,7 @@ function SubjectsRouter() {
 // The sections are in the app sidebar (lib/portalNav ADMIN_NAV) and live at
 // /admin/<section>; some have tabs (?tab=). This screen shows the section's
 // title, its tabs and its content.
-const NAV_ITEMS = ADMIN_NAV.flatMap(g => g.items)
+const NAV_ITEMS = [...ADMIN_NAV.flatMap(g => g.items), ...ADMIN_UNLISTED]
 
 const TABS = {
   questions: [['bank', 'Bank'], ['add', 'Add questions'], ['review', 'Review queue'], ['preview', 'Preview']],
@@ -93,7 +94,8 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
 
   // Waiting on an admin: shown as badges in the app sidebar.
   useEffect(() => {
-    reportPortalBadges('admin', { people: pendingApps, questions: reviewCount, reports: openReports })
+    // Reports and the review queue are inside each subject now; Subjects carries their count.
+    reportPortalBadges('admin', { people: pendingApps, subjects: reviewCount + openReports })
   }, [pendingApps, reviewCount, openReports])
 
   const context = {
@@ -127,7 +129,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview"  element={<AdminOverviewTab />} />
             <Route path="people"    element={<AdminPeopleTab profile={profile} pendingApps={pendingApps} onApplicationsChange={loadBadges} />} />
-            <Route path="subjects/*" element={<SubjectsRouter />} />
+            <Route path="subjects/*" element={<SubjectsRouter profile={profile} onChange={loadBadges} />} />
             <Route path="questions" element={<AdminQuestionsScreen profile={profile} tab={tab} onReviewChange={loadBadges} theme={theme} />} />
             <Route path="reports"   element={<AdminReportsScreen onChange={loadBadges} />} />
             <Route path="exam-papers" element={<AdminExamPapersTab />} />

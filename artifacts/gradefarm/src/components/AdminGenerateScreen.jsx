@@ -30,8 +30,9 @@ function groupTopics(topics) {
   return groups
 }
 
-export default function AdminGenerateScreen() {
-  const [subject,         setSubject]         = useState('')
+/** `subject`: inside a subject's page in Admin, that subject (no picker). */
+export default function AdminGenerateScreen({ subject: fixedSubject = '' } = {}) {
+  const [subject,         setSubject]         = useState(fixedSubject)
   const [selectedCodes,   setSelectedCodes]   = useState(new Set())
   const [count,           setCount]           = useState(10)
   const [difficulty,      setDifficulty]      = useState('mixed')
@@ -58,7 +59,7 @@ export default function AdminGenerateScreen() {
       .then(curricula => {
         const subjects = curricula.map(c => ({ id: c.name, label: c.name }))
         setBuiltInSubjects(subjects)
-        if (!subject && subjects.length > 0) setSubject(subjects[0].id)
+        if (!fixedSubject && !subject && subjects.length > 0) setSubject(subjects[0].id)
       })
       .catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -160,14 +161,16 @@ export default function AdminGenerateScreen() {
       <p style={{ ...ui.hint, fontSize: 13, margin: 0 }}>AI writes questions for the subtopics you pick. They go to the review queue, and students see them once you approve them.</p>
 
       {/* Subject */}
-      <div style={section}>
-        <span style={ui.label}>Subject</span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[...filteredBuiltIn.map(s => [s.id, s.label]), ...managedSubjects.map(s => [s, s])].map(([id, label]) => (
-            <button key={id} type="button" aria-pressed={subject === id} onClick={() => handleSubjectChange(id)} style={chip(subject === id)}>{label}</button>
-          ))}
+      {!fixedSubject && (
+        <div style={section}>
+          <span style={ui.label}>Subject</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[...filteredBuiltIn.map(s => [s.id, s.label]), ...managedSubjects.map(s => [s, s])].map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={subject === id} onClick={() => handleSubjectChange(id)} style={chip(subject === id)}>{label}</button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Topic checkbox tree */}
       {groups.length > 0 && (

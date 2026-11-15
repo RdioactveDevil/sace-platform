@@ -18,7 +18,15 @@ import CourseScopePanel from './CourseScopePanel'
 import WrittenAnswersPanel from './WrittenAnswersPanel'
 import AdminSubjectLayout from './AdminSubjectLayout'
 import AdminSubjectQuestions from './AdminSubjectQuestions'
-import { countSubjectQuestions } from '../lib/adminDb'
+import AdminSubjectOverview from './AdminSubjectOverview'
+import AdminExamPapersTab from './AdminExamPapersTab'
+import AdminReviewScreen from './AdminReviewScreen'
+import AdminReportsScreen from './AdminReportsScreen'
+import AdminGenerateScreen from './AdminGenerateScreen'
+import AdminVisionScreen from './AdminVisionScreen'
+import AdminUploadScreen from './AdminUploadScreen'
+import { countSubjectQuestions, loadSubjectHealth } from '../lib/adminDb'
+import { chip } from '../lib/adminUi'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS, usesMathAnswers } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
@@ -107,7 +115,7 @@ function subtopicProgress(detail) {
   })))
 }
 
-export default function AdminCurriculumDetail({ curriculumId, section = 'topics', onSection = () => {}, query = '', onSearch = () => {}, onBack, onGoLive }) {
+export default function AdminCurriculumDetail({ curriculumId, profile, section = 'overview', onSection = () => {}, query = '', onSearch = () => {}, onBack, onGoLive }) {
   const [curriculum, setCurriculum]   = useState(null)
   const [topics, setTopics]           = useState([])
   const [loading, setLoading]         = useState(true)
@@ -169,6 +177,16 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
   useEffect(() => {
     countSubjectQuestions(curriculumId).then(setQuestionCount).catch(() => {})
   }, [curriculumId])
+
+  // Reports, the review queue and questions by topic: the Overview and the menu's badges.
+  const [health, setHealth] = useState(null)
+  const [addMethod, setAddMethod] = useState('generate')
+  const subjectName = curriculum?.name
+  const refreshHealth = () => {
+    if (!subjectName) return
+    loadSubjectHealth(curriculumId, subjectName).then(h => { setHealth(h); setQuestionCount(h.rows.length) }).catch(() => {})
+  }
+  useEffect(refreshHealth, [curriculumId, subjectName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving the page stops generation, so ask first while it is running.
   useEffect(() => {
@@ -678,6 +696,43 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
   )
 
   const pages = {
+    overview: (
+      <>
+        {pageTitle('Overview', 'This subject at a glance, and what needs fixing.')}
+        <AdminSubjectOverview health={health} topics={curriculum.topics} features={curriculum.features} examContext={curriculum.exam_context} onSection={onSection} />
+      </>
+    ),
+    add: (
+      <>
+        {pageTitle('Add questions', 'Every way in ends in the Review queue: students see new questions once you approve them.')}
+        <div role="radiogroup" aria-label="How to add questions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
+          {[['generate', 'Generate with AI'], ['photo', 'From a photo'], ['pdf', 'From a PDF']].map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={addMethod === id} onClick={() => setAddMethod(id)} style={chip(addMethod === id)}>{label}</button>
+          ))}
+        </div>
+        {addMethod === 'generate' && <AdminGenerateScreen key={curriculum.name} subject={curriculum.name} />}
+        {addMethod === 'photo' && <AdminVisionScreen key={curriculum.name} subject={curriculum.name} />}
+        {addMethod === 'pdf' && <AdminUploadScreen key={curriculum.name} subject={curriculum.name} />}
+      </>
+    ),
+    papers: (
+      <>
+        {pageTitle('Exam papers', "This subject's past and trial exam papers, for the exam builder.")}
+        <AdminExamPapersTab key={curriculum.name} subject={curriculum.name} />
+      </>
+    ),
+    review: (
+      <>
+        {pageTitle('Review queue', "New questions for this subject waiting for you. Students don't see them until you approve them.")}
+        <AdminReviewScreen key={curriculum.name} profile={profile} subject={curriculum.name} onChange={refreshHealth} />
+      </>
+    ),
+    reports: (
+      <>
+        {pageTitle('Reports', "This subject's questions that students or the AI check said are wrong, and students' flags.")}
+        <AdminReportsScreen key={curriculum.name} subject={curriculum.name} onChange={refreshHealth} />
+      </>
+    ),
     questions: (
       <>
         {pageTitle('Questions', "This subject's own questions. Tick some to fix them together, or open one to edit it.")}
@@ -1009,7 +1064,7 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
     ),
   }
   const available = new Set(Object.keys(pages))
-  const current = available.has(section) ? section : 'topics'
+  const current = available.has(section) ? section : 'overview'
 
   const header = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
@@ -1051,7 +1106,15 @@ export default function AdminCurriculumDetail({ curriculumId, section = 'topics'
       section={current}
       onSection={onSection}
       available={available}
-      counts={{ topics: { text: topics.length }, ...(questionCount != null ? { questions: { text: questionCount.toLocaleString('en-AU') } } : {}) }}
+      counts={{
+        topics: { text: topics.length },
+        ...(questionCount != null ? { questions: { text: questionCount.toLocaleString('en-AU') } } : {}),
+        ...(health ? {
+          reports: health.openReports ? { text: health.openReports, alert: true } : { text: 0 },
+          review: { text: health.drafts },
+          papers: { text: health.papers },
+        } : {}),
+      }}
       header={header}
     >
       {error && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{error}</div>}

@@ -50,15 +50,17 @@ const shortDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'num
  * A question opens beside the list with its answer key, what students picked,
  * and the buttons that settle it: set the answer, edit it, remove it.
  */
-export default function AdminReportsScreen({ onChange }) {
+/** `subject`: inside a subject's page in Admin, only that subject's reports and flags. */
+export default function AdminReportsScreen({ onChange, subject: fixedSubject = '' }) {
   const location = useLocation()
   const [view, setView] = useState(() => (new URLSearchParams(location.search).get('view') === 'flags' ? 'flags' : 'reports'))
   const [reports, setReports] = useState(null)
   const [flags, setFlags] = useState(null)
   const [error, setError] = useState('')
 
-  const loadReports = useCallback(() => fetchQuestionReports('all').then(setReports).catch(e => { setReports([]); setError(e.message || 'Could not load reports.') }), [])
-  const loadFlags = useCallback(() => fetchQuestionFlags().then(setFlags).catch(e => { setFlags([]); setError(e.message || 'Could not load flags.') }), [])
+  const ofSubject = useCallback((list) => (fixedSubject ? (list || []).filter(r => r.questions?.subject === fixedSubject) : list), [fixedSubject])
+  const loadReports = useCallback(() => fetchQuestionReports('all').then(rs => setReports(ofSubject(rs))).catch(e => { setReports([]); setError(e.message || 'Could not load reports.') }), [ofSubject])
+  const loadFlags = useCallback(() => fetchQuestionFlags().then(fs => setFlags(ofSubject(fs))).catch(e => { setFlags([]); setError(e.message || 'Could not load flags.') }), [ofSubject])
   useEffect(() => { loadReports(); loadFlags() }, [loadReports, loadFlags])
 
   const openCount = reports ? new Set(reports.filter(isOpenReport).map(r => r.question_id)).size : null
@@ -84,7 +86,7 @@ export default function AdminReportsScreen({ onChange }) {
       {error && <div role="alert" style={note('danger')}>{error}</div>}
 
       {view === 'reports'
-        ? <ReportsView reports={reports} reload={async () => { await loadReports(); onChange?.() }} />
+        ? <ReportsView reports={reports} fixedSubject={fixedSubject} reload={async () => { await loadReports(); onChange?.() }} />
         : <FlagsView flags={flags} reload={loadFlags} />}
     </div>
   )
@@ -92,7 +94,7 @@ export default function AdminReportsScreen({ onChange }) {
 
 // ── Wrong-answer reports ──────────────────────────────────────────────────────
 
-function ReportsView({ reports, reload }) {
+function ReportsView({ reports, reload, fixedSubject = '' }) {
   const navigate = useNavigate()
   const [status, setStatus] = useState('open')
   const [source, setSource] = useState('all')
@@ -100,7 +102,7 @@ function ReportsView({ reports, reload }) {
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState(null) // { ok, text }
   const [subjects, setSubjects] = useState([])
-  const [scanSubject, setScanSubject] = useState('')
+  const [scanSubject, setScanSubject] = useState(fixedSubject)
   useEffect(() => { fetchLiveCurricula().then(cs => setSubjects([...new Set(cs.map(c => c.name))].sort())).catch(() => {}) }, [])
 
   // One row per question: its newest report, and how many reports it has here.
@@ -150,10 +152,12 @@ function ReportsView({ reports, reload }) {
 
       <div style={{ ...ui.card, padding: '10px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ fontSize: 13, color: 'var(--t-textSub)', flex: '1 1 220px' }}>Ask the AI to check questions from the bank for wrong answers.</span>
-        <select aria-label="Subject to check" value={scanSubject} onChange={e => setScanSubject(e.target.value)} style={{ ...ui.input, padding: '6px 9px', fontSize: 12.5, maxWidth: 240 }}>
-          <option value="">Any subject</option>
-          {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        {!fixedSubject && (
+          <select aria-label="Subject to check" value={scanSubject} onChange={e => setScanSubject(e.target.value)} style={{ ...ui.input, padding: '6px 9px', fontSize: 12.5, maxWidth: 240 }}>
+            <option value="">Any subject</option>
+            {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
         <button type="button" disabled={!!busy} style={btn('secondary', !!busy)}
           onClick={() => run('scan', () => bulkScanQuestions({ subject: scanSubject || undefined, limit: 50 }), r => r.queued ? `Checked ${r.queued} question${r.queued === 1 ? '' : 's'}. Any it found wrong are fixed or open below.` : 'Nothing left to check there.')}>
           {busy === 'scan' ? 'Checking 50 questions…' : 'Check 50 questions'}

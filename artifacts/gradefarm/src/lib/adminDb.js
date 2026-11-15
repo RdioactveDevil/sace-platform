@@ -279,3 +279,23 @@ export async function transcribeQuestionImage(file) {
   })
   return json.text || ''
 }
+
+/**
+ * What a subject's Overview and menu badges need: its questions, how many of
+ * them have an open report, drafts waiting for review, and exam paper batches.
+ */
+export async function loadSubjectHealth(curriculumId, subjectName) {
+  const [rows, reports, pending, needsReview, papers] = await Promise.all([
+    fetchSubjectQuestions(curriculumId),
+    fetchQuestionReports('all').catch(() => []),
+    getDraftQuestions({ status: 'pending', subject: subjectName }).catch(() => []),
+    getDraftQuestions({ status: 'needs_review', subject: subjectName }).catch(() => []),
+    (async () => {
+      const { count } = await supabase.from('exam_paper_batches').select('id', { count: 'exact', head: true }).eq('subject', subjectName)
+      return count || 0
+    })().catch(() => 0),
+  ])
+  const ids = new Set(rows.map(q => q.id))
+  const openReports = new Set(reports.filter(r => isOpenReport(r) && (ids.has(r.question_id) || r.questions?.subject === subjectName)).map(r => r.question_id)).size
+  return { rows, openReports, drafts: pending.length + needsReview.length, papers }
+}

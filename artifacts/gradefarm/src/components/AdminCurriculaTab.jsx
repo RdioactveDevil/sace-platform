@@ -5,6 +5,7 @@ import { fetchSubjectBankCounts } from '../lib/db'
 import { adminApiPost, prepareCurriculumDoc } from '../lib/adminApi'
 import { COHORT_LEVEL_OPTIONS, buildCanonicalCurriculumName } from '../lib/subjects'
 import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
+import { fetchQuestionReports, isOpenReport, getDraftQuestions } from '../lib/adminDb'
 
 // Which subjects the list shows.
 const SHOW = [
@@ -45,6 +46,25 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
   const [flagTables, setFlagTables]     = useState(false)
 
   const [bankCounts, setBankCounts]     = useState({})
+  // What's waiting in each subject, by name: { reports, review }.
+  const [waiting, setWaiting] = useState({})
+  useEffect(() => {
+    Promise.all([
+      fetchQuestionReports('all').catch(() => []),
+      getDraftQuestions({ status: 'pending' }).catch(() => []),
+      getDraftQuestions({ status: 'needs_review' }).catch(() => []),
+    ]).then(([reports, pending, needs]) => {
+      const out = {}
+      const add = (name, key, id) => {
+        if (!name) return
+        out[name] ||= { reports: new Set(), review: 0 }
+        if (key === 'reports') out[name].reports.add(id); else out[name].review++
+      }
+      reports.filter(isOpenReport).forEach(r => add(r.questions?.subject, 'reports', r.question_id))
+      ;[...pending, ...needs].forEach(d => add(d.subject, 'review'))
+      setWaiting(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, { reports: v.reports.size, review: v.review }])))
+    })
+  }, [])
   const [search, setSearch]             = useState('')
   const [show, setShow]                 = useState('all')
   const load = useCallback(async (silent = false) => {
@@ -181,6 +201,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
               <tr>
                 <th style={ui.th}>Subject</th>
                 <th style={ui.th}>Status</th>
+                <th style={ui.th}>Needs you</th>
                 <th style={{ ...ui.th, textAlign: 'right' }}>Topics</th>
                 <th style={{ ...ui.th, textAlign: 'right' }}>In the bank</th>
                 <th style={ui.th}>Generated</th>
@@ -201,6 +222,11 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                       {(c.level_label || '').trim() && <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{c.level_label.trim()}</div>}
                     </td>
                     <td style={ui.td}><StatusBadge status={status} /></td>
+                    <td style={{ ...ui.td, whiteSpace: 'nowrap' }}>
+                      {waiting[c.name]?.reports > 0 && <span style={{ ...needPill, background: 'var(--t-dangerBg)', color: 'var(--t-danger)' }}>{waiting[c.name].reports} report{waiting[c.name].reports === 1 ? '' : 's'}</span>}
+                      {waiting[c.name]?.review > 0 && <span style={{ ...needPill, background: 'rgba(245,158,11,0.14)', color: '#b45309' }}>{waiting[c.name].review} to review</span>}
+                      {!waiting[c.name]?.reports && !waiting[c.name]?.review && <span style={{ color: 'var(--t-textFaint)' }}>—</span>}
+                    </td>
                     <td style={{ ...ui.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {c.topic_count}<span style={{ color: 'var(--t-textMuted)' }}> · {c.subtopic_count} sub</span>
                     </td>
@@ -421,3 +447,5 @@ function DeleteSubjectDialog({ subject, onClose, onDeleted }) {
     </>
   )
 }
+
+const needPill = { display: 'inline-block', fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, marginRight: 4 }

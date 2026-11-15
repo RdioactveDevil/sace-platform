@@ -9,7 +9,8 @@ import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 /** 50 MB — file goes to Supabase Storage, not base64 through Vercel */
 const MAX_PDF_BYTES = 50 * 1024 * 1024
 
-export default function AdminUploadScreen() {
+/** `subject`: inside a subject's page in Admin, that subject (no picker). */
+export default function AdminUploadScreen({ subject: fixedSubject = '' } = {}) {
   const [stageOptions, setStageOptions] = useState([])
   const [stage, setStage]     = useState('')
   const [file, setFile]       = useState(null)
@@ -24,7 +25,8 @@ export default function AdminUploadScreen() {
         // All live curricula from DB are available for upload
         const opts = curricula.map(c => ({ value: c.name, label: c.name }))
         setStageOptions(opts)
-        if (opts.length > 0) setStage(opts[0].value)
+        if (fixedSubject) setStage(fixedSubject)
+        else if (opts.length > 0) setStage(opts[0].value)
       })
       .catch(() => {})
   }, [])
@@ -74,6 +76,7 @@ export default function AdminUploadScreen() {
       </p>
 
       {/* Stage selector */}
+      {!fixedSubject && (
       <div>
         <span style={ui.label}>Stage</span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -84,6 +87,7 @@ export default function AdminUploadScreen() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Drop zone */}
       <div

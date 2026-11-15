@@ -29,9 +29,10 @@ const STATUS = {
  * the whole batch when given its ID, and writes each paper's outcome back
  * here (exam_paper_batches).
  */
-export default function AdminExamPapersTab() {
+/** `subject`: inside a subject's page in Admin, that subject (no picker; only its batches). */
+export default function AdminExamPapersTab({ subject: fixedSubject = '' } = {}) {
   const [curricula, setCurricula] = useState([])
-  const [subject, setSubject] = useState('')
+  const [subject, setSubject] = useState(fixedSubject)
   useEffect(() => { listCurricula().then(list => setCurricula(list || [])).catch(() => {}) }, [])
   const cur = curricula.find(c => c.name === subject)
   const board = cur && groupSubject({ name: cur.name, level: cur.level_label }).group === 'sace' ? 'sace' : 'vce'
@@ -97,8 +98,9 @@ export default function AdminExamPapersTab() {
   // Recent batches and what the Action reported for each paper.
   const [batches, setBatches] = useState(null)
   const loadBatches = () => {
-    supabase.from('exam_paper_batches').select('id, subject, papers, results, created_at, updated_at').order('created_at', { ascending: false }).limit(12)
-      .then(({ data }) => setBatches(data || []))
+    let q = supabase.from('exam_paper_batches').select('id, subject, papers, results, created_at, updated_at').order('created_at', { ascending: false }).limit(12)
+    if (fixedSubject) q = q.eq('subject', fixedSubject)
+    q.then(({ data }) => setBatches(data || []))
   }
   useEffect(loadBatches, [])
   const [copied, setCopied] = useState('')
@@ -120,12 +122,14 @@ export default function AdminExamPapersTab() {
         <div style={{ fontSize: 13, color: 'var(--t-textSub)', lineHeight: 1.6, maxWidth: 760 }}>
           Drop in past and trial exam papers with their solutions or assessment reports. Details are read from the file names; check them, then upload the batch and load it with the Action. Questions go into the bank for the exam builder.
         </div>
-        <label style={{ fontSize: 12.5, color: 'var(--t-textMuted)', maxWidth: 420 }}>Subject
-          <select value={subject} onChange={e => setSubject(e.target.value)} style={{ ...input, marginTop: 4, fontSize: 13 }}>
-            <option value="">Choose a subject…</option>
-            {curricula.map(c => <option key={c.id} value={c.name}>{c.name}{c.status !== 'live' ? ` (${c.status})` : ''}</option>)}
-          </select>
-        </label>
+        {!fixedSubject && (
+          <label style={{ fontSize: 12.5, color: 'var(--t-textMuted)', maxWidth: 420 }}>Subject
+            <select value={subject} onChange={e => setSubject(e.target.value)} style={{ ...input, marginTop: 4, fontSize: 13 }}>
+              <option value="">Choose a subject…</option>
+              {curricula.map(c => <option key={c.id} value={c.name}>{c.name}{c.status !== 'live' ? ` (${c.status})` : ''}</option>)}
+            </select>
+          </label>
+        )}
 
         <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files) }}
           onClick={() => fileInput.current?.click()} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') fileInput.current?.click() }}
