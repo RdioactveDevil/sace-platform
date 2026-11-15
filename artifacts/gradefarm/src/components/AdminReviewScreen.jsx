@@ -19,7 +19,8 @@ function StatusBadge({ status }) {
   return <span style={{ fontSize: 12, fontWeight: 600, color }}>{label}</span>
 }
 
-export default function AdminReviewScreen({ profile, onChange }) {
+/** `subject`: inside a subject's page in Admin, only that subject's drafts. */
+export default function AdminReviewScreen({ profile, onChange, subject: fixedSubject = '' }) {
 
   // ── Drafts tab state ─────────────────────────────────────────────────────────
   const [drafts,         setDrafts]         = useState([])
@@ -50,6 +51,7 @@ export default function AdminReviewScreen({ profile, onChange }) {
     if (!skipLoading) setLoading(true)
     try {
       const data = await getDraftQuestions({
+        subject: fixedSubject || undefined,
         status: filterStatus === 'all' ? undefined : filterStatus,
       })
       setDrafts(data)

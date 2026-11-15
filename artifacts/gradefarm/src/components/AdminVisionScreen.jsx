@@ -14,8 +14,9 @@ const TYPE_OPTIONS = [
 ]
 
 
-export default function AdminVisionScreen() {
-  const [subject, setSubject] = useState('')
+/** `subject`: inside a subject's page in Admin, that subject (no box for it). */
+export default function AdminVisionScreen({ subject: fixedSubject = '' } = {}) {
+  const [subject, setSubject] = useState(fixedSubject)
   const [topic, setTopic] = useState('')
   const [subtopic, setSubtopic] = useState('')
   const [count, setCount] = useState(4)
@@ -97,10 +98,12 @@ export default function AdminVisionScreen() {
       </div>
 
       <div className="av-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-        <div>
-          <label htmlFor="vis-subject" style={ui.label}>Subject</label>
-          <input id="vis-subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={{ ...ui.input, width: '100%' }} />
-        </div>
+        {!fixedSubject && (
+          <div>
+            <label htmlFor="vis-subject" style={ui.label}>Subject</label>
+            <input id="vis-subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Chemistry Stage 1" style={{ ...ui.input, width: '100%' }} />
+          </div>
+        )}
         <div>
           <label htmlFor="vis-topic" style={ui.label}>Topic <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>(optional)</span></label>
           <input id="vis-topic" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Cell biology" style={{ ...ui.input, width: '100%' }} />

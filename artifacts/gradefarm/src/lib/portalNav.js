@@ -27,16 +27,24 @@ export const ADMIN_NAV = [
     { id: 'overview',  label: 'Overview',  icon: LayoutDashboard, sub: 'What needs you, and how the platform did this week.' },
     { id: 'people',    label: 'People',    icon: Users,           sub: 'Every account: students, tutors and admins.' },
   ]},
+  // A subject's questions, exam papers, review queue and reports are inside
+  // the subject (Subjects → a subject). "All questions" is for finding a
+  // question across every subject.
   { label: 'Content', items: [
-    { id: 'subjects',  label: 'Subjects',  icon: BookOpen,        sub: 'Subjects, their topics and what students can see.' },
-    { id: 'questions', label: 'Questions', icon: ListChecks,      sub: 'The question bank, adding questions and the review queue.' },
-    { id: 'exam-papers', label: 'Exam papers', icon: FileStack,    sub: 'Load past and trial exam papers for the exam builder, several at a time.' },
-    { id: 'reports',   label: 'Reports',   icon: Flag,            sub: 'Questions students have reported as wrong.' },
+    { id: 'subjects',  label: 'Subjects',  icon: BookOpen,        sub: 'Everything about each subject: topics, questions, exam papers, the review queue and reports.' },
+    { id: 'questions', label: 'All questions', icon: ListChecks,  sub: 'Find a question in any subject, add questions and the review queue across subjects.' },
   ]},
   { label: 'Platform', items: [
     { id: 'insights',  label: 'Insights',  icon: ChartColumn,     sub: 'How students do by topic, and the work tutors set.' },
     { id: 'settings',  label: 'Settings',  icon: Settings,        sub: 'Student access and pricing.' },
   ]},
+]
+
+// Cross-subject pages the admin Overview links to, no longer in the sidebar
+// (each subject has its own). Their titles for the page header.
+export const ADMIN_UNLISTED = [
+  { id: 'exam-papers', label: 'Exam papers', icon: FileStack, sub: 'Past and trial exam papers across every subject. Each subject has its own under Sources.' },
+  { id: 'reports',   label: 'Reports',   icon: Flag,            sub: 'Reported questions across every subject. Each subject has its own under Quality.' },
 ]
 
 // Old admin section URLs, and where each one lives now.

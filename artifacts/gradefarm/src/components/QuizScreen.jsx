@@ -51,7 +51,7 @@ import TableView from './TableView'
 import DiagramView from './DiagramView'
 import PassageView from './PassageView'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
-import { usesMathInput } from '../lib/subjects'
+import { usesMathAnswers } from '../lib/subjects'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { MarksBreakdown } from './questions/WrittenAnswer'
 import { AnnotatedQuestion, AdviceSteps, penColor } from './TitanAdvice'
@@ -2091,7 +2091,7 @@ export default function QuizScreen({
   const isMcq = getQuestionType(currentQ) === 'mcq'
   const isBonus = bonusId === currentQ.id && !currentQ.is_variant && !examRun
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
-  const mathInput = usesMathInput(subjectTile?.name || currentQ?.subject)
+  const mathInput = usesMathAnswers(subjectTile, currentQ?.subject)
   const roughSheetH = Math.min(520, Math.round(window.innerHeight * 0.68))
   // Titan checks rough work in practice (not in an exam), where Titan is offered.
   const roughTitan = onOpenLearn && !examMode ? {

@@ -54,6 +54,17 @@ export function usesMathInput(name) {
   return /math|method|specialist|statist|calculus|algebra|numeracy/i.test(String(name || ''))
 }
 
+/**
+ * Whether a subject's written answers use the maths answer box (working line
+ * by line, each line maths or words) instead of a plain text box. Set per
+ * subject in Admin (features.math_answers); until it's set, maths subjects
+ * by name (usesMathInput).
+ */
+export function usesMathAnswers(tile, fallbackName = '') {
+  const set = tile?.features?.math_answers
+  return typeof set === 'boolean' ? set : usesMathInput(tile?.name || fallbackName)
+}
+
 /** Find the tile whose subject matches a stored subject string (e.g. an assignment's). */
 export function findTileForSubjectString(tiles, subject) {
   const want = normalizeSubjectStorageKey(subject).toLowerCase()

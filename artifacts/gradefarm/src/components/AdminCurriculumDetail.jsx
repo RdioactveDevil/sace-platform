@@ -16,7 +16,18 @@ import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import SharedQuestionsPanel from './SharedQuestionsPanel'
 import CourseScopePanel from './CourseScopePanel'
 import WrittenAnswersPanel from './WrittenAnswersPanel'
-import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
+import AdminSubjectLayout from './AdminSubjectLayout'
+import AdminSubjectQuestions from './AdminSubjectQuestions'
+import AdminSubjectOverview from './AdminSubjectOverview'
+import AdminExamPapersTab from './AdminExamPapersTab'
+import AdminReviewScreen from './AdminReviewScreen'
+import AdminReportsScreen from './AdminReportsScreen'
+import AdminGenerateScreen from './AdminGenerateScreen'
+import AdminVisionScreen from './AdminVisionScreen'
+import AdminUploadScreen from './AdminUploadScreen'
+import { countSubjectQuestions, loadSubjectHealth } from '../lib/adminDb'
+import { chip } from '../lib/adminUi'
+import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS, usesMathAnswers } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
 
@@ -104,7 +115,7 @@ function subtopicProgress(detail) {
   })))
 }
 
-export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }) {
+export default function AdminCurriculumDetail({ curriculumId, profile, section = 'overview', onSection = () => {}, query = '', onSearch = () => {}, onBack, onGoLive }) {
   const [curriculum, setCurriculum]   = useState(null)
   const [topics, setTopics]           = useState([])
   const [loading, setLoading]         = useState(true)
@@ -158,6 +169,24 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
     loadDetail()
     return () => { clearInterval(pollRef.current); stopRef.current = true }
   }, [curriculumId])
+
+  // For the header and the menu; the Questions page updates it as it changes.
+  const [questionCount, setQuestionCount] = useState(null)
+  const [search, setSearch] = useState(query)
+  useEffect(() => { setSearch(query) }, [query])
+  useEffect(() => {
+    countSubjectQuestions(curriculumId).then(setQuestionCount).catch(() => {})
+  }, [curriculumId])
+
+  // Reports, the review queue and questions by topic: the Overview and the menu's badges.
+  const [health, setHealth] = useState(null)
+  const [addMethod, setAddMethod] = useState('generate')
+  const subjectName = curriculum?.name
+  const refreshHealth = () => {
+    if (!subjectName) return
+    loadSubjectHealth(curriculumId, subjectName).then(h => { setHealth(h); setQuestionCount(h.rows.length) }).catch(() => {})
+  }
+  useEffect(refreshHealth, [curriculumId, subjectName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving the page stops generation, so ask first while it is running.
   useEffect(() => {
@@ -615,29 +644,404 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
   const statusLabel = { live: 'Live', generating: 'Generating', draft: 'Draft' }[curriculum.status] || curriculum.status
   const statusColor = curriculum.status === 'live' ? 'var(--t-success)' : curriculum.status === 'generating' ? 'var(--t-textSub)' : 'var(--t-goldText)'
 
-  return (
-    <div style={{ fontFamily: FONT_B, color: 'var(--t-textSub)' }}>
+  // ── The pages (AdminSubjectLayout's menu) ──────────────────────────────────
+  const waitNote = (
+    <div style={note('info')}>This opens again once the questions have finished being written. Keep an eye on it in Topics.</div>
+  )
+  const pageTitle = (title, sub) => (
+    <div style={{ marginBottom: 16 }}>
+      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '-0.01em' }}>{title}</h2>
+      {sub && <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 3, lineHeight: 1.5 }}>{sub}</div>}
+    </div>
+  )
 
-      {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button
-          onClick={onBack}
-          style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 13, fontFamily: FONT_B, padding: 0 }}
-        >
-          ← Subjects
-        </button>
-        <EditableText
-          value={curriculum.name}
-          onSave={name => setCurriculum(prev => ({ ...prev, name }))}
-          style={{ fontSize: 18, fontWeight: 800, color: 'var(--t-text)' }}
+  // A new subject's plan is approved here, and its questions written from here.
+  const draftControls = isDraft && (
+    <div style={{ ...ui.card, padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ flex: '1 1 260px', fontSize: 12.5, color: 'var(--t-textMuted)', lineHeight: 1.5 }}>
+        <strong style={{ display: 'block', fontSize: 13.5, color: 'var(--t-text)' }}>Ready to write the questions?</strong>
+        Check the topics below, then approve the plan and the questions are written subtopic by subtopic.
+      </div>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}>
+        Questions per subtopic
+        <input
+          type="number" min={1} max={MAX_PER_SUBTOPIC} step={1}
+          value={perSubtopic}
+          onChange={e => setPerSubtopic(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+          onBlur={e => choosePerSubtopic(e.target.value)}
+          disabled={saving || generating}
+          style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--t-textMuted)', marginLeft: 4 }}>
-          <span style={{ flexShrink: 0 }}>Level</span>
+      </label>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}
+        title="Short-answer questions marked by AI against a marking scheme. Students see them once Written answers is switched on in Student features.">
+        Written answers per subtopic
+        <input
+          type="number" min={0} max={MAX_WRITTEN_PER_SUBTOPIC} step={1}
+          value={writtenPer}
+          onChange={e => setWrittenPer(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
+          onBlur={e => chooseWritten(e.target.value)}
+          disabled={saving || generating}
+          style={{ width: 56, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
+        />
+      </label>
+      <button
+        onClick={handleApproveAndGenerate}
+        disabled={saving || totalSubtopics === 0}
+        style={btn('primary', saving || totalSubtopics === 0)}
+      >
+        Approve and generate questions
+      </button>
+    </div>
+  )
+
+  const pages = {
+    overview: (
+      <>
+        {pageTitle('Overview', 'This subject at a glance, and what needs fixing.')}
+        <AdminSubjectOverview health={health} topics={curriculum.topics} features={curriculum.features} examContext={curriculum.exam_context} onSection={onSection} />
+      </>
+    ),
+    add: (
+      <>
+        {pageTitle('Add questions', 'Every way in ends in the Review queue: students see new questions once you approve them.')}
+        <div role="radiogroup" aria-label="How to add questions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
+          {[['generate', 'Generate with AI'], ['photo', 'From a photo'], ['pdf', 'From a PDF']].map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={addMethod === id} onClick={() => setAddMethod(id)} style={chip(addMethod === id)}>{label}</button>
+          ))}
+        </div>
+        {addMethod === 'generate' && <AdminGenerateScreen key={curriculum.name} subject={curriculum.name} />}
+        {addMethod === 'photo' && <AdminVisionScreen key={curriculum.name} subject={curriculum.name} />}
+        {addMethod === 'pdf' && <AdminUploadScreen key={curriculum.name} subject={curriculum.name} />}
+      </>
+    ),
+    papers: (
+      <>
+        {pageTitle('Exam papers', "This subject's past and trial exam papers, for the exam builder.")}
+        <AdminExamPapersTab key={curriculum.name} subject={curriculum.name} />
+      </>
+    ),
+    review: (
+      <>
+        {pageTitle('Review queue', "New questions for this subject waiting for you. Students don't see them until you approve them.")}
+        <AdminReviewScreen key={curriculum.name} profile={profile} subject={curriculum.name} onChange={refreshHealth} />
+      </>
+    ),
+    reports: (
+      <>
+        {pageTitle('Reports', "This subject's questions that students or the AI check said are wrong, and students' flags.")}
+        <AdminReportsScreen key={curriculum.name} subject={curriculum.name} onChange={refreshHealth} />
+      </>
+    ),
+    questions: (
+      <>
+        {pageTitle('Questions', "This subject's own questions. Tick some to fix them together, or open one to edit it.")}
+        <AdminSubjectQuestions curriculumId={curriculumId} topics={curriculum.topics} initialText={query} onCount={setQuestionCount} />
+      </>
+    ),
+    topics: (
+      <>
+        {pageTitle('Topics', 'The plan students practise from. Rename, reorder, add or remove topics and subtopics, then Save.')}
+        {draftControls}
+        {!generating && (
+        <div style={{
+          marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+          background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
+        }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 10 }}>
+            Change the plan with AI
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <textarea
+                value={reviseInstruction}
+                onChange={e => setReviseInstruction(e.target.value)}
+                placeholder='e.g. "Restructure to match the pasted TOC below" or "Add a topic on probability with 3 subtopics"'
+                rows={2}
+                disabled={revising}
+                style={{
+                  width: '100%', padding: '8px 10px', borderRadius: 8,
+                  border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
+                  color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+                  resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+                }}
+              />
+              {/* Toggle paste area */}
+              <button
+                onClick={() => setShowPasteArea(v => !v)}
+                disabled={revising}
+                style={{
+                  alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: '1px dashed var(--t-border)',
+                  background: showPasteArea ? 'var(--t-bgSubtle)' : 'transparent',
+                  color: showPasteArea ? 'var(--t-goldText)' : 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
+                }}
+              >
+                {showPasteArea ? '▾ Hide paste area' : '▸ Paste TOC / text document'}
+              </button>
+              {showPasteArea && (
+                <textarea
+                  value={reviseSourceText}
+                  onChange={e => setReviseSourceText(e.target.value)}
+                  placeholder={'Paste a table of contents, topic list, or any text here.\nClaude will use it as the source to restructure the curriculum.'}
+                  rows={8}
+                  disabled={revising}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: 8,
+                    border: '1px solid var(--t-border)', background: 'var(--t-bgSubtle)',
+                    color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B, outline: 'none',
+                    resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
+                  }}
+                />
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                borderRadius: 8, cursor: revising ? 'not-allowed' : 'pointer',
+                border: reviseDoc ? '1px solid var(--t-success)' : '1px dashed var(--t-border)',
+                background: reviseDoc ? 'var(--t-successBg)' : 'transparent',
+                fontSize: 12, color: reviseDoc ? 'var(--t-success)' : 'var(--t-textMuted)', whiteSpace: 'nowrap',
+              }}>
+                <input type="file" accept=".pdf,.txt" disabled={revising} onChange={handleReviseFileUpload} style={{ display: 'none' }} />
+                {reviseDoc ? `✓ ${reviseDoc.name}` : '↑ Upload doc'}
+                {reviseDoc && (
+                  <span onClick={e => { e.preventDefault(); setReviseDoc(null) }} style={{ marginLeft: 4, cursor: 'pointer', color: 'var(--t-textMuted)' }}>×</span>
+                )}
+              </label>
+              <button
+                onClick={handleRevise}
+                disabled={revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())}
+                style={{
+                  padding: '8px 16px', borderRadius: 8,
+                  border: '1px solid var(--t-border)',
+                  background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'var(--t-bgSubtle)' : 'var(--t-bgSubtle)',
+                  color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'var(--t-textMuted)' : 'var(--t-textSub)',
+                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'not-allowed' : 'pointer',
+                  fontFamily: FONT_B,
+                }}
+              >
+                {revising ? 'Revising…' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+              )}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+        {/* Left: tree editor */}
+        <div style={{ flex: '1 1 420px', minWidth: 0 }}>
+          {topics.map((topic, ti) => (
+            <div key={ti} style={{ marginBottom: 14 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 14px', borderRadius: 10,
+                background: 'var(--t-bgCard)',
+                border: '1px solid var(--t-border)',
+              }}>
+                <span style={{ fontSize: 10, color: 'var(--t-textMuted)', fontWeight: 700, width: 22, flexShrink: 0 }}>T{ti + 1}</span>
+                <EditableText
+                  value={topic.name}
+                  onSave={name => renameTopic(ti, name)}
+                  style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--t-text)' }}
+                />
+                <select
+                  value={topic.question_style || 'standard'}
+                  onChange={e => setTopicStyle(ti, e.target.value)}
+                  title="How questions for this topic are generated. Saved with the curriculum."
+                  style={{
+                    flexShrink: 0, padding: '3px 6px', borderRadius: 6, fontSize: 11, fontFamily: FONT_B,
+                    border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
+                    color: topic.question_style === 'passage' ? 'var(--t-goldText)' : 'var(--t-textMuted)',
+                  }}
+                >
+                  <option value="standard">Standard questions</option>
+                  <option value="passage">Reading passages</option>
+                </select>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <IconBtn title="Move up"      onClick={() => moveTopicUp(ti)}   disabled={ti === 0}>↑</IconBtn>
+                  <IconBtn title="Move down"    onClick={() => moveTopicDown(ti)} disabled={ti === topics.length - 1}>↓</IconBtn>
+                  <IconBtn title="Delete topic" onClick={() => deleteTopic(ti)}   danger>×</IconBtn>
+                </div>
+              </div>
+
+              {/* Subtopics */}
+              <div style={{ paddingLeft: 28, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {topic.subtopics.map((sub, si) => (
+                  <div key={si} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 12px', borderRadius: 8,
+                    background: 'var(--t-bgCard)',
+                    border: '1px solid var(--t-border)',
+                  }}>
+                    <span style={{ fontSize: 10, color: 'var(--t-textFaint)', width: 30, flexShrink: 0 }}>{ti + 1}.{si + 1}</span>
+                    <EditableText
+                      value={sub.name}
+                      onSave={name => renameSubtopic(ti, si, name)}
+                      style={{ flex: 1, fontSize: 13, color: 'var(--t-textSub)' }}
+                    />
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                      <IconBtn onClick={() => moveSubtopicUp(ti, si)}   disabled={si === 0}                          small>↑</IconBtn>
+                      <IconBtn onClick={() => moveSubtopicDown(ti, si)} disabled={si === topic.subtopics.length - 1} small>↓</IconBtn>
+                      <IconBtn onClick={() => deleteSubtopic(ti, si)}   danger small>×</IconBtn>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => addSubtopic(ti)} style={{ ...addBtn, marginTop: 2 }}>
+                  + Add subtopic
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <button onClick={addTopic} style={{ ...addBtn, marginTop: 8, padding: '10px 16px', fontSize: 13 }}>
+            + Add topic
+          </button>
+        </div>
+
+        {/* Right: generation progress panel */}
+        {progress && (
+          <div style={{
+            flex: '0 1 320px', minWidth: 260,
+            position: 'sticky', top: 0,
+            background: 'var(--t-bgCard)',
+            border: '1px solid var(--t-border)',
+            borderRadius: 12, padding: 16,
+            maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
+          }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 12 }}>
+              Generating questions
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ height: 6, borderRadius: 3, background: 'var(--t-bgSubtle)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3, background: 'var(--t-success)',
+                  width: `${progress.length > 0 ? Math.round(((doneCount + failedCount) / progress.length) * 100) : 0}%`,
+                  transition: 'width 0.4s',
+                }} />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 5 }}>
+                {totalQs} questions{totalWritten > 0 ? ` + ${totalWritten} written answers` : ''} · {doneCount} of {progress.length} subtopics done
+                {failedCount > 0 && <span style={{ color: 'var(--t-danger)' }}> · {failedCount} failed</span>}
+              </div>
+            </div>
+
+            {generating && running && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1, fontSize: 11, color: 'var(--t-textMuted)', lineHeight: 1.4 }}>
+                  Keep this tab open: generation runs from it and stops if you close it.
+                </div>
+                <button onClick={handlePause} style={secondaryBtn(false)}>Pause</button>
+              </div>
+            )}
+            {generating && !running && remainingCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1, fontSize: 11, color: 'var(--t-goldText)', lineHeight: 1.4 }}>
+                  Paused with {remainingCount} subtopic{remainingCount === 1 ? '' : 's'} to go.
+                </div>
+                <button onClick={handleResume} style={btn('primary')}>Resume</button>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {progress.map(p => {
+                const chipColor = p.gen_status === 'done' ? 'var(--t-success)' : p.gen_status === 'failed' ? 'var(--t-danger)' : p.gen_status === 'generating' ? 'var(--t-textSub)' : 'var(--t-textMuted)'
+                return (
+                  <div key={p.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 10px', borderRadius: 8,
+                    background: 'var(--t-bgCard)',
+                    border: '1px solid var(--t-border)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    </div>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      color: chipColor,
+                      padding: '1px 0',
+                    }}>
+                      {p.gen_status === 'done' ? `${p.questions_generated} questions` : p.gen_status === 'generating' ? 'Writing…' : p.gen_status === 'failed' ? 'Failed' : 'Waiting'}
+                      {writtenProgress[p.id] && (
+                        <span title={writtenProgress[p.id].error || (writtenProgress[p.id].notSaved ? `${writtenProgress[p.id].notSaved} didn't pass the checks` : '')}
+                          style={{ color: writtenProgress[p.id].status === 'failed' ? 'var(--t-danger)' : 'var(--t-textMuted)' }}>
+                          {' · '}{writtenProgress[p.id].status === 'writing' ? 'written answers…' : `${writtenProgress[p.id].saved} written${writtenProgress[p.id].status === 'failed' ? ' (failed)' : ''}`}
+                        </span>
+                      )}
+                    </span>
+                    {p.gen_status === 'failed' && (
+                      <button
+                        onClick={() => handleRetry(p)}
+                        style={{
+                          background: 'none', border: '1px solid var(--t-danger)',
+                          borderRadius: 6, color: 'var(--t-danger)', fontSize: 11.5, fontWeight: 700,
+                          cursor: 'pointer', padding: '2px 7px', fontFamily: FONT_B,
+                        }}
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      </>
+    ),
+    written: generating ? waitNote : <WrittenAnswersPanel curriculumId={curriculumId} topics={curriculum.topics} enabled={!!curriculum.features?.written_answers} />,
+    borrowed: generating ? waitNote : <SharedQuestionsPanel curriculumId={curriculumId} />,
+    resources: generating ? waitNote : <CurriculumResourcesPanel curriculumId={curriculumId} />,
+    scope: generating ? waitNote : <CourseScopePanel curriculumId={curriculumId} />,
+    features: generating ? waitNote : <FeatureSwitches name={curriculum.name} features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />,
+    exam: generating ? waitNote : (
+        <div style={{
+          marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+          background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
+        }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 4 }}>
+            About the exam
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 10 }}>
+            Notes on the real exam that AI uses whenever it writes questions for this subject: its structure ("30 multiple-choice questions, 1 mark each"), textbook terms, what's out of scope. Saved with the plan.
+          </div>
+          <textarea
+            value={curriculum.exam_context || ''}
+            onChange={e => setCurriculum(prev => ({ ...prev, exam_context: e.target.value }))}
+            maxLength={3000}
+            rows={4}
+            placeholder={'e.g. "SACE Stage 2 exam: 30 multiple-choice questions worth 1 mark each, 90 minutes. Use Nelson Chemistry 3 & 4 terminology. Calculators permitted — include calculation-based questions."'}
+            style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8,
+              border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
+              color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+              resize: 'vertical', boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ fontSize: 11, color: 'var(--t-textFaint)', textAlign: 'right', marginTop: 4 }}>
+            {(curriculum.exam_context || '').length}/3000
+          </div>
+        </div>
+          ),
+    details: (
+      <div style={{ ...ui.card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 640 }}>
+        <div>
+          <div style={ui.label}>Name</div>
+          <EditableText
+            value={curriculum.name}
+            onSave={name => setCurriculum(prev => ({ ...prev, name }))}
+            style={{ fontSize: 15, fontWeight: 700, color: 'var(--t-text)' }}
+          />
+          <div style={{ ...ui.hint, marginTop: 4 }}>Click the name to change it, then Save.</div>
+        </div>
+        <label style={{ display: 'block' }}>
+          <span style={ui.label}>Level</span>
           <select
             value={curriculum.level_label || ''}
             onChange={e => setCurriculum(prev => ({ ...prev, level_label: e.target.value }))}
             disabled={generating}
-            style={{ ...ui.input, padding: '5px 9px', fontSize: 12.5, minWidth: 120, opacity: generating ? 0.5 : 1 }}
+            style={{ ...ui.input, minWidth: 160, opacity: generating ? 0.5 : 1 }}
           >
             <option value="">Select…</option>
             {COHORT_LEVEL_OPTIONS.map(opt => (
@@ -645,64 +1049,74 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
             ))}
           </select>
         </label>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: statusColor }}>{statusLabel}</span>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          {saveOk && <span role="status" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--t-success)' }}>Saved</span>}
+        <div>
+          <div style={ui.label}>Old spellings in the question bank</div>
+          <div style={{ ...ui.hint, marginBottom: 8 }}>Questions saved under an older or shorter spelling of this subject's name are moved onto this subject.</div>
           <button
             onClick={handleConsolidateSpellings}
             disabled={saving || generating || consolidating}
-            title="Merge legacy/bare subject spellings in the question bank onto this curriculum's exact name"
             style={secondaryBtn(saving || generating || consolidating)}
           >
             {consolidating ? 'Consolidating…' : 'Consolidate spellings'}
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || generating}
-            style={secondaryBtn(saving || generating)}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {isDraft && (
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}>
-              Questions per subtopic
-              <input
-                type="number" min={1} max={MAX_PER_SUBTOPIC} step={1}
-                value={perSubtopic}
-                onChange={e => setPerSubtopic(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
-                onBlur={e => choosePerSubtopic(e.target.value)}
-                disabled={saving || generating}
-                style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
-              />
-            </label>
-          )}
-          {isDraft && (
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}
-              title="Short-answer questions marked by AI against a marking scheme. Students see them once Written answers is switched on in Student features.">
-              Written answers per subtopic
-              <input
-                type="number" min={0} max={MAX_WRITTEN_PER_SUBTOPIC} step={1}
-                value={writtenPer}
-                onChange={e => setWrittenPer(e.target.value === '' ? '' : Math.round(Number(e.target.value)))}
-                onBlur={e => chooseWritten(e.target.value)}
-                disabled={saving || generating}
-                style={{ width: 56, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--t-border)', background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B }}
-              />
-            </label>
-          )}
-          {isDraft && (
-            <button
-              onClick={handleApproveAndGenerate}
-              disabled={saving || totalSubtopics === 0}
-              style={btn('primary', saving || totalSubtopics === 0)}
-            >
-              Approve and generate questions
-            </button>
-          )}
         </div>
       </div>
+    ),
+  }
+  const available = new Set(Object.keys(pages))
+  const current = available.has(section) ? section : 'overview'
 
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+        <button
+          onClick={onBack}
+          style={{ background: 'none', border: 'none', color: 'var(--t-textMuted)', cursor: 'pointer', fontSize: 12.5, fontFamily: FONT_B, padding: 0, marginBottom: 4 }}
+        >
+          ← Subjects
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h1 style={{ margin: '0 4px 0 0', fontSize: 21, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>{curriculum.name}</h1>
+          <span style={{ ...pill, color: statusColor }}>{generating ? `Writing questions · ${doneCount + failedCount} of ${(progress || []).length}` : statusLabel}</span>
+          {curriculum.level_label && <span style={pill}>{curriculum.level_label}</span>}
+          <span style={pill}>{topics.length} topic{topics.length === 1 ? '' : 's'} · {totalSubtopics} subtopic{totalSubtopics === 1 ? '' : 's'}</span>
+          {questionCount != null && <span style={pill}>{questionCount.toLocaleString('en-AU')} question{questionCount === 1 ? '' : 's'}</span>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <form role="search" onSubmit={e => { e.preventDefault(); onSearch(search.trim()) }} style={{ display: 'flex' }}>
+          <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search this subject's questions"
+            aria-label="Search this subject's questions" style={{ ...ui.input, width: 280, maxWidth: '100%' }} />
+        </form>
+        {saveOk && <span role="status" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--t-success)' }}>Saved</span>}
+        <button
+          onClick={handleSave}
+          disabled={saving || generating}
+          title="Saves the topics, name, level and About the exam"
+          style={btn('primary', saving || generating)}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <AdminSubjectLayout
+      section={current}
+      onSection={onSection}
+      available={available}
+      counts={{
+        topics: { text: topics.length },
+        ...(questionCount != null ? { questions: { text: questionCount.toLocaleString('en-AU') } } : {}),
+        ...(health ? {
+          reports: health.openReports ? { text: health.openReports, alert: true } : { text: 0 },
+          review: { text: health.drafts },
+          papers: { text: health.papers },
+        } : {}),
+      }}
+      header={header}
+    >
       {error && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{error}</div>}
       {genError && <div role="alert" style={{ ...note('danger'), marginBottom: 14 }}>{genError}</div>}
 
@@ -891,302 +1305,8 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
         )
       })()}
 
-      {/* Per-subject feature switches */}
-      {!generating && (
-        <FeatureSwitches features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />
-      )}
-
-      {/* Exam scope & generation context */}
-      {!generating && (
-        <div style={{
-          marginBottom: 20, padding: '14px 16px', borderRadius: 10,
-          background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
-        }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 4 }}>
-            About the exam
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 10 }}>
-            Notes on the real exam that AI uses whenever it writes questions for this subject: its structure ("30 multiple-choice questions, 1 mark each"), textbook terms, what's out of scope. Saved with the plan.
-          </div>
-          <textarea
-            value={curriculum.exam_context || ''}
-            onChange={e => setCurriculum(prev => ({ ...prev, exam_context: e.target.value }))}
-            maxLength={3000}
-            rows={4}
-            placeholder={'e.g. "SACE Stage 2 exam: 30 multiple-choice questions worth 1 mark each, 90 minutes. Use Nelson Chemistry 3 & 4 terminology. Calculators permitted — include calculation-based questions."'}
-            style={{
-              width: '100%', padding: '8px 10px', borderRadius: 8,
-              border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
-              color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-              resize: 'vertical', boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ fontSize: 11, color: 'var(--t-textFaint)', textAlign: 'right', marginTop: 4 }}>
-            {(curriculum.exam_context || '').length}/3000
-          </div>
-        </div>
-      )}
-
-      {/* Reference resources — textbooks/exams distilled into generation exemplars */}
-      {!generating && <CurriculumResourcesPanel curriculumId={curriculumId} />}
-
-      {/* Written-answer questions, marked by AI against a marking scheme */}
-      {!generating && <WrittenAnswersPanel curriculumId={curriculumId} topics={curriculum.topics} enabled={!!curriculum.features?.written_answers} />}
-
-      {/* Course scope, and checking the bank against it */}
-      {!generating && <CourseScopePanel curriculumId={curriculumId} />}
-
-      {/* Borrow questions from another subject, subtopic by subtopic */}
-      {!generating && <SharedQuestionsPanel curriculumId={curriculumId} />}
-
-      {/* AI revise panel */}
-      {!generating && (
-        <div style={{
-          marginBottom: 20, padding: '14px 16px', borderRadius: 10,
-          background: 'var(--t-bgCard)', border: '1px solid var(--t-border)',
-        }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 10 }}>
-            Change the plan with AI
-          </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <textarea
-                value={reviseInstruction}
-                onChange={e => setReviseInstruction(e.target.value)}
-                placeholder='e.g. "Restructure to match the pasted TOC below" or "Add a topic on probability with 3 subtopics"'
-                rows={2}
-                disabled={revising}
-                style={{
-                  width: '100%', padding: '8px 10px', borderRadius: 8,
-                  border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
-                  color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-                  resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
-                }}
-              />
-              {/* Toggle paste area */}
-              <button
-                onClick={() => setShowPasteArea(v => !v)}
-                disabled={revising}
-                style={{
-                  alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: '1px dashed var(--t-border)',
-                  background: showPasteArea ? 'var(--t-bgSubtle)' : 'transparent',
-                  color: showPasteArea ? 'var(--t-goldText)' : 'var(--t-textMuted)', fontSize: 12, cursor: 'pointer', fontFamily: FONT_B,
-                }}
-              >
-                {showPasteArea ? '▾ Hide paste area' : '▸ Paste TOC / text document'}
-              </button>
-              {showPasteArea && (
-                <textarea
-                  value={reviseSourceText}
-                  onChange={e => setReviseSourceText(e.target.value)}
-                  placeholder={'Paste a table of contents, topic list, or any text here.\nClaude will use it as the source to restructure the curriculum.'}
-                  rows={8}
-                  disabled={revising}
-                  style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid var(--t-border)', background: 'var(--t-bgSubtle)',
-                    color: 'var(--t-text)', fontSize: 12, fontFamily: FONT_B, outline: 'none',
-                    resize: 'vertical', boxSizing: 'border-box', opacity: revising ? 0.6 : 1,
-                  }}
-                />
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                borderRadius: 8, cursor: revising ? 'not-allowed' : 'pointer',
-                border: reviseDoc ? '1px solid var(--t-success)' : '1px dashed var(--t-border)',
-                background: reviseDoc ? 'var(--t-successBg)' : 'transparent',
-                fontSize: 12, color: reviseDoc ? 'var(--t-success)' : 'var(--t-textMuted)', whiteSpace: 'nowrap',
-              }}>
-                <input type="file" accept=".pdf,.txt" disabled={revising} onChange={handleReviseFileUpload} style={{ display: 'none' }} />
-                {reviseDoc ? `✓ ${reviseDoc.name}` : '↑ Upload doc'}
-                {reviseDoc && (
-                  <span onClick={e => { e.preventDefault(); setReviseDoc(null) }} style={{ marginLeft: 4, cursor: 'pointer', color: 'var(--t-textMuted)' }}>×</span>
-                )}
-              </label>
-              <button
-                onClick={handleRevise}
-                disabled={revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())}
-                style={{
-                  padding: '8px 16px', borderRadius: 8,
-                  border: '1px solid var(--t-border)',
-                  background: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'var(--t-bgSubtle)' : 'var(--t-bgSubtle)',
-                  color: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'var(--t-textMuted)' : 'var(--t-textSub)',
-                  fontSize: 13, fontWeight: 700, cursor: (revising || (!reviseInstruction.trim() && !reviseDoc && !reviseSourceText.trim())) ? 'not-allowed' : 'pointer',
-                  fontFamily: FONT_B,
-                }}
-              >
-                {revising ? 'Revising…' : 'Apply'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-
-        {/* Left: tree editor */}
-        <div style={{ flex: '1 1 420px', minWidth: 0 }}>
-          {topics.map((topic, ti) => (
-            <div key={ti} style={{ marginBottom: 14 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 14px', borderRadius: 10,
-                background: 'var(--t-bgCard)',
-                border: '1px solid var(--t-border)',
-              }}>
-                <span style={{ fontSize: 10, color: 'var(--t-textMuted)', fontWeight: 700, width: 22, flexShrink: 0 }}>T{ti + 1}</span>
-                <EditableText
-                  value={topic.name}
-                  onSave={name => renameTopic(ti, name)}
-                  style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--t-text)' }}
-                />
-                <select
-                  value={topic.question_style || 'standard'}
-                  onChange={e => setTopicStyle(ti, e.target.value)}
-                  title="How questions for this topic are generated. Saved with the curriculum."
-                  style={{
-                    flexShrink: 0, padding: '3px 6px', borderRadius: 6, fontSize: 11, fontFamily: FONT_B,
-                    border: '1px solid var(--t-border)', background: 'var(--t-bgInput)',
-                    color: topic.question_style === 'passage' ? 'var(--t-goldText)' : 'var(--t-textMuted)',
-                  }}
-                >
-                  <option value="standard">Standard questions</option>
-                  <option value="passage">Reading passages</option>
-                </select>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <IconBtn title="Move up"      onClick={() => moveTopicUp(ti)}   disabled={ti === 0}>↑</IconBtn>
-                  <IconBtn title="Move down"    onClick={() => moveTopicDown(ti)} disabled={ti === topics.length - 1}>↓</IconBtn>
-                  <IconBtn title="Delete topic" onClick={() => deleteTopic(ti)}   danger>×</IconBtn>
-                </div>
-              </div>
-
-              {/* Subtopics */}
-              <div style={{ paddingLeft: 28, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {topic.subtopics.map((sub, si) => (
-                  <div key={si} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '7px 12px', borderRadius: 8,
-                    background: 'var(--t-bgCard)',
-                    border: '1px solid var(--t-border)',
-                  }}>
-                    <span style={{ fontSize: 10, color: 'var(--t-textFaint)', width: 30, flexShrink: 0 }}>{ti + 1}.{si + 1}</span>
-                    <EditableText
-                      value={sub.name}
-                      onSave={name => renameSubtopic(ti, si, name)}
-                      style={{ flex: 1, fontSize: 13, color: 'var(--t-textSub)' }}
-                    />
-                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                      <IconBtn onClick={() => moveSubtopicUp(ti, si)}   disabled={si === 0}                          small>↑</IconBtn>
-                      <IconBtn onClick={() => moveSubtopicDown(ti, si)} disabled={si === topic.subtopics.length - 1} small>↓</IconBtn>
-                      <IconBtn onClick={() => deleteSubtopic(ti, si)}   danger small>×</IconBtn>
-                    </div>
-                  </div>
-                ))}
-                <button onClick={() => addSubtopic(ti)} style={{ ...addBtn, marginTop: 2 }}>
-                  + Add subtopic
-                </button>
-              </div>
-            </div>
-          ))}
-
-          <button onClick={addTopic} style={{ ...addBtn, marginTop: 8, padding: '10px 16px', fontSize: 13 }}>
-            + Add topic
-          </button>
-        </div>
-
-        {/* Right: generation progress panel */}
-        {progress && (
-          <div style={{
-            flex: '0 1 320px', minWidth: 260,
-            position: 'sticky', top: 0,
-            background: 'var(--t-bgCard)',
-            border: '1px solid var(--t-border)',
-            borderRadius: 12, padding: 16,
-            maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
-          }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--t-text)', marginBottom: 12 }}>
-              Generating questions
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ height: 6, borderRadius: 3, background: 'var(--t-bgSubtle)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: 3, background: 'var(--t-success)',
-                  width: `${progress.length > 0 ? Math.round(((doneCount + failedCount) / progress.length) * 100) : 0}%`,
-                  transition: 'width 0.4s',
-                }} />
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--t-textMuted)', marginTop: 5 }}>
-                {totalQs} questions{totalWritten > 0 ? ` + ${totalWritten} written answers` : ''} · {doneCount} of {progress.length} subtopics done
-                {failedCount > 0 && <span style={{ color: 'var(--t-danger)' }}> · {failedCount} failed</span>}
-              </div>
-            </div>
-
-            {generating && running && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                <div style={{ flex: 1, fontSize: 11, color: 'var(--t-textMuted)', lineHeight: 1.4 }}>
-                  Keep this tab open: generation runs from it and stops if you close it.
-                </div>
-                <button onClick={handlePause} style={secondaryBtn(false)}>Pause</button>
-              </div>
-            )}
-            {generating && !running && remainingCount > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                <div style={{ flex: 1, fontSize: 11, color: 'var(--t-goldText)', lineHeight: 1.4 }}>
-                  Paused with {remainingCount} subtopic{remainingCount === 1 ? '' : 's'} to go.
-                </div>
-                <button onClick={handleResume} style={btn('primary')}>Resume</button>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {progress.map(p => {
-                const chipColor = p.gen_status === 'done' ? 'var(--t-success)' : p.gen_status === 'failed' ? 'var(--t-danger)' : p.gen_status === 'generating' ? 'var(--t-textSub)' : 'var(--t-textMuted)'
-                return (
-                  <div key={p.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '7px 10px', borderRadius: 8,
-                    background: 'var(--t-bgCard)',
-                    border: '1px solid var(--t-border)',
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                    </div>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, flexShrink: 0,
-                      color: chipColor,
-                      padding: '1px 0',
-                    }}>
-                      {p.gen_status === 'done' ? `${p.questions_generated} questions` : p.gen_status === 'generating' ? 'Writing…' : p.gen_status === 'failed' ? 'Failed' : 'Waiting'}
-                      {writtenProgress[p.id] && (
-                        <span title={writtenProgress[p.id].error || (writtenProgress[p.id].notSaved ? `${writtenProgress[p.id].notSaved} didn't pass the checks` : '')}
-                          style={{ color: writtenProgress[p.id].status === 'failed' ? 'var(--t-danger)' : 'var(--t-textMuted)' }}>
-                          {' · '}{writtenProgress[p.id].status === 'writing' ? 'written answers…' : `${writtenProgress[p.id].saved} written${writtenProgress[p.id].status === 'failed' ? ' (failed)' : ''}`}
-                        </span>
-                      )}
-                    </span>
-                    {p.gen_status === 'failed' && (
-                      <button
-                        onClick={() => handleRetry(p)}
-                        style={{
-                          background: 'none', border: '1px solid var(--t-danger)',
-                          borderRadius: 6, color: 'var(--t-danger)', fontSize: 11.5, fontWeight: 700,
-                          cursor: 'pointer', padding: '2px 7px', fontFamily: FONT_B,
-                        }}
-                      >
-                        Retry
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      {pages[current]}
+    </AdminSubjectLayout>
   )
 }
 
@@ -1224,9 +1344,10 @@ const addBtn = {
 }
 
 const secondaryBtn = (disabled) => btn('secondary', disabled)
+const pill = { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 999, background: 'var(--t-bgHover)', fontSize: 12, fontWeight: 700, color: 'var(--t-textSub)', whiteSpace: 'nowrap' }
 
 /** Optional student tools for this subject. Everything is off unless switched on here. */
-function FeatureSwitches({ features, saving, onChange }) {
+function FeatureSwitches({ name, features, saving, onChange }) {
   const row = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', cursor: 'pointer' }
   const numInput = {
     width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--t-border)',
@@ -1307,11 +1428,24 @@ function FeatureSwitches({ features, saving, onChange }) {
         <span>
           <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Written answers</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>
-            Short-answer questions in practice, marked by AI point by point against a marking scheme (Written answers panel below).
+            Short-answer questions in practice, marked by AI point by point against a marking scheme (write them in Content → Written answers).
             Each answer marked costs roughly 2c. Not used in Exam Mode.
           </span>
         </span>
       </label>
+      {features.written_answers && (
+        <label style={{ ...row, padding: '0 0 8px 26px' }}>
+          <input type="checkbox" checked={usesMathAnswers({ name, features })}
+            onChange={e => onChange({ math_answers: e.target.checked })} style={{ accentColor: 'var(--t-text)' }} />
+          <span>
+            <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Maths answer box</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>
+              Students set out their working line by line, each line a maths box (fractions, powers, symbols) or words.
+              Off: one plain text box. On by default for maths subjects.
+            </span>
+          </span>
+        </label>
+      )}
       {features.written_answers && (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '0 0 8px 26px', fontSize: 12, color: 'var(--t-textMuted)' }}>
           <label>New ones per student per day{' '}

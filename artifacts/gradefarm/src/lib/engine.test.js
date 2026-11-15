@@ -214,7 +214,7 @@ test('an assignment run without remediation says so in its label', () => {
 })
 
 // ─── Ranks & XP ──────────────────────────────────────────────────────────────
-import { RANKS, RANK_TIERS, getLevel, getLevelProgress, rankAccuracy, nextRankHint, calcXP, calcRemediationXP, getRemediationCompletionBonus } from './engine.js'
+import { RANKS, RANK_TIERS, getLevel, getLevelProgress, rankAccuracy, nextRankHint, nextRankChecklist, calcXP, calcRemediationXP, getRemediationCompletionBonus } from './engine.js'
 
 test('every rank has one tier, and the top rank is Legend', () => {
   assert.equal(RANKS.length, RANK_TIERS.length)
@@ -312,4 +312,16 @@ test('Got wrong sessions and counts leave out learned questions', () => {
   assert.equal(getQuestionCounts(qs, map).wrong, 1)
   for (let i = 0; i < 10; i++) assert.equal(selectNextQuestion(qs, map, [], 'wrong').id, 'm')
   assert.equal(selectNextQuestion(qs, map, ['m'], 'wrong'), null)
+})
+
+test('the Rank up checklist shows what the next rank still needs', () => {
+  // Silver II (level 3) with 3,838 XP and 50%: Silver I's XP is done, its 55% isn't.
+  assert.deepEqual(nextRankChecklist(3, 3838, 0.5), [
+    { label: '2,200 XP', done: true, now: 'you have 3,838' },
+    { label: '55% accuracy', done: false, now: "you're on 50%" },
+  ])
+  // Below Silver II there's no accuracy to reach.
+  assert.deepEqual(nextRankChecklist(1, 260, 0.9), [{ label: '500 XP', done: false, now: 'you have 260' }])
+  // Top rank: nothing next.
+  assert.deepEqual(nextRankChecklist(RANKS.length - 1, 60000, 0.9), [])
 })

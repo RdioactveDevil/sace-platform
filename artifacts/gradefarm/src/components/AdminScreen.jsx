@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ADMIN_NAV, ADMIN_LEGACY, reportPortalBadges } from '../lib/portalNav'
+import { ADMIN_NAV, ADMIN_UNLISTED, ADMIN_LEGACY, reportPortalBadges } from '../lib/portalNav'
 import './TutorDashboard.css'
 import AdminOverviewTab          from './AdminOverviewTab'
 import AdminPeopleTab            from './AdminPeopleTab'
@@ -17,25 +17,37 @@ import { getDraftQuestions, fetchQuestionReports, isOpenReport } from '../lib/ad
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
-function SubjectsRouter() {
-  const [selectedId, setSelectedId] = useState(null)
+/**
+ * Subjects: the list at /admin/subjects, and one subject at
+ * /admin/subjects/<id>/<page> (its menu is AdminSubjectLayout).
+ */
+function SubjectsRouter({ profile, onChange }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [, , , id, page] = location.pathname.split('/')
 
-  if (selectedId) {
+  if (id) {
     return (
       <AdminCurriculumDetail
-        curriculumId={selectedId}
-        onBack={() => setSelectedId(null)}
+        key={id}
+        curriculumId={id}
+        profile={profile}
+        section={page || 'overview'}
+        onSection={(next) => navigate(`/admin/subjects/${id}/${next}`)}
+        query={new URLSearchParams(location.search).get('q') || ''}
+        onSearch={(q) => navigate(`/admin/subjects/${id}/questions${q ? `?q=${encodeURIComponent(q)}` : ''}`)}
+        onBack={() => navigate('/admin/subjects')}
         onGoLive={() => {}}
       />
     )
   }
-  return <AdminCurriculaTab onSelectCurriculum={setSelectedId} />
+  return <AdminCurriculaTab onSelectCurriculum={(next) => navigate(`/admin/subjects/${next}`)} />
 }
 
 // The sections are in the app sidebar (lib/portalNav ADMIN_NAV) and live at
 // /admin/<section>; some have tabs (?tab=). This screen shows the section's
 // title, its tabs and its content.
-const NAV_ITEMS = ADMIN_NAV.flatMap(g => g.items)
+const NAV_ITEMS = [...ADMIN_NAV.flatMap(g => g.items), ...ADMIN_UNLISTED]
 
 const TABS = {
   questions: [['bank', 'Bank'], ['add', 'Add questions'], ['review', 'Review queue'], ['preview', 'Preview']],
@@ -75,13 +87,15 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
   }, [section]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const meta = NAV_ITEMS.find(i => i.id === section) || NAV_ITEMS[0]
+  const inSubject = section === 'subjects' && /^\/admin\/subjects\/[^/]+/.test(location.pathname)
   const tabs = TABS[section]
   const tab = tabs ? (tabs.some(([id]) => id === params.get('tab')) ? params.get('tab') : tabs[0][0]) : null
   const setTab = (id) => navigate(`/admin/${section}${id === tabs[0][0] ? '' : `?tab=${id}`}`)
 
   // Waiting on an admin: shown as badges in the app sidebar.
   useEffect(() => {
-    reportPortalBadges('admin', { people: pendingApps, questions: reviewCount, reports: openReports })
+    // Reports and the review queue are inside each subject now; Subjects carries their count.
+    reportPortalBadges('admin', { people: pendingApps, subjects: reviewCount + openReports })
   }, [pendingApps, reviewCount, openReports])
 
   const context = {
@@ -92,7 +106,7 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
 
   return (
     <div className="td-root" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--t-bg)', fontFamily: FONT_B, color: 'var(--t-text)', colorScheme: theme === 'dark' ? 'dark' : 'light' }}>
-      <header className="td-header" style={{ padding: tabs ? '18px 28px 0' : '18px 28px', borderBottom: '1px solid var(--t-border)', flexShrink: 0 }}>
+      {!inSubject && <header className="td-header" style={{ padding: tabs ? '18px 28px 0' : '18px 28px', borderBottom: '1px solid var(--t-border)', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--t-text)', lineHeight: 1.2 }}>{meta.label}</h1>
         <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 2 }}>{context}</div>
         {tabs && (
@@ -106,16 +120,16 @@ export default function AdminScreen({ profile, theme = 'dark' }) {
             ))}
           </div>
         )}
-      </header>
+      </header>}
 
       {/* Section content */}
       <div className="td-content" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 56px' }}>
-        <div key={`${section}-${tab || ''}`} className="td-content-enter" style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
+        <div key={inSubject ? 'subject' : `${section}-${tab || ''}`} className="td-content-enter" style={{ maxWidth: inSubject ? 1480 : 1320, width: '100%', margin: '0 auto' }}>
           <Routes>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview"  element={<AdminOverviewTab />} />
             <Route path="people"    element={<AdminPeopleTab profile={profile} pendingApps={pendingApps} onApplicationsChange={loadBadges} />} />
-            <Route path="subjects"  element={<SubjectsRouter />} />
+            <Route path="subjects/*" element={<SubjectsRouter profile={profile} onChange={loadBadges} />} />
             <Route path="questions" element={<AdminQuestionsScreen profile={profile} tab={tab} onReviewChange={loadBadges} theme={theme} />} />
             <Route path="reports"   element={<AdminReportsScreen onChange={loadBadges} />} />
             <Route path="exam-papers" element={<AdminExamPapersTab />} />

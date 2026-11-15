@@ -4,6 +4,7 @@ import { getStripe, removePaidSubject } from "./billing";
 import { currentStreak } from "../lib/streak";
 import { planIsLive, type TutorBillingRow } from "../lib/tutor-plan";
 import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
+import { parseBulkRequest, conceptTag, chunks } from "../lib/question-bulk";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -1240,6 +1241,75 @@ router.patch("/admin/questions/:id/content", async (req, res) => {
     const { error } = await admin.from("questions").update(built.update).eq("id", req.params.id);
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /admin/questions/bulk — fix many of a subject's questions at once (the
+// Questions page inside a subject). Body: { curriculumId, ids, action,
+// subtopicId?, difficulty? }; lib/question-bulk.ts has the rules. Moving,
+// setting difficulty and deleting only touch this subject's own questions
+// (a borrowed one belongs to its own subject: hide it here instead); hiding
+// and unhiding work for any question shown in the subject.
+// Replies { changed, skipped }.
+router.post("/admin/questions/bulk", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+    const parsed = parseBulkRequest(req.body);
+    if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+    const { action, curriculumId, ids } = parsed;
+
+    const { data: cur } = await admin.from("curricula").select("id, name").eq("id", curriculumId).maybeSingle();
+    if (!cur) return res.status(404).json({ error: "Subject not found" });
+
+    if (action === "hide" || action === "unhide") {
+      for (const part of chunks(ids)) {
+        const { error } = action === "hide"
+          ? await admin.from("curriculum_hidden_questions").upsert(
+            part.map((id) => ({ curriculum_id: curriculumId, question_id: id, reason: "Hidden by an admin." })),
+            { onConflict: "curriculum_id,question_id", ignoreDuplicates: true })
+          : await admin.from("curriculum_hidden_questions").delete().eq("curriculum_id", curriculumId).in("question_id", part);
+        if (error) return res.status(500).json({ error: error.message });
+      }
+      return res.json({ changed: ids.length, skipped: 0 });
+    }
+
+    // This subject's own questions among those picked.
+    const own: string[] = [];
+    for (const part of chunks(ids)) {
+      const { data, error } = await admin.from("questions").select("id").eq("curriculum_id", curriculumId).in("id", part);
+      if (error) return res.status(500).json({ error: error.message });
+      own.push(...((data ?? []) as { id: string }[]).map((r) => r.id));
+    }
+    const skipped = ids.length - own.length;
+    if (!own.length) return res.json({ changed: 0, skipped });
+
+    let update: Record<string, unknown> | null = null;
+    if (action === "difficulty") update = { difficulty: parsed.difficulty };
+    if (action === "move") {
+      const { data: sub } = await admin.from("curriculum_subtopics").select("id, name, topic_id").eq("id", parsed.subtopicId!).maybeSingle();
+      const { data: topic } = sub
+        ? await admin.from("curriculum_topics").select("id, name, curriculum_id").eq("id", (sub as { topic_id: string }).topic_id).maybeSingle()
+        : { data: null };
+      if (!sub || !topic || (topic as { curriculum_id: string }).curriculum_id !== curriculumId) {
+        return res.status(400).json({ error: "That subtopic isn't in this subject" });
+      }
+      const t = (topic as { name: string }).name;
+      const st = (sub as { name: string }).name;
+      update = { topic: t, subtopic: st, subtopic_id: (sub as { id: string }).id, concept_tag: conceptTag((cur as { name: string }).name, t, st) };
+    }
+
+    for (const part of chunks(own)) {
+      const { error } = action === "delete"
+        ? await admin.from("questions").delete().in("id", part)
+        : await admin.from("questions").update(update!).in("id", part);
+      if (error) return res.status(500).json({ error: error.message });
+    }
+    return res.json({ changed: own.length, skipped });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

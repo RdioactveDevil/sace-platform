@@ -406,6 +406,23 @@ export function nextRankHint(xp, accuracy = 0) {
   return accuracy < tier.accuracy ? `${xpLeft}, plus ${Math.round(tier.accuracy * 100)}% recent accuracy` : xpLeft
 }
 
+/**
+ * What the rank after `level` needs, for the Rank up screen: XP, and recent
+ * accuracy from Silver II up, each with whether it's done and where the
+ * student is now. [] at the top rank.
+ */
+export function nextRankChecklist(level, xp, accuracy = 0) {
+  const tier = RANK_TIERS[level + 1]
+  if (!tier) return []
+  const have = Math.max(0, Math.round(xp || 0))
+  const pct = Math.round((accuracy || 0) * 100)
+  const items = [{ label: `${tier.xp.toLocaleString('en-AU')} XP`, done: have >= tier.xp, now: `you have ${have.toLocaleString('en-AU')}` }]
+  if (tier.accuracy > 0) {
+    items.push({ label: `${Math.round(tier.accuracy * 100)}% accuracy`, done: (accuracy || 0) >= tier.accuracy, now: `you're on ${pct}%` })
+  }
+  return items
+}
+
 // A wrong answer costs as much as a right one earns before the streak bonus,
 // so XP only builds up when more answers are right than wrong.
 export function calcXP(correct, difficulty, streak) {
