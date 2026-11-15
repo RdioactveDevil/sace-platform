@@ -28,6 +28,7 @@ import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { exportRowsToCsv } from '../lib/csv'
 import { X } from 'lucide-react'
 import AdminTutorSection from './AdminTutorSection'
+import { usePerson, PersonDetails, PersonParent, PersonSignIn, PersonPlan } from './AdminPersonControls'
 import AdminTutorApplicationsTab from './AdminTutorApplicationsTab'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -108,6 +109,8 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
   const [filterSubject, setFilterSubject]   = useState('')
   const [filterTutor, setFilterTutor]       = useState('')
   const [selected, setSelected]             = useState(null)
+  // Their details, parent, sign-in, settings and plan (AdminPersonControls).
+  const [person, reloadPerson] = usePerson(selected?.id)
   const [detailStats, setDetailStats]       = useState(null)
   const [statsLoading, setStatsLoading]     = useState(false)
   const [busyId, setBusyId]                 = useState(null)
@@ -508,6 +511,8 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
                 <div style={{ fontSize: 12.5, color: 'var(--t-goldText)', fontWeight: 600 }}>Hasn't finished setting up their account.</div>
               )}
 
+              <PersonDetails person={person} reload={reloadPerson} onChanged={() => load(true)} />
+
               {selTutor && <AdminTutorSection tutor={selTutor} students={students.filter(s => !s.is_tutor || s.is_admin)} onChange={() => loadTutors()} />}
               {/* Their tutors */}
               {!selected.is_tutor && (
@@ -664,6 +669,9 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
                 }}
               />
 
+              <PersonPlan person={person} reload={reloadPerson} onChanged={() => loadSubscriptions(selected.id)} />
+              <PersonParent person={person} reload={reloadPerson} onChanged={() => load(true)} />
+
               {/* Role management */}
               <Section title="Role">
                 {roleError && (
@@ -705,6 +713,8 @@ export default function AdminPeopleTab({ profile, pendingApps = 0, onApplication
                   </div>
                 </div>
               </Section>
+
+              <PersonSignIn person={person} reload={reloadPerson} onChanged={() => load(true)} isSelf={selected.id === profile?.id} />
 
               {/* Account management — deactivate (reversible) or delete (permanent) */}
               <Section title="Account">
