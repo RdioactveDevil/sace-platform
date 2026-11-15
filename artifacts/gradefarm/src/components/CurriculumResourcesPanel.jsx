@@ -8,6 +8,7 @@ import {
 import { FileText, X } from 'lucide-react'
 
 import { btn, FONT_B } from '../lib/adminUi'
+import { guessResourceType } from '../lib/resourceTypes'
 
 const RESOURCE_TYPES = [
   { value: 'textbook', label: 'Textbook' },
@@ -23,6 +24,8 @@ const STATUS_STYLE = {
   processing: { color: 'var(--t-goldText)', label: 'Processing…' },
   failed: { color: 'var(--t-danger)', label: 'Failed' },
 }
+
+const isPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
 
 function fmtSize(bytes) {
   if (!bytes) return ''
@@ -41,9 +44,11 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
   const [uploading, setUploading] = useState(false)
   // { fileIndex, fileTotal, name, done, total } while a batch uploads.
   const [progress, setProgress] = useState(null)
+  // Picked files waiting to upload: [{ file, type }].
   const [files, setFiles] = useState([])
   const [resourceType, setResourceType] = useState('textbook')
   const [error, setError] = useState(null)
+  const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef()
 
   const refresh = useCallback(async () => {
@@ -67,19 +72,25 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
     const skipped = []
     const ok = []
     for (const f of picked) {
-      if (f.type !== 'application/pdf') skipped.push(`${f.name} (not a PDF)`)
+      if (!isPdf(f)) skipped.push(`${f.name} (not a PDF)`)
       else if (f.size > MAX_RESOURCE_BYTES) skipped.push(`${f.name} (over 50 MB)`)
       else ok.push(f)
     }
     setFiles(prev => {
       const key = f => `${f.name}:${f.size}:${f.lastModified}`
-      const have = new Set(prev.map(key))
-      return [...prev, ...ok.filter(f => !have.has(key(f)))]
+      const have = new Set(prev.map(p => key(p.file)))
+      return [...prev, ...ok.filter(f => !have.has(key(f))).map(file => ({ file, type: guessResourceType(file.name, resourceType) }))]
     })
     setError(skipped.length ? `Skipped ${skipped.join(', ')}.` : null)
   }
 
   const removeFile = (i) => setFiles(prev => prev.filter((_, j) => j !== i))
+  const setFileType = (i, type) => setFiles(prev => prev.map((p, j) => (j === i ? { ...p, type } : p)))
+
+  // Drag and drop: any number of PDFs onto the panel.
+  const onDragOver = (e) => { if (uploading) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (!dragOver) setDragOver(true) }
+  const onDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false) }
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); if (!uploading) handleFiles(e.dataTransfer.files) }
 
   // Uploads one file at a time (each is read by AI, and big books are read in
   // parts), carrying on past failures so one bad file doesn't stop the rest.
@@ -91,14 +102,14 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
     setError(null)
     const failed = []
     for (let i = 0; i < batch.length; i++) {
-      const file = batch[i]
+      const { file, type } = batch[i]
       setProgress({ fileIndex: i + 1, fileTotal: batch.length, name: file.name, done: 0, total: 1 })
       try {
         await uploadCurriculumResource(curriculumId, file, {
-          resourceType,
+          resourceType: type,
           onProgress: (done, total) => setProgress(p => ({ ...p, done, total })),
         })
-        setFiles(prev => prev.filter(f => f !== file))
+        setFiles(prev => prev.filter(p => p.file !== file))
       } catch (err) {
         failed.push(`${file.name}: ${err.message}`)
       }
@@ -127,43 +138,54 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         Reference material
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 12 }}>
-        Textbooks, past exams or practice tests as PDFs, up to 50 MB each. Pick several at once to upload them together. Big books are split into page ranges. AI works out which subtopics each covers and keeps example questions and style notes, which shape the questions it writes for this subject.
+        Textbooks, past exams or practice tests as PDFs, up to 50 MB each. Drop in as many as you like and they upload one after another. Big books are split into page ranges. AI works out which subtopics each covers and keeps example questions and style notes, which shape the questions it writes for this subject.
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={onDragOver} onDragEnter={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+        onClick={() => !uploading && fileRef.current?.click()}
+        role="button" tabIndex={0} aria-label="Add PDFs: drop them here or press to choose"
+        onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !uploading) { e.preventDefault(); fileRef.current?.click() } }}
+        style={{
+          marginBottom: 12, padding: '22px 16px', borderRadius: 12, textAlign: 'center',
+          border: `2px dashed ${dragOver ? 'var(--t-accent)' : 'var(--t-borderStrong, var(--t-border))'}`,
+          background: dragOver ? 'rgba(241,190,67,0.10)' : 'var(--t-bgSubtle)',
+          cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1, transition: 'background 0.12s, border-color 0.12s',
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)' }}>{dragOver ? 'Drop to add them' : 'Drag PDFs here'}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 4 }}>
+          or <span style={{ fontWeight: 700, color: 'var(--t-text)', textDecoration: 'underline' }}>{files.length ? 'choose more' : 'choose files'}</span>. As many as you like.
+        </div>
       </div>
 
       {/* Upload row */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-        <select
-          value={resourceType}
-          onChange={e => setResourceType(e.target.value)}
-          style={{
-            padding: '8px 10px', borderRadius: 8, border: '1px solid var(--t-border)',
-            background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
-          }}
-        >
-          {RESOURCE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
-
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          style={{
-            padding: '8px 14px', borderRadius: 9, border: '1.5px dashed var(--t-borderStrong)',
-            background: 'var(--t-bgCard)', color: 'var(--t-textMuted)',
-            fontSize: 13, fontWeight: 700, cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: FONT_B,
-            opacity: uploading ? 0.6 : 1,
-          }}
-        >
-          {files.length ? 'Add more PDFs' : 'Choose PDFs'}
-        </button>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--t-textMuted)' }}>
+          New files are
+          <select
+            value={resourceType}
+            onChange={e => setResourceType(e.target.value)}
+            title="Used when the file name doesn't say what it is. Each file's type can be changed below."
+            style={{
+              padding: '7px 10px', borderRadius: 8, border: '1px solid var(--t-border)',
+              background: 'var(--t-bgInput)', color: 'var(--t-text)', fontSize: 13, fontFamily: FONT_B, outline: 'none',
+            }}
+          >
+            {RESOURCE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </label>
         <input
           ref={fileRef}
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,.pdf"
           multiple
           style={{ display: 'none' }}
           onChange={e => handleFiles(e.target.files)}
         />
 
+        <span style={{ flex: 1 }} />
         <button
           onClick={handleUpload}
           disabled={files.length === 0 || uploading}
@@ -176,17 +198,21 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
       {/* Picked files, waiting to upload */}
       {files.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-          {files.map((f, i) => {
+          {files.map(({ file: f, type }, i) => {
             const current = uploading && progress?.name === f.name
             return (
               <span key={`${f.name}:${f.size}:${f.lastModified}`} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 280, padding: '4px 6px 4px 9px', borderRadius: 999,
+                display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 380, padding: '4px 6px 4px 9px', borderRadius: 999,
                 border: `1px solid ${current ? 'var(--t-borderStrong)' : 'var(--t-border)'}`, background: 'var(--t-bgCard)',
                 fontSize: 12, fontWeight: 600, color: current ? 'var(--t-text)' : 'var(--t-textMuted)',
               }}>
                 <FileText size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
                 <span style={{ flexShrink: 0, opacity: 0.75 }}>{fmtSize(f.size)}</span>
+                <select value={type} onChange={e => setFileType(i, e.target.value)} disabled={uploading} aria-label={`What ${f.name} is`}
+                  style={{ flexShrink: 0, border: 'none', background: 'var(--t-bgHover)', color: 'var(--t-text)', borderRadius: 999, padding: '2px 6px', fontSize: 11.5, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer' }}>
+                  {RESOURCE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
                 <button
                   type="button"
                   onClick={() => removeFile(i)}
