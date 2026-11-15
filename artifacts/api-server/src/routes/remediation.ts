@@ -11,6 +11,7 @@ import { normalizeMathText } from "../lib/normalize-math";
 import { filterVerifiedQuestions } from "../lib/verify-question";
 import { scopeForSubtopic, scopePromptLines, filterInScope, subtopicIdFor, type Scope } from "../lib/course-scope";
 import { logger } from "../lib/logger";
+import { canReadQuestion } from "../lib/question-access";
 
 /**
  * Remediation "similar questions", generated and stored by the server.
@@ -142,19 +143,6 @@ async function parentScope(caller: Caller, parent: Pick<Parent, "curriculum_id" 
     logger.warn({ err }, "[remediation] couldn't read the course scope; generating without it");
     return null;
   }
-}
-
-/** Whether the caller may see this question (staff, or a subject they have access to). */
-async function canReadQuestion(caller: Caller, questionId: string): Promise<boolean> {
-  if (caller.isAdmin || caller.isTutor) return true;
-  const { data, error } = await caller.admin.rpc("user_can_read_question", { p_user: caller.userId, p_question_id: questionId });
-  if (error?.code === "PGRST202") {
-    // Before migration 20261025000005 there is no access check to call.
-    logger.warn("[remediation] user_can_read_question missing; allowing the request");
-    return true;
-  }
-  if (error) throw error;
-  return data === true;
 }
 
 async function generateWithClaude(caller: Caller, parent: Parent, targetDifficulty: number, scope: Scope | null): Promise<unknown[]> {

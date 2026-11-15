@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireUser, requireAdmin } from "../lib/auth";
+import { requireUser, requireAdmin, type Caller } from "../lib/auth";
 import { checkAiQuota } from "../lib/ai-quota";
 import { checkMarkedAllowance } from "../lib/marked-quota";
 import { blockAwaitingParent, loadStudentContext } from "../lib/parent-consent";
@@ -8,6 +8,9 @@ import { markAnswer, normalizeResponse, responseHash, MAX_RESPONSE_CHARS, type M
 import { generateMarkedQuestions, loadMarkedTarget, MARKED_MAX_COUNT } from "../lib/marked-questions";
 import { logger } from "../lib/logger";
 import { storedAdvice, writeAdvice } from "../lib/advice";
+import { withoutAnswers } from "../lib/grade";
+import { canReadQuestion } from "../lib/question-access";
+import { findSubtopic, markedTopupLimit, planMarkedTopup, topupDifficulty } from "../lib/marked-topup";
 
 const router = Router();
 
@@ -249,6 +252,152 @@ router.post("/marked/generate", async (req, res) => {
   } catch (err) {
     logger.error({ err, subtopicId }, "[marking] generating written-answer questions failed");
     res.status(500).json({ error: err instanceof Error ? err.message : "Generating the questions failed" });
+  }
+});
+
+/** Which of these questions the student has answered (answer_log). */
+async function answeredIds(caller: Caller, ids: string[]): Promise<Set<string>> {
+  const done = new Set<string>();
+  if (caller.userId === "service") return done;
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await caller.admin
+      .from("answer_log").select("question_id")
+      .eq("user_id", caller.userId).in("question_id", ids.slice(i, i + 100));
+    if (error) throw error;
+    for (const r of (data ?? []) as { question_id: string }[]) done.add(r.question_id);
+  }
+  return done;
+}
+
+/**
+ * Claim up to `wanted` written-answer top-ups from the student's allowance for
+ * today (migration 20261115000000). 0 when they don't qualify (no paid,
+ * granted or beta subscription to the subject), have none left, or the check
+ * can't run: these cost real money, so they fail closed.
+ */
+async function claimTopups(caller: Caller, curriculumId: string, wanted: number, limit: number): Promise<number> {
+  const { data, error } = await caller.admin.rpc("use_marked_topup_quota", {
+    p_user: caller.userId, p_curriculum: curriculumId, p_count: wanted, p_limit: limit,
+  });
+  if (error) {
+    logger.warn({ err: error }, "[marking] written-answer top-up allowance check failed; not writing any");
+    return 0;
+  }
+  return Math.max(0, Math.min(wanted, Number(data) || 0));
+}
+
+async function releaseTopups(caller: Caller, unused: number): Promise<void> {
+  if (unused < 1) return;
+  const { error } = await caller.admin.rpc("release_marked_topup_quota", { p_user: caller.userId, p_count: unused });
+  if (error) logger.warn({ err: error }, "[marking] giving back unused written-answer top-ups failed");
+}
+
+// POST /api/marked/top-up  { curriculumId, subtopic, difficulty? }
+// More written-answer questions for a student who has used up the ones in a
+// subtopic. The app asks in the background as they reach the last one, so the
+// next is ready when they finish. Writes up to MARKED_MAX_COUNT, checked like
+// the admin ones, within the student's daily allowance (paid subjects only;
+// lib/marked-topup.ts). Only refills: a subtopic with no written answers gets
+// none. When the student still has some unanswered, sends those back instead
+// (the app may have loaded before they were written).
+// Returns { questions: [rows, without answers for students], written, reason? }.
+router.post("/marked/top-up", async (req, res) => {
+  const caller = await requireUser(req, res);
+  if (!caller) return;
+  const { curriculumId, subtopic, difficulty } = (req.body || {}) as { curriculumId?: unknown; subtopic?: unknown; difficulty?: unknown };
+  if (typeof curriculumId !== "string" || !curriculumId || typeof subtopic !== "string" || !subtopic.trim()) {
+    res.status(400).json({ error: "curriculumId and subtopic required" });
+    return;
+  }
+  const staff = caller.isAdmin || caller.isTutor;
+  const shown = (rows: Record<string, unknown>[]) => (staff ? rows : rows.map((r) => withoutAnswers(r)));
+  try {
+    const { data: curr } = await caller.admin.from("curricula").select("id, features").eq("id", curriculumId).maybeSingle();
+    if (!curr) {
+      res.status(404).json({ error: "Subject not found" });
+      return;
+    }
+    const features = ((curr as { features?: Record<string, unknown> | null }).features ?? {});
+    if (features.written_answers !== true) {
+      res.status(403).json({ error: "Written answers aren't switched on for this subject." });
+      return;
+    }
+    const { data: subs, error: subErr } = await caller.admin
+      .from("curriculum_subtopics").select("id, name").eq("curriculum_id", curriculumId);
+    if (subErr) throw subErr;
+    const sub = findSubtopic(subs as { id: string; name: string | null }[] | null, subtopic);
+    if (!sub) {
+      res.status(404).json({ error: "Subtopic not found" });
+      return;
+    }
+
+    // The subtopic's written-answer questions, newest first, less any kept out of this subject.
+    const [bankRes, hiddenRes] = await Promise.all([
+      caller.admin.from("questions").select("id")
+        .eq("subtopic_id", sub.id).eq("question_type", "marked")
+        .order("created_at", { ascending: false }).limit(500),
+      caller.admin.from("curriculum_hidden_questions").select("question_id").eq("curriculum_id", curriculumId),
+    ]);
+    if (bankRes.error) throw bankRes.error;
+    const hidden = new Set(((hiddenRes.data ?? []) as { question_id: string }[]).map((r) => r.question_id));
+    const bank = ((bankRes.data ?? []) as { id: string }[]).filter((q) => !hidden.has(q.id));
+    if (!bank.length) {
+      res.json({ questions: [], written: 0, reason: "none" });
+      return;
+    }
+    // Only students who can see this subject's questions.
+    if (!(await canReadQuestion(caller, bank[0].id))) {
+      res.status(403).json({ error: "You don't have access to this subject." });
+      return;
+    }
+
+    const plan = planMarkedTopup(bank, await answeredIds(caller, bank.map((q) => q.id)));
+    if (plan.action === "serve") {
+      const { data: rows, error } = await caller.admin.from("questions").select("*").in("id", plan.ids);
+      if (error) throw error;
+      res.json({ questions: shown((rows ?? []) as Record<string, unknown>[]), written: 0, reason: "enough" });
+      return;
+    }
+    if (plan.action !== "generate") {
+      res.json({ questions: [], written: 0, reason: "none" });
+      return;
+    }
+
+    // A student under 15 waits for their parent to confirm before any AI.
+    const student = await loadStudentContext(caller);
+    if (blockAwaitingParent(student, res)) return;
+
+    const claimed = staff ? MARKED_MAX_COUNT : await claimTopups(caller, curriculumId, MARKED_MAX_COUNT, markedTopupLimit(features));
+    if (claimed < 1) {
+      res.json({ questions: [], written: 0, reason: "allowance" });
+      return;
+    }
+    const check = await checkAiQuota(caller, false);
+    if ("blocked" in check) {
+      if (!staff) await releaseTopups(caller, claimed);
+      res.status(429).json({ code: "ai_daily_limit", error: "You've reached today's limit for new questions. It resets tomorrow." });
+      return;
+    }
+
+    let saved: Record<string, unknown>[] = [];
+    try {
+      const target = await loadMarkedTarget(caller.admin, sub.id);
+      if (target) {
+        const result = await generateMarkedQuestions(caller.admin, target, { count: claimed, difficulty: topupDifficulty(difficulty) });
+        saved = result.saved as Record<string, unknown>[];
+        if (result.rejected.length) {
+          logger.info({ subtopicId: sub.id, saved: saved.length, rejected: result.rejected.length }, "[marking] written-answer top-up");
+        }
+      }
+    } finally {
+      // The allowance counts only questions that reached the bank. Given back
+      // before replying: Vercel may freeze the function once it has responded.
+      if (!staff) await releaseTopups(caller, claimed - saved.length);
+    }
+    res.json({ questions: shown(saved), written: saved.length });
+  } catch (err) {
+    logger.error({ err, curriculumId, subtopic }, "[marking] written-answer top-up failed");
+    res.status(500).json({ error: "New written-answer questions couldn't be written just now." });
   }
 });
 

@@ -1312,6 +1312,19 @@ function FeatureSwitches({ features, saving, onChange }) {
           </span>
         </span>
       </label>
+      {features.written_answers && (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '0 0 8px 26px', fontSize: 12, color: 'var(--t-textMuted)' }}>
+          <label>New ones per student per day{' '}
+            <input type="number" min={0} max={30} style={numInput}
+              defaultValue={features.marked_topup_daily_limit ?? 6}
+              onBlur={e => { const v = Math.round(Number(e.target.value)); onChange({ marked_topup_daily_limit: v >= 0 && e.target.value !== '' ? v : undefined }) }} />
+          </label>
+          <span style={{ color: 'var(--t-textFaint)' }}>
+            When a paid student gets to the last written answer in a subtopic, more are written and checked in the background
+            (3 at a time, a few cents each). 0 turns this off.
+          </span>
+        </div>
+      )}
 
       <label style={row}>
         <input type="checkbox" checked={!!features.exam_grade_topups} onChange={e => onChange({ exam_grade_topups: e.target.checked || undefined })} style={{ accentColor: 'var(--t-text)' }} />

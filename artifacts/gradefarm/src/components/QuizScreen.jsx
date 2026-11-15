@@ -27,6 +27,7 @@ import {
   getRemediationVariants,
   storeRemediationVariants,
   fetchAndPersistMoreQuestions,
+  fetchMoreWrittenAnswers,
   flagQuestion,
   reportQuestion, reportOffCourse,
   flagTopicForStudyPlan,
@@ -54,7 +55,8 @@ import { usesMathInput } from '../lib/subjects'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { MarksBreakdown } from './questions/WrittenAnswer'
 import { AnnotatedQuestion, AdviceSteps, penColor } from './TitanAdvice'
-import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked, totalMarks } from '../lib/questionTypes'
+import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked, totalMarks, questionFormat } from '../lib/questionTypes'
+import { writtenTopupSubtopic } from '../lib/writtenTopups'
 import { buildQuestionHelpContext, describeResponse, questionHelpSystemSection } from '../lib/questionHelp'
 import RoughWork from './RoughWork'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
@@ -348,6 +350,12 @@ export default function QuizScreen({
   // Subtopics a background top-up returned nothing for; skipped for the rest
   // of the session so a topic that can't generate isn't retried every answer.
   const prefetchBarrenSubtopicsRef = useRef(new Set())
+  // Written-answer top-ups (lib/writtenTopups.js): one at a time; subtopics
+  // that came back with nothing new; and whether to stop for the session
+  // (today's allowance used, or AI not allowed yet).
+  const writtenTopupBusyRef = useRef(false)
+  const writtenTopupSkipRef = useRef(new Set())
+  const writtenTopupStoppedRef = useRef(false)
 
   useEffect(() => {
     const h = () => { setIsMobile(window.innerWidth < 860) }
@@ -946,6 +954,9 @@ export default function QuizScreen({
   useEffect(() => {
     if (finished || (quizMode !== 'new' && quizMode !== 'all')) return
     if (backgroundPrefetchAttempted.current || generatingMoreRef.current) return
+    // A short-answer-only session: new multiple-choice questions wouldn't show
+    // in it, so writing them would only use up AI. (Written answers top up below.)
+    if (questions.length && questions.every(q => questionFormat(q) === 'saq')) return
 
     // Count questions still available to pick this session. In 'new' mode that's
     // questions the student hasn't seen (by id or content); in 'all' (Repeat
@@ -1005,6 +1016,40 @@ export default function QuizScreen({
         if (lowestSubtopic) prefetchBarrenSubtopicsRef.current.add(lowestSubtopic)
         backgroundPrefetchAttempted.current = false
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionAnswered.length])
+
+  // Written answers: once the student is down to the last one in the subtopic
+  // they're doing (or picked a subtopic with none left), ask for more in the
+  // background, so the next is ready by the time they finish. The server writes
+  // up to 3, checked, within their daily allowance on a paid subject.
+  useEffect(() => {
+    if (!subjectTile?.features?.written_answers || examRun) return
+    if (finished || (quizMode !== 'new' && quizMode !== 'all')) return
+    if (writtenTopupBusyRef.current || writtenTopupStoppedRef.current) return
+    const lastMain = [...sessionResults].reverse().find(r => !r.remediation)
+    const subtopic = writtenTopupSubtopic({
+      questions,
+      isAvailable: q => !sessionAnswered.includes(q.id) && (quizMode === 'all' || !isSeenQuestion(q)),
+      picked: effectiveSubtopics,
+      lastAnswered: lastMain ? questions.find(q => q.id === lastMain.id) : null,
+      skip: writtenTopupSkipRef.current,
+    })
+    if (!subtopic) return
+    writtenTopupBusyRef.current = true
+    const known = new Set(questions.map(q => q.id))
+    fetchMoreWrittenAnswers(subjectTile, subtopic, targetDifficultyFor(sessionResults))
+      .then(({ questions: got, reason }) => {
+        const fresh = got.filter(q => !known.has(q.id))
+        if (fresh.length && typeof onBankQuestionsAdded === 'function') onBankQuestionsAdded(fresh)
+        if (reason === 'allowance') writtenTopupStoppedRef.current = true
+        else if (!fresh.length) writtenTopupSkipRef.current.add(subtopic)
+      })
+      .catch(err => {
+        if (err?.stop) writtenTopupStoppedRef.current = true
+        else writtenTopupSkipRef.current.add(subtopic)
+      })
+      .finally(() => { writtenTopupBusyRef.current = false })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionAnswered.length])
 
