@@ -16,7 +16,7 @@ import CurriculumResourcesPanel from './CurriculumResourcesPanel'
 import SharedQuestionsPanel from './SharedQuestionsPanel'
 import CourseScopePanel from './CourseScopePanel'
 import WrittenAnswersPanel from './WrittenAnswersPanel'
-import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS } from '../lib/subjects'
+import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS, usesMathAnswers } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
 import { TriangleAlert, Sparkles } from 'lucide-react'
 
@@ -893,7 +893,7 @@ export default function AdminCurriculumDetail({ curriculumId, onBack, onGoLive }
 
       {/* Per-subject feature switches */}
       {!generating && (
-        <FeatureSwitches features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />
+        <FeatureSwitches name={curriculum.name} features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />
       )}
 
       {/* Exam scope & generation context */}
@@ -1226,7 +1226,7 @@ const addBtn = {
 const secondaryBtn = (disabled) => btn('secondary', disabled)
 
 /** Optional student tools for this subject. Everything is off unless switched on here. */
-function FeatureSwitches({ features, saving, onChange }) {
+function FeatureSwitches({ name, features, saving, onChange }) {
   const row = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', cursor: 'pointer' }
   const numInput = {
     width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--t-border)',
@@ -1312,6 +1312,19 @@ function FeatureSwitches({ features, saving, onChange }) {
           </span>
         </span>
       </label>
+      {features.written_answers && (
+        <label style={{ ...row, padding: '0 0 8px 26px' }}>
+          <input type="checkbox" checked={usesMathAnswers({ name, features })}
+            onChange={e => onChange({ math_answers: e.target.checked })} style={{ accentColor: 'var(--t-text)' }} />
+          <span>
+            <span style={{ fontSize: 13, color: 'var(--t-text)', fontWeight: 600 }}>Maths answer box</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--t-textMuted)' }}>
+              Students set out their working line by line, each line a maths box (fractions, powers, symbols) or words.
+              Off: one plain text box. On by default for maths subjects.
+            </span>
+          </span>
+        </label>
+      )}
       {features.written_answers && (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '0 0 8px 26px', fontSize: 12, color: 'var(--t-textMuted)' }}>
           <label>New ones per student per day{' '}

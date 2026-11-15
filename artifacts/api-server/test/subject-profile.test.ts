@@ -34,7 +34,8 @@ test("the marker speaks to the subject", () => {
   assert.match(chem, /SACE Chemistry Stage 2 assessor marking .* Year 12 student/);
   assert.match(chem, /changes the chemistry/);
   assert.match(chem, /\$\\ce\{\.\.\.\}\$/);
-  assert.doesNotMatch(chem, /equation editor/);
+  // Any subject can have the maths answer box switched on (Admin), so the marker always knows how to read it.
+  assert.match(chem, /may type working in an equation editor/);
 
   const methods = markingSystem("VCE Mathematical Methods Units 1 and 2");
   assert.match(methods, /Year 11 student/);
