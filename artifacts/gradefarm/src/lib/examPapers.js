@@ -63,3 +63,38 @@ export const safeName = (name) => String(name || 'paper.pdf').replace(/[^A-Za-z0
 export function sourceLabelFor({ kind, publisher, year, paper }) {
   return [publisher, year, kind === 'commercial' ? 'Trial' : '', paper].filter(Boolean).join(' ')
 }
+
+/** Natural order for question numbers ("2" before "10", "3a" after "3"). */
+const byQuestionNumber = (a, b) => {
+  const na = parseInt(a.source_question, 10)
+  const nb = parseInt(b.source_question, 10)
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb
+  return String(a.source_question || '').localeCompare(String(b.source_question || ''), undefined, { numeric: true })
+}
+
+/**
+ * A subject's loaded exam-paper questions grouped into papers, newest first:
+ * [{ key, label, kind, publisher, year, paper, a: [Section A], b: [Section B], marks, loadedAt }].
+ * A question belongs to a paper by its `source` label (scripts/src/ingest-past-paper.ts).
+ */
+export function groupLoadedPapers(rows) {
+  const papers = new Map()
+  for (const q of rows || []) {
+    const label = q.source || sourceLabelFor({ kind: q.source_kind, publisher: q.source_publisher, year: q.source_year, paper: q.source_paper }) || 'Unnamed paper'
+    if (!papers.has(label)) {
+      papers.set(label, {
+        key: label, label, kind: q.source_kind === 'commercial' ? 'trial' : 'past',
+        publisher: q.source_publisher || '', year: q.source_year || null, paper: q.source_paper || '',
+        a: [], b: [], marks: 0, loadedAt: null,
+      })
+    }
+    const p = papers.get(label)
+    if (q.exam_section === 'B' || q.question_type === 'extended') p.b.push(q)
+    else p.a.push(q)
+    p.marks += q.question_type === 'extended' ? Number(q.total_marks) || 0 : 1
+    if (q.created_at && (!p.loadedAt || q.created_at > p.loadedAt)) p.loadedAt = q.created_at
+  }
+  const out = [...papers.values()]
+  for (const p of out) { p.a.sort(byQuestionNumber); p.b.sort(byQuestionNumber) }
+  return out.sort((x, y) => (Number(y.year) || 0) - (Number(x.year) || 0) || x.label.localeCompare(y.label))
+}
