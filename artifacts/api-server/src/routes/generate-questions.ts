@@ -1,3 +1,4 @@
+import { withoutAnswers } from "../lib/grade";
 import { Router } from "express";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { CLAUDE_MODEL, CLAUDE_THINKING, CLAUDE_EXAM_MODEL, CLAUDE_EXAM_EFFORT } from "../lib/anthropic-model";
@@ -861,6 +862,11 @@ router.post("/generate-questions", async (req, res) => {
   if (studentExamClaim > 0) {
     const saved = result.status === 200 ? Number(result.body.inserted) || 0 : 0;
     await releaseStudentExamGrade(adminDb, caller, studentExamClaim - saved);
+  }
+  // Students get the new questions as the questions_student view shows them:
+  // answers come back from /answers/check once they've answered.
+  if (!caller.isAdmin && !caller.isTutor && Array.isArray(result.body.questions)) {
+    result.body = { ...result.body, questions: (result.body.questions as Record<string, unknown>[]).map((q) => withoutAnswers(q)) };
   }
   res.status(result.status).json(result.body);
 });

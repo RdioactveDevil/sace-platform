@@ -1162,6 +1162,36 @@ export async function fetchAndPersistMoreQuestions(subject, topicCode, count = 1
   }))
 }
 
+/**
+ * More written-answer questions for a subtopic the student has nearly used up
+ * (POST /api/marked/top-up; when to ask is lib/writtenTopups.js). The server
+ * writes up to 3, checked, within the student's daily allowance on a paid
+ * subject, or sends back ones they haven't answered yet. Slow: a minute or
+ * two when it writes, so call it in the background.
+ * Resolves to { questions, reason }: reason 'allowance' means no more today.
+ * Throws with `stop: true` when nothing more will come this session.
+ */
+export async function fetchMoreWrittenAnswers(subjectTile, subtopic, targetDifficulty = null) {
+  const curriculumId = curriculumIdFromTile(subjectTile)
+  if (!curriculumId || !subtopic) return { questions: [], reason: 'none' }
+  const res = await fetch('/api/marked/top-up', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ curriculumId, subtopic, difficulty: targetDifficulty ?? 'mixed' }),
+  })
+  if (!res.ok) {
+    const err = new Error(`written-answer top-up failed (${res.status})`)
+    // Out of AI for today, or waiting on a parent: no point asking again this session.
+    err.stop = res.status === 429 || res.status === 403
+    throw err
+  }
+  const data = await res.json().catch(() => ({}))
+  const norm = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase()
+  // Filed under the session's spelling of the subtopic, so the quiz picks them up.
+  const rows = (data.questions || []).map(q => (norm(q.subtopic) === norm(subtopic) ? { ...q, subtopic } : q))
+  return { questions: mapAndDedupeQuestions(rows, subjectTile?.name), reason: data.reason || '' }
+}
+
 export async function flagTopicForStudyPlan(userId, { subject, topic, subtopic, concept_tag, reason = 'remediation' }) {
   const { error } = await supabase
     .from('study_plan_items')
