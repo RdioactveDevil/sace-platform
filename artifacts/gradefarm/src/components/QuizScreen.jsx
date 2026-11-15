@@ -1019,10 +1019,10 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionAnswered.length])
 
-  // Written answers: once the student is down to the last one in the subtopic
-  // they're doing (or picked a subtopic with none left), ask for more in the
-  // background, so the next is ready by the time they finish. The server writes
-  // up to 3, checked, within their daily allowance on a paid subject.
+  // Written answers: when the subtopic the student is working on is down to its
+  // last one or has none left (lib/writtenTopups.js has the cases), ask for more
+  // in the background, so the next is ready by the time they need it. The server
+  // writes up to 3, checked, within their daily allowance on a paid subject.
   useEffect(() => {
     if (!subjectTile?.features?.written_answers || examRun) return
     if (finished || (quizMode !== 'new' && quizMode !== 'all')) return
@@ -1034,6 +1034,7 @@ export default function QuizScreen({
       picked: effectiveSubtopics,
       lastAnswered: lastMain ? questions.find(q => q.id === lastMain.id) : null,
       skip: writtenTopupSkipRef.current,
+      lastSeen: q => Date.parse(struggleMap?.[q.id]?.last_seen || '') || 0,
     })
     if (!subtopic) return
     writtenTopupBusyRef.current = true
