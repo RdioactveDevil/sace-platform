@@ -336,3 +336,25 @@ export async function savePersonSettings(id, body) {
 export async function changePersonBilling(id, action) {
   return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/billing`, { method: 'POST', body: JSON.stringify({ action }) })
 }
+
+// ─── LOADED EXAM PAPERS (a subject → Exam papers) ────────────────────────────
+
+const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, created_at'
+
+/** Every question loaded from an exam paper into a subject (they have an exam section). */
+export async function fetchLoadedPaperQuestions(curriculumId) {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('questions').select(PAPER_FIELDS)
+      .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
+
+/** Rewrite a multi-part exam question: { question, parts: [{ label, level, text, marks, solution, image_url }] }. */
+export async function editExtendedQuestion(id, body) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/extended`, { method: 'PATCH', body: JSON.stringify(body) })
+}

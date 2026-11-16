@@ -6,7 +6,7 @@ import { getQuestionType, QUESTION_TYPES } from './questionTypes.js'
 export const SOURCE_FILTERS = [
   ['all', 'All sources'],
   ['ai', 'Written by AI'],
-  ['paper', 'Past exam papers'],
+  ['paper', 'Past and trial papers'],
   ['other', 'Other sources'],
 ]
 
@@ -17,11 +17,17 @@ export const FLAG_FILTERS = [
   ['visible', 'Not hidden'],
 ]
 
-export const TYPE_FILTERS = [['all', 'All types'], ...Object.entries(QUESTION_TYPES).map(([id, t]) => [id, t.label])]
+export const TYPE_FILTERS = [['all', 'All types'], ...Object.entries(QUESTION_TYPES).map(([id, t]) => [id, t.label]), ['extended', 'Exam question (parts)']]
 
-/** Where a question came from: 'paper' (an official exam), 'ai' (no source recorded) or 'other'. */
+/** A question's type, including multi-part exam questions (Section B of a loaded paper). */
+export const questionKind = (q) => (q?.question_type === 'extended' ? 'extended' : getQuestionType(q))
+
+/** The type's name for a list. */
+export const questionKindLabel = (q) => (questionKind(q) === 'extended' ? 'Exam question (parts)' : QUESTION_TYPES[getQuestionType(q)].label)
+
+/** Where a question came from: 'paper' (a past or trial exam), 'ai' (no source recorded) or 'other'. */
 export function questionSource(q) {
-  if (q?.source_kind === 'official') return 'paper'
+  if (q?.source_kind === 'official' || q?.source_kind === 'commercial' || q?.exam_section) return 'paper'
   if (!q?.source_kind && !q?.source) return 'ai'
   return 'other'
 }
@@ -36,7 +42,7 @@ export function filterSubjectQuestions(rows, f = {}, { reported = new Set(), hid
   return (rows || []).filter(q => {
     if (f.topic && q.topic !== f.topic) return false
     if (f.subtopic && q.subtopic !== f.subtopic) return false
-    if (f.type && f.type !== 'all' && getQuestionType(q) !== f.type) return false
+    if (f.type && f.type !== 'all' && questionKind(q) !== f.type) return false
     if (f.difficulty && Number(q.difficulty) !== Number(f.difficulty)) return false
     if (f.source && f.source !== 'all' && questionSource(q) !== f.source) return false
     if (f.flag === 'reported' && !reported.has(q.id)) return false

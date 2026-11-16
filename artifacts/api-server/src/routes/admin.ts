@@ -5,6 +5,7 @@ import { currentStreak } from "../lib/streak";
 import { planIsLive, type TutorBillingRow } from "../lib/tutor-plan";
 import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
 import { parseBulkRequest, conceptTag, chunks } from "../lib/question-bulk";
+import { buildExtendedUpdate } from "../lib/extended-edit";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -1310,6 +1311,27 @@ router.post("/admin/questions/bulk", async (req, res) => {
       if (error) return res.status(500).json({ error: error.message });
     }
     return res.json({ changed: own.length, skipped });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/questions/:id/extended — rewrite a multi-part exam question
+// (Section B of a loaded exam paper): { question, parts: [{ label, level,
+// text, marks, solution, image_url }] }. Total marks and the solution are
+// worked out from the parts (lib/extended-edit.ts).
+router.patch("/admin/questions/:id/extended", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const built = buildExtendedUpdate(req.body);
+    if ("error" in built) return res.status(400).json({ error: built.error });
+    const { data, error } = await ctx.admin.from("questions").update(built.update)
+      .eq("id", req.params.id).eq("question_type", "extended").select("id");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No multi-part question with that ID" });
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

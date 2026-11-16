@@ -5,10 +5,10 @@ import MathText from './MathText'
 import { QuestionPanel } from './AdminQuestionPanel'
 import {
   fetchSubjectQuestions, fetchHiddenQuestionIds, fetchQuestionRow, bulkEditQuestions, bulkScanQuestions,
-  fetchQuestionReports, isOpenReport, editQuestion, deleteQuestion,
+  fetchQuestionReports, isOpenReport, editQuestion, deleteQuestion, editExtendedQuestion,
 } from '../lib/adminDb'
-import { filterSubjectQuestions, questionSource, SOURCE_FILTERS, FLAG_FILTERS, TYPE_FILTERS } from '../lib/subjectQuestions'
-import { getQuestionType, QUESTION_TYPES } from '../lib/questionTypes'
+import { filterSubjectQuestions, questionSource, questionKindLabel, SOURCE_FILTERS, FLAG_FILTERS, TYPE_FILTERS } from '../lib/subjectQuestions'
+import ExtendedQuestionEditor from './ExtendedQuestionEditor'
 
 const PAGE = 50
 const NO_FILTERS = { text: '', topic: '', subtopic: '', type: 'all', difficulty: '', source: 'all', flag: 'any' }
@@ -236,7 +236,7 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
                           <span className="sq-q"><MathText text={q.question || ''} /></span>
                         </button>
                         <div style={{ marginTop: 5, fontSize: 12, color: 'var(--t-textMuted)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
-                          <span>{QUESTION_TYPES[getQuestionType(q)].label}</span>
+                          <span>{questionKindLabel(q)}</span>
                           <span aria-hidden="true">·</span>
                           {src === 'paper'
                             ? <span style={tag('rgba(241,190,67,0.2)', 'var(--t-goldText)')}>{q.source || 'Past paper'}</span>
@@ -253,7 +253,10 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
                     {openId === q.id && (
                       <tr>
                         <td colSpan={4} style={{ ...ui.td, background: 'var(--t-bgSubtle)', padding: 16 }}>
-                          {openRow ? (
+                          {openRow && openRow.question_type === 'extended' ? (
+                            <ExtendedQuestionEditor key={openRow.id} question={openRow} busy={busy === 'edit'} onCancel={() => setOpenId(null)}
+                              onSave={(body) => run('edit', async () => { await editExtendedQuestion(openRow.id, body); setNotice({ ok: true, text: 'Saved.' }); await refreshOpen() })} />
+                          ) : openRow ? (
                             <QuestionPanel key={openRow.id} questionId={openRow.id} q={openRow} busy={busy} open
                               meta={`${openRow.id} · ${[openRow.topic, openRow.subtopic].filter(Boolean).join(' → ')}`}
                               onEdit={(fields) => run('edit', async () => { await editQuestion(openRow.id, fields); setNotice({ ok: true, text: 'Saved.' }); await refreshOpen() })}

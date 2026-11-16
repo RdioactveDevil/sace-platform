@@ -3,6 +3,7 @@ import { FileStack, Upload, Copy, RefreshCw, X, ExternalLink } from 'lucide-reac
 import { supabase } from '../lib/supabase'
 import { listCurricula } from '../lib/curriculaDb'
 import { groupSubject } from '../lib/homeSubjects'
+import AdminLoadedPapers from './AdminLoadedPapers'
 import { buildPaperRows, parsePaperFilename, safeName, sourceLabelFor } from '../lib/examPapers'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -117,6 +118,7 @@ export default function AdminExamPapersTab({ subject: fixedSubject = '' } = {}) 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontFamily: FONT_B, color: 'var(--t-text)' }}>
+      {cur && <AdminLoadedPapers key={cur.id} curriculumId={cur.id} />}
       <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}><FileStack size={17} /> Load exam papers</div>
         <div style={{ fontSize: 13, color: 'var(--t-textSub)', lineHeight: 1.6, maxWidth: 760 }}>
