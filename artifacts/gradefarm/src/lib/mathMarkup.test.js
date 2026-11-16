@@ -10,6 +10,7 @@ import {
   convertBracketDelimiters,
   restoreLiteralNewlines,
   parseLatexJson,
+  katexSafeLatex,
 } from './mathMarkup.js'
 
 const math = (tokens) => tokens.filter((t) => t.type === 'math').map((t) => t.content)
@@ -143,4 +144,20 @@ test('parseLatexJson keeps single-backslash LaTeX from model JSON intact', () =>
 test('parseLatexJson leaves correctly escaped JSON unchanged', () => {
   const raw = String.raw`[{"q":"$\\frac{1}{2}$ said \"hi\" é"}]`
   assert.deepEqual(parseLatexJson(raw), JSON.parse(raw))
+})
+
+test('katexSafeLatex turns MathLive-only commands into ones KaTeX draws', () => {
+  const cases = [
+    [String.raw`f^{\doubleprime}\left(x\right)=6x-6`, String.raw`f^{\prime\prime}\left(x\right)=6x-6`],
+    [String.raw`g^{\tripleprime}(x)`, String.raw`g^{\prime\prime\prime}(x)`],
+    [String.raw`\int x\,\differentialD x`, String.raw`\int x\,\mathrm{d} x`],
+    [String.raw`\exponentialE^{\imaginaryI\pi}`, String.raw`\mathrm{e}^{\mathrm{i}\pi}`],
+  ]
+  for (const [from, to] of cases) {
+    assert.equal(katexSafeLatex(from), to)
+    assert.doesNotThrow(() => katex.renderToString(katexSafeLatex(from), { throwOnError: true, strict: false }))
+  }
+  assert.equal(katexSafeLatex(String.raw`f^{\prime}(x)`), String.raw`f^{\prime}(x)`)
+  assert.equal(katexSafeLatex('plain text'), 'plain text')
+  assert.equal(katexSafeLatex(null), null)
 })

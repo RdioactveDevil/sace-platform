@@ -559,3 +559,21 @@ export function parseMathText(text) {
 }
 
 export default parseMathText
+
+// MathLive (the maths answer box) writes some symbols with commands KaTeX
+// doesn't have, so a second derivative typed as f''(x) came back as
+// f^{\doubleprime}(x) and was shown as raw text. These are KaTeX's spellings.
+const MATHLIVE_ONLY = [
+  [/\\doubleprime(?![a-zA-Z])/g, '\\prime\\prime'],
+  [/\\tripleprime(?![a-zA-Z])/g, '\\prime\\prime\\prime'],
+  [/\\differentialD(?![a-zA-Z])/g, '\\mathrm{d}'],
+  [/\\exponentialE(?![a-zA-Z])/g, '\\mathrm{e}'],
+  [/\\imaginaryI(?![a-zA-Z])/g, '\\mathrm{i}'],
+  [/\\imaginaryJ(?![a-zA-Z])/g, '\\mathrm{j}'],
+]
+
+/** LaTeX from the maths answer box, with MathLive-only commands swapped for ones KaTeX can draw. */
+export function katexSafeLatex(latex) {
+  if (typeof latex !== 'string' || !latex.includes('\\')) return latex
+  return MATHLIVE_ONLY.reduce((s, [re, to]) => s.replace(re, to), latex)
+}

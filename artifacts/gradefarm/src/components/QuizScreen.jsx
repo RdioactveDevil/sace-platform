@@ -144,7 +144,7 @@ function ExtraPracticeStrip({ streak, target, status, topic, onReturnToQuiz, the
           : `${target} in a row${topic ? ` on ${topic}` : ''}, then back to your session`
   return (
     <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 14px', borderRadius: 10, background: t.bgCard, border: `1px solid ${status === 'complete' ? t.success : t.border}`, fontSize: 12.5 }}>
-      <strong style={{ color: t.text }}>Extra practice</strong>
+      <strong style={{ color: t.text }}>Comeback Mode</strong>
       <span style={{ color: t.textMuted, flex: 1, minWidth: 0 }}>{message}</span>
       {status === 'struggling' && onReturnToQuiz && (
         <button type="button" onClick={onReturnToQuiz} style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>

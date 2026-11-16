@@ -3,6 +3,7 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'mathlive'
 import 'mathlive/fonts.css'
+import { katexSafeLatex } from '../lib/mathMarkup.js'
 
 // The maths answer box (a MathLive field, typed like the KaTeX it renders)
 // and its symbols keyboard. Used by the Diagnostic and by written answers in
@@ -183,7 +184,7 @@ export function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabl
       mf.readOnly = !!disabled
       if (value) mf.setValue(value, { suppressChangeNotifications: true })
 
-      const onInput = () => stableAnswer.current(questionId, mf.value)
+      const onInput = () => stableAnswer.current(questionId, katexSafeLatex(mf.value))
       const onFocus = () => {
         mf.style.borderColor = 'var(--t-text)'
         mf.style.boxShadow = '0 0 0 1px var(--t-text)'
@@ -221,7 +222,7 @@ export function MathLiveInput({ questionId, value, onAnswer, insertFnRef, disabl
           if (disabled) return
           mf.focus()
           mf.insert(sym.ml, { selectionMode: 'placeholder' })
-          stableAnswer.current(questionId, mf.value)
+          stableAnswer.current(questionId, katexSafeLatex(mf.value))
         }
       }
     }
