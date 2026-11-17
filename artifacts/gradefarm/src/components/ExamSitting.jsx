@@ -18,6 +18,18 @@ import {
 } from '../lib/examSitting'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+// One line of encouragement at the top of the timer, the same for the whole sitting.
+const QUOTES = [
+  "You've prepared for this. Trust your work.",
+  'One question at a time.',
+  'Read carefully, show your working, keep moving.',
+  "Good luck. You've got this.",
+  'Stay calm, stay focused, finish strong.',
+  'Every mark counts. Keep going.',
+  'Breathe. Read the question twice, then write.',
+  'Hard work got you here. Now show it.',
+]
+const quoteFor = (id = '') => QUOTES[[...String(id)].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7) % QUOTES.length]
 const clockTime = (ms) => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
 // A timer's chime plays whatever the app's sound setting is: it's an alarm.
@@ -75,11 +87,11 @@ function Instructions({ t, attempt, subject, newExam, go, onBegin }) {
   const [ticked, setTicked] = useState({})
 
   const checklist = [
-    { id: 'paper', text: 'Your exam paper, printed', extra: attempt.exam_id && (
+    { id: 'paper', text: 'Your printed exam paper', extra: attempt.exam_id && (
       <button type="button" className="ex-link" onClick={() => newExam(`exam=${attempt.exam_id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Download size={14} aria-hidden="true" /> Download the paper</button>
     ) },
     { id: 'pens', text: 'Black or blue pens, a pencil and an eraser' },
-    { id: 'calc', text: 'Your approved calculator, if this paper allows one' },
+    { id: 'calc', text: 'Approved calculator' },
     booklet
       ? { id: 'booklet', text: `The ${booklet.title.toLowerCase()}`, extra: <a className="ex-link" href={booklet.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><ExternalLink size={14} aria-hidden="true" /> Open it to print</a> }
       : { id: 'booklet', text: 'Any data booklet or formula sheet the exam allows' },
@@ -87,6 +99,7 @@ function Instructions({ t, attempt, subject, newExam, go, onBegin }) {
     { id: 'quiet', text: `Somewhere quiet for ${formatMinutes(total)}` },
   ]
   const ready = checklist.filter(c => ticked[c.id]).length
+  const allReady = ready === checklist.length
 
   const fact = (label, value) => (
     <div style={{ padding: '12px 14px', borderRadius: 12, background: t.bgSubtle, border: `1px solid ${t.border}`, minWidth: 0 }}>
@@ -142,10 +155,13 @@ function Instructions({ t, attempt, subject, newExam, go, onBegin }) {
         </section>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="ex-btn primary" style={{ minHeight: 46, padding: '11px 20px', fontSize: 15 }} onClick={() => onBegin(times)}>
+          {/* Only once everything on the checklist is ticked. */}
+          <button type="button" className="ex-btn primary" style={{ minHeight: 46, padding: '11px 20px', fontSize: 15 }} disabled={!allReady} onClick={() => onBegin(times)}
+            aria-describedby={allReady ? undefined : 'sit-tick-hint'}>
             {sace ? 'Begin writing time' : 'Begin reading time'}
           </button>
           <button type="button" className="ex-btn" onClick={() => go('/exams')}>Not now</button>
+          {!allReady && <span id="sit-tick-hint" style={{ fontSize: 13, color: t.textMuted }}>Tick everything above to begin.</span>}
         </div>
       </div>
     </main>
@@ -240,24 +256,24 @@ function Clock({ t, attempt, sitting, persist, saveFailed }) {
         </button>
       </div>
 
+      <div style={{ padding: '16px 20px 0', textAlign: 'center', fontSize: 15, fontStyle: 'italic', color: t.textSub }}>{quoteFor(attempt.id)}</div>
+
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '28px 20px', textAlign: 'center' }}>
         {notice && <div role="status" style={{ padding: '10px 18px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, fontSize: 15, fontWeight: 700 }}>{notice}</div>}
-        <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: accent }}>{label}</div>
+        <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.text }}>{label}</div>
         <div aria-live="off" style={{ fontSize: 'clamp(64px, 17vw, 168px)', fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', opacity: st.paused ? 0.45 : 1 }}>
           {formatClock(st.left)}
         </div>
         <div style={{ width: 'min(560px, 100%)', height: 8, borderRadius: 4, background: t.bgHover }} aria-hidden="true">
           <div style={{ width: `${progress * 100}%`, height: 8, borderRadius: 4, background: accent, transition: 'width 0.25s linear' }} />
         </div>
-        <div style={{ fontSize: 15, color: t.textSub, lineHeight: 1.6, maxWidth: 560 }}>
+        {(st.paused || st.phase === 'writing') && <div style={{ fontSize: 15, color: t.textSub, lineHeight: 1.6, maxWidth: 560 }}>
           {st.paused
             ? 'The clock is stopped. Pauses are shown with your result.'
-            : st.phase === 'reading'
-              ? <>Read the paper, but don't start writing answers yet. Writing time ({formatMinutes(sitting.writing_ms / 60_000)}) starts at <b style={{ color: t.text }}>{clockTime(now + st.left)}</b>.</>
-              : <>Writing time ends at <b style={{ color: t.text }}>{clockTime(now + st.left)}</b>.{pace && (writingUsed < pace.ms
+            : <>Writing time ends at <b style={{ color: t.text }}>{clockTime(now + st.left)}</b>.{pace && (writingUsed < pace.ms
                   ? <> Aim to finish Section A ({pace.aMarks} marks) by <b style={{ color: t.text }}>{clockTime(now + pace.ms - writingUsed)}</b>.</>
                   : <> Section B ({pace.bMarks} marks) now.</>)}</>}
-        </div>
+        </div>}
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 }}>
           {st.paused
