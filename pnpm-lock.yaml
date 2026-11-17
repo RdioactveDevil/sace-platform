@@ -290,6 +290,9 @@ importers:
       mathlive:
         specifier: ^0.109.2
         version: 0.109.2
+      pdfjs-dist:
+        specifier: 4.10.38
+        version: 4.10.38
       react-router-dom:
         specifier: ^7.14.2
         version: 7.14.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)

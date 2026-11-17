@@ -88,6 +88,7 @@
     "katex": "^0.16.45",
     "livekit-client": "^2.18.9",
     "mathlive": "^0.109.2",
+    "pdfjs-dist": "4.10.38",
     "react-router-dom": "^7.14.2",
     "tus-js-client": "^4.3.1"
   }
