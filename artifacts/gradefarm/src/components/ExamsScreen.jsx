@@ -1,16 +1,19 @@
 import { confirmDialog } from '../lib/dialog'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Timer, Download } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { fetchSolutions, getExamBankForTile } from '../lib/db'
-import { listBuiltExams } from '../lib/builtExams'
+import { listBuiltExams, deleteBuiltExam } from '../lib/builtExams'
 import { ATTEMPT_STORE } from '../lib/examAttempts'
 import { isExamReady } from '../lib/examBuilder'
 import {
   SKIP, tally, partRows, byQuestion, byTopic, summary, cleanMark, skippedParts,
-  previousPercent, seenQuestionIds,
+  previousPercent, seenQuestionIds, snapshotOf,
 } from '../lib/examMarking'
+import { boardOf, sittingState, sittingSummary, timesForSnapshot, formatClock } from '../lib/examSitting'
+import { formatMinutes } from '../lib/examBuilder'
 import MathText from './MathText'
+import ExamSitting from './ExamSitting'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const letter = (i) => (Number.isInteger(i) ? String.fromCharCode(65 + i) : '')
@@ -18,17 +21,20 @@ const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /**
- * Exams: the student's own exams from the exam builder. They download one,
- * sit it on paper, then mark each part here against the solutions (marks, or
- * Skipped for a blank, kept apart from 0), and keep a history of their scores.
+ * Exams: the student's own exams from the exam builder. Every exam they save
+ * (or a tutor shares) is ready to sit: Start this exam gives an instructions
+ * page and then a timed sitting (ExamSitting.jsx) on the printed paper. Then
+ * they mark each part here against the solutions (marks, or Skipped for a
+ * blank, kept apart from 0), and keep a history of their scores.
  *
- * `view`: 'dashboard' (/exams), 'mark' (/exams/:id/mark) or 'result'
- * (/exams/:id). `go(path)` navigates; `newExam(query)` opens the builder.
+ * `view`: 'dashboard' (/exams), 'sit' (/exams/:id/sit), 'mark'
+ * (/exams/:id/mark) or 'result' (/exams/:id). `go(path)` navigates; `newExam(query)` opens the builder.
  * Self-marked scores give no XP.
  */
 export default function ExamsScreen({
   theme = 'dark', subject, profile, view = 'dashboard', attemptId = null, go = () => {}, newExam = () => {}, onExit = () => {},
   store = ATTEMPT_STORE, loadSolutions = fetchSolutions, loadBank = getExamBankForTile, loadExams = listBuiltExams,
+  removeExam = deleteBuiltExam,
 }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
@@ -47,6 +53,13 @@ export default function ExamsScreen({
   }, [subjectName, myId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const replace = (row) => setAttempts(prev => (prev || []).map(a => (a.id === row.id ? row : a)))
+  // A new attempt, opened straight into its timed sitting.
+  const sit = async (fields) => {
+    const row = await store.create({ userId: myId, subject: subjectName, ...fields })
+    if (!row) { setError("Couldn't start that exam. Check your connection and try again."); return }
+    setAttempts(prev => [row, ...(prev || [])])
+    go(`/exams/${row.id}/sit`)
+  }
   const attempt = attemptId ? (attempts || []).find(a => a.id === attemptId) : null
 
   const css = `
@@ -81,6 +94,8 @@ export default function ExamsScreen({
         <div><button type="button" className="ex-btn" onClick={() => go('/exams')}>Back to Exams</button></div>
       </main>
     )
+  } else if (view === 'sit') {
+    body = <ExamSitting t={t} attempt={attempt} subject={subject} store={store} onSaved={replace} go={go} newExam={newExam} />
   } else if (view === 'mark') {
     body = <Marking t={t} attempt={attempt} store={store} loadSolutions={loadSolutions} onSaved={replace} go={go} />
   } else if (view === 'result') {
@@ -88,7 +103,11 @@ export default function ExamsScreen({
   } else {
     body = (
       <Dashboard t={t} attempts={attempts} error={error} subjectName={subjectName} myId={myId} go={go} newExam={newExam}
-        loadBank={loadBank} loadExams={loadExams} subject={subject}
+        loadBank={loadBank} loadExams={loadExams} subject={subject} sit={sit}
+        onRemoveExam={async (r) => {
+          if (!(await confirmDialog(`Delete your saved exam "${r.title}"?`, { confirm: 'Delete', danger: true }))) return false
+          return removeExam(r.id)
+        }}
         onRemove={async (a) => {
           if (!(await confirmDialog(`Remove "${a.title}" from your exams?${a.status === 'marked' ? ' Its score will be deleted.' : ''}`, { confirm: 'Remove', danger: true }))) return
           if (await store.remove(a.id)) setAttempts(prev => prev.filter(x => x.id !== a.id))
@@ -118,6 +137,7 @@ export default function ExamsScreen({
 
 // Marking keeps its own header (with the running score), so the bar here is for the result page only.
 function BarFor({ view, back, attempt, go, newExam }) {
+  if (view === 'sit') return <div className="ex-bar">{back}</div>
   if (view !== 'result') return null
   return (
     <div className="ex-bar">
@@ -132,35 +152,60 @@ function BarFor({ view, back, attempt, go, newExam }) {
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam, loadBank, loadExams, onRemove }) {
+function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam, loadBank, loadExams, onRemove, onRemoveExam, sit }) {
   const sum = useMemo(() => summary(attempts), [attempts])
   const topics = useMemo(() => byTopic(attempts).slice(0, 4), [attempts])
-  const toMark = attempts.filter(a => a.status !== 'marked')
+  // Not yet marked: waiting to be sat (or being sat) until a timed sitting has
+  // finished or marking has begun; then it's ready to mark.
+  const now = Date.now()
+  const sat = (a) => sittingState(a.sitting, now)?.phase === 'done'
+  const notMarked = attempts.filter(a => a.status !== 'marked')
+  const toMark = notMarked.filter(a => sat(a) || tally(a.snapshot, a.marks || {}).entered > 0)
+  const toSit = notMarked.filter(a => !toMark.includes(a))
   const marked = attempts.filter(a => a.status === 'marked')
     .sort((a, b) => String(b.marked_at || '').localeCompare(String(a.marked_at || '')))
 
-  // Exams a tutor shared with the student's classes that they haven't started.
-  const [shared, setShared] = useState([])
+  // Saved exams not started yet: the student's own, and ones a tutor shared with their classes.
+  const [saved, setSaved] = useState([])
   useEffect(() => {
     let alive = true
     Promise.resolve(loadExams(subjectName)).then(rows => {
       if (!alive || !rows) return
       const started = new Set(attempts.map(a => a.exam_id))
-      setShared(rows.filter(r => r.owner_id !== myId && r.class_id && !started.has(r.id)))
+      setSaved(rows.filter(r => !started.has(r.id) && (r.owner_id === myId || r.class_id)))
     }).catch(() => {})
     return () => { alive = false }
   }, [subjectName, attempts]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // How much of the bank's real exam questions the student has met.
+  // The exam bank: how much of its real exam questions the student has met,
+  // and the questions a saved exam is made of when they start it.
+  const [bank, setBank] = useState(null)
   const [bankCount, setBankCount] = useState(null)
   useEffect(() => {
     let alive = true
     Promise.resolve(loadBank(subject)).then(qs => {
       if (!alive || !qs) return
+      setBank(qs)
       setBankCount((qs || []).filter(q => isExamReady(q) && q.source).map(q => q.id))
     }).catch(() => {})
     return () => { alive = false }
   }, [subjectName]) // eslint-disable-line react-hooks/exhaustive-deps
+  const snapshotFor = (r) => {
+    if (!bank) return null
+    const byId = new Map(bank.map(q => [q.id, q]))
+    const exam = { A: (r.questions?.A || []).map(id => byId.get(id)).filter(Boolean), B: (r.questions?.B || []).map(id => byId.get(id)).filter(Boolean) }
+    if (!exam.A.length && !exam.B.length) return null
+    return snapshotOf(exam, { title: r.title, subject: subjectName, board: r.settings?.board || boardOf(subject) })
+  }
+  const [starting, setStarting] = useState(null)
+  const startSaved = async (r) => {
+    const snapshot = snapshotFor(r)
+    if (!snapshot) return
+    setStarting(r.id)
+    await sit({ examId: r.id, title: r.title, snapshot })
+    setStarting(null)
+  }
+  const [hidden, setHidden] = useState(() => new Set())
   const seen = useMemo(() => seenQuestionIds(attempts), [attempts])
   const seenReal = bankCount ? bankCount.filter(id => seen.has(id)).length : 0
 
@@ -174,14 +219,15 @@ function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam
     </div>
   )
 
-  if (!attempts.length && !shared.length) {
+  const ready = saved.filter(r => !hidden.has(r.id))
+  if (!attempts.length && !ready.length) {
     return (
       <main className="ex-main">
         {error && <div className="ex-card" role="alert" style={{ color: t.danger }}>{error}</div>}
         <div className="ex-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
           <h2 className="ex-h" style={{ fontSize: 19 }}>Your exams will appear here</h2>
           <div style={{ fontSize: 14.5, color: t.textSub, lineHeight: 1.6, maxWidth: 620 }}>
-            Build a practice exam from past papers and download it. Sit it on paper, then come back here to mark each part against the solutions and keep track of your scores.
+            Build a practice exam from past papers and save it. Start it here under timed conditions with the paper printed, then mark each part against the solutions and keep track of your scores.
           </div>
           <button type="button" className="ex-btn primary" onClick={() => newExam('')}><Plus size={16} aria-hidden="true" /> New exam</button>
         </div>
@@ -227,21 +273,78 @@ function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam
             </section>
           )}
 
-          {(toMark.length > 0 || shared.length > 0) && (
+          {(toSit.length > 0 || ready.length > 0) && (
+            <section aria-labelledby="ex-tosit" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <h2 id="ex-tosit" className="ex-h">Ready to sit</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+                {toSit.map(a => {
+                  const st = sittingState(a.sitting, now)
+                  const times = timesForSnapshot(a.snapshot)
+                  return (
+                    <div key={a.id} className="ex-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: st ? t.borderAccent : t.border }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 800 }}>{a.title}</div>
+                          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 3 }}>{plural(a.snapshot?.questions?.length || 0, 'question')} · {tally(a.snapshot, {}).available} marks · {formatMinutes(times.readingMinutes + times.writingMinutes)}</div>
+                        </div>
+                        <button type="button" onClick={() => onRemove(a)} aria-label={`Remove ${a.title}`} title="Remove" style={{ border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', padding: 4, display: 'inline-flex' }}><Trash2 size={15} /></button>
+                      </div>
+                      {st && <div style={{ fontSize: 13, color: t.goldText, fontWeight: 700 }}>{st.paused ? 'Paused' : 'In progress'} · {formatClock(st.writingLeft + (st.phase === 'reading' ? st.left : 0))} left</div>}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button type="button" className="ex-btn primary" onClick={() => go(`/exams/${a.id}/sit`)}><Timer size={16} aria-hidden="true" /> {st ? 'Resume' : 'Start this exam'}</button>
+                        {a.exam_id && <button type="button" className="ex-btn" onClick={() => newExam(`exam=${a.exam_id}`)}><Download size={15} aria-hidden="true" /> Download</button>}
+                      </div>
+                      {!st && <button type="button" className="ex-link" style={{ alignSelf: 'flex-start', fontSize: 12.5 }} onClick={() => go(`/exams/${a.id}/mark`)}>Already sat it without the timer? Mark it</button>}
+                    </div>
+                  )
+                })}
+                {ready.map(r => {
+                  const snap = snapshotFor(r)
+                  const times = snap && timesForSnapshot(snap)
+                  const count = (r.questions?.A?.length || 0) + (r.questions?.B?.length || 0)
+                  const mine = r.owner_id === myId
+                  return (
+                    <div key={r.id} className="ex-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 800 }}>{r.title}</div>
+                          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 3 }}>
+                            {mine ? `Saved ${day(r.updated_at)}` : `From your tutor · ${day(r.updated_at)}`} · {plural(count, 'question')}
+                            {snap ? ` · ${tally(snap, {}).available} marks · ${formatMinutes(times.readingMinutes + times.writingMinutes)}` : ''}
+                          </div>
+                        </div>
+                        {mine && <button type="button" onClick={async () => { if (await onRemoveExam(r)) setHidden(h => new Set(h).add(r.id)) }} aria-label={`Delete ${r.title}`} title="Delete" style={{ border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', padding: 4, display: 'inline-flex' }}><Trash2 size={15} /></button>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button type="button" className="ex-btn primary" disabled={!snap || starting === r.id} onClick={() => startSaved(r)}>
+                          <Timer size={16} aria-hidden="true" /> {starting === r.id ? 'Starting…' : 'Start this exam'}
+                        </button>
+                        <button type="button" className="ex-btn" onClick={() => newExam(`exam=${r.id}`)}><Download size={15} aria-hidden="true" /> Download</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {toMark.length > 0 && (
             <section aria-labelledby="ex-tomark" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <h2 id="ex-tomark" className="ex-h">Ready to mark</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
                 {toMark.map(a => {
                   const tl = tally(a.snapshot, a.marks || {})
+                  const timed = sittingSummary(a.sitting)
                   return (
                     <div key={a.id} className="ex-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: t.borderAccent }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 15, fontWeight: 800 }}>{a.title}</div>
-                          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 3 }}>Downloaded {day(a.created_at)} · {plural(a.snapshot?.questions?.length || 0, 'question')} · {tl.available} marks</div>
+                          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 3 }}>{a.sitting?.ended_at ? `Sat ${day(new Date(a.sitting.ended_at).toISOString())}` : `Downloaded ${day(a.created_at)}`} · {plural(a.snapshot?.questions?.length || 0, 'question')} · {tl.available} marks</div>
                         </div>
                         <button type="button" onClick={() => onRemove(a)} aria-label={`Remove ${a.title}`} title="Remove" style={{ border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', padding: 4, display: 'inline-flex' }}><Trash2 size={15} /></button>
                       </div>
+                      {timed && <div style={{ fontSize: 12.5, color: t.textSub }}>{timed}</div>}
                       {tl.entered > 0 && <div style={{ fontSize: 13, color: t.goldText, fontWeight: 700 }}>Marking in progress · {tl.entered} of {tl.parts} parts</div>}
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button type="button" className="ex-btn primary" onClick={() => go(`/exams/${a.id}/mark`)}>{tl.entered > 0 ? 'Continue marking' : 'Mark it'}</button>
@@ -250,15 +353,6 @@ function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam
                     </div>
                   )
                 })}
-                {shared.map(r => (
-                  <div key={r.id} className="ex-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 800 }}>{r.title}</div>
-                      <div style={{ fontSize: 13, color: t.textMuted, marginTop: 3 }}>From your tutor · {day(r.updated_at)}</div>
-                    </div>
-                    <div><button type="button" className="ex-btn" onClick={() => newExam(`exam=${r.id}`)}>Open and download</button></div>
-                  </div>
-                ))}
               </div>
             </section>
           )}
@@ -280,7 +374,7 @@ function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam
                         <td style={{ textAlign: 'right', color: t.textSub, whiteSpace: 'nowrap' }}>{a.skipped ? plural(a.skipped, 'mark') : '–'}</td>
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <button type="button" className="ex-link" onClick={() => go(`/exams/${a.id}`)}>View</button>
-                          {a.exam_id && <> <span style={{ color: t.textMuted }}>·</span> <button type="button" className="ex-link" onClick={() => newExam(`exam=${a.exam_id}`)}>Retake</button></>}
+                          {' '}<span style={{ color: t.textMuted }}>·</span> <button type="button" className="ex-link" onClick={() => sit({ examId: a.exam_id, title: a.title, snapshot: a.snapshot })}>Sit again</button>
                         </td>
                       </tr>
                     ))}
@@ -499,6 +593,7 @@ function Result({ t, attempt, attempts, newExam }) {
             {tl.percent}%{change !== null && <> · <span style={{ color: change >= 0 ? t.success : t.danger }}>{change >= 0 ? `up ${change}` : `down ${-change}`} point{Math.abs(change) === 1 ? '' : 's'} on your last exam</span></>}
           </div>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6 }}>{attempt.marked_at ? `Marked ${day(attempt.marked_at)}` : 'Not finished marking'}</div>
+          {sittingSummary(attempt.sitting) && <div style={{ fontSize: 13, color: t.textMuted, marginTop: 2 }}>{sittingSummary(attempt.sitting)}</div>}
         </div>
         <div style={{ flex: '1 1 380px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div role="img" aria-label={`${tl.scored} marks scored, ${tl.lost} marks lost, ${tl.skipped} marks skipped, out of ${tl.available}`}
