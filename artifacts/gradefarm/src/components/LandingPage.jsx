@@ -59,12 +59,86 @@ const EXTRA_CSS = `
   .gfx .tile.t4 { transform: rotate(1deg); } .gfx .tile.t5 { transform: rotate(-1.2deg); }
   .gfx .on .tile.t4, .gfx .on .tile.t5 { transform: none; }
 }
+/* ── Hero, Without gradefarm.: wobbling cards, crumpled paper, ink, coffee and stationery ── */
+@keyframes gfx-wob { 0% { translate: 0 0; rotate: 0deg; } 50% { translate: 1.5px -2px; rotate: .5deg; } 100% { translate: -1.5px 1px; rotate: -.4deg; } }
+@keyframes gfx-snake { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes gfx-snake-fade { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }
+.gfx .tile { animation: gfx-wob 5.2s ease-in-out infinite alternate; }
+.gfx .tile.t1 { animation-duration: 6.1s; animation-delay: -1.3s; } .gfx .tile.t2 { animation-duration: 4.7s; animation-delay: -2.2s; }
+.gfx .tile.t3 { animation-duration: 5.8s; animation-delay: -.6s; } .gfx .tile.t4 { animation-duration: 6.6s; animation-delay: -3s; }
+.gfx .tile.t5 { animation-duration: 5.4s; animation-delay: -1.8s; } .gfx .tile.junk { animation-duration: 7s; }
+.gfx .on .tile { animation: none; }
+/* Crumpled paper: torn-looking edges and creases, smoothed out when you switch. */
+.gfx .tile.crumpled { clip-path: polygon(2% 5%, 47% 0, 98% 7%, 95% 47%, 100% 95%, 53% 91%, 3% 100%, 0 51%); }
+.gfx .tile.crumpled::after { content: ""; position: absolute; inset: 0; pointer-events: none; transition: opacity .4s;
+  background: linear-gradient(118deg, transparent 46%, rgba(12,16,55,.08) 49%, rgba(255,255,255,.55) 50.5%, transparent 53%),
+    linear-gradient(28deg, transparent 57%, rgba(12,16,55,.07) 60%, rgba(255,255,255,.5) 61%, transparent 64%),
+    linear-gradient(200deg, transparent 30%, rgba(12,16,55,.05) 32%, transparent 35%),
+    linear-gradient(160deg, rgba(12,16,55,.05), transparent 45%, rgba(12,16,55,.06)); }
+.gfx.dark .tile.crumpled::after { opacity: .28; }
+.gfx .on .tile.crumpled { clip-path: polygon(-10% -10%, 50% -10%, 110% -10%, 110% 50%, 110% 110%, 50% 110%, -10% 110%, -10% 50%); }
+.gfx .on .tile.crumpled::after { opacity: 0; }
+.gfx .tile:not(.junk) { transition: left .7s cubic-bezier(.65,0,.25,1), top .7s cubic-bezier(.65,0,.25,1), width .7s cubic-bezier(.65,0,.25,1), height .7s cubic-bezier(.65,0,.25,1), transform .7s cubic-bezier(.65,0,.25,1), clip-path .6s ease, border-color .4s, background .4s, box-shadow .4s; }
+/* Ink on the cards. */
+.gfx .doodle { position: absolute; pointer-events: none; }
+.gfx .hand { font-family: 'Caveat', 'Segoe Print', cursive; font-weight: 700; color: #2b4fa8; line-height: 1; white-space: nowrap; }
+.gfx.dark .hand { color: #8fa9f0; }
+/* (.a span would otherwise shrink the handwriting to the card's 13px text) */
+.gfx .tile .a .hand { display: inline-block; margin: 0; }
+.gfx .tile .a .n0 { right: 12px; bottom: 12px; font-size: 25px; transform: rotate(-6deg); }
+.gfx .tile .a .n1 { right: 10px; bottom: 10px; font-size: 24px; color: #d4382c; transform: rotate(-4deg); }
+.gfx .tile .a .n5 { right: 12px; bottom: 10px; font-size: 24px; transform: rotate(5deg); }
+.gfx .tile .x-mark { right: 10px; bottom: 8px; width: 54px; height: 54px; }
+.gfx .tile .strike { left: 12px; top: 52px; width: 70%; height: 16px; }
+/* Loose on the desk. */
+.gfx .mess { position: absolute; inset: 0; pointer-events: none; transition: opacity .4s, transform .5s; }
+.gfx .on .mess { opacity: 0; transform: translateY(12px); }
+.gfx .mess .coffee { position: absolute; left: -13%; top: 236px; width: 230px; z-index: 0; }
+.gfx .mess .coffee .spill { fill: rgba(140, 88, 38, .17); }
+.gfx .mess .coffee .ring { fill: none; stroke: rgba(118, 70, 28, .33); stroke-width: 5; stroke-dasharray: 230 40; }
+.gfx .mess .pencil { position: absolute; left: 3%; top: 436px; width: 200px; transform: rotate(-7deg); z-index: 2; filter: drop-shadow(0 4px 4px rgba(12,16,55,.18)); }
+.gfx .mess .pen { position: absolute; right: -9%; top: 150px; width: 170px; transform: rotate(-62deg); z-index: 2; filter: drop-shadow(0 4px 4px rgba(12,16,55,.2)); }
+.gfx .mess .eraser { position: absolute; right: 9%; top: 440px; width: 66px; transform: rotate(14deg); z-index: 2; filter: drop-shadow(0 3px 3px rgba(12,16,55,.18)); }
+.gfx .mess .loose { left: 54%; top: -2px; font-size: 25px; color: #d4382c; transform: rotate(-5deg); z-index: 2; }
+/* "make the switch", pointing at With gradefarm. */
+.gfx .swr { position: relative; }
+.gfx .switch-note { position: absolute; left: calc(50% + 196px); top: -30px; display: flex; flex-direction: column; align-items: flex-start; font-family: 'Caveat', 'Segoe Print', cursive; font-weight: 700; font-size: 27px; line-height: 1; color: var(--goldt); transform: rotate(-4deg); white-space: nowrap; transition: opacity .35s; pointer-events: none; }
+.gfx .switch-note svg { width: 58px; height: 42px; margin: 2px 0 0 -30px; }
+.gfx .on .switch-note { opacity: 0; }
+
+/* ── Hero, With gradefarm.: no window, white boxes, a gold line travelling round each ── */
+.gfx .frame { display: none; }
+.gfx .on .tile { background: var(--card); border-color: var(--line); box-shadow: 0 10px 26px -18px rgba(12,16,55,.35); }
+.gfx .snake { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity .4s; overflow: visible; }
+.gfx .snake rect { x: .75px; y: .75px; width: calc(100% - 1.5px); height: calc(100% - 1.5px); fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 16 84; }
+.gfx .on .snake { opacity: 1; transition-delay: .8s; }
+.gfx .on .snake rect { animation: gfx-snake 5.5s linear infinite, gfx-snake-fade 5.5s ease-in-out infinite; }
+.gfx .on .t1 .snake rect { animation-delay: -1.1s; } .gfx .on .t2 .snake rect { animation-delay: -2.4s; } .gfx .on .t3 .snake rect { animation-delay: -3.6s; }
+.gfx .on .t4 .snake rect { animation-delay: -.5s; } .gfx .on .t5 .snake rect { animation-delay: -4.4s; }
+@media (min-width: 761px) {
+  /* The tidy grid needs less room than the mess, so the hero closes up when you switch. */
+  .gfx .stage { transition: height .6s cubic-bezier(.65,0,.25,1); }
+  .gfx .on .stage { height: 430px; }
+  .gfx .on .tile.t0 { top: 40px; } .gfx .on .tile.t1 { top: 40px; } .gfx .on .tile.t2 { top: 40px; }
+  .gfx .on .tile.t3 { top: 206px; } .gfx .on .tile.t4 { top: 206px; } .gfx .on .tile.t5 { top: 206px; }
+  .gfx .mob-adapt { display: block; position: absolute; left: 0; right: 0; top: 390px; margin: 0; text-align: center; font-size: 17px; font-weight: 700; color: var(--ink); opacity: 0; transition: opacity .4s; pointer-events: none; }
+  .gfx .mob-adapt .wm { font-size: 17px !important; }
+  .gfx .on .mob-adapt { opacity: 1; transition-delay: .6s; }
+}
+@media (max-width: 760px) {
+  .gfx .mess { display: none; }
+  .gfx .switch-note { position: static; flex-direction: row; align-items: center; justify-content: center; gap: 4px; margin-top: 8px; font-size: 22px; transform: none; }
+  .gfx .swr { flex-direction: column; align-items: center; }
+  .gfx .switch-note svg { width: 34px; height: 26px; margin: 0; transform: rotate(60deg); order: -1; }
+}
 /* The hero's changing word keeps the width of "adaptive", so the line doesn't jump. */
 .gfx .scw-stack { display: inline-grid; vertical-align: bottom; }
 .gfx .scw-stack > span { grid-area: 1 / 1; text-align: center; white-space: nowrap; }
 .gfx .scw-size { visibility: hidden; }
 .gfx .scw-live { transition: color .25s; }
 .gfx .scw-live.busy { color: var(--goldt); }
+/* "gradefarm is the rest.": the wordmark at the heading's own size. */
+.gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
 .gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
@@ -87,8 +161,8 @@ const CLUTTER = [['Sticky notes', 'Formula sheet on the fridge.'], ['YouTube, 1 
 // plays it again. Screen readers and reduced motion only ever get "adaptive".
 const HEADLINE_WORDS = ['adaptive', 'smart', 'personal', 'adaptive']
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
-const SCRAMBLE_MS = 520
-const HOLD_MS = 1700
+const SCRAMBLE_MS = 650
+const HOLD_MS = 1900
 
 function ScrambleWord() {
   const [text, setText] = useState(HEADLINE_WORDS[0])
@@ -104,7 +178,7 @@ function ScrambleWord() {
       const p = Math.min(1, (performance.now() - start) / SCRAMBLE_MS)
       const fixed = Math.floor(p * to.length)
       setText(Array.from(to, (c, i) => (i < fixed ? c : LETTERS[Math.floor(Math.random() * 26)])).join(''))
-      if (p < 1) wait(frame, 40)
+      if (p < 1) wait(frame, 55)
       else done()
     }
     frame()
@@ -139,6 +213,49 @@ function ScrambleWord() {
 
 const Wordmark = ({ size }) => <span className="wm" style={size ? { fontSize: size } : undefined}>grade<span>farm.</span></span>
 
+// Hand-drawn bits for the messy "Without gradefarm." side (all decoration, hidden from screen readers).
+const INK = { red: '#d4382c', blue: '#2b4fa8' }
+const Cross = () => <svg className="doodle x-mark" viewBox="0 0 60 60"><path d="M10 12 C 24 26, 36 38, 50 50 M50 10 C 38 24, 24 38, 9 50" fill="none" stroke={INK.red} strokeWidth="5" strokeLinecap="round" /></svg>
+const Strike = () => <svg className="doodle strike" viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M4 12 C 50 6, 120 16, 196 8" fill="none" stroke={INK.red} strokeWidth="3" strokeLinecap="round" /></svg>
+const Note = ({ children, className = '' }) => <span className={`doodle hand ${className}`}>{children}</span>
+// What's scrawled on each card, by index (Textbook, Tutor, Waiting for marks, Past papers, Flashcards, Study planner).
+const DOODLES = {
+  0: <Note className="n0">pg 47??</Note>,
+  1: <Note className="n1">cancelled again</Note>,
+  3: <Cross />,
+  5: <><Strike /><Note className="n5">start Monday</Note></>,
+}
+const CRUMPLED = new Set([2, 4])
+
+function DeskMess() {
+  return (
+    <div className="mess" aria-hidden="true">
+      <svg className="coffee" viewBox="0 0 220 170">
+        <path className="spill" d="M34 78 C 18 46, 62 22, 96 38 C 128 12, 184 32, 172 68 C 204 88, 184 132, 140 122 C 118 152, 62 152, 54 126 C 20 130, 8 98, 34 78 Z" />
+        <circle className="spill" cx="196" cy="40" r="7" /><circle className="spill" cx="20" cy="146" r="5" /><circle className="spill" cx="160" cy="150" r="4" />
+        <circle className="ring" cx="104" cy="82" r="48" />
+      </svg>
+      <svg className="pencil" viewBox="0 0 230 26">
+        <polygon points="0,13 22,3 22,23" fill="#e9cfa2" /><polygon points="0,13 8,9.5 8,16.5" fill="#3a3a44" />
+        <rect x="22" y="3" width="168" height="20" fill="#f1be43" /><rect x="22" y="3" width="168" height="6" fill="#f7d77e" />
+        <rect x="190" y="2" width="10" height="22" fill="#b9bdc9" /><rect x="200" y="2" width="26" height="22" rx="5" fill="#f2a1ad" />
+      </svg>
+      <svg className="pen" viewBox="0 0 200 24">
+        <polygon points="0,12 14,7 14,17" fill="#1b1f3a" /><rect x="14" y="5" width="120" height="14" rx="4" fill="#20285e" />
+        <rect x="132" y="3" width="64" height="18" rx="6" fill="#2d3780" /><rect x="140" y="0" width="44" height="5" rx="2" fill="#b9bdc9" />
+      </svg>
+      <svg className="eraser" viewBox="0 0 90 44">
+        <rect x="2" y="4" width="86" height="36" rx="7" fill="#f6b3bd" /><rect x="40" y="4" width="48" height="36" rx="2" fill="#5d7fd1" />
+        <rect x="2" y="30" width="86" height="10" rx="5" fill="rgba(0,0,0,.08)" />
+      </svg>
+      <span className="doodle hand loose">due tomorrow!!</span>
+    </div>
+  )
+}
+
+/** The travelling gold line round a feature box (With gradefarm.). */
+const Snake = () => <svg className="snake" aria-hidden="true"><rect pathLength="100" rx="13" /></svg>
+
 function Hero({ theme, onStart, onTry }) {
   const [on, setOn] = useState(false)
   return (
@@ -156,23 +273,25 @@ function Hero({ theme, onStart, onTry }) {
               <button type="button" aria-pressed={!on} onClick={() => setOn(false)}>Without gradefarm.</button>
               <button type="button" aria-pressed={on} onClick={() => setOn(true)}>With gradefarm.</button>
             </div>
+            <span className="switch-note" aria-hidden="true">
+              make the switch
+              <svg viewBox="0 0 70 50"><path d="M62 6 C 50 30, 30 40, 8 40 M8 40 L 18 32 M8 40 L 17 47" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </span>
           </div>
           <div className="stage">
-            <div className="frame" aria-hidden={!on}>
-              <div className="bar"><Wordmark /></div>
-              <div className="adapt"><Wordmark /> identifies what you already know and what you need to work on.</div>
-            </div>
+            <DeskMess />
             {PARTS.map((p, i) => (
-              <div key={p.name} className={`tile t${i}`}>
-                <div className="a" aria-hidden={on}><b>{p.old[0]}</b><span>{p.old[1]}</span></div>
+              <div key={p.name} className={`tile t${i}${CRUMPLED.has(i) ? ' crumpled' : ''}`}>
+                <div className="a" aria-hidden={on}><b>{p.old[0]}</b><span>{p.old[1]}</span>{DOODLES[i] && <span aria-hidden="true">{DOODLES[i]}</span>}</div>
                 <div className="b" aria-hidden={!on}>
                   <div className="th"><img src={p.img} alt={`gradefarm. screen: ${p.name}`} loading="lazy" /></div>
                   <div><strong>{p.name}</strong><em>{p.what}</em></div>
                 </div>
+                <Snake />
               </div>
             ))}
             <p className="mob-adapt"><Wordmark size={15} /> identifies what you already know and what you need to work on.</p>
-            {CLUTTER.map(([name, what], i) => <div key={name} className={`tile junk x${i}`} aria-hidden={on}><div className="a"><b>{name}</b><span>{what}</span></div></div>)}
+            {CLUTTER.map(([name, what], i) => <div key={name} className={`tile junk x${i}${i === 2 ? ' crumpled' : ''}`} aria-hidden={on}><div className="a"><b>{name}</b><span>{what}</span></div></div>)}
             <p className="cap">All separate. None of them knows what you got wrong.</p>
           </div>
           <div className="ctas2">
@@ -267,7 +386,7 @@ function Compare() {
   return (
     <section className="sec" id="compare" aria-labelledby="gfx-cmp-h">
       <div className="in">
-        <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week. <Wordmark /> is the rest.</h2>
+        <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week. <span className="wm cmpwm">grade<span>farm</span></span> is the rest.</h2>
         <div className="card cmp">
           <table>
             <thead><tr><th><span className="lp-sr">What</span></th><th>Textbook</th><th>Past papers</th><th>ChatGPT</th><th>Tutor</th><th className="gf"><Wordmark size={15} /></th></tr></thead>
@@ -364,7 +483,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
         <section className="sec" id="pricing" aria-labelledby="gfx-price-h">
           <div className="in">
-            <h2 className="h2" id="gfx-price-h">Free plan vs paid plan</h2>
+            <h2 className="h2" id="gfx-price-h">Why upgrade?</h2>
             <div className="card ptab">
               <table>
                 <thead><tr><th><span className="lp-sr">What you get</span></th><th>Free</th><th className="pd">Paid</th></tr></thead>

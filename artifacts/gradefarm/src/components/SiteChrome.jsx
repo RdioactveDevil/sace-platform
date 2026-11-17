@@ -74,9 +74,10 @@ export const SITE_CSS = `
 .lp-nav[data-scrolled="true"] { border-bottom-color: var(--lp-line); }
 .lp-nav .lp-in { display: flex; align-items: center; gap: 24px; height: 62px; }
 .lp-nav-links { display: flex; gap: 22px; }
-.lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 13.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
+.lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 15.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
 .lp-nav-links button:hover { color: var(--lp-ink); }
 .lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.lp-nav .lp-btn.sm { min-height: 38px; padding: 0 15px; font-size: 14.5px; }
 .lp-menu-btn { display: none; }
 .lp-nav-start .short { display: none; }
 .lp-menu { border-top: 1px solid var(--lp-line); padding: 6px 0 12px; }
