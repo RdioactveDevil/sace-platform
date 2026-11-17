@@ -172,10 +172,11 @@ export default function TryItBox({ onStart, onNext }) {
           )}
         </div>
         {playing && <p className="skip"><button type="button" className="wk" onClick={skip}>Skip to the end</button></p>}
-        <div className="legend">
-          <div className={`lgi${lit.difficulty ? ' lit' : ''}`}><span className="li"><Icon d={STAR} /></span><div><b>Difficulty</b><span>Get it right and the next question is harder.</span></div></div>
-          <div className={`lgi${lit.spaced ? ' lit' : ''}`}><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>Miss one and it comes back in 1 hour, then days later.</span></div></div>
-          <div className={`lgi${lit.comeback ? ' lit' : ''}`}><span className="li"><Icon d={LOOP} /></span><div><b>Comeback Mode</b><span>Answer 3 similar questions to progress.</span></div></div>
+        {/* Each explanation shows only while it's happening (a right answer, a miss, Comeback Mode). */}
+        <div className="legend" aria-live="polite">
+          {lit.difficulty && <div className="lgi lit"><span className="li"><Icon d={STAR} /></span><div><b>Difficulty</b><span>Get it right and the next question is harder.</span></div></div>}
+          {lit.spaced && <div className="lgi lit"><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>Miss one and it comes back in 1 hour, then days later.</span></div></div>}
+          {lit.comeback && <div className="lgi lit"><span className="li"><Icon d={LOOP} /></span><div><b>Comeback Mode</b><span>Answer 3 similar questions to progress.</span></div></div>}
         </div>
         {onNext && (
           <p className="tonext">

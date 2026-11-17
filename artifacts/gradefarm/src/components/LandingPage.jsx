@@ -135,6 +135,12 @@ const EXTRA_CSS = `
 .gfx .scw-size { visibility: hidden; }
 .gfx .scw-live { transition: color .25s; }
 .gfx .scw-live.busy { color: var(--goldt); }
+/* Try it now: the explanation cards appear only while their thing is happening. */
+@keyframes gfx-lgi-in { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: translateY(-3px); } }
+.gfx .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; min-height: 92px; align-items: flex-start; }
+.gfx .legend .lgi { width: 300px; max-width: 100%; animation: gfx-lgi-in .45s cubic-bezier(.2,1.2,.4,1) both; }
+.gfx .legend .lgi + .lgi { animation-delay: .12s; }
+@media (max-width: 760px) { .gfx .legend { min-height: 0; } .gfx .legend .lgi { width: 100%; } }
 /* Try it now: pick a subject first. */
 .gfx .pick { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 8px 0 4px; }
 .gfx .pk-h { font-size: 21px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
