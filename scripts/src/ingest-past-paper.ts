@@ -16,6 +16,11 @@
  *   4. Rows are upserted (--apply) or summarised (default dry-run). Ids are
  *      built from the source and question number, so re-running a paper
  *      updates its questions instead of adding copies.
+ *   5. Every crop is checked (ink cut off at its edges; a close look for
+ *      question text, headers and footers, or the wrong thing), and each
+ *      question is saved 'pending' with what was found (review_status,
+ *      review). Students don't see it until an admin approves it in Admin →
+ *      Exam papers → Loaded papers (migration 20261118000000_question_review).
  *
  * Rows carry the exam-paper fields from migration
  * 20261109000003_question_source.sql (source, source_kind, source_publisher,
@@ -32,6 +37,8 @@
  *     [--solutions <url | path>] [--topic "Only this topic"] [--limit 5] [--apply]
  *   Add --recrop (with a batch or a paper) to redo the figure crops of papers already loaded,
  *   without reading their questions again.
+ *   Add --resume (with a batch and --apply) to skip the papers that batch already loaded
+ *   for review, to carry on after a run stopped or timed out.
  *   (--pdf-url / --storage-path still work in place of --pdf.)
  */
 import { createHash } from "node:crypto";
@@ -41,6 +48,8 @@ import { PDFiumLibrary } from "@hyzyla/pdfium";
 import sharp from "sharp";
 import { snapToInk, pctToPx, grow, crop, type Page, type PxBox } from "./lib/figure-crop";
 import { readPages, findPage, renderPage, maskedPage, locateFigure, figureAtTop, hintLine, cropBox, type PageText } from "./lib/figure-find";
+import { planBatch } from "./lib/batch-plan";
+import { sameWords, inkAtEdges, cropCheckPrompt, cropLookSchema, cropFlags, type CropLook, type Flag } from "./lib/question-review";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
 const MODEL = process.env.INGEST_MODEL || "claude-opus-5-5";
@@ -60,6 +69,8 @@ type Args = {
   limit?: number;
   /** Redo the figure crops of a paper already in the bank, leaving its questions as they are. */
   recrop?: boolean;
+  /** Batch: skip papers this batch already loaded for review (to carry on after a stop). */
+  resume?: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -77,6 +88,7 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--topic") a.topic = v();
     else if (k === "--apply") a.apply = true;
     else if (k === "--recrop") a.recrop = true;
+    else if (k === "--resume") a.resume = true;
     else if (k === "--limit") a.limit = parseInt(v() || "", 10) || undefined;
   }
   return a;
@@ -99,6 +111,8 @@ type Extracted = {
   topic: string;
   subtopic: string;
   difficulty: number;
+  /** The total printed with the question ("Question 4 (9 marks)" → 9); 0 if none. */
+  printed_marks: number;
   figure_page: number;
   figure_bbox: BBox;
 };
@@ -175,10 +189,11 @@ function outputSchema(topicNames: string[]) {
             topic,
             subtopic: { type: "string" },
             difficulty: { type: "integer" },
+            printed_marks: { type: "integer" },
             figure_page: { type: "integer" },
             figure_bbox: bboxSchema,
           },
-          required: ["number", "question", "options", "answer_index", "solution", "parts", "topic", "subtopic", "difficulty", "figure_page", "figure_bbox"],
+          required: ["number", "question", "options", "answer_index", "solution", "parts", "topic", "subtopic", "difficulty", "printed_marks", "figure_page", "figure_bbox"],
           additionalProperties: false,
         },
       },
@@ -200,6 +215,10 @@ function systemPrompt(args: Args, section: "A" | "B", course: Course, hasSolutio
     "Copy the wording exactly as printed. Do not rewrite, simplify, correct or add to any question.",
     "Write every mathematical expression and chemical formula in LaTeX inside $...$ (inline) or $$...$$ (displayed). Use \\ce{} for chemical formulas. A literal dollar sign is \\$.",
     "Keep line breaks that matter (e.g. a function definition on its own line) as \\n.",
+    "Never copy page headers, footers or margins into any text: page numbers, 'SECTION B – Question 1 – continued', 'Continued', 'TURN OVER', 'Do not write in this area', copyright lines.",
+    "Copy each piece of text once. Text printed once on the paper appears once in the output: not in both the question and a part, and not twice in one field.",
+    "Labels printed on or under an equation or figure (such as '(purple)' under a formula) go with it, on the same line as the thing they label or in brackets after it.",
+    "Questions must stand alone, because they are mixed into new exams. When information is shared ('Use the following information to answer Questions 3 and 4'), copy that information into each question that uses it, leave out the 'Use the following information…' sentence, and give each question the shared figure.",
     FIGURE_BOX_RULE,
     "Tables that are plain text may be written as a markdown table in the text instead of a figure.",
     `topic must be one of the course topics below, and subtopic one of that topic's subtopics (exactly as written). Course:\n${courseList}`,
@@ -213,15 +232,16 @@ function systemPrompt(args: Args, section: "A" | "B", course: Course, hasSolutio
     ? [
         "Extract ONLY the multiple-choice questions (usually Section A). If the paper has none, return an empty list.",
         "number is the question number as printed. question is the stem. options are the answer options in order WITHOUT their letters (A., B. …). answer_index is the 0-based index of the correct option.",
-        "solution is a short worked explanation of why that option is right. parts is an empty list.",
+        "solution is a short worked explanation of why that option is right. parts is an empty list. printed_marks is 1.",
       ]
     : [
         "Extract ONLY the short-answer and extended-answer questions (usually Section B, or every question in a paper without multiple choice, such as SACE question booklets). Skip multiple-choice questions.",
         "number is the question number as printed. question is the text before the first part (the shared context or definitions; empty if the question starts with a part).",
+        "printed_marks is the total printed with the question number (e.g. 'Question 4 (9 marks)' → 9), or 0 if the paper prints none.",
         "parts lists every part in order: label as printed without dots or brackets ('a', 'b'; 'i', 'ii' for sub-parts; '1', '2' for sub-sub-parts), level 1 for a, b, c, level 2 for i, ii, iii and level 3 for (1), (2) under a sub-part.",
         "A part that only introduces its sub-parts has marks 0 and its own text; each sub-part carries its marks. marks is the number printed for that part (e.g. '2 marks' → 2).",
         "solution on each part is the worked answer for that part (as in the solutions document when given). A part's figure goes on the part (figure_page / figure_bbox); a figure shared by the whole question goes on the question.",
-        "A question with no lettered parts has one part with label '' holding the question's marks and solution, and question holds its text.",
+        "A question with no lettered parts has one part with label '' and EMPTY text, holding the question's marks and solution; question holds its text.",
         "options is an empty list and answer_index is -1.",
       ];
   return [...common, ...sectionRules].filter(Boolean).join("\n");
@@ -369,6 +389,36 @@ async function figureFromText(paper: Buffer, pages: PageText[], hint: string): P
   return null;
 }
 
+/**
+ * What's wrong with a crop, if anything: ink running off its edges (the figure
+ * is cut off), and a close look by FIGURE_MODEL for question text, page
+ * headers and footers, or a crop that isn't the figure at all. The flags go
+ * on the question for an admin to check (lib/question-review.ts).
+ */
+async function checkCrop(client: Anthropic, png: Buffer, hint: string, where: string): Promise<Flag[]> {
+  const edges = await inkAtEdges(png).catch(() => [] as string[]);
+  let look: CropLook | null = null;
+  try {
+    const small = await sharp(png).resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    const message = await client.messages.create({
+      model: FIGURE_MODEL,
+      max_tokens: 400,
+      output_config: { format: { type: "json_schema", schema: cropLookSchema } },
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: small.toString("base64") } },
+          { type: "text", text: cropCheckPrompt(hint) },
+        ],
+      }],
+    } as Anthropic.MessageCreateParamsNonStreaming);
+    look = JSON.parse(message.content.map((c) => (c.type === "text" ? c.text : "")).join("")) as CropLook;
+  } catch (err) {
+    console.warn(`  close check of ${where || "the question"}'s figure failed (${(err as Error).message}); checked its edges only`);
+  }
+  return cropFlags(where, edges, look);
+}
+
 /** A file name that changes when the crop does, so a new crop is never served from a cache. */
 const figurePath = (sourceId: string, name: string, png: Buffer) =>
   `exam-papers/${sourceId}/${name}-${createHash("sha1").update(png).digest("hex").slice(0, 8)}.png`;
@@ -387,10 +437,14 @@ type Outcome = { questions: number; marks: number; figures: number; skipped: str
 async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buffer, source: string): Promise<Outcome> {
   const sourceId = createHash("sha1").update(`${args.subject}|${source}`).digest("hex").slice(0, 10);
   const { data: rows, error } = await admin.from("questions")
-    .select("id, exam_section, source_question, question, image_url, parts")
+    .select("id, exam_section, source_question, question, image_url, parts, review")
     .like("id", `ep_${sourceId}_%`);
   if (error) throw new Error(`Loading the paper's questions failed: ${error.message}`);
-  type Row = { id: string; exam_section: string; source_question: string; question: string; image_url: string | null; parts: { label: string; text: string; image_url: string | null }[] | null };
+  type Row = {
+    id: string; exam_section: string; source_question: string; question: string; image_url: string | null;
+    parts: { label: string; text: string; image_url: string | null }[] | null;
+    review: { printed_marks?: number; flags?: Flag[] } | null;
+  };
   const figs: { key: string; row: Row; part: number; name: string; hint: string }[] = [];
   for (const r of (rows || []) as Row[]) {
     const n = `${r.exam_section}${r.source_question}`;
@@ -475,20 +529,29 @@ async function recropPaper(admin: any, client: Anthropic, args: Args, paper: Buf
       pageNo = at.figure_page;
     }
     figures++;
+    // The new crop's own checks replace the old crop's.
+    const where = f.part < 0 ? "" : String(f.row.parts![f.part].label || "");
+    const newFlags = await checkCrop(client, png, f.hint, where);
+    for (const fl of newFlags) console.log(`      ⚑ ${fl.message}`);
     if (!args.apply) { console.log(`  ${f.name}: page ${pageNo}${got ? "" : " (model)"}, ${png.length}-byte crop`); continue; }
     const path = figurePath(sourceId, f.name, png);
     const { error: upErr } = await admin.storage.from("question-images").upload(path, png, { contentType: "image/png", upsert: true });
     if (upErr) { console.warn(`  ${f.name}: upload failed: ${upErr.message}`); skipped.push(f.name); continue; }
     const url = admin.storage.from("question-images").getPublicUrl(path).data.publicUrl;
-    const row = changed.get(f.row.id) || { ...f.row, parts: f.row.parts ? f.row.parts.map((p) => ({ ...p })) : null };
+    const row = changed.get(f.row.id) || { ...f.row, parts: f.row.parts ? f.row.parts.map((p) => ({ ...p })) : null, review: { ...(f.row.review || {}) } };
     if (f.part < 0) row.image_url = url;
     else row.parts![f.part].image_url = url;
+    row.review = {
+      ...row.review,
+      flags: [...(row.review?.flags || []).filter((fl) => !(fl.code.startsWith("figure_") && fl.where === where)), ...newFlags],
+    };
     changed.set(f.row.id, row);
     console.log(`  ${f.name}: page ${pageNo}${got ? "" : " (model)"} → ${path}`);
   }
   if (args.apply) {
     for (const r of changed.values()) {
-      const { error: upd } = await admin.from("questions").update({ image_url: r.image_url, parts: r.parts }).eq("id", r.id);
+      // New figures are checked again before students see them.
+      const { error: upd } = await admin.from("questions").update({ image_url: r.image_url, parts: r.parts, review: r.review, review_status: "pending" }).eq("id", r.id);
       if (upd) console.warn(`  saving ${r.id} failed: ${upd.message}`);
     }
   }
@@ -531,12 +594,13 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
   const sourceId = createHash("sha1").update(`${args.subject}|${source}`).digest("hex").slice(0, 10);
   let figures = 0;
   const pagesText = await readPages(paper);
-  const figure = async (page: number, box: BBox, name: string, hint = ""): Promise<string | null> => {
+  const figure = async (page: number, box: BBox, name: string, hint: string, where: string, flags: Flag[]): Promise<string | null> => {
     if (!hasFigure(page, box) || !rendered.has(page)) return null;
     try {
       // From the part's own text where that works; the model's box otherwise.
       const png = (await figureFromText(paper, pagesText, hint))?.png ?? await placeFigure(client, rendered.get(page)!, box, hint);
       figures++;
+      flags.push(...await checkCrop(client, png, hint, where));
       if (!args.apply) return `(dry-run: ${png.length}-byte crop)`;
       const path = figurePath(sourceId, name, png);
       const { error } = await admin.storage.from("question-images").upload(path, png, { contentType: "image/png", upsert: true });
@@ -544,10 +608,17 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
       return admin.storage.from("question-images").getPublicUrl(path).data.publicUrl;
     } catch (err) {
       console.warn(`  figure crop failed for ${name}: ${(err as Error).message}`);
+      flags.push({ code: "figure_failed", where, message: `${where ? `Part ${where}'s figure` : "The figure"} couldn't be cropped from the paper.` });
       return null;
     }
   };
 
+  // The page a question starts on, so the reviewer can open the paper there (0: not found).
+  const pageOf = (q: Extracted) => {
+    const text = q.question || q.parts?.[0]?.text || "";
+    const at = text ? findPage(pagesText, hintLine(text).text) : { page: -1 };
+    return at.page >= 0 ? at.page + 1 : Math.max(0, q.figure_page || 0);
+  };
   const rows: Record<string, unknown>[] = [];
   const skipped: string[] = [];
   for (const { section, q } of all) {
@@ -555,6 +626,8 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
     const topic = args.topic || q.topic || "General";
     const subs = subtopicsOf.get(topic) || [];
     const subtopic = subs.includes(q.subtopic) ? q.subtopic : subs[0] || q.subtopic || topic;
+    // What the checks found, for the admin who reviews it before students see it.
+    const flags: Flag[] = [];
     const base = {
       id: `ep_${sourceId}_${section}${num.replace(/[^a-z0-9]/gi, "")}`,
       subject: args.subject,
@@ -569,7 +642,10 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
       source_paper: args.paper,
       source_question: num,
       exam_section: section,
-      image_url: await figure(q.figure_page, q.figure_bbox, `${section}${num}`, q.question || ""),
+      image_url: await figure(q.figure_page, q.figure_bbox, `${section}${num}`, q.question || "", "", flags),
+      // Saved for review: kept from students until an admin approves it (migration 20261118000000).
+      review_status: "pending",
+      review: { printed_marks: Math.max(0, Math.round(q.printed_marks || 0)), page: pageOf(q), flags },
       created_at: new Date().toISOString(),
     };
     if (section === "A") {
@@ -584,13 +660,20 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
           text: p.text || "",
           marks: Math.max(0, Math.round(p.marks || 0)),
           solution: p.solution || "",
-          image_url: await figure(p.figure_page, p.figure_bbox, `${section}${num}${p.label || ""}`, p.text || ""),
+          image_url: await figure(p.figure_page, p.figure_bbox, `${section}${num}${p.label || ""}`, p.text || "", String(p.label || "").replace(/^\(|\)?\.?$/g, ""), flags),
         });
       }
       const total = parts.reduce((s, p) => s + p.marks, 0);
       if ((!q.question && !parts.length) || !total) { skipped.push(`B${num}`); continue; }
+      let stem = q.question || "";
+      // A question without lettered parts: its text is the stem, and its one
+      // unlabelled part is only the answer space (else it is printed twice).
+      if (parts.length === 1 && !parts[0].label) {
+        if (!stem) stem = parts[0].text;
+        if (sameWords(stem, parts[0].text) || stem.replace(/\s+/g, " ").includes(parts[0].text.replace(/\s+/g, " ").trim())) parts[0].text = "";
+      }
       rows.push({
-        ...base, question_type: "extended", question: q.question || parts[0]?.text || "", parts, total_marks: total,
+        ...base, question_type: "extended", question: stem || parts[0]?.text || "", parts, total_marks: total,
         solution: parts.map((p) => (p.label ? `${p.label}. ${p.solution}` : p.solution)).join("\n"),
       });
     }
@@ -606,6 +689,7 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
     for (const r of rows) {
       const parts = Array.isArray(r.parts) ? ` · ${(r.parts as { label: string; marks: number }[]).map((p) => `${p.label || "-"}:${p.marks}`).join(" ")}` : "";
       console.log(`  ${r.exam_section}${r.source_question} [${r.topic} / ${r.subtopic}]${parts}${r.image_url ? " +figure" : ""}  ${String(r.question).slice(0, 80).replace(/\n/g, " ")}`);
+      for (const f of (r.review as { flags: Flag[] }).flags) console.log(`      ⚑ ${f.message}`);
     }
     console.log("Re-run with apply to save these to the bank.");
     return outcome;
@@ -616,7 +700,24 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
   }
   const { data: saved, error } = await admin.from("questions").upsert(rows, { onConflict: "id" }).select("id");
   if (error) throw new Error(`Save failed: ${error.message}`);
-  console.log(`Saved ${(saved || []).length} question(s) from ${source}.`);
+  console.log(`Saved ${(saved || []).length} question(s) from ${source}, waiting for review in Admin → Exam papers → Loaded papers before students see them.`);
+  // Loaded again: questions saved last time that this reading didn't find
+  // (numbered differently, or from another paper that was given the same
+  // label) are taken away from students. Rejected, not deleted, so an admin
+  // can bring one back. Not on a --limit test run, which reads only some.
+  if (!args.limit) {
+    const keep = new Set(rows.map((r) => r.id as string));
+    const { data: old, error: oldErr } = await admin.from("questions").select("id, review_status").like("id", `ep_${sourceId}_%`);
+    if (oldErr) console.warn(`  couldn't check for old questions: ${oldErr.message}`);
+    const stale = ((old || []) as { id: string; review_status: string | null }[]).filter((r) => !keep.has(r.id) && r.review_status !== "rejected").map((r) => r.id);
+    if (stale.length) {
+      const { error: rej } = await admin.from("questions").update({
+        review_status: "rejected",
+        review: { flags: [{ code: "not_reloaded", where: "", message: `Not found when ${source} was loaded again on ${new Date().toISOString().slice(0, 10)}: it may be from another paper saved under the same label. Kept from students.` }] },
+      }).in("id", stale);
+      console.log(rej ? `  couldn't retire ${stale.length} old question(s): ${rej.message}` : `  ${stale.length} old question(s) not found this time were taken away from students: ${stale.join(", ")}`);
+    }
+  }
   if (!solutions) console.log("Tip: no solutions PDF was given, so answers were worked out by the model. Run the 'Backfill — verify & repair' Action to fact-check them.");
   return outcome;
 }
@@ -638,10 +739,20 @@ async function runBatch(admin: any, client: Anthropic, id: string, cli: Args) {
     const { error: e } = await admin.from("exam_paper_batches").update({ results, updated_at: new Date().toISOString() }).eq("id", id);
     if (e) console.warn(`  couldn't record progress: ${e.message}`);
   };
-  console.log(`Batch ${id}: ${papers.length} paper(s) for ${batch.subject} (${mode})`);
+  console.log(`Batch ${id}: ${papers.length} paper(s) for ${batch.subject} (${mode}${cli.resume ? ", resuming" : ""})`);
+  const plan = planBatch(papers, results as Record<string, { status?: string; mode?: string; reviewed?: boolean }>, { resume: !!cli.resume, apply: cli.apply });
   let failed = 0;
   for (let i = 0; i < papers.length; i++) {
     const p = papers[i];
+    const step = plan[i];
+    if (step.action === "skip") { console.log(`${i + 1}/${papers.length} ${step.label}: skipped (${step.reason})`); continue; }
+    if (step.action === "duplicate") {
+      failed++;
+      results[i] = { status: "failed", mode, error: step.reason.slice(0, 300), at: new Date().toISOString() };
+      console.error(`::error::${p.pdf}: ${step.reason}`);
+      await record();
+      continue;
+    }
     console.log(`::group::${i + 1}/${papers.length} ${p.source || p.pdf}`);
     results[i] = { status: "running", mode, at: new Date().toISOString() };
     await record();
@@ -650,7 +761,8 @@ async function runBatch(admin: any, client: Anthropic, id: string, cli: Args) {
         pdf: p.pdf, solutions: p.solutions || undefined, subject: batch.subject, kind: p.kind === "commercial" ? "commercial" : "official",
         publisher: p.publisher, year: Number(p.year), paper: p.paper, topic: cli.topic, apply: cli.apply, limit: cli.limit, recrop: cli.recrop,
       });
-      results[i] = { status: cli.apply ? "saved" : "checked", mode, ...out, at: new Date().toISOString() };
+      // reviewed: saved by the ingest with the review step, so --resume can skip it.
+      results[i] = { status: cli.apply ? "saved" : "checked", mode, ...out, reviewed: cli.apply && !cli.recrop, at: new Date().toISOString() };
     } catch (err) {
       failed++;
       const message = err instanceof Error ? err.message : String(err);

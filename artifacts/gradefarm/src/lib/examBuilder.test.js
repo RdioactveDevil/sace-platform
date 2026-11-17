@@ -143,3 +143,21 @@ test('drawing answers and figure sizes', () => {
   assert.equal(big.height, 60)
   assert.equal(figureSizeMm(0, 0), null)
 })
+
+test('a question without lettered parts keeps its answer space and prints its text once', () => {
+  // Stored as the ingest did: the stem in question, an unlabelled part with only marks.
+  const bare = ext('q5', [{ label: '', text: '', marks: 5 }], { question: 'Explain the viscosities.' })
+  assert.deepEqual(partsOf(bare).map(x => [x.label, x.text, x.marks]), [['', '', 5]])
+  assert.equal(marksOf(bare), 5)
+  // The same text in the stem and the part is printed once (in the stem).
+  const twice = ext('q7', [{ label: '', text: 'Show the isomers of C2H5ClO.\n', marks: 6 }], { question: 'Show the isomers of  C2H5ClO.' })
+  assert.deepEqual(partsOf(twice).map(x => [x.text, x.marks]), [['', 6]])
+  // A labelled part that only repeats the stem keeps its text: it is printed under its label.
+  const labelled = ext('q8', [{ label: 'a', text: 'Same words.', marks: 2 }], { question: 'Same words.' })
+  assert.equal(partsOf(labelled)[0].text, 'Same words.')
+})
+
+test('questions waiting for review, or rejected, stay out of built exams', () => {
+  const qs = [mc('1'), mc('2', { review_status: 'pending' }), mc('3', { review_status: 'rejected' }), mc('4', { review_status: 'approved' })]
+  assert.deepEqual(examPool(qs).A.map(q => q.id), ['1', '4'])
+})

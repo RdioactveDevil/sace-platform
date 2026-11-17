@@ -22,6 +22,14 @@ test("bad parts are refused", () => {
   assert.match(err({ question: "Q", parts: [] }), /at least one part/);
   assert.match(err({ question: "Q", parts: [{ text: "x", marks: -1 }] }), /marks/);
   assert.match(err({ question: "Q", parts: [{ text: "x", marks: 1.5 }] }), /marks/);
-  assert.match(err({ question: "Q", parts: [{ text: "", marks: 2 }] }), /needs its question/);
+  assert.match(err({ question: "Q", parts: [{ label: "a", text: "x", marks: 1 }, { label: "b", text: "", marks: 2 }] }), /Part 2 needs its question/);
+  assert.match(err({ question: "", parts: [{ text: "", marks: 2 }] }), /needs its question/);
   assert.match(err({ question: "Q", parts: [{ text: "x", marks: 0 }] }), /at least one mark/);
+});
+
+test("a question without lettered parts keeps its text in the stem and an empty answer part", () => {
+  const r = buildExtendedUpdate({ question: "Explain the viscosities.", parts: [{ label: "", text: "", marks: 5 }] });
+  assert.ok("update" in r);
+  assert.equal(r.update.question, "Explain the viscosities.");
+  assert.deepEqual((r.update.parts as { text: string; marks: number }[]).map((p) => [p.text, p.marks]), [["", 5]]);
 });

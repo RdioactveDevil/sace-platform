@@ -8,7 +8,11 @@ export const PUBLISHERS = [
   ['TSSM', /\btssm\b/i], ['Itute', /itute/i], ['Checkpoints', /checkpoint/i], ['Heffernan', /heffernan/i],
   ['Jacaranda', /jacaranda/i], ['Cambridge', /cambridge/i], ['Edrolo', /edrolo/i], ['STAV', /\bstav\b/i],
   ['Engage', /\bengage\b/i], ['Lisachem', /lisachem/i], ['A+', /\ba\+|aplus/i],
+  ['QATS', /\bqats\b/i], ['Lorikeet', /lorikeet/i], ['Access', /\baccess\b/i],
 ]
+
+/** The northern-hemisphere (NHT) paper: a different exam from the main one that year, in the same format. */
+const NHT = /\bnht\b|northern[-_ ]hemisphere/i
 
 const SOLUTION_WORDS = /(solution|answers?|report|marking|guide|exemplar|worked|response)/i
 
@@ -28,7 +32,9 @@ export function parsePaperFilename(name, board = 'vce') {
     year,
     solutions,
     kind: pub ? 'commercial' : 'official',
-    publisher: pub ? pub[0] : board === 'sace' ? 'SACE Board' : 'VCAA',
+    // An NHT paper gets its own publisher name so its label differs from the main exam's,
+    // and keeps the same paper name so the exam builder can mix the two.
+    publisher: pub ? pub[0] : `${board === 'sace' ? 'SACE Board' : 'VCAA'}${NHT.test(base) ? ' NHT' : ''}`,
     paper: num ? `Exam ${num}` : 'Exam',
   }
 }
@@ -62,6 +68,20 @@ export const safeName = (name) => String(name || 'paper.pdf').replace(/[^A-Za-z0
 /** "VCAA 2023 Exam 2" or "NEAP 2024 Trial Exam 2", as the ingest script labels questions. */
 export function sourceLabelFor({ kind, publisher, year, paper }) {
   return [publisher, year, kind === 'commercial' ? 'Trial' : '', paper].filter(Boolean).join(' ')
+}
+
+/**
+ * Labels that more than one paper row would be saved under. Questions are
+ * stored by label and question number, so a second paper with the same label
+ * overwrites the first one's questions.
+ */
+export function duplicateLabels(rows) {
+  const seen = new Map()
+  for (const r of rows || []) {
+    const label = sourceLabelFor(r)
+    seen.set(label, (seen.get(label) || 0) + 1)
+  }
+  return [...seen].filter(([, n]) => n > 1).map(([label]) => label)
 }
 
 /** Natural order for question numbers ("2" before "10", "3a" after "3"). */

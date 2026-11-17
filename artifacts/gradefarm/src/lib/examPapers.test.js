@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parsePaperFilename, buildPaperRows, safeName, sourceLabelFor } from './examPapers.js'
+import { parsePaperFilename, buildPaperRows, safeName, sourceLabelFor, duplicateLabels } from './examPapers.js'
 
 test('file names give year, paper, publisher and solutions', () => {
   assert.deepEqual(parsePaperFilename('2025-MathMethods2.pdf'), { year: 2025, solutions: false, kind: 'official', publisher: 'VCAA', paper: 'Exam 2' })
@@ -32,4 +32,26 @@ test('labels and safe names', () => {
   assert.equal(sourceLabelFor({ kind: 'official', publisher: 'VCAA', year: 2023, paper: 'Exam 2' }), 'VCAA 2023 Exam 2')
   assert.equal(sourceLabelFor({ kind: 'commercial', publisher: 'NEAP', year: 2024, paper: 'Exam 1' }), 'NEAP 2024 Trial Exam 1')
   assert.equal(safeName('2025 Math Methods (2).pdf'), '2025-Math-Methods-2-.pdf')
+})
+
+test('the trial publishers and NHT papers in the VCE Chemistry uploads get their own labels', () => {
+  const label = (name) => sourceLabelFor(parsePaperFilename(name))
+  assert.equal(label('2024-qats-units-3-4.pdf'), 'QATS 2024 Trial Exam')
+  assert.equal(label('2024-lorikeet-units-3-4.pdf'), 'Lorikeet 2024 Trial Exam')
+  assert.equal(label('2024-access-units-3-4.pdf'), 'Access 2024 Trial Exam')
+  // The northern-hemisphere paper is a different exam from the main one, in the same format.
+  const nht = parsePaperFilename('2019-vcaa-nht.pdf')
+  assert.deepEqual([nht.kind, nht.publisher, nht.paper], ['official', 'VCAA NHT', 'Exam'])
+  assert.equal(label('2019-vcaa.pdf'), 'VCAA 2019 Exam')
+  assert.equal(parsePaperFilename('2019-vcaa-nht-report.pdf').solutions, true)
+})
+
+test('papers that would be saved under the same label are found', () => {
+  const rows = [
+    { key: 0, kind: 'commercial', publisher: 'TSSM', year: 2024, paper: 'Exam' },
+    { key: 1, kind: 'commercial', publisher: 'TSSM', year: 2024, paper: 'Exam' },
+    { key: 2, kind: 'official', publisher: 'VCAA', year: 2024, paper: 'Exam' },
+  ]
+  assert.deepEqual(duplicateLabels(rows), ['TSSM 2024 Trial Exam'])
+  assert.deepEqual(duplicateLabels(rows.slice(1)), [])
 })
