@@ -16,6 +16,10 @@ import { CURVE_CRAM, CURVE_GF } from './site/curves'
 const EXTRA_CSS = `
 .gfx .end .city { color: var(--city); }
 .gfx .link { display: inline-flex; align-items: center; gap: 6px; }
+.gfx .fhead .fh1, .gfx .fp-h { text-align: center; }
+.gfx .fhead { padding-bottom: 32px; }
+.gfx .fp-h { margin-bottom: 10px; }
+.gfx .fp .ex { text-align: center; margin-left: auto; margin-right: auto; max-width: 46ch; text-wrap: balance; }
 /* The source chips' tick boxes share .bx with the Ranks cards; keep them small. */
 .gfx .chip .bx { padding: 0; flex-shrink: 0; display: inline-block; }
 /* Comeback Mode's session strip fits a phone-width card. */
@@ -131,14 +135,14 @@ function InfiniteQuestions() {
   const shown = Math.min(pn, 20)
   const fresh = Math.min(s.fresh[s.lvl], shown)
   return (
-    <Panel title="Infinite Questions" intro="Most question banks run out, or start showing you the same questions again. gradefarm. keeps count of how many new questions you have left at your level, and writes more before you run out. Your session never stops.">
+    <Panel title="Infinite Questions" intro="Most question banks run out. gradefarm. writes more at your level before you do, so your session never stops.">
       <div className="split">
         <div className="how">
           <Rules title="How the engine decides" items={[
-            ['It keeps a buffer', 'When fewer than 8 new questions are left in your session, it writes 10 more in the background while you keep answering.'],
-            ['It writes at your level', 'New questions are written at the difficulty you’re working at right now, on the topic you’re practising, in your exam’s style.'],
-            ['It follows you up', 'If you move up a level and there are fewer than 2 questions near it, it writes harder ones straight away.'],
-            ['No repeats', 'It never gives you a question you’ve already done in that session.'],
+            ['It keeps a buffer', 'Under 8 new questions left? It writes 10 more while you keep going.'],
+            ['It writes at your level', 'Same difficulty, same topic, in your exam’s style.'],
+            ['It follows you up', 'Move up a level and it writes harder ones straight away.'],
+            ['No repeats', 'Never the same question twice in a session.'],
           ]} />
         </div>
         <div className="card qcard">
@@ -176,13 +180,13 @@ function AdaptiveDifficulty() {
   const add = (ok) => setLad(cur => [...cur, { d: targetLevel(cur), ok }].slice(-12))
   const last = lad.slice(-5)
   return (
-    <Panel title="Adaptive Difficulty" intro="Every question is rated from one to five stars against your real exam. You don't choose easy or hard: the engine reads your recent answers and keeps you at the level where you're stretched but still getting most of them right.">
+    <Panel title="Adaptive Difficulty" intro="Every question is rated one to five stars. Your recent answers decide how hard the next one is.">
       <div className="split">
         <div className="how">
           <Rules title="How the engine decides" items={[
             ['Everyone starts at ★★', 'Nobody starts on the hardest questions.'],
-            ['It reads your last five answers', 'Get 70% or more right and the next question is one step above the hardest level you’ve got right. Get 40% or less and it drops one below. In between, it holds.'],
-            ['It scores every question', 'Each time it picks, questions you’ve got wrong before score highest, and questions near your level get a big boost. It picks from the top five, so practice never feels scripted.'],
+            ['It reads your last five answers', '70% or more right: one step harder. 40% or less: one step easier. In between, it holds.'],
+            ['It scores every question', 'Ones you’ve missed before come first, near your level. It picks from the top five, so it never feels scripted.'],
           ]} />
         </div>
         <div className="card ladder">
@@ -238,14 +242,14 @@ function ComebackMode() {
   }
   const back = st === 'done' || st === 'plan' || st === 'skip'
   return (
-    <Panel title="Comeback Mode" intro="Get a question wrong and gradefarm. doesn't just show you the answer and move on. It pauses your session, gives you a short run of questions on the same idea, and only sends you back once you've shown you can do it.">
+    <Panel title="Comeback Mode" intro="Get one wrong and you practise questions like it straight away, then go back to your session.">
       <div className="split">
         <div className="how">
           <Rules title="How the engine decides" items={[
-            ['A strand of its own', 'Up to 8 questions like the one you missed, at the same difficulty. They’re prepared while you’re still answering the first one, so there’s no wait.'],
-            ['3 in a row to go back', 'Get 3 right in a row and you rejoin your session exactly where you left off.'],
-            ['Easier if you’re stuck', 'Miss two and the next question explains the idea first, and 2 in a row is enough. Miss three and 1 right is enough.'],
-            ['Nothing gets lost', 'The question you missed comes back in an hour. Still stuck after 5 misses? It goes in your study plan.'],
+            ['A strand of its own', 'Up to 8 questions like the one you missed, ready before you need them.'],
+            ['3 in a row to go back', 'Then you rejoin your session where you left off.'],
+            ['Easier if you’re stuck', 'Miss two and it explains the idea first, and 2 in a row is enough. Miss three and 1 is.'],
+            ['Nothing gets lost', 'It comes back in an hour. After 5 misses, it goes in your study plan.'],
           ]} />
         </div>
         <div className="card cbx">
@@ -278,7 +282,7 @@ function SpacedRepetition() {
   const [curve, setCurve] = useState('both')
   const op = (k) => (curve === 'both' || curve === k ? 1 : 0.18)
   return (
-    <Panel title="Spaced Repetition" intro="You forget most of what you learn within days unless you see it again. The gradefarm. engine uses spaced repetition: every question you answer gets its own return date, so it comes back just as you're about to forget it. Each time you get it right, the gap gets longer, until it's in your long-term memory.">
+    <Panel title="Spaced Repetition" intro="Every question gets a return date, so it comes back just before you'd forget it, and the gap grows each time you get it right.">
       <div className="split">
         <div className="how">
           <h3 className="how-h">How the engine schedules it</h3>
@@ -291,8 +295,8 @@ function SpacedRepetition() {
               <tr><th>Right 5 times or more</th><td>1 month <small>or 2</small></td></tr>
             </tbody></table>
           </div>
-          <p className="hn">The longer gap is for questions you get right at least 75% of the time. One you've got wrong half the time or more comes back in an hour, however often you've got it right.</p>
-          <p className="hn">Each session starts with up to 5 questions that are due back, then carries on with new ones.</p>
+          <p className="hn">The longer gap is for questions you get right at least 75% of the time. Wrong half the time or more? Back in an hour.</p>
+          <p className="hn">Each session starts with up to 5 that are due back.</p>
         </div>
         <div className="card curve">
           <div className="curve-h">
@@ -378,12 +382,12 @@ function ExamBuilder() {
   const p2 = paper === 2
   const ex = ids.map(id => EX.find(e => e.id === id))
   return (
-    <Panel title="The Exam Builder" intro="Build a complete practice exam in seconds, laid out like the real paper, from real past exams and trial exams. Print it and sit it under exam conditions, or sit it on screen in exam mode.">
+    <Panel title="The Exam Builder" intro="A full practice exam in seconds, laid out like the real paper, from past and trial exams.">
       <Rules title="How it builds your exam" row r2 items={[
-        ['Real papers, never mixed', 'Questions come from official past exams, trial exams and gradefarm.’s own bank. Exam 1 and Exam 2 questions never end up in the same paper.'],
-        ['New questions first', 'It picks questions you haven’t done before, spreads them across every topic, and puts them in course order.'],
-        ['The real structure', 'For Methods Exam 2, that’s 20 multiple-choice questions and about 60 marks of extended answers, with writing time worked out from the marks: 2 hours.'],
-        ['Swap anything', 'Don’t like a question? Swap it for one from the same section and topic that you haven’t seen.'],
+        ['Real papers, never mixed', 'Official past exams, trial exams and gradefarm.’s own bank. Exam 1 and Exam 2 never mix.'],
+        ['New questions first', 'Ones you haven’t done, across every topic, in course order.'],
+        ['The real structure', 'Methods Exam 2: 20 multiple choice and about 60 marks of extended response, in 2 hours.'],
+        ['Swap anything', 'Swap any question for an unseen one from the same section and topic.'],
       ]} />
       <div className="xb">
         <div className="card bld">
@@ -470,11 +474,11 @@ function ExaminerMarking() {
     [false, 'Stronger forces, so more energy to separate the molecules', 'You said ethanol boils higher, but not why. Say hydrogen bonds are stronger, so more energy is needed to separate ethanol molecules.', '0/1'],
   ]
   return (
-    <Panel title="Examiner Marking" intro="Type an answer to a written question and it's marked the way your exam is marked: against a marking scheme, one mark at a time. For every mark you get, you see the words that earned it. For every mark you miss, you see exactly what was missing.">
+    <Panel title="Examiner Marking" intro="Written answers are marked against the marking scheme, one mark at a time, with your own words quoted back.">
       <Rules title="How it marks" row items={[
-        ['Against the scheme', 'Each question has a marking scheme listing what an examiner looks for, and your answer is checked against each point separately.'],
-        ['Your words, quoted', 'Every mark shows the part of your answer that earned it, so you know what worked, not just your score.'],
-        ['Help before you answer', 'Stuck? Titan’s Advice marks up the key words in the question and nudges you towards the idea, without giving the answer.'],
+        ['Against the scheme', 'Your answer is checked against each point an examiner looks for.'],
+        ['Your words, quoted', 'Every mark shows the part of your answer that earned it.'],
+        ['Help before you answer', 'Titan’s Advice highlights the key words and nudges you, without giving the answer.'],
       ]} />
       <div className="mk">
         <div className={`card pane ${adv ? 'adv-on' : ''}`}>
@@ -515,11 +519,11 @@ function ExaminerMarking() {
 
 function Titan() {
   return (
-    <Panel title="Your Tutor, Titan AI" intro="Titan is gradefarm.'s AI tutor. Ask it anything about your subject at any hour, and it takes you through it step by step. Open it from a question and it already knows what you're looking at, so you don't have to explain.">
+    <Panel title="Your Tutor, Titan AI" intro="An AI tutor for your subject, any time. Open it from a question and it already knows what you're on.">
       <Rules title="How Titan helps" row items={[
-        ['It asks before it tells', 'When you’re stuck, it asks you the question that gets you to the next step, instead of handing over the answer.'],
-        ['It checks your working', 'Write on the question with a pen, finger or keyboard and it points to the exact line where it went wrong.'],
-        ['Photos and lessons', 'Snap a photo of a question from your textbook or class notes, or take a guided lesson on a whole topic.'],
+        ['It asks before it tells', 'Stuck? It asks the question that gets you to the next step.'],
+        ['It checks your working', 'Write it out and it points to the line that went wrong.'],
+        ['Photos and lessons', 'Snap a question from your textbook, or take a guided lesson on a topic.'],
       ]} />
       <div className="tg">
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -552,16 +556,16 @@ const CURVE_PTS = 'M20 135 L35 89.6 L50 60 L65 43.9 L80 39 L95 43.1 L110 54 L125
 function ExamGradeQuestions() {
   const [fmt, setFmt] = useState('graph')
   return (
-    <Panel title="Exam-Grade Questions" intro="Every question is written for your exact course and looks like the questions on your real exam: the same style, the same notation, and real graphs, diagrams and passages wherever your exam has them.">
+    <Panel title="Exam-Grade Questions" intro="Written for your course in your exam's style, with real graphs, diagrams and passages.">
       <div className="ftabs" role="group" aria-label="Question formats">
         {FORMATS.map(([id, name]) => <button key={id} type="button" aria-pressed={fmt === id} onClick={() => setFmt(id)}>{name}</button>)}
       </div>
       <div className="split">
         <div className="how">
           <Rules title="How the engine writes them" items={[
-            ['Built from your course', 'Each subject is built from its official course, like the VCAA study design, and every question sits under one of its topics.'],
-            ['Modelled on real exams', 'New questions are written from examples of real exam questions for your subject, so the style and difficulty match.'],
-            ['Nothing off the course', 'It never asks about something your course covers later. If a question ever seems off, tap “It’s not in my course” and it’s reviewed.'],
+            ['Built from your course', 'Every question sits under a topic in your official course, like the VCAA study design.'],
+            ['Modelled on real exams', 'Written from real exam questions, so the style and difficulty match.'],
+            ['Nothing off the course', 'Nothing from later in your course. Seems off? Tap “It’s not in my course”.'],
           ]} />
         </div>
         <div>
@@ -625,11 +629,11 @@ function ExamGradeQuestions() {
 
 function RanksAndLeagues() {
   return (
-    <Panel title="Ranks & Leagues" intro="Practice you can see adding up. You earn XP for every question, climb ranks, keep a daily streak and compete in a weekly league against students at your level, while your predicted grade shows where you're heading.">
+    <Panel title="Ranks & Leagues" intro="XP, ranks, a daily streak and a weekly league at your level, plus a predicted grade.">
       <Rules title="How it's worked out" row items={[
-        ['Ranks you can’t fake', 'From Silver up, every rank needs real accuracy as well as XP: 50% for Silver II, up to 85% for Legend. Guessing won’t get you there.'],
-        ['Fair leagues', 'Up to 20 students at your level, Monday to Sunday. The top 5 move up a league.'],
-        ['A predicted grade', 'Worked out from your accuracy at each difficulty, once you’ve answered 40 questions.'],
+        ['Ranks you can’t fake', 'Silver and up need real accuracy too: 50% for Silver II, up to 85% for Legend.'],
+        ['Fair leagues', 'Up to 20 students at your level, Monday to Sunday. Top 5 move up.'],
+        ['A predicted grade', 'From your accuracy at each difficulty, after 40 answers.'],
       ]} />
       <div className="four">
         <div className="card bx"><h3>Ranks you can't fake</h3>
@@ -695,7 +699,6 @@ export default function FeaturesPage({ theme = 'light', onToggleTheme, onSignIn 
         <header className="fhead">
           <div className="in wide">
             <h1 className="fh1">Everything inside gradefarm.</h1>
-            <p className="lead">Pick a feature to see it working.</p>
           </div>
         </header>
         <section className="fx" id="features" aria-label="Features">
