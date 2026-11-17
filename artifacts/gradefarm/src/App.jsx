@@ -43,6 +43,7 @@ if (typeof window !== 'undefined') {
 // LiveKit, MathLive, the entire admin bundle, marketing pages, etc.) are split
 // out of the initial app bundle and only fetched when the route is visited.
 const LandingPage           = lazyWithReload(() => import('./components/LandingPage'))
+const FeaturesPage          = lazyWithReload(() => import('./components/FeaturesPage'))
 const Year6Page             = lazyWithReload(() => import('./components/Year6Page'))
 const ReadinessCheckScreen  = lazyWithReload(() => import('./components/ReadinessCheckScreen'))
 const AuthScreen            = lazyWithReload(() => import('./components/AuthScreen'))
@@ -1634,6 +1635,8 @@ function AppInner() {
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
+      {/* Features — public, signed in or not */}
+      <Route path="/features" element={<FeaturesPage {...commonProps} onSignIn={() => navigate('/auth')} />} />
       <Route path="/pricing" element={<PricingPage {...commonProps} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} profileState={(user && profile?.state) || null} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />

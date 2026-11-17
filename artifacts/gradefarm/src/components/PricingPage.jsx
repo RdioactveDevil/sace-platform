@@ -269,7 +269,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   const tutorFrom = tutorPlans.length ? Math.min(...tutorPlans.map(p => p.price)) : null
   const annualPct = Math.round((pricing.annual_discount ?? 0.15) * 100)
 
-  const NAV = [['How it works', () => homeSection('how')], ['Subjects', () => homeSection('subjects')], ['Questions', () => homeSection('questions')], ['Pricing', () => window.scrollTo({ top: 0, behavior: 'smooth' }), true]]
+  const NAV = [['Features', () => navigate('/features')], ['Subjects', () => homeSection('subjects')], ['Pricing', () => window.scrollTo({ top: 0, behavior: 'smooth' }), true]]
 
   return (
     <div className="lp" style={{ ...themeVars(theme), colorScheme: theme === 'dark' ? 'dark' : 'light',
