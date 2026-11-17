@@ -115,11 +115,46 @@ const EXTRA_CSS = `
 .gfx .on .snake rect { animation: gfx-snake 5.5s linear infinite, gfx-snake-fade 5.5s ease-in-out infinite; }
 .gfx .on .t1 .snake rect { animation-delay: -1.1s; } .gfx .on .t2 .snake rect { animation-delay: -2.4s; } .gfx .on .t3 .snake rect { animation-delay: -3.6s; }
 .gfx .on .t4 .snake rect { animation-delay: -.5s; } .gfx .on .t5 .snake rect { animation-delay: -4.4s; }
+/* With gradefarm.: each card is a mini illustration, then its name and one line. */
+.gfx .tile .b { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 12px 14px 14px; }
+.gfx .tile .b strong { font-size: 15.5px; font-weight: 800; color: var(--ink); margin-top: 6px; }
+.gfx .tile .b em { font-style: normal; font-size: 13px; line-height: 1.4; color: var(--ink2); }
+.gfx .il { height: 86px; border-radius: 10px; background: var(--subtle); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 8px 10px; }
+.gfx .il.stack .q { position: absolute; left: 50%; height: 48px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; transform: translateX(-50%); }
+.gfx .il.stack .q3 { top: 8px; width: 60%; } .gfx .il.stack .q2 { top: 14px; width: 66%; }
+.gfx .il.stack .q1 { top: 20px; width: 72%; height: 58px; padding: 6px 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+.gfx .il.stack .q1 i { width: 100%; font-style: normal; font-size: 11px; font-weight: 700; color: var(--ink); }
+.gfx .il.stack .q1 span { height: 12px; width: 30%; border-radius: 4px; border: 1px solid var(--line); }
+.gfx .il.stack .q1 span.on { border-color: var(--ok); background: var(--ok-bg, var(--okbg)); }
+.gfx .il.stack .plus { position: absolute; right: 8px; top: 7px; font-style: normal; font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #0c1037; color: #f1be43; }
+.gfx .il.chat { flex-direction: column; align-items: stretch; gap: 5px; }
+.gfx .il.chat p { margin: 0; font-size: 11px; line-height: 1.3; padding: 5px 8px; border-radius: 9px; max-width: 86%; }
+.gfx .il.chat .me { align-self: flex-end; background: var(--card); border: 1px solid var(--line); color: var(--ink); }
+.gfx .il.chat .ti { background: #0c1037; color: #fff; } .gfx .il.chat .ti b { display: block; font-size: 10px; color: #f1be43; }
+.gfx .il.marks { gap: 12px; justify-content: flex-start; }
+.gfx .il.marks .sc { font-size: 34px; font-weight: 800; color: var(--ink); line-height: 1; } .gfx .il.marks .sc small { font-size: 16px; color: var(--muted); }
+.gfx .il.marks div { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 700; }
+.gfx .il.marks .y { color: var(--ok); } .gfx .il.marks .n { color: var(--bad); }
+.gfx .il.paper .pp { width: 108px; height: 72px; background: #fff; border: 1px solid var(--line2); border-radius: 4px; padding: 6px 7px; display: flex; flex-direction: column; gap: 2px; box-shadow: 4px 4px 0 var(--line); }
+.gfx .il.paper .pp .wm { font-size: 9px; } .gfx .il.paper .pp b { font-size: 9.5px; color: #0c1037; line-height: 1.2; } .gfx .il.paper .pp small { font-size: 8.5px; color: #64748b; }
+.gfx .il.paper .pp i { height: 3px; background: #e3e6f0; border-radius: 2px; } .gfx .il.paper .pp i.s { width: 60%; }
+.gfx .il.time .tl { display: flex; align-items: center; width: 100%; }
+.gfx .il.time .tl span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 800; color: var(--ink); position: relative; padding-top: 20px; }
+.gfx .il.time .tl span::before { content: ""; position: absolute; top: 2px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--sq3); z-index: 1; }
+.gfx .il.time .tl span::after { content: ""; position: absolute; top: 7px; left: 50%; width: 100%; height: 2px; background: var(--sq2); }
+.gfx .il.time .tl span:last-child::after { display: none; }
+.gfx .il.time .tl span.x::before { background: var(--bad); } .gfx .il.time .tl span.g { color: var(--goldt); }
+.gfx .il.bars { flex-direction: column; align-items: stretch; gap: 6px; }
+.gfx .il.bars div { display: grid; grid-template-columns: 88px 1fr 30px; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; color: var(--ink2); }
+.gfx .il.bars i { height: 7px; border-radius: 4px; background: linear-gradient(90deg, var(--sq3) var(--w), var(--sq0) var(--w)); }
+.gfx .il.bars i.lo { background: linear-gradient(90deg, var(--bad) var(--w), var(--sq0) var(--w)); }
+.gfx .il.bars b { font-size: 10.5px; }
 @media (min-width: 761px) {
   /* The hero stays the same size both ways (so the background never moves); the tidy grid sits in the middle of it. */
-  .gfx .on .tile.t0 { top: 62px; } .gfx .on .tile.t1 { top: 62px; } .gfx .on .tile.t2 { top: 62px; }
+  .gfx .on .tile { height: 186px; }
+  .gfx .on .tile.t0 { top: 28px; } .gfx .on .tile.t1 { top: 28px; } .gfx .on .tile.t2 { top: 28px; }
   .gfx .on .tile.t3 { top: 228px; } .gfx .on .tile.t4 { top: 228px; } .gfx .on .tile.t5 { top: 228px; }
-  .gfx .mob-adapt { display: block; position: absolute; left: 0; right: 0; top: 412px; margin: 0; text-align: center; font-size: 17px; font-weight: 700; color: var(--ink); opacity: 0; transition: opacity .4s; pointer-events: none; }
+  .gfx .mob-adapt { display: block; position: absolute; left: 0; right: 0; top: 436px; margin: 0; text-align: center; font-size: 17px; font-weight: 700; color: var(--ink); opacity: 0; transition: opacity .4s; pointer-events: none; }
   .gfx .mob-adapt .wm { font-size: 17px !important; }
   .gfx .on .mob-adapt { opacity: 1; transition-delay: .6s; }
 }
@@ -171,13 +206,34 @@ const EXTRA_CSS = `
 `
 
 /** The four parts of gradefarm. in the hero: what they replace, and the real screen. */
+// Each part's mini illustration (a tiny drawn piece of the feature), shown above its name.
+const ILLUS = {
+  bank: (
+    <div className="il stack"><div className="q q3" /><div className="q q2" /><div className="q q1"><i>Differentiate 𝑦 = 𝑥³ − 2𝑥</i><span /><span /><span className="on" /></div><em className="plus">+10</em></div>
+  ),
+  tutor: (
+    <div className="il chat"><p className="me">Why × 2?</p><p className="ti"><b>Titan</b>What’s the derivative of the inside?</p></div>
+  ),
+  examiner: (
+    <div className="il marks"><b className="sc">2<small>/3</small></b><div><span className="y">✓ Hydrogen bonding</span><span className="y">✓ Dispersion forces</span><span className="n">✗ Why it boils higher</span></div></div>
+  ),
+  builder: (
+    <div className="il paper"><div className="pp"><span className="wm">grade<span>farm.</span></span><b>Mathematical Methods</b><small>Exam 2 · 2 hours</small><i /><i /><i className="s" /></div></div>
+  ),
+  spaced: (
+    <div className="il time"><div className="tl"><span className="x">Miss</span><span>1 hr</span><span>2 days</span><span>1 wk</span><span className="g">1 mth</span></div></div>
+  ),
+  progress: (
+    <div className="il bars"><div><span>Expected value</span><i className="lo" style={{ '--w': '17%' }} /><b>17%</b></div><div><span>Log laws</span><i style={{ '--w': '40%' }} /><b>40%</b></div><div><span>Integrals</span><i style={{ '--w': '60%' }} /><b>60%</b></div></div>
+  ),
+}
 const PARTS = [
-  { name: 'Question bank', what: 'Questions for your exact course, at your level. When you’re running low, it writes more.', img: '/home/question.jpg', old: ['Textbook questions', 'The same 30 questions, answers in the back.'] },
-  { name: 'Tutor', what: 'Ask about any question at 11 pm. Titan asks you the next step instead of just giving the answer.', img: '/home/titan.jpg', old: ['Tutor, Tuesdays 4 pm', 'Great, for an hour a week.'] },
-  { name: 'Examiner', what: 'Every answer marked straight away. Written answers marked point by point, like your real exam.', img: '/home/marking.jpg', old: ['Waiting for marks', 'Your teacher marks it next week.'] },
-  { name: 'Practice papers', what: 'Full practice exams from past and trial papers, laid out like your SACE or VCE paper.', img: '/home/exam-sace.jpg', old: ['Past papers (PDF)', 'Printed, half done, never marked.'] },
-  { name: 'Spaced Repetition', what: 'What you miss comes back an hour later, then days, then weeks, until it sticks.', img: '/home/review.jpg', old: ['Flashcards', 'Made once, never looked at again.'] },
-  { name: 'Progress', what: 'Your weakest topics, and exactly what to practise next.', img: '/home/weak.jpg', old: ['Study planner', 'A to-do list you gave up on in week 3.'] },
+  { k: 'bank', name: 'The Infinity Bank', what: 'A bank that never runs out of questions.', old: ['Textbook questions', 'The same 30 questions, answers in the back.'] },
+  { k: 'tutor', name: 'Titan The Tutor', what: 'Run through specific questions, or 10-minute lessons at your convenience.', old: ['Tutor, Tuesdays 4 pm', 'Great, for an hour a week.'] },
+  { k: 'examiner', name: 'The Examiner', what: 'Your answers annotated and graded mark by mark.', old: ['Waiting for marks', 'Your teacher marks it next week.'] },
+  { k: 'builder', name: 'The Exam Builder', what: 'Build exact replicas of your exam, with questions taken from past papers.', old: ['Past papers (PDF)', 'Printed, half done, never marked.'] },
+  { k: 'spaced', name: 'Spaced Repetition', what: 'Never forget another topic.', old: ['Flashcards', 'Made once, never looked at again.'] },
+  { k: 'progress', name: 'Progress', what: 'Play to your strengths, improve your weaknesses.', old: ['Study planner', 'A to-do list you gave up on in week 3.'] },
 ]
 /** Clutter that only exists without gradefarm.: half hidden, and gone when it's on. */
 const CLUTTER = [['Sticky notes', 'Formula sheet on the fridge.'], ['YouTube, 1 am', 'Six videos watched. No questions done.'], ['Group chat', 'Anyone got the answers to Q12?']]
@@ -310,8 +366,8 @@ function Hero({ theme, onStart, onTry }) {
               <div key={p.name} className={`tile t${i}${CRUMPLED.has(i) ? ' crumpled' : ''}`}>
                 <div className="a" aria-hidden={on}><b>{p.old[0]}</b><span>{p.old[1]}</span>{DOODLES[i] && <span aria-hidden="true">{DOODLES[i]}</span>}</div>
                 <div className="b" aria-hidden={!on}>
-                  <div className="th"><img src={p.img} alt={`gradefarm. screen: ${p.name}`} loading="lazy" /></div>
-                  <div><strong>{p.name}</strong><em>{p.what}</em></div>
+                  <div aria-hidden="true">{ILLUS[p.k]}</div>
+                  <strong>{p.name}</strong><em>{p.what}</em>
                 </div>
                 <Snake />
               </div>

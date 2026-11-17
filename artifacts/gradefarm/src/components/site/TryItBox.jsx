@@ -72,7 +72,7 @@ export default function TryItBox({ onStart, onNext }) {
             Difficulty on the right. Each shows only while it's happening. Below the box on narrow screens. */}
         <div className="tqrow">
         <div className="side l" aria-live="polite">
-          {lit.spaced && <div className="lgi lit"><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>Miss one and it comes back in 1 hour, then days later.</span></div></div>}
+          {lit.spaced && <div className="lgi lit"><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>You just missed this question and GradeFarm has logged it. It will be reshown to you at specific times to ensure it sticks.</span></div></div>}
         </div>
         <div className="card tq">
           {picking && (
@@ -178,8 +178,8 @@ export default function TryItBox({ onStart, onNext }) {
           )}
         </div>
         <div className="side r" aria-live="polite">
-          {lit.comeback && <div className="lgi lit"><span className="li"><Icon d={LOOP} /></span><div><b>Comeback Mode</b><span>Answer 3 similar questions to progress.</span></div></div>}
-          {lit.difficulty && <div className="lgi lit"><span className="li"><Icon d={STAR} /></span><div><b>Difficulty</b><span>Get it right and the next question is harder.</span></div></div>}
+          {lit.comeback && <div className="lgi lit"><span className="li"><Icon d={LOOP} /></span><div><b>Comeback Mode</b><span>Drop one mark, and GradeFarm gives you three questions to make up for it. Your chance for an Academic Comeback.</span></div></div>}
+          {lit.difficulty && <div className="lgi lit"><span className="li"><Icon d={STAR} /></span><div><b>Adaptive Difficulty</b><span>You got this one right. GradeFarm has logged this and you will be shown more difficult questions to push you further.</span></div></div>}
         </div>
         </div>
         {playing && <p className="skip"><button type="button" className="wk" onClick={skip}>Skip to the end</button></p>}
