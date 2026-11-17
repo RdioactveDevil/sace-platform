@@ -83,7 +83,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   const latest = useRef(null) // the newest draft, before the debounce
   const baseline = useRef(null) // the draft as the editor opened, to tell if anything changed
   const pending = useRef(new Map()) // preview address → { blob, kind } for images not uploaded yet
-  const previewRef = useRef(null)
+  const [previewEl, setPreviewEl] = useState(null) // the preview column, once it's on screen
   const [fit, setFit] = useState(0.8)
 
   const load = useCallback(async () => {
@@ -102,9 +102,15 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   const questions = rows || []
   const sum = useMemo(() => reviewSummary(questions), [questions])
   const status = useMemo(() => paperStatus(questions), [questions])
-  useEffect(() => { if (rows && onlyAttention === null) setOnlyAttention(sum.attention > 0) }, [rows, onlyAttention, sum.attention])
+  // Once the paper loads: list only what needs checking if anything does, and open on its first question.
+  useEffect(() => {
+    if (!rows || onlyAttention !== null) return
+    const first = rows.find(x => needsAttention(x)) || rows[0]
+    setOnlyAttention(sum.attention > 0)
+    if (first && !selectedId) setSelectedId(first.id)
+  }, [rows, onlyAttention, sum.attention, selectedId])
   const visible = useMemo(() => (onlyAttention ? questions.filter(q => needsAttention(q)) : questions), [questions, onlyAttention])
-  const q = questions.find(x => x.id === selectedId) || visible[0] || questions[0] || null
+  const q = onlyAttention === null ? null : questions.find(x => x.id === selectedId) || visible[0] || questions[0] || null
   useEffect(() => { if (q && q.id !== selectedId) setSelectedId(q.id) }, [q, selectedId])
 
   // The board and style the exam builder would print this subject in.
@@ -149,16 +155,16 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   const back = async () => { if (await leaveEdit()) onBack() }
   const toggleWhole = async () => { if (await leaveEdit()) setWhole(w => !w) }
 
-  // Fit the printed page to the preview column.
+  // Fit the printed page to the preview column, and keep it fitted as the column changes size.
   useEffect(() => {
-    const el = previewRef.current
+    const el = previewEl
     if (!el) return
     const measure = () => setFit(Math.max(0.3, Math.min(1.4, (el.clientWidth - 24) / PAGE_PX)))
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [rows])
+  }, [previewEl])
   const scale = zoom ?? fit
 
   const run = async (key, fn, ok) => {
@@ -230,6 +236,8 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
       </div>
     )
   }
+
+  if (!q) return <div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div>
 
   const flags = shown ? reviewFlags(shown) : []
   const page = Number(q?.review?.page) || 0
@@ -314,7 +322,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
               ? <button type="button" onClick={() => setSide(editing ? 'editor' : 'pdf')} style={tool}><PanelRightOpen size={14} aria-hidden="true" /> Show side panel</button>
               : <button type="button" onClick={() => setSide('hidden')} style={tool}><PanelRightClose size={14} aria-hidden="true" /> Hide side panel</button>}
           </div>
-          <div ref={previewRef} className="pp-preview" style={{ background: 'var(--t-bgSubtle)', borderRadius: 10, padding: 12, overflow: 'auto', maxHeight: '80vh' }}>
+          <div ref={setPreviewEl} className="pp-preview" style={{ background: 'var(--t-bgSubtle)', borderRadius: 10, padding: 12, overflow: 'auto', maxHeight: '80vh' }}>
             {whole ? visible.map(x => (
               <div key={x.id} style={{ marginBottom: 8 }}>
                 <button type="button" onClick={() => select(x.id)} style={{ ...tool, marginBottom: 6, ...(x.id === q?.id ? { borderColor: 'var(--t-accent)' } : {}) }}>

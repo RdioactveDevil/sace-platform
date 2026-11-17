@@ -1,0 +1,2 @@
+# Local-only check files (they point at files outside the repo).
+*.local.*

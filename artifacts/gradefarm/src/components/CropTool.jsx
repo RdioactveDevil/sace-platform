@@ -137,8 +137,17 @@ export default function CropTool({ pdfUrl, startPage = 1, onUse, onCancel }) {
         <button type="button" onClick={onCancel} style={small(true)}><X size={15} aria-hidden="true" /> Cancel</button>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap' }}>
-        <div ref={stageRef} style={{ flex: '3 1 420px', minWidth: 0, minHeight: 300, overflow: 'auto', background: 'var(--t-bgSubtle)', padding: 12 }}>
+      <style>{`
+        .ct-body { flex: 1; min-height: 0; display: flex; }
+        .ct-stage { flex: 1 1 0; min-width: 0; overflow: auto; background: var(--t-bgSubtle); padding: 12px; }
+        .ct-side { flex: 0 0 300px; min-height: 0; overflow: auto; border-left: 1px solid var(--t-border); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+        @media (max-width: 760px) {
+          .ct-body { flex-direction: column; }
+          .ct-side { flex: 0 0 auto; max-height: 42vh; border-left: 0; border-top: 1px solid var(--t-border); }
+        }
+      `}</style>
+      <div className="ct-body">
+        <div ref={stageRef} className="ct-stage">
           {error && <div role="alert" style={{ color: 'var(--t-danger)', fontSize: 13.5 }}>{error}</div>}
           {!doc && !error && <div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Opening the paper…</div>}
           {doc && (
@@ -163,7 +172,7 @@ export default function CropTool({ pdfUrl, startPage = 1, onUse, onCancel }) {
           )}
         </div>
 
-        <div style={{ flex: '1 1 260px', minWidth: 0, borderLeft: '1px solid var(--t-border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto' }}>
+        <div className="ct-side">
           <div style={{ fontSize: 13, color: 'var(--t-textSub)', lineHeight: 1.5 }}>
             Drag a box over the figure: its axes, labels and caption, but no question text, marks or answer lines. Drag inside the box to move it, or its corners and edges to resize it.
           </div>
