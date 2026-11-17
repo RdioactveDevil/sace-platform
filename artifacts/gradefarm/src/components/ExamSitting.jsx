@@ -156,12 +156,10 @@ function Instructions({ t, attempt, subject, newExam, go, onBegin }) {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Only once everything on the checklist is ticked. */}
-          <button type="button" className="ex-btn primary" style={{ minHeight: 46, padding: '11px 20px', fontSize: 15 }} disabled={!allReady} onClick={() => onBegin(times)}
-            aria-describedby={allReady ? undefined : 'sit-tick-hint'}>
+          <button type="button" className="ex-btn primary" style={{ minHeight: 46, padding: '11px 20px', fontSize: 15 }} disabled={!allReady} onClick={() => onBegin(times)}>
             {sace ? 'Begin writing time' : 'Begin reading time'}
           </button>
           <button type="button" className="ex-btn" onClick={() => go('/exams')}>Not now</button>
-          {!allReady && <span id="sit-tick-hint" style={{ fontSize: 13, color: t.textMuted }}>Tick everything above to begin.</span>}
         </div>
       </div>
     </main>
