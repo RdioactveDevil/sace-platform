@@ -24,15 +24,16 @@ it.
   look-alike.
 - The original PDF beside it, open at the question's page.
 - Editing on the same page, with the preview showing the unsaved edit live.
-- Fixing figures: remove a wrong figure, or replace it with an uploaded image.
+- Fixing figures: crop a figure straight from the original paper, remove a
+  wrong one, or replace it with an uploaded image.
+- Loaded papers shows, for every paper, whether it has been checked, is part
+  way through, or hasn't been started, so it's clear what is done and what's
+  left.
 - Review (flags, approve, reject, approve all without problems) moves here.
 
 ## Non-goals
 
 - The online exam-sitting view (the admin chose the printed view).
-- Cropping a figure out of the original PDF inside the page. Replacing means
-  uploading an image (e.g. a screenshot of the original). A crop tool can come
-  later.
 - Changing how built exams look or paginate.
 - Editing papers that aren't loaded from exam papers (bank questions keep their
   current screens).
@@ -107,10 +108,47 @@ papers' "Open" goes here instead of expanding in place.
   marks, worked solution), extended to report every change to the page so the
   preview redraws from the draft. Debounced so typing stays smooth.
 - Section A: the existing multiple-choice editor, extended the same way.
-- Figures, on the question and on each part: **Remove**, and **Replace** by
-  uploading a PNG/JPEG (stored in `question-images` under the paper's folder,
-  like ingest crops). Removing or replacing a figure clears that figure's
-  stored crop flags; the text checks re-run on the draft as usual.
+- Figures, on the question and on each part: **Crop from the paper**,
+  **Remove**, and **Upload** a PNG/JPEG. New images are stored in
+  `question-images` under the paper's folder, like ingest crops. Any change to
+  a figure clears that figure's stored crop flags; the text checks re-run on
+  the draft as usual. A question or part with no figure can be given one the
+  same ways.
+
+## Crop tool
+
+Opened from a figure's "Crop from the paper" while editing.
+
+- Shows the original PDF page, drawn in the browser by pdf.js (the same
+  library and version the ingest uses) at the ingest's resolution, 3 pixels
+  per point, so a crop made here prints at the same size as an ingest crop
+  (the exam paper sizes figures from that resolution).
+- Opens on the question's page, with previous / next page, and zoom.
+- The admin drags a box over the figure. Handles adjust each edge; the box can
+  be moved. "Tighten" trims white margins to the drawing (with the same small
+  white margin the ingest leaves), never cutting into ink.
+- The selected area is shown beside the page as it will be saved, and the
+  printed preview shows the question with it before saving.
+- "Use this crop" puts it into the draft; it is uploaded when the question is
+  saved, so cancelling leaves nothing behind.
+- If the paper's PDF isn't available, the button says why and Upload is
+  offered instead.
+
+## Checked, part way, not started
+
+Each paper on Loaded papers, and the paper page's header, shows where it is:
+
+- **Checked**: every question approved or rejected. Shows when and by whom
+  it was last reviewed ("Checked 18 Nov by Adhyayan").
+- **Part way**: some questions reviewed, with "12 of 40 checked".
+- **Not checked**: none reviewed yet, including papers loaded before reviews
+  existed.
+
+A filter on Loaded papers shows all, not checked, part way or checked, and
+papers are ordered so unfinished ones come first. Recording who and when
+needs two new columns on `questions`, `reviewed_at` and `reviewed_by`, set by
+`POST /api/admin/questions/review` (migration). Editing a question after it
+was approved doesn't reset it; the date shows the last review.
 - Save writes through the existing endpoints (`/extended`, `/content`; figures
   through the extended body for parts and `/visuals` for the question image).
   Saving does not approve: the question keeps its review status.
@@ -133,6 +171,11 @@ papers' "Open" goes here instead of expanding in place.
 - Live edits: a unit test that the draft (not the saved question) is what the
   preview receives, and a browser check that editing a part's text and marks
   changes the preview.
+- Crops: a check that a crop made in the tool of a known box on a real paper
+  page matches the same box cut from the ingest's own render of that page, in
+  size and pixels.
+- Paper status: unit tests for checked / part way / not checked from a
+  paper's questions.
 
 ## Constraints
 
@@ -163,8 +206,11 @@ papers' "Open" goes here instead of expanding in place.
   read-through.
 - **The original PDF in the right column by default**, swapped for the editor
   while editing, with a peek button.
-- **Replace a figure by uploading an image**, not by cropping the PDF on the
-  page (admins can already upload to `question-images`).
+- **A crop is uploaded only when the question is saved**, so cancelling leaves
+  nothing in storage.
+- **"Checked" means every question approved or rejected.** A question saved
+  after approval stays approved; the paper stays checked.
+- **Unfinished papers are listed first** on Loaded papers.
 - **Saving never approves.** Approve is always its own click.
 - **The preview's settings come from the subject**: board (VCE/SACE) and
   maths or not, as the exam builder works them out; sources and solutions off.
