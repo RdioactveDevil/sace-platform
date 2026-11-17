@@ -30,6 +30,35 @@ const EXTRA_CSS = `
 .gfx .sec { scroll-margin-top: 72px; }
 .gfx .hc { color: inherit; text-decoration: none; }
 .gfx .wq .mt > span { white-space: nowrap !important; }
+/* Hero: six parts and three bits of clutter, messy without gradefarm.; tidy in a 3 x 2 grid with it. */
+@media (min-width: 761px) {
+  .gfx .stage { height: 490px; }
+  .gfx .tile { z-index: 1; }
+  .gfx .tile.t4 { left: 9%; top: 262px; transform: rotate(3.5deg); transition-delay: .22s; }
+  .gfx .tile.t5 { left: 63%; top: 278px; transform: rotate(-2.5deg); transition-delay: .26s; }
+  .gfx .on .tile { width: 31%; }
+  .gfx .on .tile.t0 { left: 2%; top: 64px; } .gfx .on .tile.t1 { left: 34.5%; top: 64px; } .gfx .on .tile.t2 { left: 67%; top: 64px; }
+  .gfx .on .tile.t3 { left: 2%; top: 228px; } .gfx .on .tile.t4 { left: 34.5%; top: 228px; } .gfx .on .tile.t5 { left: 67%; top: 228px; }
+  .gfx .on .tile.t4, .gfx .on .tile.t5 { transform: none; }
+  .gfx .tile .b { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .gfx .tile .b strong { font-size: 15px; }
+  .gfx .tile .b em { font-size: 12.5px; }
+  .gfx .cap { top: 448px; }
+  /* The clutter sits behind, half hidden or hanging off the edge, and flies off when gradefarm. is on. */
+  .gfx .tile.junk { z-index: 0; transition: opacity .45s ease, transform .6s cubic-bezier(.65,0,.25,1); }
+  .gfx .tile.junk.x0 { left: -4%; top: 18px; transform: rotate(-7deg); }
+  .gfx .tile.junk.x1 { left: 84%; top: 300px; transform: rotate(6deg); }
+  .gfx .tile.junk.x2 { left: 31%; top: 196px; transform: rotate(-4deg); }
+  .gfx .on .tile.junk { width: 23.5%; opacity: 0; pointer-events: none; }
+  .gfx .on .tile.junk.x0 { left: -4%; top: 18px; transform: translate(-80px, -40px) rotate(-18deg) scale(.8); }
+  .gfx .on .tile.junk.x1 { left: 84%; top: 300px; transform: translate(90px, 40px) rotate(16deg) scale(.8); }
+  .gfx .on .tile.junk.x2 { left: 31%; top: 196px; transform: translateY(60px) rotate(-10deg) scale(.7); }
+}
+@media (max-width: 760px) {
+  .gfx .tile.junk { display: none; }
+  .gfx .tile.t4 { transform: rotate(1deg); } .gfx .tile.t5 { transform: rotate(-1.2deg); }
+  .gfx .on .tile.t4, .gfx .on .tile.t5 { transform: none; }
+}
 /* The hero's changing word keeps the width of "adaptive", so the line doesn't jump. */
 .gfx .scw-stack { display: inline-grid; vertical-align: bottom; }
 .gfx .scw-stack > span { grid-area: 1 / 1; text-align: center; white-space: nowrap; }
@@ -47,7 +76,11 @@ const PARTS = [
   { name: 'Tutor', what: 'Ask about any question at 11 pm. Titan asks you the next step instead of just giving the answer.', img: '/home/titan.jpg', old: ['Tutor, Tuesdays 4 pm', 'Great, for an hour a week.'] },
   { name: 'Examiner', what: 'Every answer marked straight away. Written answers marked point by point, like your real exam.', img: '/home/marking.jpg', old: ['Waiting for marks', 'Your teacher marks it next week.'] },
   { name: 'Practice papers', what: 'Full practice exams from past and trial papers, laid out like your SACE or VCE paper.', img: '/home/exam-sace.jpg', old: ['Past papers (PDF)', 'Printed, half done, never marked.'] },
+  { name: 'Spaced Repetition', what: 'What you miss comes back an hour later, then days, then weeks, until it sticks.', img: '/home/review.jpg', old: ['Flashcards', 'Made once, never looked at again.'] },
+  { name: 'Progress', what: 'Your weakest topics, and exactly what to practise next.', img: '/home/weak.jpg', old: ['Study planner', 'A to-do list you gave up on in week 3.'] },
 ]
+/** Clutter that only exists without gradefarm.: half hidden, and gone when it's on. */
+const CLUTTER = [['Sticky notes', 'Formula sheet on the fridge.'], ['YouTube, 1 am', 'Six videos watched. No questions done.'], ['Group chat', 'Anyone got the answers to Q12?']]
 
 // The hero's "adaptive": on load it scrambles through "smart" and "personal"
 // and settles back on "adaptive" (about 7 seconds), then stays still. Hovering
@@ -139,7 +172,8 @@ function Hero({ theme, onStart, onTry }) {
               </div>
             ))}
             <p className="mob-adapt"><Wordmark size={15} /> identifies what you already know and what you need to work on.</p>
-            <p className="cap">Four separate things. None of them knows what you got wrong.</p>
+            {CLUTTER.map(([name, what], i) => <div key={name} className={`tile junk x${i}`} aria-hidden={on}><div className="a"><b>{name}</b><span>{what}</span></div></div>)}
+            <p className="cap">All separate. None of them knows what you got wrong.</p>
           </div>
           <div className="ctas2">
             <StartButton onClick={onStart} />
