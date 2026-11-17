@@ -243,6 +243,8 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
   }
   // Other pages link to a section here with navigate('/home', { state: { scrollTo } }).
   const scrollTo = location.state?.scrollTo
+  // Otherwise open at the top (the router keeps the last page's scroll).
+  useEffect(() => { if (!scrollTo) window.scrollTo(0, 0) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!scrollTo) return
     requestAnimationFrame(() => go(scrollTo))

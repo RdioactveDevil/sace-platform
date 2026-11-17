@@ -680,6 +680,8 @@ export default function FeaturesPage({ theme = 'light', onToggleTheme, onSignIn 
   const location = useLocation()
   const open = featureFromHash(location.hash)
   const [seen, setSeen] = useState(() => [open])
+  // Open at the top, like the other public pages (the router keeps the last page's scroll).
+  useEffect(() => { window.scrollTo(0, 0) }, [])
   useEffect(() => { setSeen(s => (s.includes(open) ? s : [...s, open])) }, [open])
   const pick = (n) => navigate({ hash: `#${FEATURES[n].slug}` }, { replace: true })
   const start = () => navigate('/pricing')
