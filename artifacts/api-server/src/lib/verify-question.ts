@@ -88,12 +88,12 @@ export function parseVerdict(text: string): Verdict {
   return JSON.parse(text.slice(start, end + 1)) as Verdict;
 }
 
-/** Call the AI fact-checker for a single question payload. Throws on API/parse failure. */
-export async function verifyQuestionPayload(q: {
-  question: string;
-  options: string[];
-  answer_index: number;
-}, limits: { maxTokens?: number; timeoutMs?: number } = {}): Promise<Verdict> {
+/**
+ * Send one prompt to the fact-checking model (CLAUDE_VERIFY_MODEL) and return
+ * its text, retrying rate limits, overloads and timeouts. Throws when the API
+ * keeps failing. Shared by the question-bank gate and the lesson checker.
+ */
+export async function askVerifier(prompt: string, limits: { maxTokens?: number; timeoutMs?: number } = {}): Promise<string> {
   const baseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
   const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
 
@@ -114,13 +114,12 @@ export async function verifyQuestionPayload(q: {
         body: JSON.stringify({
           model: CLAUDE_VERIFY_MODEL,
           max_tokens: limits.maxTokens ?? 2000,
-          messages: [{ role: "user", content: buildPrompt(q) }],
+          messages: [{ role: "user", content: prompt }],
         }),
       });
       if (resp.ok) {
         const body = await resp.json() as { content?: { type: string; text?: string }[] };
-        const text = body.content?.find((b) => b.type === "text")?.text ?? "";
-        return parseVerdict(text.trim());
+        return (body.content?.find((b) => b.type === "text")?.text ?? "").trim();
       }
     } catch (err) {
       lastErr = err as Error; // network error / timeout abort — retryable
@@ -128,7 +127,7 @@ export async function verifyQuestionPayload(q: {
       clearTimeout(timeout);
     }
 
-    if (resp?.ok) throw lastErr; // 2xx but body/JSON parse failed — not transient
+    if (resp?.ok) throw lastErr; // 2xx but the body couldn't be read — not transient
     const status = resp?.status;
     if (status !== undefined) {
       if (!RETRYABLE_STATUS.has(status)) throw new Error(`Anthropic API ${status}`);
@@ -143,6 +142,15 @@ export async function verifyQuestionPayload(q: {
     await new Promise((r) => setTimeout(r, wait + Math.random() * 500));
   }
   throw lastErr;
+}
+
+/** Call the AI fact-checker for a single question payload. Throws on API/parse failure. */
+export async function verifyQuestionPayload(q: {
+  question: string;
+  options: string[];
+  answer_index: number;
+}, limits: { maxTokens?: number; timeoutMs?: number } = {}): Promise<Verdict> {
+  return parseVerdict(await askVerifier(buildPrompt(q), limits));
 }
 
 export type VerifiableQuestion = {

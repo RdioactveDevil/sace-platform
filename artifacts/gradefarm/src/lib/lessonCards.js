@@ -178,7 +178,7 @@ export function describeLessonCard(lesson) {
     if (c.check.explanation) out.push(`Explanation shown after answering: ${c.check.explanation}`)
     if (!a) {
       const picked = Number.isInteger(lesson.picked) ? ` They have selected ${letter(lesson.picked)} but not checked it yet.` : ''
-      out.push(`The student has NOT answered this yet.${picked} Do not tell them the answer or which option is right: give a hint or a smaller question that leads them there.`)
+      out.push(`The student has NOT answered this yet.${picked} Do not volunteer the answer or which option is right: give a hint or a smaller question that leads them there. But if they tell you their own answer in the chat, check it honestly and say whether it's right; never call a correct answer wrong.`)
     } else {
       out.push(`The student answered ${a.picked != null ? letter(a.picked) : 'it'} and was ${a.ok ? 'right' : 'wrong'}. You can now discuss the answer openly${a.ok ? '' : ', starting from why their choice was tempting'}.`)
     }

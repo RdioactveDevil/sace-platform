@@ -144,3 +144,23 @@ test('parseLatexJson leaves correctly escaped JSON unchanged', () => {
   const raw = String.raw`[{"q":"$\\frac{1}{2}$ said \"hi\" é"}]`
   assert.deepEqual(parseLatexJson(raw), JSON.parse(raw))
 })
+
+// A long equation on a line of its own (the ester question's reaction) is
+// shown as display maths, which MathText scales to fit the card. Inline, KaTeX
+// can't wrap it and it ran off the side.
+test('a long equation alone on its line becomes display maths', () => {
+  const eq = String.raw`\ce{CH3(CH2)4COOH(l) + CH3CH2OH(l) <=> CH3(CH2)4COOCH2CH3(l) + H2O(l)}`
+  const toks = parseMathText(`A student mixes the two.\n$${eq}$\nExplain why.`)
+  const m = toks.find((t) => t.type === 'math')
+  assert.equal(m.display, true)
+  assert.equal(m.content, eq)
+  assert.deepEqual(texts(toks), ['A student mixes the two.', 'Explain why.'])
+  assertRenders(toks)
+})
+
+test('short or mid-sentence maths stays inline', () => {
+  const short = parseMathText('Find $x$ when\n$x^2 = 4$\nholds.')
+  assert.equal(short.find((t) => t.content === 'x^2 = 4').display, false)
+  const mid = parseMathText(String.raw`Burning $\ce{CH4 + 2O2 -> CO2 + 2H2O}$ releases energy and much more besides.`)
+  assert.equal(mid.find((t) => t.type === 'math').display, false)
+})

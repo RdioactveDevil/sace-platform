@@ -115,6 +115,9 @@ CHECKING ANSWERS — CRITICAL RULE (accuracy matters more than tone):
 - If they are RIGHT — even if their wording is loose, even if they answered more than you asked, even if they worked ahead — confirm it immediately and warmly: "Yes! Exactly right." Then move forward. Do NOT say "almost", do NOT ask them to redo it, and do NOT re-ask a question they have already answered correctly.
 - Only when the answer is genuinely INCORRECT: never say "wrong" — say "almost, think about it this way..." and guide them toward it.
 - If a student gives a list or works ahead (e.g. "15, 19, 23"), check every value. If they're all correct, credit the whole thing — don't treat only the first as their answer or pretend they only gave one.
+- ANSWERS GIVEN EARLY COUNT. Before every reply, reread the student's recent messages. If they have already given the answer to the step you're about to ask about, or to the whole problem — even several messages back, even before you asked for it, even as a bare number like "1" or "44 g" — check it first. If it's right, say so ("Yes, 44 g is right — you were ahead of me!") and skip the steps that lead to it. Never walk them through steps towards an answer they've already given, and never re-ask for it.
+- Skipping steps is not being wrong. A correct final answer reached without showing every step is CORRECT: confirm it, then (only if useful) ask briefly how they got there. Never call it wrong or "almost" because they skipped your plan.
+- Judge their answer against the maths, not against the step you planned next: if they answer a different (later) step than the one you asked, check THAT step and credit it.
 - If you catch yourself having mis-judged a correct answer, briefly own it ("You're right — that was on me") and move on. Never make the same misjudgment twice in a session.
 
 YOUR TEACHING METHOD:
@@ -707,6 +710,8 @@ export default function LearnScreen({
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           purpose: 'lesson',
+          // The server fact-checks the lesson for this subject before sending it back.
+          subject: subjectName || '',
           max_tokens: 6000,
           system: `You write short guided lessons for ${subjectName || 'school'} students at ${yearLevel} level. ${style}
 The student sees one card at a time: each key idea, then straight away a quick question on that idea, then a worked example, then a final challenge. Keep every card short enough to read in under a minute.
@@ -1086,6 +1091,11 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
       .ls-lesson-panel { border-left: 1px solid ${t.border}; display: flex; flex-direction: column; min-height: 0; }
       .ls-ideas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .ls-card-in { animation: fadeUp 0.25s ease; }
+      .ls-reveal { position: relative; display: block; width: 100%; padding: 0; margin: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+      .ls-reveal-blur { filter: blur(6px); opacity: 0.75; user-select: none; pointer-events: none; transition: filter 0.15s; }
+      .ls-reveal:hover .ls-reveal-blur, .ls-reveal:focus-visible .ls-reveal-blur { filter: blur(4px); }
+      .ls-reveal:focus-visible { outline: 2px solid ${t.borderStrong}; outline-offset: 2px; }
+      .ls-reveal-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 800; color: ${t.textSub}; }
       .ls-kick { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: ${t.textMuted}; }
       .ls-num { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; font-weight: 800; background: ${t.bgSubtle}; color: ${t.textSub}; }
       .ls-plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -1401,7 +1411,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
             {lessonLoading && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{lessonLoading === 'this topic' ? 'Writing your lesson…' : lessonLoading}</div>
-                <div style={{ fontSize: 13, color: t.textMuted }}>Titan is writing the key ideas, a quick question for each, a worked example and a final challenge. This takes a few seconds.</div>
+                <div style={{ fontSize: 13, color: t.textMuted }}>Titan is writing the key ideas, a quick question for each, a worked example and a final challenge, then checking every answer before you see it. This takes a few seconds.</div>
                 <div className="ls-ideas">{[0, 1, 2, 3].map(i => <div key={i} style={{ ...card, height: 110, opacity: 0.6, animation: 'pulse 1.4s ease infinite' }} />)}</div>
               </div>
             )}
@@ -1480,25 +1490,32 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                         <span className="ls-kick">Worked example</span>
                         <div style={{ fontSize: 16, fontWeight: 800, margin: '8px 0 6px', lineHeight: 1.45 }}><MathText text={L.example.problem} /></div>
                         {L.example.visual && <div style={{ margin: '4px 0 12px' }}><LessonVisual visual={L.example.visual} theme={theme} /></div>}
-                        {L.example.steps.map((st, i) => (
-                          <div key={i} style={{ display: 'grid', gridTemplateColumns: '26px 1fr', gap: 10, padding: '11px 0', borderTop: `1px solid ${t.border}` }}>
-                            <span className="ls-num" style={{ opacity: i < (lesson.revealed ?? 1) ? 1 : 0.4 }}>{i + 1}</span>
-                            {i < (lesson.revealed ?? 1) ? (
-                              <div className="ls-card-in">
-                                <div style={{ fontSize: 14.5 }}><MathText text={st.work} /></div>
-                                {st.note && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}><MathText text={st.note} /></div>}
-                              </div>
-                            ) : <span style={{ fontSize: 13, color: t.textFaint, alignSelf: 'center' }}>Hidden until you're ready</span>}
-                          </div>
-                        ))}
+                        {L.example.steps.map((st, i) => {
+                          const shown = i < (lesson.revealed ?? 1)
+                          const body = (
+                            <>
+                              <div style={{ fontSize: 14.5 }}><MathText text={st.work} /></div>
+                              {st.note && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 2 }}><MathText text={st.note} /></div>}
+                            </>
+                          )
+                          return (
+                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '26px 1fr', gap: 10, padding: '11px 0', borderTop: `1px solid ${t.border}` }}>
+                              <span className="ls-num" style={{ opacity: shown ? 1 : 0.5 }}>{i + 1}</span>
+                              {shown ? <div className="ls-card-in">{body}</div> : (
+                                // A hidden line is the line itself, blurred, like the back of a
+                                // flashcard: tap it to reveal it (and any lines before it).
+                                <button type="button" className="ls-reveal" onClick={() => updateLesson({ revealed: i + 1 })}
+                                  aria-label={`Reveal line ${i + 1}`}>
+                                  <div className="ls-reveal-blur" aria-hidden="true">{body}</div>
+                                  {i === (lesson.revealed ?? 1) && <span className="ls-reveal-tag">Tap to reveal</span>}
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                       {(lesson.revealed ?? 1) < L.example.steps.length && (
-                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <button type="button" style={secondaryBtn} onClick={() => updateLesson({ revealed: (lesson.revealed ?? 1) + 1 })}>
-                            {(lesson.revealed ?? 1) === L.example.steps.length - 1 ? 'Show final step' : 'Show next step'}
-                          </button>
-                          <span style={{ fontSize: 12.5, color: t.textMuted }}>Try the next line yourself first.</span>
-                        </div>
+                        <span style={{ fontSize: 12.5, color: t.textMuted }}>Try the next line yourself first, then tap it to check.</span>
                       )}
                       <div style={{ display: 'flex', gap: 10 }}>
                         <button type="button" style={secondaryBtn} onClick={() => goToCard(at - 1)}>Back</button>

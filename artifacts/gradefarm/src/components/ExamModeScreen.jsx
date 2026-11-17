@@ -57,6 +57,7 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
         paper={paper}
         trackId={activeTrack?.id}
         theme={theme}
+        subject={subject}
         onResult={handleResult}
         onExit={() => { setPaper(null); setActiveTrack(null) }}
       />
