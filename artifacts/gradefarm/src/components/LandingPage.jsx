@@ -201,6 +201,11 @@ const EXTRA_CSS = `
 /* "gradefarm is the rest.": the wordmark at the heading's own size. */
 .gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
+/* The Exam Builder card shows both covers as whole pages, side by side. */
+.gfx .hv.covers .cv { width: auto; height: 192px; top: 26px; }
+.gfx .hv.covers .cv img { width: auto; height: 100%; }
+.gfx .hv.covers .cv.sace { left: auto; right: calc(50% + 6px); }
+.gfx .hv.covers .cv.vce { right: auto; left: calc(50% + 6px); top: 30px; }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
 .gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
 `
