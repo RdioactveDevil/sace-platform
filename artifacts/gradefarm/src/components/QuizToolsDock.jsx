@@ -1,24 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Calculator as CalculatorIcon, Atom, Ruler, Repeat, Wrench } from 'lucide-react'
+import { Calculator as CalculatorIcon, BookOpen, Wrench, ExternalLink } from 'lucide-react'
 import { appZoom } from '../lib/appZoom'
 import { THEMES } from '../lib/theme'
-import { ELEMENTS, CATEGORIES } from '../lib/periodicTable'
-import { CONSTANTS, FORMULAS } from '../lib/dataSheet'
-import { UNIT_CATEGORIES, convert } from '../lib/unitConversions'
-import MathText from './MathText'
 
-const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
 const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_M = "'JetBrains Mono', monospace"
 
 // ── Tool registry ───────────────────────────────────────────────────────────
+// The data booklet is the subject's official SACE / VCAA booklet or formula
+// sheet (a PDF uploaded in Admin → Curricula → Student features), never a
+// generic list of formulas, so it's only offered once one is uploaded.
 const TOOLS = [
-  { id: 'calc',     icon: CalculatorIcon, label: 'Calculator',    w: 300, h: 440 },
-  { id: 'periodic', icon: Atom,       label: 'Periodic table', w: 640, h: 480 },
-  { id: 'data',     icon: Ruler,      label: 'Data sheet',     w: 360, h: 460 },
-  { id: 'convert',  icon: Repeat,     label: 'Unit converter', w: 320, h: 360 },
+  { id: 'calc',     icon: CalculatorIcon, label: 'Calculator',   w: 300, h: 440 },
+  { id: 'booklet',  icon: BookOpen,       label: 'Data booklet', w: 720, h: 620 },
 ]
 
 // ── Safe calculator evaluator ────────────────────────────────────────────────
@@ -52,7 +47,7 @@ function evaluateExpression(raw, deg) {
 }
 
 // ── Draggable / resizable floating window ────────────────────────────────────
-function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobile }) {
+function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobile, booklet }) {
   const t = THEMES[theme]
   const [pos, setPos] = useState(initial)
   const dragRef = useRef(null)
@@ -130,9 +125,7 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {tool.id === 'calc' && <Calculator theme={theme} />}
-        {tool.id === 'periodic' && <PeriodicTable theme={theme} />}
-        {tool.id === 'data' && <DataSheet theme={theme} />}
-        {tool.id === 'convert' && <UnitConverter theme={theme} />}
+        {tool.id === 'booklet' && <DataBooklet theme={theme} booklet={booklet} />}
       </div>
     </div>
   )
@@ -232,211 +225,39 @@ function modeBtn(t) {
   }
 }
 
-// ── Periodic table ───────────────────────────────────────────────────────────
-function PeriodicTable({ theme }) {
+// ── Official data booklet ───────────────────────────────────────────────────
+// The PDF itself, as the exam hands it out: the browser's PDF viewer scrolls,
+// zooms and searches it. Phones that won't show a PDF inline get the link.
+function DataBooklet({ theme, booklet }) {
   const t = THEMES[theme]
-  const [sel, setSel] = useState(null)
-
+  if (!booklet?.url) return null
   return (
-    <div style={{ padding: 12 }}>
-      <div style={{ overflowX: 'auto' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(18, minmax(26px, 1fr))',
-          gridTemplateRows: 'repeat(10, auto)',
-          gap: 2,
-          minWidth: 560,
-        }}>
-          {ELEMENTS.map(el => {
-            const c = CATEGORIES[el.cat]?.color || CATEGORIES.unknown.color
-            const active = sel?.n === el.n
-            return (
-              <button
-                key={el.n}
-                onClick={() => setSel(el)}
-                title={`${el.name} — ${el.mass}`}
-                style={{
-                  gridColumn: el.x, gridRow: el.y,
-                  aspectRatio: '1 / 1',
-                  border: `1px solid ${active ? GOLD : c + '66'}`,
-                  background: active ? c + '44' : c + '1f',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center',
-                  padding: 1, lineHeight: 1, overflow: 'hidden',
-                }}
-              >
-                <span style={{ fontSize: 7, color: t.textMuted }}>{el.n}</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: t.text }}>{el.sym}</span>
-              </button>
-            )
-          })}
-          {/* f-block placeholder markers in the main grid */}
-          <div style={{ gridColumn: 3, gridRow: 6, ...markerCell(t) }}>57–71</div>
-          <div style={{ gridColumn: 3, gridRow: 7, ...markerCell(t) }}>89–103</div>
-        </div>
-      </div>
-
-      {/* Detail / legend strip */}
-      {sel ? (
-        <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: t.bgSubtle, border: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 54, height: 54, borderRadius: 10, flexShrink: 0, background: (CATEGORIES[sel.cat]?.color || '#888') + '2a', border: `1px solid ${CATEGORIES[sel.cat]?.color}66`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 9, color: t.textMuted }}>{sel.n}</span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: t.text }}>{sel.sym}</span>
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{sel.name}</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>
-              Atomic mass <b style={{ color: t.text }}>{sel.mass}</b> · Group {sel.group} · Period {sel.period}
-            </div>
-            <div style={{ fontSize: 11, color: CATEGORIES[sel.cat]?.color, marginTop: 2, fontWeight: 700 }}>{CATEGORIES[sel.cat]?.label}</div>
-          </div>
-        </div>
-      ) : (
-        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {Object.values(CATEGORIES).map(cat => (
-            <span key={cat.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: t.textMuted }}>
-              <span style={{ width: 9, height: 9, borderRadius: 2, background: cat.color }} />{cat.label}
-            </span>
-          ))}
-        </div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <iframe
+        title={booklet.title || 'Data booklet'}
+        src={`${booklet.url}#view=FitH&toolbar=1`}
+        style={{ flex: 1, minHeight: 0, width: '100%', border: 'none', background: '#fff' }}
+      />
+      <a href={booklet.url} target="_blank" rel="noreferrer"
+        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', borderTop: `1px solid ${t.border}`, fontSize: 12, fontWeight: 700, color: t.textSub, textDecoration: 'none' }}>
+        <ExternalLink size={13} aria-hidden="true" />Open in a new tab
+      </a>
     </div>
   )
-}
-
-function markerCell(t) {
-  return {
-    aspectRatio: '1 / 1', borderRadius: 4, border: `1px dashed ${t.border}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 7, color: t.textFaint, fontWeight: 700,
-  }
-}
-
-// ── Data sheet ───────────────────────────────────────────────────────────────
-function DataSheet({ theme }) {
-  const t = THEMES[theme]
-  const subjects = Object.keys(FORMULAS)
-  const [tab, setTab] = useState('Constants')
-  const tabs = ['Constants', ...subjects]
-  const rows = tab === 'Constants'
-    ? CONSTANTS.map(c => ({ left: c.sym ? <MathText text={c.sym} /> : c.name, sub: c.sym ? c.name : null, right: <MathText text={c.value} /> }))
-    : (FORMULAS[tab] || []).map(f => ({ left: f.name, sub: null, right: <MathText text={f.value} /> }))
-
-  return (
-    <div style={{ padding: 12 }}>
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-        {tabs.map(tb => (
-          <button key={tb} onClick={() => setTab(tb)}
-            style={{
-              padding: '5px 11px', borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-              fontFamily: FONT_B, transition: 'all 0.12s',
-              border: `1px solid ${tab === tb ? t.borderAccent : t.border}`,
-              background: tab === tb ? t.accentGlow : 'transparent',
-              color: tab === tb ? t.text : t.textMuted,
-            }}>{tb}</button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {rows.map((r, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            padding: '9px 11px', borderRadius: 9,
-            background: i % 2 ? t.bgSubtle : 'transparent',
-          }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{r.left}</div>
-              {r.sub && <div style={{ fontSize: 11, color: t.textMuted }}>{r.sub}</div>}
-            </div>
-            <div style={{ fontSize: 13, color: t.goldText, textAlign: 'right', flexShrink: 0 }}>{r.right}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Unit converter ───────────────────────────────────────────────────────────
-function UnitConverter({ theme }) {
-  const t = THEMES[theme]
-  const categories = Object.keys(UNIT_CATEGORIES)
-  const [cat, setCat] = useState('Length')
-  const units = Object.keys(UNIT_CATEGORIES[cat].units)
-  const [from, setFrom] = useState(units[0])
-  const [to, setTo] = useState(units[1] || units[0])
-  const [value, setValue] = useState('1')
-
-  // Reset units when category changes.
-  const onCat = (c) => {
-    const u = Object.keys(UNIT_CATEGORIES[c].units)
-    setCat(c); setFrom(u[0]); setTo(u[1] || u[0])
-  }
-
-  const num = parseFloat(value)
-  const out = isNaN(num) ? '' : convert(cat, num, from, to)
-  const outStr = out === '' ? '' : String(parseFloat(Number(out).toPrecision(8)))
-
-  const sel = {
-    width: '100%', padding: '9px 10px', borderRadius: 9, fontSize: 13,
-    border: `1px solid ${t.border}`, background: t.bgSubtle, color: t.text,
-    fontFamily: FONT_B, cursor: 'pointer',
-  }
-
-  return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <select value={cat} onChange={e => onCat(e.target.value)} style={sel}>
-        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-      </select>
-
-      <div>
-        <label style={lbl(t)}>From</label>
-        <input
-          type="number"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          style={{ ...sel, fontFamily: FONT_M, marginBottom: 6 }}
-        />
-        <select value={from} onChange={e => setFrom(e.target.value)} style={sel}>
-          {units.map(u => <option key={u} value={u}>{u}</option>)}
-        </select>
-      </div>
-
-      <div style={{ textAlign: 'center', color: t.textMuted, fontSize: 18 }}>↓</div>
-
-      <div>
-        <label style={lbl(t)}>To</label>
-        <div style={{ ...sel, fontFamily: FONT_M, marginBottom: 6, color: t.text, fontWeight: 800, minHeight: 38, display: 'flex', alignItems: 'center' }}>
-          {outStr || '—'}
-        </div>
-        <select value={to} onChange={e => setTo(e.target.value)} style={sel}>
-          {units.map(u => <option key={u} value={u}>{u}</option>)}
-        </select>
-      </div>
-    </div>
-  )
-}
-
-function lbl(t) {
-  return { display: 'block', fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }
 }
 
 // ── Main dock ────────────────────────────────────────────────────────────────
 /**
  * The tools a subject's questions call for, by its name: a calculator for
- * maths and the sciences, plus the periodic table, data sheet and unit
- * converter for chemistry and physics. Nothing for English, humanities or
- * verbal reasoning. Unknown subjects get everything.
+ * maths and the sciences, nothing for English, humanities or verbal
+ * reasoning. The data booklet is added whenever the subject has its official
+ * booklet uploaded (`booklet` from dataBookletFor in lib/subjects.js).
  */
-export function toolsForSubject(name) {
+export function toolsForSubject(name, booklet = null) {
   const n = String(name || '').toLowerCase()
-  if (!n) return TOOLS.map(tt => tt.id)
-  if (/english|literary|literature|reading|writing|verbal|history|geograph|business|legal|essay/.test(n)) return []
-  if (/chem/.test(n)) return ['calc', 'periodic', 'data', 'convert']
-  if (/physic/.test(n)) return ['calc', 'data', 'convert']
-  if (/biolog|science|psych/.test(n)) return ['calc', 'convert']
-  if (/math|method|numer|quantit|specialist|statist|calculus|algebra/.test(n)) return ['calc']
-  return TOOLS.map(tt => tt.id)
+  const withBooklet = (ids) => (booklet?.url ? [...ids, 'booklet'] : ids)
+  if (/english|literary|literature|reading|writing|verbal|history|geograph|business|legal|essay/.test(n)) return withBooklet([])
+  return withBooklet(['calc'])
 }
 
 /**
@@ -445,9 +266,12 @@ export function toolsForSubject(name) {
  * drag. `tools` limits which are offered. `inline` puts the launcher where
  * it's rendered (the quiz's top bar); otherwise it floats bottom-right.
  */
-export default function QuizToolsDock({ theme = 'dark', tools = TOOLS.map(tt => tt.id), inline = false }) {
+export default function QuizToolsDock({ theme = 'dark', tools = ['calc'], booklet = null, inline = false }) {
   const t = THEMES[theme]
-  const offered = TOOLS.filter(tt => tools.includes(tt.id))
+  // The booklet's own name (e.g. "Formula sheet") labels its button.
+  const offered = TOOLS
+    .filter(tt => tools.includes(tt.id) && (tt.id !== 'booklet' || booklet?.url))
+    .map(tt => (tt.id === 'booklet' && booklet?.title ? { ...tt, label: booklet.title } : tt))
   const [open, setOpen] = useState([])        // array of open tool ids
   const [expanded, setExpanded] = useState(false)
   const [topId, setTopId] = useState(null)     // which window is focused (on top)
@@ -479,7 +303,8 @@ export default function QuizToolsDock({ theme = 'dark', tools = TOOLS.map(tt => 
   // Cascade initial positions so multiple windows don't stack perfectly.
   const initialFor = (id) => {
     const idx = TOOLS.findIndex(tt => tt.id === id)
-    return { x: Math.max(16, window.innerWidth / appZoom() - 380 - idx * 28), y: 88 + idx * 28 }
+    const w = TOOLS[idx]?.w || 360
+    return { x: Math.max(16, window.innerWidth / appZoom() - w - 24 - idx * 28), y: 88 + idx * 28 }
   }
 
   if (!offered.length) return null
@@ -495,7 +320,7 @@ export default function QuizToolsDock({ theme = 'dark', tools = TOOLS.map(tt => 
     <>
       {/* Open windows */}
       {open.map((id, i) => {
-        const tool = TOOLS.find(tt => tt.id === id)
+        const tool = offered.find(tt => tt.id === id)
         if (!tool) return null
         return (
           <FloatingWindow
@@ -507,6 +332,7 @@ export default function QuizToolsDock({ theme = 'dark', tools = TOOLS.map(tt => 
             zIndex={2000 + (topId === id ? open.length + 1 : i)}
             onFocus={() => setTopId(id)}
             onClose={() => closeTool(id)}
+            booklet={booklet}
           />
         )
       })}

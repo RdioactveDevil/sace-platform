@@ -555,7 +555,26 @@ export function parseMathText(text) {
       tokenizeMath(preprocessPlain(sub.content)).forEach(push)
     }
   }
-  return out
+  return promoteLoneEquations(out)
+}
+
+// Inline maths this long can't wrap (KaTeX keeps an equation on one line), so
+// when it sits on a line of its own it's shown as display maths instead, which
+// MathText scales down to fit. The line breaks either side become the block's own.
+const LONG_INLINE = 30
+
+function promoteLoneEquations(tokens) {
+  tokens.forEach((tok, i) => {
+    if (tok.type !== 'math' || tok.display || tok.content.length < LONG_INLINE) return
+    const prev = tokens[i - 1], next = tokens[i + 1]
+    const startsLine = !prev || (prev.type === 'text' && /\n[ \t]*$/.test(prev.content))
+    const endsLine = !next || (next.type === 'text' && /^[ \t]*\n/.test(next.content))
+    if (!startsLine || !endsLine) return
+    tok.display = true
+    if (prev) prev.content = prev.content.replace(/\n[ \t]*$/, '')
+    if (next) next.content = next.content.replace(/^[ \t]*\n/, '')
+  })
+  return tokens.filter((t) => t.type === 'math' || t.content)
 }
 
 export default parseMathText

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { makeEvalFn, samplePath } from '../lib/graphExpr'
+import { ChemString } from './ChemFigure'
 
 const COLORS = ['#4f8ef7', '#f15b5b', '#3cba74', '#f5a623', '#9b59b6']
 
@@ -148,7 +149,7 @@ export default function GraphView({ graph, theme }) {
                 : <line x1={PAD.left} y1={y} x2={PAD.left + PLOT_W} y2={y} stroke={axisColor} strokeWidth={1.3} strokeDasharray="6 5" />}
               {a.label && (
                 <text x={vertical ? x + 5 : PAD.left + PLOT_W - 4} y={vertical ? PAD.top + 12 : y - 6} textAnchor={vertical ? 'start' : 'end'}
-                  fontSize={11} fill={textColor} fontFamily="system-ui, sans-serif" fontStyle="italic">{a.label}</text>
+                  fontSize={11} fill={textColor} fontFamily="system-ui, sans-serif" fontStyle="italic"><ChemString text={String(a.label)} size={11} chem={false} /></text>
               )}
             </g>
           )
@@ -176,7 +177,7 @@ export default function GraphView({ graph, theme }) {
                   fontFamily="system-ui, sans-serif"
                   fontWeight={600}
                 >
-                  {pt.label}
+                  <ChemString text={String(pt.label)} size={11} chem={false} />
                 </text>
               )}
             </g>
@@ -188,8 +189,8 @@ export default function GraphView({ graph, theme }) {
         <polygon points={`${axisX},${PAD.top} ${axisX - 4},${PAD.top + 7} ${axisX + 4},${PAD.top + 7}`} fill={axisColor} />
 
         {/* Axis labels */}
-        <text x={PAD.left + PLOT_W - 4} y={axisY + 28} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">{xLabel}</text>
-        <text x={axisX + 6} y={PAD.top + 4} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic">{yLabel}</text>
+        <text x={PAD.left + PLOT_W - 4} y={axisY + 28} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic"><ChemString text={String(xLabel)} size={11} chem={false} /></text>
+        <text x={axisX + 6} y={PAD.top + 4} fontSize={11} fill={axisColor} fontFamily="system-ui, sans-serif" fontStyle="italic"><ChemString text={String(yLabel)} size={11} chem={false} /></text>
       </svg>
     </div>
   )

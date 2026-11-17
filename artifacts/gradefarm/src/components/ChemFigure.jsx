@@ -11,7 +11,7 @@
 // Structures (diagram.structures) are drawn on the server from SMILES; see
 // StructureList below and api-server/src/lib/chem-figures.ts.
 
-import { chemTextParts } from '../lib/chemText'
+import { chemTextParts, labelParts } from '../lib/chemText'
 
 const FONT = "'Plus Jakarta Sans', sans-serif"
 const MAX = 40
@@ -41,9 +41,10 @@ function ticks(min, max, step) {
 }
 
 // Labels are split into normal, subscript and superscript pieces (lib/chemText).
-function ChemString({ text, size }) {
+// `chem` reads formulas (H2O → H₂O); otherwise only LaTeX markup is converted.
+export function ChemString({ text, size, chem = true }) {
   const out = []
-  chemTextParts(text).forEach(([kind, t], i) => {
+  ;(chem ? chemTextParts : labelParts)(text).forEach(([kind, t], i) => {
     if (kind === 'n') { out.push(<tspan key={i}>{t}</tspan>); return }
     const shift = kind === 'sub' ? size * 0.28 : -size * 0.38
     out.push(<tspan key={i} fontSize={size * 0.72} dy={shift}>{t}</tspan>)
@@ -57,7 +58,7 @@ function Text({ x, y, children, c, size = 12, anchor = 'middle', weight = 500, f
     <text x={x} y={y} textAnchor={anchor} dominantBaseline="central" fontFamily={FONT} fontSize={size} fontWeight={weight}
       fill={fill || c.text} stroke={c.bg} strokeWidth={3.5} strokeLinejoin="round" paintOrder="stroke"
       transform={rotate ? `rotate(${rotate} ${x} ${y})` : undefined}>
-      {chem ? <ChemString text={children} size={size} /> : children}
+      {typeof children === 'string' ? <ChemString text={children} size={size} chem={!!chem} /> : children}
     </text>
   )
 }
