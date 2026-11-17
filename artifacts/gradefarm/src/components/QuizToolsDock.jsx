@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import { Calculator as CalculatorIcon, BookOpen, Wrench, ExternalLink } from 'lucide-react'
 import { appZoom } from '../lib/appZoom'
 import { THEMES } from '../lib/theme'
+import { evaluate, formatResult, CalcError } from '../lib/calculator'
 
 const NAVY = '#0c1037'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -12,39 +13,9 @@ const FONT_M = "'JetBrains Mono', monospace"
 // sheet (a PDF uploaded in Admin → Curricula → Student features), never a
 // generic list of formulas, so it's only offered once one is uploaded.
 const TOOLS = [
-  { id: 'calc',     icon: CalculatorIcon, label: 'Calculator',   w: 300, h: 440 },
+  { id: 'calc',     icon: CalculatorIcon, label: 'Calculator',   w: 340, h: 580 },
   { id: 'booklet',  icon: BookOpen,       label: 'Data booklet', w: 720, h: 620 },
 ]
-
-// ── Safe calculator evaluator ────────────────────────────────────────────────
-function evaluateExpression(raw, deg) {
-  let s = String(raw)
-    .replace(/×/g, '*')
-    .replace(/÷/g, '/')
-    .replace(/−/g, '-')
-    .replace(/π/g, '(PI)')
-    .replace(/√/g, 'sqrt')
-    .replace(/\^/g, '**')
-    .replace(/%/g, '/100')
-    // standalone e → Euler's number (not part of an identifier like "exp")
-    .replace(/(?<![a-zA-Z0-9_])e(?![a-zA-Z0-9_])/g, '(E)')
-  // factorial: 5! → fact(5)
-  s = s.replace(/(\d+(?:\.\d+)?)!/g, 'fact($1)')
-
-  const k = deg ? Math.PI / 180 : 1
-  // eslint-disable-next-line no-new-func
-  const fn = new Function(`"use strict";
-    const {abs,exp,floor,ceil,round,sign,pow,PI,E}=Math;
-    const sqrt=Math.sqrt, ln=Math.log, log=Math.log10;
-    const sin=(x)=>Math.sin(x*${k}), cos=(x)=>Math.cos(x*${k}), tan=(x)=>Math.tan(x*${k});
-    const asin=(x)=>Math.asin(x)/${k}, acos=(x)=>Math.acos(x)/${k}, atan=(x)=>Math.atan(x)/${k};
-    const fact=(n)=>{n=Math.round(n); if(n<0||n>170)return NaN; let r=1; for(let i=2;i<=n;i++)r*=i; return r;};
-    return (${s});`)
-  const val = fn()
-  if (typeof val !== 'number' || !isFinite(val)) return 'Error'
-  // Trim floating-point noise, keep up to 10 significant digits.
-  return String(parseFloat(val.toPrecision(10)))
-}
 
 // ── Draggable / resizable floating window ────────────────────────────────────
 function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobile, booklet }) {
@@ -132,87 +103,193 @@ function FloatingWindow({ tool, theme, onClose, initial, zIndex, onFocus, isMobi
 }
 
 // ── Scientific calculator ────────────────────────────────────────────────────
+// A text box the student types into (or fills from the keypad, which inserts
+// at the cursor), worked out by lib/calculator.js. Keys: Enter or = works it
+// out, Esc clears, ↑ ↓ bring back earlier sums. After an answer, an operator
+// carries on from Ans and anything else starts a new sum, as on a calculator.
+// The quiz's own shortcuts ignore keys typed into a text box, so typing "2"
+// here never picks option 2.
+
+const KEYPAD = [
+  [{ l: 'sin', i: 'sin(' }, { l: 'cos', i: 'cos(' }, { l: 'tan', i: 'tan(' }, { l: '(', i: '(' }, { l: ')', i: ')' }],
+  [{ l: 'sin⁻¹', i: 'sin⁻¹(' }, { l: 'cos⁻¹', i: 'cos⁻¹(' }, { l: 'tan⁻¹', i: 'tan⁻¹(' }, { l: 'x²', i: '²', k: '²' }, { l: 'xʸ', i: '^', k: '^' }],
+  [{ l: 'ln', i: 'ln(' }, { l: 'log', i: 'log(' }, { l: '√', i: '√(' }, { l: 'eˣ', i: 'e^(' }, { l: '10ˣ', i: '10^(' }],
+  [{ l: 'π', i: 'π' }, { l: 'e', i: 'e' }, { l: 'x!', i: '!', k: '!' }, { l: 'x⁻¹', i: '⁻¹' }, { l: '×10ˣ', i: 'E', k: 'E', title: 'Scientific notation: 6.02×10²³ is typed 6.02E23' }],
+  [{ l: '7' }, { l: '8' }, { l: '9' }, { l: '÷', i: '÷', k: '/', op: true }, { l: 'nCr', i: 'nCr(', title: 'Combinations: nCr(5, 2)' }],
+  [{ l: '4' }, { l: '5' }, { l: '6' }, { l: '×', i: '×', k: '*', op: true }, { l: '%', i: '%', k: '%' }],
+  [{ l: '1' }, { l: '2' }, { l: '3' }, { l: '−', i: '-', k: '-', op: true }, { l: 'Ans', i: 'Ans', title: 'The last answer' }],
+  [{ l: '0' }, { l: '.' }, { l: ',', i: ',', title: 'Separates two numbers, as in nCr(5, 2)' }, { l: '+', i: '+', k: '+', op: true }, { l: '=', eq: true, k: 'Enter' }],
+]
+
+// Typed characters shown the way the keypad writes them.
+const TYPED = { '*': '×', '/': '÷' }
+// After an answer, these carry on from it ("Ans×2"); anything else starts afresh.
+const CARRIES_ON = /^([+\-×÷^²³!%]|⁻¹)/
+
 function Calculator({ theme }) {
   const t = THEMES[theme]
+  const inputRef = useRef(null)
   const [expr, setExpr] = useState('')
-  const [result, setResult] = useState('')
+  const [shown, setShown] = useState(null)       // { text, mantissa?, exponent? } or { error }
   const [deg, setDeg] = useState(true)
-  const [ans, setAns] = useState('0')
+  const [ans, setAns] = useState(0)
+  const [history, setHistory] = useState([])     // newest first: { expr, text }
+  const [histAt, setHistAt] = useState(-1)
+  const [fresh, setFresh] = useState(false)      // the answer on show is for the sum in the box
+  // On a touch screen the keypad is the keyboard, so the phone's own stays down.
+  const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
 
-  const push = (token) => { setExpr(e => e + token); setResult('') }
-  const clear = () => { setExpr(''); setResult('') }
-  const back = () => setExpr(e => e.slice(0, -1))
-  const equals = () => {
-    if (!expr.trim()) return
-    const r = evaluateExpression(expr, deg)
-    setResult(r)
-    if (r !== 'Error') setAns(r)
+  useEffect(() => { if (!touch) inputRef.current?.focus() }, [touch])
+
+  // Where the cursor goes after the next render. Set straight after React
+  // writes the box, before the next keystroke, so fast typing lands in order.
+  const caretRef = useRef(null)
+  useLayoutEffect(() => {
+    const el = inputRef.current, caret = caretRef.current
+    if (!el || caret == null) return
+    caretRef.current = null
+    if (!touch && document.activeElement !== el) el.focus()
+    el.setSelectionRange(caret, caret)
+  })
+
+  const place = (next, caret) => {
+    setExpr(next); setShown(null); setHistAt(-1)
+    caretRef.current = caret
   }
 
-  const KEYS = [
-    ['sin(', 'cos(', 'tan(', '(', ')'],
-    ['ln(', 'log(', '√(', 'π', 'e'],
-    ['7', '8', '9', '÷', '^'],
-    ['4', '5', '6', '×', '!'],
-    ['1', '2', '3', '−', '%'],
-    ['0', '.', 'Ans', '+', '='],
-  ]
+  const insert = (txt) => {
+    const el = inputRef.current
+    if (fresh) {
+      setFresh(false)
+      const base = CARRIES_ON.test(txt) ? 'Ans' : ''
+      place(base + txt, base.length + txt.length)
+      return
+    }
+    const start = el?.selectionStart ?? expr.length
+    const end = el?.selectionEnd ?? expr.length
+    place(expr.slice(0, start) + txt + expr.slice(end), start + txt.length)
+  }
 
-  const isOp = (k) => ['÷', '×', '−', '+', '^'].includes(k)
-  const isFn = (k) => /[a-zπe√√]/i.test(k) && k !== 'Ans'
+  const backspace = () => {
+    const el = inputRef.current
+    setFresh(false)
+    const start = el?.selectionStart ?? expr.length
+    const end = el?.selectionEnd ?? expr.length
+    if (start !== end) { place(expr.slice(0, start) + expr.slice(end), start); return }
+    if (!start) return
+    // ⁻¹ is two characters but one key.
+    const cut = expr.slice(0, start).endsWith('⁻¹') ? 2 : 1
+    place(expr.slice(0, start - cut) + expr.slice(start), start - cut)
+  }
 
-  const handle = (k) => {
-    if (k === '=') return equals()
-    if (k === 'Ans') return push(ans)
-    push(k)
+  const clear = () => { setFresh(false); place('', 0) }
+
+  const equals = () => {
+    if (!expr.trim()) return
+    try {
+      const v = evaluate(expr, { ans, deg })
+      const out = formatResult(v)
+      setAns(v)
+      setShown(out)
+      setFresh(true)
+      setHistory(h => [{ expr, text: out.text }, ...h.filter(x => x.expr !== expr)].slice(0, 20))
+      setHistAt(-1)
+    } catch (e) {
+      setShown({ error: e instanceof CalcError ? e.message : 'Syntax error' })
+      setFresh(false)
+    }
+  }
+
+  // While typing, the answer so far is shown faintly underneath.
+  const preview = useMemo(() => {
+    if (fresh || !expr.trim()) return ''
+    try { return formatResult(evaluate(expr, { ans, deg })).text } catch { return '' }
+  }, [expr, ans, deg, fresh])
+
+  const onKeyDown = (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); equals(); return }
+    if (e.key === 'Escape') { if (expr) { e.preventDefault(); e.stopPropagation(); clear() } return }
+    if (e.key === 'Backspace' && fresh) { e.preventDefault(); setFresh(false); place(expr, expr.length); return }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (!history.length) return
+      e.preventDefault()
+      const at = Math.max(-1, Math.min(history.length - 1, histAt + (e.key === 'ArrowUp' ? 1 : -1)))
+      const next = at === -1 ? '' : history[at].expr
+      setExpr(next); setHistAt(at); setShown(null); setFresh(false)
+      caretRef.current = next.length
+      return
+    }
+    if (e.key.length === 1 && (fresh || TYPED[e.key])) {
+      e.preventDefault()
+      insert(TYPED[e.key] || e.key)
+    }
+  }
+
+  const keyBtn = (k, i) => {
+    const label = k.l
+    const isNum = /^[\d.]$/.test(label)
+    return (
+      <button
+        key={i}
+        type="button"
+        title={k.title || (k.k ? `Key: ${k.k}` : undefined)}
+        // Keep the cursor in the box, so typing carries on after a click.
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => (k.eq ? equals() : insert(k.i ?? label))}
+        style={{
+          border: `1px solid ${t.border}`, borderRadius: 9, cursor: 'pointer', padding: 0, minHeight: 36,
+          fontFamily: isNum || k.eq ? FONT_M : FONT_B, fontSize: isNum ? 15 : 12.5, fontWeight: isNum || k.eq || k.op ? 800 : 700,
+          background: k.eq ? t.accent : k.op ? t.bgHover : isNum ? t.bgCard : t.bgSubtle,
+          color: k.eq ? NAVY : isNum || k.op ? t.text : t.textSub,
+        }}
+      >{label}</button>
+    )
   }
 
   return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
-      {/* Display */}
-      <div style={{ background: t.bgSubtle, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 12px', minHeight: 64 }}>
-        <div style={{ fontFamily: FONT_M, fontSize: 13, color: t.textMuted, wordBreak: 'break-all', minHeight: 18 }}>{expr || ' '}</div>
-        <div style={{ fontFamily: FONT_M, fontSize: 22, fontWeight: 800, color: result === 'Error' ? t.danger : t.text, textAlign: 'right', wordBreak: 'break-all' }}>
-          {result !== '' ? result : ' '}
+    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, minHeight: '100%', boxSizing: 'border-box' }}
+      onMouseDown={e => { if (e.target === e.currentTarget && !touch) { e.preventDefault(); inputRef.current?.focus() } }}>
+      {/* Display: the sum (typed or keyed) and the answer */}
+      <div style={{ background: t.bgSubtle, border: `1px solid ${t.border}`, borderRadius: 10, padding: '8px 10px' }}>
+        <input
+          ref={inputRef}
+          value={expr}
+          onChange={e => { setExpr(e.target.value); setShown(null); setFresh(false); setHistAt(-1) }}
+          onKeyDown={onKeyDown}
+          inputMode={touch ? 'none' : 'text'}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          aria-label="Calculation"
+          placeholder="Type a sum, e.g. 0.40 × 2.5 × 44.0"
+          style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', color: t.text, fontFamily: FONT_M, fontSize: 15, padding: '2px 0' }}
+        />
+        <div aria-live="polite" style={{ fontFamily: FONT_M, textAlign: 'right', minHeight: 30, wordBreak: 'break-all', fontWeight: 800,
+          fontSize: shown ? 22 : 15, color: shown?.error ? t.danger : shown ? t.text : t.textFaint }}>
+          {shown?.error ? shown.error
+            : shown?.mantissa ? <>{shown.mantissa}<span style={{ fontWeight: 600 }}> × 10</span><sup style={{ fontSize: '0.6em' }}>{shown.exponent}</sup></>
+            : shown ? shown.text
+            : preview ? `= ${preview}` : ' '}
         </div>
       </div>
 
       {/* Mode row */}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => setDeg(d => !d)} style={{ ...modeBtn(t), color: t.text, borderColor: t.border }}>
-          {deg ? 'DEG' : 'RAD'}
-        </button>
-        <button onClick={back} style={modeBtn(t)}>⌫</button>
-        <button onClick={clear} style={{ ...modeBtn(t), color: t.danger }}>AC</button>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setDeg(d => !d)}
+          title="Angles in degrees or radians" style={{ ...modeBtn(t), color: t.text }}>{deg ? 'DEG' : 'RAD'}</button>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={backspace} title="Key: Backspace" aria-label="Delete" style={modeBtn(t)}>⌫</button>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={clear} title="Key: Esc" style={{ ...modeBtn(t), color: t.danger }}>AC</button>
       </div>
 
       {/* Keypad */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6, flex: 1 }}>
-        {KEYS.flat().map((k, i) => {
-          const equalsKey = k === '='
-          return (
-            <button
-              key={i}
-              onClick={() => handle(k)}
-              style={{
-                border: `1px solid ${t.border}`,
-                borderRadius: 9,
-                fontFamily: FONT_M,
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: 'pointer',
-                padding: '0',
-                minHeight: 38,
-                transition: 'all 0.12s',
-                background: equalsKey ? t.accent
-                  : isOp(k) ? t.bgHover
-                  : t.bgSubtle,
-                color: equalsKey ? NAVY : isFn(k) ? t.textSub : t.text,
-              }}
-            >{k}</button>
-          )
-        })}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+        {KEYPAD.flat().map(keyBtn)}
       </div>
+
+      {!touch && (
+        <div style={{ fontSize: 10.5, color: t.textFaint, textAlign: 'center', lineHeight: 1.5 }}>
+          Type with your keyboard · Enter = · Esc clears · ↑ ↓ earlier sums
+        </div>
+      )}
     </div>
   )
 }
