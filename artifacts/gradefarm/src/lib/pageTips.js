@@ -21,7 +21,7 @@ export const PAGE_TIPS = {
   // Shown at the first wrong answer (QuizScreen sends a gf-page-tip event).
   'quiz-wrong': {
     steps: [
-      { target: 'quiz-extra-practice', title: 'Extra practice', body: "Got one wrong? Practise a few like it straight away. Get them right in a row and you're back to your session." },
+      { target: 'quiz-extra-practice', title: 'Comeback Mode', body: "Got one wrong? Comeback Mode gives you a few like it straight away. Get them right in a row and you're back to your session." },
     ],
   },
   learn: {

@@ -2,7 +2,7 @@ import { useMemo, useRef, useLayoutEffect } from 'react'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'katex/contrib/mhchem/mhchem.js' // enables \ce{} for chemical equations
-import { parseMathText, restoreLiteralNewlines } from '../lib/mathMarkup.js'
+import { parseMathText, restoreLiteralNewlines, katexSafeLatex } from '../lib/mathMarkup.js'
 import { splitMarkdownBlocks, applyBold } from '../lib/markdownBlocks.js'
 import { markParts } from '../lib/advice.js'
 
@@ -26,7 +26,7 @@ import { markParts } from '../lib/advice.js'
 // source rather than KaTeX's red error text.
 function renderToken(part) {
   try {
-    return katex.renderToString(part.content, {
+    return katex.renderToString(katexSafeLatex(part.content), {
       throwOnError: true,
       displayMode: part.display,
       strict: false,
