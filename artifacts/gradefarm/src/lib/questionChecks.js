@@ -154,3 +154,22 @@ export function reviewSummary(questions) {
   }
   return out
 }
+
+/**
+ * Where a paper's review is: 'checked' when every question is approved or
+ * rejected, 'partway' when some are, 'unchecked' when none are (including
+ * papers loaded before reviews existed). lastAt / lastBy: the latest review
+ * (reviewed_at, reviewed_by; migration 20261118000001).
+ */
+export function paperStatus(questions) {
+  const list = questions || []
+  const done = list.filter(q => q.review_status === 'approved' || q.review_status === 'rejected')
+  const latest = done.filter(q => q.reviewed_at).sort((a, b) => (a.reviewed_at < b.reviewed_at ? 1 : -1))[0]
+  return {
+    state: list.length && done.length === list.length ? 'checked' : done.length ? 'partway' : 'unchecked',
+    checked: done.length,
+    total: list.length,
+    lastAt: latest?.reviewed_at || null,
+    lastBy: latest?.reviewed_by || null,
+  }
+}

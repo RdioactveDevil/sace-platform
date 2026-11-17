@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkQuestion, reviewFlags, reviewState, isReviewed, needsAttention, reviewSummary } from './questionChecks.js'
+import { checkQuestion, reviewFlags, reviewState, isReviewed, needsAttention, reviewSummary, paperStatus } from './questionChecks.js'
 
 const codes = (q) => checkQuestion(q).map(f => `${f.code}${f.where ? `:${f.where}` : ''}`)
 const ext = (question, parts, extra = {}) => ({ id: 'x', question_type: 'extended', exam_section: 'B', question, parts, ...extra })
@@ -103,4 +103,15 @@ test('which questions need an admin, and a paper\'s review summary', () => {
   ]
   assert.deepEqual(qs.map(q => needsAttention(q)), [true, true, false, true, false, false])
   assert.deepEqual(reviewSummary(qs), { pending: 2, flagged: 2, rejected: 1, attention: 3, cleanPending: ['1'] })
+})
+
+test('a paper is checked when every question is approved or rejected', () => {
+  const q = (review_status, reviewed_at = null, reviewed_by = null) => ({ review_status, reviewed_at, reviewed_by })
+  assert.deepEqual(paperStatus([]), { state: 'unchecked', checked: 0, total: 0, lastAt: null, lastBy: null })
+  // Loaded before reviews existed, or waiting: not checked.
+  assert.equal(paperStatus([q(null), q('pending')]).state, 'unchecked')
+  const part = paperStatus([q('approved', '2026-11-18T01:00:00Z', 'u1'), q('pending'), q(null)])
+  assert.deepEqual([part.state, part.checked, part.total], ['partway', 1, 3])
+  const done = paperStatus([q('approved', '2026-11-18T01:00:00Z', 'u1'), q('rejected', '2026-11-18T03:00:00Z', 'u2'), q('approved', '2026-11-18T02:00:00Z', 'u1')])
+  assert.deepEqual(done, { state: 'checked', checked: 3, total: 3, lastAt: '2026-11-18T03:00:00Z', lastBy: 'u2' })
 })

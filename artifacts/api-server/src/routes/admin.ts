@@ -6,7 +6,7 @@ import { planIsLive, type TutorBillingRow } from "../lib/tutor-plan";
 import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
 import { parseBulkRequest, conceptTag, chunks } from "../lib/question-bulk";
 import { buildExtendedUpdate } from "../lib/extended-edit";
-import { parseReviewRequest } from "../lib/question-review";
+import { parseReviewRequest, dropFigureFlags } from "../lib/question-review";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -1350,14 +1350,39 @@ router.post("/admin/questions/review", async (req, res) => {
     if (!ctx) return;
     const parsed = parseReviewRequest(req.body);
     if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+    // Who reviewed it and when (migration 20261118000001); cleared when sent back to review.
+    const reviewed = parsed.status === "pending"
+      ? { reviewed_at: null, reviewed_by: null }
+      : { reviewed_at: new Date().toISOString(), reviewed_by: ctx.callerUserId };
     let changed = 0;
     for (const part of chunks(parsed.ids)) {
-      const { data, error } = await ctx.admin.from("questions").update({ review_status: parsed.status })
+      const { data, error } = await ctx.admin.from("questions").update({ review_status: parsed.status, ...reviewed })
         .in("id", part).not("source", "is", null).select("id");
       if (error) return res.status(500).json({ error: error.message });
       changed += data?.length ?? 0;
     }
     return res.json({ changed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /admin/questions/:id/figure-changed — an admin changed one of a
+// loaded question's figures by hand (cropped it again, uploaded or removed
+// it): { where: "" for the question's figure, or the part's label }. The
+// ingest's crop checks on that figure are dropped from its review.
+router.post("/admin/questions/:id/figure-changed", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const where = typeof req.body?.where === "string" ? req.body.where.slice(0, 12) : "";
+    const { data: q, error } = await ctx.admin.from("questions").select("id, review").eq("id", req.params.id).maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!q) return res.status(404).json({ error: "No question with that ID" });
+    const { error: upd } = await ctx.admin.from("questions").update({ review: dropFigureFlags((q as { review: unknown }).review, where) }).eq("id", req.params.id);
+    if (upd) return res.status(500).json({ error: upd.message });
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
