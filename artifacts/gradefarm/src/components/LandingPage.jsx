@@ -135,12 +135,23 @@ const EXTRA_CSS = `
 .gfx .scw-size { visibility: hidden; }
 .gfx .scw-live { transition: color .25s; }
 .gfx .scw-live.busy { color: var(--goldt); }
-/* Try it now: the explanation cards appear only while their thing is happening. */
-@keyframes gfx-lgi-in { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: translateY(-3px); } }
-.gfx .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; min-height: 92px; align-items: flex-start; }
-.gfx .legend .lgi { width: 300px; max-width: 100%; animation: gfx-lgi-in .45s cubic-bezier(.2,1.2,.4,1) both; }
-.gfx .legend .lgi + .lgi { animation-delay: .12s; }
-@media (max-width: 760px) { .gfx .legend { min-height: 0; } .gfx .legend .lgi { width: 100%; } }
+/* Try it now: the box with its explanation cards either side, shown only while their thing is happening. */
+@keyframes gfx-lgi-l { from { opacity: 0; transform: translateX(24px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes gfx-lgi-r { from { opacity: 0; transform: translateX(-24px) scale(.96); } to { opacity: 1; transform: none; } }
+.gfx .tqrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 640px) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 36px; }
+.gfx .tqrow .tq { margin: 0; max-width: none; }
+.gfx .side { display: flex; flex-direction: column; gap: 12px; padding-top: 150px; }
+.gfx .side.l { align-items: flex-end; } .gfx .side.r { align-items: flex-start; }
+.gfx .side .lgi { width: 100%; max-width: 280px; }
+.gfx .side.l .lgi { animation: gfx-lgi-l .45s cubic-bezier(.2,1.2,.4,1) both; }
+.gfx .side.r .lgi { animation: gfx-lgi-r .45s cubic-bezier(.2,1.2,.4,1) .1s both; }
+.gfx .side .lgi.lit { transform: none; }
+@media (max-width: 1100px) {
+  .gfx .tqrow { grid-template-columns: minmax(0, 1fr); gap: 10px; max-width: 640px; margin-left: auto; margin-right: auto; }
+  .gfx .tqrow .tq { order: 1; } .gfx .side.l { order: 2; } .gfx .side.r { order: 3; }
+  .gfx .side { padding-top: 0; align-items: stretch !important; }
+  .gfx .side .lgi { max-width: none; }
+}
 /* Try it now: pick a subject first. */
 .gfx .pick { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 8px 0 4px; }
 .gfx .pk-h { font-size: 21px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }

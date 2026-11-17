@@ -68,6 +68,12 @@ export default function TryItBox({ onStart, onNext }) {
     <section className="sec" id="try" aria-labelledby="gfx-try-h">
       <div className="in">
         <h2 className="h2" id="gfx-try-h">Try it now. See what happens.</h2>
+        {/* The box with its explanations either side: Spaced Repetition on the left, Comeback Mode or
+            Difficulty on the right. Each shows only while it's happening. Below the box on narrow screens. */}
+        <div className="tqrow">
+        <div className="side l" aria-live="polite">
+          {lit.spaced && <div className="lgi lit"><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>Miss one and it comes back in 1 hour, then days later.</span></div></div>}
+        </div>
         <div className="card tq">
           {picking && (
             <div className="pick">
@@ -171,13 +177,12 @@ export default function TryItBox({ onStart, onNext }) {
             </div>
           )}
         </div>
-        {playing && <p className="skip"><button type="button" className="wk" onClick={skip}>Skip to the end</button></p>}
-        {/* Each explanation shows only while it's happening (a right answer, a miss, Comeback Mode). */}
-        <div className="legend" aria-live="polite">
-          {lit.difficulty && <div className="lgi lit"><span className="li"><Icon d={STAR} /></span><div><b>Difficulty</b><span>Get it right and the next question is harder.</span></div></div>}
-          {lit.spaced && <div className="lgi lit"><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>Miss one and it comes back in 1 hour, then days later.</span></div></div>}
+        <div className="side r" aria-live="polite">
           {lit.comeback && <div className="lgi lit"><span className="li"><Icon d={LOOP} /></span><div><b>Comeback Mode</b><span>Answer 3 similar questions to progress.</span></div></div>}
+          {lit.difficulty && <div className="lgi lit"><span className="li"><Icon d={STAR} /></span><div><b>Difficulty</b><span>Get it right and the next question is harder.</span></div></div>}
         </div>
+        </div>
+        {playing && <p className="skip"><button type="button" className="wk" onClick={skip}>Skip to the end</button></p>}
         {onNext && (
           <p className="tonext">
             <a className="btn lg try" href="#inside" onClick={onNext}>See what's inside<ArrowDown size={18} strokeWidth={2.6} aria-hidden="true" /></a>
