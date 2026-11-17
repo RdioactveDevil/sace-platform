@@ -63,7 +63,7 @@ function Hero({ onStart, onTry }) {
           </div>
           <div className="stage">
             <div className="frame" aria-hidden={!on}>
-              <div className="bar"><Wordmark /><small>SACE Mathematical Methods</small></div>
+              <div className="bar"><Wordmark /></div>
               <div className="adapt"><Wordmark /> identifies what you already know and what you need to work on.</div>
             </div>
             {PARTS.map((p, i) => (
