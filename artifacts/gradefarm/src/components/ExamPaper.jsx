@@ -79,6 +79,8 @@ const CSS = `
   .xv-endsec span { border-top: 0.4mm solid #1a1a1a; padding-top: 1.5mm; width: 32mm; text-align: right; font-weight: 700; font-size: 10.5pt; }
   .xv-blank { position: absolute; left: 0; right: 0; top: 46%; text-align: center; font-weight: 700; font-size: 10.5pt; }
   .xv-cover { position: absolute; inset: 0; }
+  .xv-brand { position: absolute; left: 20mm; top: 14mm; display: flex; flex-direction: column; }
+  .xv-brand small { margin-top: 2.4mm; font-size: 9pt; font-weight: 700; color: #1a1a1a; }
   .xv-band { position: absolute; top: 0; bottom: 0; width: 10mm; }
   .xv-label { position: absolute; top: 11mm; left: 105mm; right: 12mm; height: 31mm; border: 0.35mm dotted #555; border-radius: 3mm; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 6.5pt; line-height: 1.5; }
   .xv-sn { position: absolute; top: 47mm; left: 89mm; right: 12mm; }
@@ -541,6 +543,8 @@ function VceExam({ exam, meta }) {
         <div className="xp-page">
           <div className="xv-cover">
             <div className="xv-band" style={{ left: 0, background: band }} />
+            {/* Top left, where the VCAA paper has its own mark: ours, as on the SACE cover. */}
+            <div className="xv-brand"><Wordmark size="26pt" /><small>Practice examination</small></div>
             <div className="xv-label">SUPERVISOR TO ATTACH<br />PROCESSING LABEL HERE</div>
             <div className="xv-sn">
               <div className="row">
