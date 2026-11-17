@@ -37,6 +37,8 @@
  *     [--solutions <url | path>] [--topic "Only this topic"] [--limit 5] [--apply]
  *   Add --recrop (with a batch or a paper) to redo the figure crops of papers already loaded,
  *   without reading their questions again.
+ *   Add --resume (with a batch and --apply) to skip the papers that batch already loaded
+ *   for review, to carry on after a run stopped or timed out.
  *   (--pdf-url / --storage-path still work in place of --pdf.)
  */
 import { createHash } from "node:crypto";
@@ -46,6 +48,7 @@ import { PDFiumLibrary } from "@hyzyla/pdfium";
 import sharp from "sharp";
 import { snapToInk, pctToPx, grow, crop, type Page, type PxBox } from "./lib/figure-crop";
 import { readPages, findPage, renderPage, maskedPage, locateFigure, figureAtTop, hintLine, cropBox, type PageText } from "./lib/figure-find";
+import { planBatch } from "./lib/batch-plan";
 import { sameWords, inkAtEdges, cropCheckPrompt, cropLookSchema, cropFlags, type CropLook, type Flag } from "./lib/question-review";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -66,6 +69,8 @@ type Args = {
   limit?: number;
   /** Redo the figure crops of a paper already in the bank, leaving its questions as they are. */
   recrop?: boolean;
+  /** Batch: skip papers this batch already loaded for review (to carry on after a stop). */
+  resume?: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -83,6 +88,7 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--topic") a.topic = v();
     else if (k === "--apply") a.apply = true;
     else if (k === "--recrop") a.recrop = true;
+    else if (k === "--resume") a.resume = true;
     else if (k === "--limit") a.limit = parseInt(v() || "", 10) || undefined;
   }
   return a;
@@ -695,6 +701,23 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
   const { data: saved, error } = await admin.from("questions").upsert(rows, { onConflict: "id" }).select("id");
   if (error) throw new Error(`Save failed: ${error.message}`);
   console.log(`Saved ${(saved || []).length} question(s) from ${source}, waiting for review in Admin → Exam papers → Loaded papers before students see them.`);
+  // Loaded again: questions saved last time that this reading didn't find
+  // (numbered differently, or from another paper that was given the same
+  // label) are taken away from students. Rejected, not deleted, so an admin
+  // can bring one back. Not on a --limit test run, which reads only some.
+  if (!args.limit) {
+    const keep = new Set(rows.map((r) => r.id as string));
+    const { data: old, error: oldErr } = await admin.from("questions").select("id, review_status").like("id", `ep_${sourceId}_%`);
+    if (oldErr) console.warn(`  couldn't check for old questions: ${oldErr.message}`);
+    const stale = ((old || []) as { id: string; review_status: string | null }[]).filter((r) => !keep.has(r.id) && r.review_status !== "rejected").map((r) => r.id);
+    if (stale.length) {
+      const { error: rej } = await admin.from("questions").update({
+        review_status: "rejected",
+        review: { flags: [{ code: "not_reloaded", where: "", message: `Not found when ${source} was loaded again on ${new Date().toISOString().slice(0, 10)}: it may be from another paper saved under the same label. Kept from students.` }] },
+      }).in("id", stale);
+      console.log(rej ? `  couldn't retire ${stale.length} old question(s): ${rej.message}` : `  ${stale.length} old question(s) not found this time were taken away from students: ${stale.join(", ")}`);
+    }
+  }
   if (!solutions) console.log("Tip: no solutions PDF was given, so answers were worked out by the model. Run the 'Backfill — verify & repair' Action to fact-check them.");
   return outcome;
 }
@@ -716,10 +739,20 @@ async function runBatch(admin: any, client: Anthropic, id: string, cli: Args) {
     const { error: e } = await admin.from("exam_paper_batches").update({ results, updated_at: new Date().toISOString() }).eq("id", id);
     if (e) console.warn(`  couldn't record progress: ${e.message}`);
   };
-  console.log(`Batch ${id}: ${papers.length} paper(s) for ${batch.subject} (${mode})`);
+  console.log(`Batch ${id}: ${papers.length} paper(s) for ${batch.subject} (${mode}${cli.resume ? ", resuming" : ""})`);
+  const plan = planBatch(papers, results as Record<string, { status?: string; mode?: string; reviewed?: boolean }>, { resume: !!cli.resume, apply: cli.apply });
   let failed = 0;
   for (let i = 0; i < papers.length; i++) {
     const p = papers[i];
+    const step = plan[i];
+    if (step.action === "skip") { console.log(`${i + 1}/${papers.length} ${step.label}: skipped (${step.reason})`); continue; }
+    if (step.action === "duplicate") {
+      failed++;
+      results[i] = { status: "failed", mode, error: step.reason.slice(0, 300), at: new Date().toISOString() };
+      console.error(`::error::${p.pdf}: ${step.reason}`);
+      await record();
+      continue;
+    }
     console.log(`::group::${i + 1}/${papers.length} ${p.source || p.pdf}`);
     results[i] = { status: "running", mode, at: new Date().toISOString() };
     await record();
@@ -728,7 +761,8 @@ async function runBatch(admin: any, client: Anthropic, id: string, cli: Args) {
         pdf: p.pdf, solutions: p.solutions || undefined, subject: batch.subject, kind: p.kind === "commercial" ? "commercial" : "official",
         publisher: p.publisher, year: Number(p.year), paper: p.paper, topic: cli.topic, apply: cli.apply, limit: cli.limit, recrop: cli.recrop,
       });
-      results[i] = { status: cli.apply ? "saved" : "checked", mode, ...out, at: new Date().toISOString() };
+      // reviewed: saved by the ingest with the review step, so --resume can skip it.
+      results[i] = { status: cli.apply ? "saved" : "checked", mode, ...out, reviewed: cli.apply && !cli.recrop, at: new Date().toISOString() };
     } catch (err) {
       failed++;
       const message = err instanceof Error ? err.message : String(err);

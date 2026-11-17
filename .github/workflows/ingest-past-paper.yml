@@ -24,7 +24,12 @@ name: Ingest exam paper
 #
 # Several papers at once: upload them on Admin → Exam papers, then paste the
 # batch ID into the first box and leave the paper details empty. Each paper's
-# result shows on that admin page.
+# result shows on that admin page. A batch run that stopped (cancelled, timed
+# out) carries on where it left off when run again with "resume" ticked: the
+# papers it already loaded for review are skipped.
+#
+# Loaded questions wait in Admin → Exam papers → Loaded papers, kept from
+# students, until an admin approves them.
 
 on:
   workflow_dispatch:
@@ -76,6 +81,10 @@ on:
         description: "Max questions (blank = all; for a quick test)"
         type: string
         default: ""
+      resume:
+        description: "Batch: skip papers this batch already loaded for review (carry on after a stop)"
+        type: boolean
+        default: true
 
 concurrency:
   group: ingest-exam-paper
@@ -84,7 +93,8 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # A big batch with its figure checks takes ~5 minutes a paper; resume carries on past this.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -112,6 +122,7 @@ jobs:
           TOPIC: ${{ inputs.topic }}
           MODE: ${{ inputs.mode }}
           LIMIT: ${{ inputs.limit }}
+          RESUME: ${{ inputs.resume }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INGEST_MODEL: ${{ vars.INGEST_MODEL }}
@@ -134,6 +145,7 @@ jobs:
           if [ -n "${SOLUTIONS// /}" ]; then ARGS+=("--solutions" "$SOLUTIONS"); fi
           if [ -n "${TOPIC// /}" ]; then ARGS+=("--topic" "$TOPIC"); fi
           if [ -n "${LIMIT// /}" ]; then ARGS+=("--limit" "$LIMIT"); fi
+          if [ "${RESUME:-}" = "true" ]; then ARGS+=("--resume"); fi
           case "$MODE" in
             apply*) ARGS+=("--apply") ;;
             recrop*) ARGS+=("--recrop" "--apply") ;;

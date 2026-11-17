@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { listCurricula } from '../lib/curriculaDb'
 import { groupSubject } from '../lib/homeSubjects'
 import AdminLoadedPapers from './AdminLoadedPapers'
-import { buildPaperRows, parsePaperFilename, safeName, sourceLabelFor } from '../lib/examPapers'
+import { buildPaperRows, parsePaperFilename, safeName, sourceLabelFor, duplicateLabels } from '../lib/examPapers'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const ACTION_URL = 'https://github.com/RdioactveDevil/sace-platform/actions/workflows/ingest-past-paper.yml'
@@ -59,12 +59,14 @@ export default function AdminExamPapersTab({ subject: fixedSubject = '' } = {}) 
   const clear = () => { setFiles([]); setRows([]); setUnpaired([]); setDone(null); setError('') }
 
   const invalid = rows.filter(r => !r.year || !String(r.publisher || '').trim() || !String(r.paper || '').trim())
+  // Two papers under one label would overwrite each other's questions.
+  const dupes = duplicateLabels(rows)
   const [uploading, setUploading] = useState('')
   const [error, setError] = useState('')
   const [done, setDone] = useState(null)
 
   const upload = async () => {
-    if (!subject || !rows.length || invalid.length) return
+    if (!subject || !rows.length || invalid.length || dupes.length) return
     setError('')
     const id = crypto.randomUUID()
     const put = async (file, n) => {
@@ -175,6 +177,7 @@ export default function AdminExamPapersTab({ subject: fixedSubject = '' } = {}) 
             </table>
             {unpaired.length > 0 && <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 8 }}>Solutions not matched to a paper: {unpaired.map(u => u.file.name).join(', ')}. Choose them in the Solutions column.</div>}
             {invalid.length > 0 && <div style={{ fontSize: 12.5, color: 'var(--t-danger)', marginTop: 6 }}>Fill in the year, publisher and paper for every row.</div>}
+            {dupes.length > 0 && <div role="alert" style={{ fontSize: 12.5, color: 'var(--t-danger)', marginTop: 6 }}>More than one paper would be saved as {dupes.map(d => `"${d}"`).join(', ')}, and each would overwrite the last one's questions. Change the publisher or paper so each label is different, or remove the copy.</div>}
           </div>
         )}
 
@@ -182,7 +185,7 @@ export default function AdminExamPapersTab({ subject: fixedSubject = '' } = {}) 
         {uploading && <div role="status" style={{ fontSize: 13, color: 'var(--t-textMuted)' }}>{uploading}</div>}
         {files.length > 0 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={upload} disabled={!subject || !rows.length || invalid.length > 0 || !!uploading} style={btn(true, !subject || !rows.length || invalid.length > 0 || !!uploading)}>
+            <button type="button" onClick={upload} disabled={!subject || !rows.length || invalid.length > 0 || dupes.length > 0 || !!uploading} style={btn(true, !subject || !rows.length || invalid.length > 0 || dupes.length > 0 || !!uploading)}>
               <Upload size={15} /> Upload {rows.length} paper{rows.length === 1 ? '' : 's'} as a batch
             </button>
             <button type="button" onClick={clear} disabled={!!uploading} style={btn(false, !!uploading)}>Clear</button>
