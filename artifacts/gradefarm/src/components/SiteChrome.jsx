@@ -204,7 +204,7 @@ export function SiteFooter({ links, hidden }) {
 /** The footer's links. `go(id)` scrolls to a homepage section. */
 export function siteFooterLinks(navigate, go) {
   return [
-    ['How it works', () => go('how')],
+    ['Features', () => navigate('/features')],
     ['Subjects', () => go('subjects')],
     ['Pricing', () => navigate('/pricing')],
     ['Privacy', () => navigate('/privacy')],
