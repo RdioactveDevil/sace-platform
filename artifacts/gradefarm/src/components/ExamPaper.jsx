@@ -407,9 +407,12 @@ function vceBlocks(exam, meta, onLoad) {
     <>Unless otherwise indicated, the diagrams in this book are <b>not</b> drawn to scale.</>,
   ]
   const sections = exam.A.length > 0
+  const num = (q, section, i) => (meta.numberOf ? meta.numberOf(q, section, i) : i + 1)
+  // A preview (meta.preview) prints the questions only: no section instructions or "End of …" lines.
+  const furniture = (b) => { if (!meta.preview) blocks.push(b) }
 
   if (sections) {
-    blocks.push({
+    furniture({
       key: 'secA', section: 'A', breakBefore: true, keepWithNext: true, el: (
         <div className="xv-sec">
           <h2><b>Section A</b> – Multiple-choice questions</h2>
@@ -428,7 +431,7 @@ function vceBlocks(exam, meta, onLoad) {
     exam.A.forEach((q, i) => blocks.push({
       key: `A-${q.id}`, section: 'A', tailMm: 7, el: (
         <div className="xv-q">
-          <div className="xv-qh"><b>Question {i + 1}</b>{src(q)}</div>
+          <div className="xv-qh"><b>Question {num(q, 'A', i)}</b>{src(q)}</div>
           <div className="xv-serif"><MathText text={q.question} /></div>
           <Figure q={q} src={q.image_url} onLoad={onLoad} />
           <div className="xv-opts xv-serif">
@@ -437,12 +440,12 @@ function vceBlocks(exam, meta, onLoad) {
         </div>
       ),
     }))
-    blocks.push({ key: 'endA', section: 'A', el: <div className="xv-endsec"><span>End of Section A</span></div> })
+    furniture({ key: 'endA', section: 'A', el: <div className="xv-endsec"><span>End of Section A</span></div> })
   }
 
   if (exam.B.length) {
     const section = sections ? 'B' : ''
-    blocks.push({
+    furniture({
       key: 'secB', section, breakBefore: true, startEven: sections, keepWithNext: true, el: (
         <div className="xv-sec">
           {sections && <h2><b>Section B</b></h2>}
@@ -457,7 +460,7 @@ function vceBlocks(exam, meta, onLoad) {
       blocks.push({
         key: `B-${q.id}`, section, keepWithNext: true, el: (
           <div style={{ paddingBottom: '2.5mm' }}>
-            <div className="xv-qh"><b>Question {i + 1}</b> ({marksOf(q)} mark{marksOf(q) === 1 ? '' : 's'}){src(q)}</div>
+            <div className="xv-qh"><b>Question {num(q, 'B', i)}</b> ({marksOf(q)} mark{marksOf(q) === 1 ? '' : 's'}){src(q)}</div>
             {q.question && <div className="xv-serif"><MathText text={q.question} /></div>}
             <Figure q={q} src={q.image_url} onLoad={onLoad} />
           </div>
@@ -479,9 +482,9 @@ function vceBlocks(exam, meta, onLoad) {
         })
       })
     })
-    if (sections) blocks.push({ key: 'endB', section: 'B', el: <div className="xv-endsec"><span>End of Section B</span></div> })
+    if (sections) furniture({ key: 'endB', section: 'B', el: <div className="xv-endsec"><span>End of Section B</span></div> })
   }
-  blocks.push({ key: 'end', section: 'end', el: <div className="xv-endsec" style={{ paddingTop: '10mm' }}><span style={{ width: '45mm' }}>End of examination</span></div> })
+  furniture({ key: 'end', section: 'end', el: <div className="xv-endsec" style={{ paddingTop: '10mm' }}><span style={{ width: '45mm' }}>End of examination</span></div> })
   return blocks
 }
 
@@ -505,7 +508,7 @@ function VcePage({ n, total, title, section, children, footer }) {
 function VceExam({ exam, meta }) {
   const sol = useMemo(() => (meta.solutions ? solutionBlocks(exam, (_, i) => i + 1) : []), [exam, meta.solutions])
   const bumpRef = useRef(() => {})
-  const blocks = useMemo(() => vceBlocks(exam, meta, () => bumpRef.current()), [exam, meta.showSources, meta.isMaths]) // eslint-disable-line react-hooks/exhaustive-deps
+  const blocks = useMemo(() => vceBlocks(exam, meta, () => bumpRef.current()), [exam, meta.showSources, meta.isMaths, meta.preview, meta.numberOf]) // eslint-disable-line react-hooks/exhaustive-deps
   const lists = useMemo(() => [blocks, sol], [blocks, sol])
   const { heights, portal, bump } = useHeights(lists, 'xv xv-body', VCE.width)
   bumpRef.current = bump
@@ -524,6 +527,22 @@ function VceExam({ exam, meta }) {
   const total = seq.length + 2
   const techFree = meta.isMaths && meta.paperNumber === '1'
   const band = techFree ? BAND.exam1 : BAND.exam2
+
+  // A preview: the question pages alone, numbered from 1, as they print.
+  if (meta.preview) {
+    return (
+      <div className="xp xv">
+        {portal}
+        <div className="xp-print" ref={fitRef}>
+          {pages.map((p, i) => (
+            <VcePage key={`p${i}`} n={i + 1} total={pages.length} title={meta.headerTitle} section={blocks[p[0]].section === 'end' ? '' : blocks[p[0]].section}>
+              <div className="xv-box xv-body">{p.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}</div>
+            </VcePage>
+          ))}
+        </div>
+      </div>
+    )
+  }
   const { totals } = meta
 
   // Contents: the page range of each section.
@@ -623,8 +642,11 @@ function VceExam({ exam, meta }) {
 function saceBlocks(questions, startNumber, meta, onLoad) {
   const blocks = []
   const src = (q) => meta.showSources && q.source ? <span className="xs-src">{sourceLabel(q)}</span> : null
+  // meta.numberOf gets each question's place within its section, as in VCE.
+  const inSection = { A: 0, B: 0 }
   questions.forEach((q, qi) => {
-    const num = startNumber + qi
+    const sectionIndex = inSection[q._section === 'A' ? 'A' : 'B']++
+    const num = meta.numberOf ? meta.numberOf(q, q._section === 'A' ? 'A' : 'B', sectionIndex) : startNumber + qi
     const qid = q.id
     if (q._section === 'A') {
       blocks.push({
@@ -730,12 +752,12 @@ function SacePage({ n, total, last, tabTop, children, cont }) {
 
 function SaceExam({ exam, meta }) {
   const all = useMemo(() => [...exam.A.map(q => ({ ...q, _section: 'A' })), ...exam.B.map(q => ({ ...q, _section: 'B' }))], [exam])
-  const booklets = useMemo(() => splitBooklets(all), [all])
+  const booklets = useMemo(() => (meta.preview ? [all] : splitBooklets(all)), [all, meta.preview])
   const bumpRef = useRef(() => {})
   const bookletBlocks = useMemo(() => {
     let start = 1
     return booklets.map(qs => { const b = saceBlocks(qs, start, meta, () => bumpRef.current()); start += qs.length; return b })
-  }, [booklets, meta.showSources, meta.isMaths]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [booklets, meta.showSources, meta.isMaths, meta.numberOf]) // eslint-disable-line react-hooks/exhaustive-deps
   const sol = useMemo(() => (meta.solutions ? solutionBlocks(exam, (s, i) => (s === 'A' ? i + 1 : exam.A.length + i + 1)) : []), [exam, meta.solutions])
   const lists = useMemo(() => [...bookletBlocks, sol], [bookletBlocks, sol])
   const { heights, portal, bump } = useHeights(lists, 'xs xs-body', SACE.width)
@@ -747,6 +769,29 @@ function SaceExam({ exam, meta }) {
   const fitRef = useFitMath()
   const totalMarks = all.reduce((s, q) => s + marksOf(q), 0)
   const extras = meta.isMaths ? ['Formula sheet'] : /chem/i.test(meta.subjectTitle) ? ['Periodic table and data sheet'] : []
+
+  // A preview: the question pages alone, with "continues on page" lines, as they print.
+  if (meta.preview) {
+    const pages = bookletPages[0] || []
+    const blocks = bookletBlocks[0] || []
+    return (
+      <div className="xp xs">
+        {portal}
+        <div className="xp-print" ref={fitRef}>
+          {pages.map((page, i) => {
+            const lastBlk = blocks[page[page.length - 1]]
+            const next = pages[i + 1] ? blocks[pages[i + 1][0]] : null
+            const cont = next && lastBlk && next.qid === lastBlk.qid ? `Question ${lastBlk.num} continues on page ${i + 2}.` : null
+            return (
+              <SacePage key={i} n={i + 1} total={pages.length} cont={cont}>
+                <div className="xs-box xs-body">{page.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}</div>
+              </SacePage>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   let firstNum = 1
   return (
@@ -854,6 +899,13 @@ function SaceExam({ exam, meta }) {
  * `meta`: { board: 'vce' | 'sace', subjectTitle, paperTitle, paperNumber,
  * headerTitle, readingMinutes, writingMinutes, materials[], isMaths,
  * showSources, answerSheet, solutions, totals }.
+ *
+ * Preview (Admin → a loaded paper): `meta.preview` prints only the question
+ * pages of the questions given, through the same blocks, styles and page
+ * packing as a built exam, and `meta.numberOf(q, section, index)` numbers each
+ * question (e.g. by its number on the original paper; keep it a stable
+ * function). Only `board`, `headerTitle`, `isMaths` and `showSources` are
+ * needed then.
  */
 export default function ExamPaper({ exam, meta }) {
   return (

@@ -20,6 +20,7 @@ import AdminSubjectLayout from './AdminSubjectLayout'
 import AdminSubjectQuestions from './AdminSubjectQuestions'
 import AdminSubjectOverview from './AdminSubjectOverview'
 import AdminExamPapersTab from './AdminExamPapersTab'
+import AdminPaperPage from './AdminPaperPage'
 import AdminReviewScreen from './AdminReviewScreen'
 import AdminReportsScreen from './AdminReportsScreen'
 import AdminGenerateScreen from './AdminGenerateScreen'
@@ -116,7 +117,7 @@ function subtopicProgress(detail) {
   })))
 }
 
-export default function AdminCurriculumDetail({ curriculumId, profile, section = 'overview', onSection = () => {}, query = '', onSearch = () => {}, onBack, onGoLive }) {
+export default function AdminCurriculumDetail({ curriculumId, profile, section = 'overview', onSection = () => {}, query = '', onSearch = () => {}, onBack, onGoLive, paper = null }) {
   const [curriculum, setCurriculum]   = useState(null)
   const [topics, setTopics]           = useState([])
   const [loading, setLoading]         = useState(true)
@@ -716,7 +717,10 @@ export default function AdminCurriculumDetail({ curriculumId, profile, section =
         {addMethod === 'pdf' && <AdminUploadScreen key={curriculum.name} subject={curriculum.name} />}
       </>
     ),
-    papers: (
+    // /admin/subjects/<id>/papers/<label>: one loaded paper (AdminPaperPage).
+    papers: paper ? (
+      <AdminPaperPage key={paper} curriculum={curriculum} label={paper} onBack={() => onSection('papers')} />
+    ) : (
       <>
         {pageTitle('Exam papers', "This subject's past and trial exam papers, for the exam builder.")}
         <AdminExamPapersTab key={curriculum.name} subject={curriculum.name} />

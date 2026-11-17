@@ -8,7 +8,8 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test \"src/lib/**/*.test.js\""
+    "test": "node --test \"src/lib/**/*.test.js\"",
+    "check:print": "node browser-checks/run.mjs"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -87,6 +88,7 @@
     "katex": "^0.16.45",
     "livekit-client": "^2.18.9",
     "mathlive": "^0.109.2",
+    "pdfjs-dist": "4.10.38",
     "react-router-dom": "^7.14.2",
     "tus-js-client": "^4.3.1"
   }

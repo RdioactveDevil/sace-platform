@@ -14,6 +14,7 @@ import AdminSettingsTab          from './AdminSettingsTab'
 import AdminExamPapersTab        from './AdminExamPapersTab'
 import { adminListTutorApplications } from '../lib/db'
 import { getDraftQuestions, fetchQuestionReports, isOpenReport } from '../lib/adminDb'
+import { paperLabelFromPath } from '../lib/paperPage'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -24,7 +25,7 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 function SubjectsRouter({ profile, onChange }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const [, , , id, page] = location.pathname.split('/')
+  const [, , , id, page, sub] = location.pathname.split('/')
 
   if (id) {
     return (
@@ -33,6 +34,7 @@ function SubjectsRouter({ profile, onChange }) {
         curriculumId={id}
         profile={profile}
         section={page || 'overview'}
+        paper={page === 'papers' && sub ? paperLabelFromPath(sub) : null}
         onSection={(next) => navigate(`/admin/subjects/${id}/${next}`)}
         query={new URLSearchParams(location.search).get('q') || ''}
         onSearch={(q) => navigate(`/admin/subjects/${id}/questions${q ? `?q=${encodeURIComponent(q)}` : ''}`)}

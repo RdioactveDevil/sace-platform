@@ -255,6 +255,40 @@ export async function reviewQuestions(ids, status) {
   return adminAuthFetch('/api/admin/questions/review', { method: 'POST', body: JSON.stringify({ ids, status }) })
 }
 
+/**
+ * Upload a figure made in Admin for a loaded exam question and return its
+ * public address. A crop from the paper goes under exam-papers/ (the printed
+ * paper sizes those at the ingest's 3 px per point); an uploaded image goes
+ * under question-uploads/ and prints at its own size. The name carries a hash
+ * of the image, so a new image is never served from a cache.
+ */
+export async function uploadQuestionImage(blob, { questionId, where, kind }) {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-1', bytes))].slice(0, 4).map(b => b.toString(16).padStart(2, '0')).join('')
+  const type = blob.type || 'image/png'
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
+  const id = String(questionId).replace(/[^A-Za-z0-9_-]/g, '')
+  const name = `${String(where || 'q').replace(/[^A-Za-z0-9]/g, '') || 'q'}-${hash}.${ext}`
+  const path = kind === 'crop' ? `exam-papers/edits/${id}/${name}` : `question-uploads/${id}/${name}`
+  const { error } = await supabase.storage.from('question-images').upload(path, blob, { contentType: type, upsert: false })
+  if (error && !/exists|duplicate/i.test(error.message || '')) throw new Error(`The image couldn't be uploaded: ${error.message}`)
+  return supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl
+}
+
+/** Tell the server a loaded question's figure was changed by hand, so its crop checks are dropped. where: '' or a part's label. */
+export async function figureChanged(id, where) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/figure-changed`, { method: 'POST', body: JSON.stringify({ where }) })
+}
+
+/** Display names of the admins who reviewed questions: Map<id, name>. */
+export async function fetchReviewerNames(ids) {
+  const list = [...new Set((ids || []).filter(Boolean))]
+  if (!list.length) return new Map()
+  const { data, error } = await supabase.from('profiles').select('id, display_name').in('id', list)
+  if (error) return new Map()
+  return new Map((data || []).map(p => [p.id, p.display_name || 'an admin']))
+}
+
 export async function editQuestion(id, fields) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/content`, { method: 'PATCH', body: JSON.stringify(fields) })
 }
@@ -347,18 +381,18 @@ export async function changePersonBilling(id, action) {
 
 // ─── LOADED EXAM PAPERS (a subject → Exam papers) ────────────────────────────
 
-const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, created_at'
+const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, graph, table_data, diagram, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, reviewed_at, reviewed_by, created_at'
 
 /** Every question loaded from an exam paper into a subject (they have an exam section). */
 export async function fetchLoadedPaperQuestions(curriculumId) {
   const rows = []
-  // Before migration 20261118000000_question_review the review columns don't exist yet.
+  // Before migrations 20261118000000/1 (question review) the review columns don't exist yet.
   let fields = PAPER_FIELDS
   for (let from = 0; ; from += 1000) {
     let { data, error } = await supabase.from('questions').select(fields)
       .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999)
     if (error && error.code === '42703' && fields === PAPER_FIELDS) {
-      fields = PAPER_FIELDS.replace(', review_status, review', '')
+      fields = PAPER_FIELDS.replace(', review_status, review, reviewed_at, reviewed_by', '')
       ;({ data, error } = await supabase.from('questions').select(fields)
         .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999))
     }

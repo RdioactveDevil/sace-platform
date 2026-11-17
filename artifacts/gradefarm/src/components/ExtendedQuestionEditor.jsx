@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import MathText from './MathText'
 import { btn, ui, FONT_B } from '../lib/adminUi'
@@ -7,12 +7,26 @@ import { btn, ui, FONT_B } from '../lib/adminUi'
  * Edit a multi-part exam question (Section B of a loaded paper): the stem and
  * each part's label, question, marks and worked solution. Maths is typed as
  * LaTeX in $…$, with a preview under each box. onSave({ question, parts }).
+ *
+ * Optional: onChange(body) on every edit (a live preview), and
+ * renderFigure(where, url, setUrl) to show and change the question's figure
+ * (where '') and each part's (its label); body then carries the question's
+ * image_url too.
  */
-export default function ExtendedQuestionEditor({ question, onSave, onCancel, busy }) {
+export default function ExtendedQuestionEditor({ question, onSave, onCancel, busy, onChange, renderFigure }) {
   const [stem, setStem] = useState(question.question || '')
+  const [stemImage, setStemImage] = useState(question.image_url || null)
   const [parts, setParts] = useState(() => (Array.isArray(question.parts) && question.parts.length ? question.parts : [{ label: 'a', level: 1, text: '', marks: 1, solution: '' }])
     .map((p, i) => ({ key: i, label: p.label || '', level: p.level || 1, text: p.text || '', marks: p.marks ?? 0, solution: p.solution || '', image_url: p.image_url || null })))
   const set = (key, field, value) => setParts(prev => prev.map(p => (p.key === key ? { ...p, [field]: value } : p)))
+  const body = () => ({
+    question: stem,
+    parts: parts.map(({ key, ...p }) => ({ ...p, marks: Number(p.marks) || 0 })),
+    ...(renderFigure ? { image_url: stemImage } : {}),
+  })
+  const changed = useRef(onChange)
+  changed.current = onChange
+  useEffect(() => { changed.current?.(body()) }, [stem, parts, stemImage]) // eslint-disable-line react-hooks/exhaustive-deps
   const total = parts.reduce((s, p) => s + (Number(p.marks) || 0), 0)
   const box = { ...ui.input, width: '100%', fontSize: 13, resize: 'vertical' }
   const preview = (text) => text.trim() && (
@@ -26,7 +40,9 @@ export default function ExtendedQuestionEditor({ question, onSave, onCancel, bus
         <textarea rows={3} value={stem} onChange={e => setStem(e.target.value)} style={box} />
         {preview(stem)}
       </label>
-      {question.image_url && <img src={question.image_url} alt="The question's figure" style={{ maxWidth: 360, borderRadius: 8, border: '1px solid var(--t-border)' }} />}
+      {renderFigure
+        ? renderFigure('', stemImage, setStemImage)
+        : question.image_url && <img src={question.image_url} alt="The question's figure" style={{ maxWidth: 360, borderRadius: 8, border: '1px solid var(--t-border)' }} />}
 
       {parts.map((p, i) => (
         <div key={p.key} style={{ border: '1px solid var(--t-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8, marginLeft: (p.level - 1) * 18, background: 'var(--t-bgCard)' }}>
@@ -50,7 +66,9 @@ export default function ExtendedQuestionEditor({ question, onSave, onCancel, bus
             <textarea rows={2} value={p.text} onChange={e => set(p.key, 'text', e.target.value)} style={box} />
             {preview(p.text)}
           </label>
-          {p.image_url && <img src={p.image_url} alt={`Figure for part ${p.label}`} style={{ maxWidth: 300, borderRadius: 8, border: '1px solid var(--t-border)' }} />}
+          {renderFigure
+            ? renderFigure(p.label, p.image_url, (url) => set(p.key, 'image_url', url))
+            : p.image_url && <img src={p.image_url} alt={`Figure for part ${p.label}`} style={{ maxWidth: 300, borderRadius: 8, border: '1px solid var(--t-border)' }} />}
           <label style={{ display: 'block' }}><span style={{ ...ui.label, fontSize: 12 }}>Worked solution</span>
             <textarea rows={3} value={p.solution} onChange={e => set(p.key, 'solution', e.target.value)} style={box} />
             {preview(p.solution)}
@@ -64,7 +82,7 @@ export default function ExtendedQuestionEditor({ question, onSave, onCancel, bus
         <span style={{ flex: 1, fontSize: 12.5, color: 'var(--t-textMuted)' }}>{total} mark{total === 1 ? '' : 's'} in all</span>
         {onCancel && <button type="button" onClick={onCancel} disabled={busy} style={btn('secondary', busy)}>Cancel</button>}
         <button type="button" disabled={busy} style={btn('primary', busy)}
-          onClick={() => onSave({ question: stem, parts: parts.map(({ key, ...p }) => ({ ...p, marks: Number(p.marks) || 0 })) })}>
+          onClick={() => onSave(body())}>
           {busy ? 'Saving…' : 'Save question'}
         </button>
       </div>

@@ -1,0 +1,400 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, ArrowLeft, Crop, ExternalLink, Eye, FileText, Minus, PanelRightClose, PanelRightOpen, Plus, Trash2, Upload } from 'lucide-react'
+import ExamPaper from './ExamPaper'
+import CropTool from './CropTool'
+import ExtendedQuestionEditor from './ExtendedQuestionEditor'
+import { QuestionEditor } from './AdminQuestionPanel'
+import { confirmDialog } from '../lib/dialog'
+import { btn, note, FONT_B } from '../lib/adminUi'
+import { groupLoadedPapers } from '../lib/examPapers'
+import { groupSubject } from '../lib/homeSubjects'
+import { isMathsSubject } from '../lib/examBuilder'
+import { reviewFlags, reviewState, needsAttention, reviewSummary, paperStatus } from '../lib/questionChecks'
+import { draftQuestion, changedFigures, originalNumber, previewSrc, isPendingImage } from '../lib/paperPage'
+import {
+  fetchLoadedPaperQuestions, fetchPaperPdfLinks, fetchReviewerNames, reviewQuestions, bulkEditQuestions,
+  editQuestion, editExtendedQuestion, saveQuestionVisuals, figureChanged, uploadQuestionImage,
+} from '../lib/adminDb'
+
+const PAGE_PX = 210 * 96 / 25.4 // an A4 page's width on screen at 100%
+const strip = (name = '') => String(name).replace(/^(VCE|SACE)\s+/i, '').replace(/\s*(Units?\s*\d.*|Stage\s*\d.*)$/i, '').trim()
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '')
+const isMcq = (q) => q.exam_section === 'A' || q.question_type === 'mcq'
+const STATE = { pending: ['To review', 'rgba(241,190,67,0.2)', 'var(--t-goldText)'], approved: ['Approved', 'var(--t-successBg, rgba(22,163,74,0.12))', 'var(--t-success)'], rejected: ['Rejected', 'var(--t-bgHover)', 'var(--t-textMuted)'] }
+
+function Chip({ bg, fg, children }) {
+  return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: bg || 'var(--t-bgHover)', color: fg || 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{children}</span>
+}
+function StateChip({ q }) {
+  if (!q.review_status) return null
+  const [label, bg, fg] = STATE[reviewState(q)]
+  return <Chip bg={bg} fg={fg}>{label}</Chip>
+}
+
+/** One printed question, exactly as the exam builder prints it, scaled to its column. */
+function Printed({ question, meta, zoom }) {
+  const exam = useMemo(() => (isMcq(question) ? { A: [question], B: [] } : { A: [], B: [question] }), [question])
+  return <div style={{ zoom }}><ExamPaper exam={exam} meta={meta} /></div>
+}
+
+/** A figure in the editor: what it is now, and crop it from the paper, upload one, or remove it. */
+function FigureSlot({ where, url, canCrop, onCrop, onUpload, onRemove }) {
+  const file = useRef(null)
+  const name = where ? `Part ${where}'s figure` : "The question's figure"
+  const small = { ...btn('secondary'), padding: '5px 9px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }
+  return (
+    <div style={{ border: '1px dashed var(--t-borderMid, var(--t-border))', borderRadius: 9, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-textMuted)' }}>{name}{isPendingImage(url) ? ' · not saved yet' : ''}</div>
+      {url ? <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain', alignSelf: 'flex-start', background: '#fff', borderRadius: 6, border: '1px solid var(--t-border)' }} />
+        : <div style={{ fontSize: 12.5, color: 'var(--t-textFaint)' }}>No figure.</div>}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onCrop} disabled={!canCrop} title={canCrop ? undefined : "The paper's PDF isn't available for this paper, so it can't be cropped here. Upload an image instead."}
+          style={{ ...small, ...(canCrop ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }}><Crop size={13} aria-hidden="true" /> Crop from the paper</button>
+        <button type="button" onClick={() => file.current?.click()} style={small}><Upload size={13} aria-hidden="true" /> Upload</button>
+        {url && <button type="button" onClick={onRemove} style={small}><Trash2 size={13} aria-hidden="true" /> Remove</button>}
+        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onUpload(f) }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One loaded exam paper, at /admin/subjects/<id>/papers/<label>: its
+ * questions, each previewed exactly as it prints (ExamPaper's preview), the
+ * original PDF beside it, editing with the preview following each change,
+ * figures cropped from the paper, and approving or rejecting each question.
+ */
+export default function AdminPaperPage({ curriculum, label, onBack }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [pdf, setPdf] = useState(undefined) // undefined: looking; null: not available
+  const [names, setNames] = useState(() => new Map())
+  const [selectedId, setSelectedId] = useState(null)
+  const [onlyAttention, setOnlyAttention] = useState(null) // null: decided once the paper loads
+  const [whole, setWhole] = useState(false)
+  const [zoom, setZoom] = useState(null) // null: fit the column
+  const [side, setSide] = useState('pdf') // 'pdf' | 'editor' | 'hidden'
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(null) // the editor's latest draft, for the preview (debounced)
+  const [cropping, setCropping] = useState(null) // { setUrl }
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState(null)
+  const latest = useRef(null) // the newest draft, before the debounce
+  const baseline = useRef(null) // the draft as the editor opened, to tell if anything changed
+  const pending = useRef(new Map()) // preview address → { blob, kind } for images not uploaded yet
+  const [previewEl, setPreviewEl] = useState(null) // the preview column, once it's on screen
+  const [fit, setFit] = useState(0.8)
+
+  const load = useCallback(async () => {
+    try {
+      const all = await fetchLoadedPaperQuestions(curriculum.id)
+      const paper = groupLoadedPapers(all).find(p => p.key === label)
+      setRows(paper ? [...paper.a, ...paper.b] : [])
+      setError('')
+      const ids = (paper ? [...paper.a, ...paper.b] : []).map(q => q.reviewed_by).filter(Boolean)
+      fetchReviewerNames(ids).then(setNames).catch(() => {})
+    } catch (e) { setError(e.message || "The paper couldn't be loaded.") }
+  }, [curriculum.id, label])
+  useEffect(() => { load() }, [load])
+  useEffect(() => { fetchPaperPdfLinks(curriculum.name).then(m => setPdf(m.get(label) || null)).catch(() => setPdf(null)) }, [curriculum.name, label])
+
+  const questions = rows || []
+  const sum = useMemo(() => reviewSummary(questions), [questions])
+  const status = useMemo(() => paperStatus(questions), [questions])
+  // Once the paper loads: list only what needs checking if anything does, and open on its first question.
+  useEffect(() => {
+    if (!rows || onlyAttention !== null) return
+    const first = rows.find(x => needsAttention(x)) || rows[0]
+    setOnlyAttention(sum.attention > 0)
+    if (first && !selectedId) setSelectedId(first.id)
+  }, [rows, onlyAttention, sum.attention, selectedId])
+  const visible = useMemo(() => (onlyAttention ? questions.filter(q => needsAttention(q)) : questions), [questions, onlyAttention])
+  const q = onlyAttention === null ? null : questions.find(x => x.id === selectedId) || visible[0] || questions[0] || null
+  useEffect(() => { if (q && q.id !== selectedId) setSelectedId(q.id) }, [q, selectedId])
+
+  // The board and style the exam builder would print this subject in.
+  const meta = useMemo(() => {
+    const board = groupSubject({ name: curriculum.name, level: curriculum.level_label }).group === 'sace' ? 'sace' : 'vce'
+    return { board, isMaths: isMathsSubject(curriculum.name), headerTitle: `GradeFarm Practice ${strip(curriculum.name)} Examination`, showSources: false, preview: true, numberOf: originalNumber }
+  }, [curriculum.name, curriculum.level_label])
+
+  // The preview follows the editor, a moment after typing stops.
+  const debounce = useRef(null)
+  const onDraft = useCallback((body) => {
+    latest.current = body
+    if (baseline.current === null) baseline.current = JSON.stringify(body)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(() => setDraft(body), 250)
+  }, [])
+  useEffect(() => () => clearTimeout(debounce.current), [])
+  const dirty = editing && latest.current !== null && JSON.stringify(latest.current) !== baseline.current
+  const shown = useMemo(() => (editing && draft ? draftQuestion(q, draft) : q), [editing, draft, q])
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  })
+
+  const stopEditing = () => {
+    setEditing(false); setDraft(null); latest.current = null; baseline.current = null
+    for (const url of pending.current.keys()) URL.revokeObjectURL(url.split('#')[0])
+    pending.current.clear()
+    setSide(s => (s === 'editor' ? 'pdf' : s))
+  }
+  /** True if it's fine to leave the current edit (nothing changed, or the admin says discard). */
+  const leaveEdit = async () => {
+    if (!editing) return true
+    if (dirty && !(await confirmDialog('This question has changes that aren\'t saved. Discard them?', { confirm: 'Discard changes', danger: true }))) return false
+    stopEditing()
+    return true
+  }
+  const select = async (id) => { if (id !== q?.id && (await leaveEdit())) setSelectedId(id) }
+  const back = async () => { if (await leaveEdit()) onBack() }
+  const toggleWhole = async () => { if (await leaveEdit()) setWhole(w => !w) }
+
+  // Fit the printed page to the preview column, and keep it fitted as the column changes size.
+  useEffect(() => {
+    const el = previewEl
+    if (!el) return
+    const measure = () => setFit(Math.max(0.3, Math.min(1.4, (el.clientWidth - 24) / PAGE_PX)))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [previewEl])
+  const scale = zoom ?? fit
+
+  const run = async (key, fn, ok) => {
+    setBusy(key); setMsg(null)
+    try { await fn(); setMsg({ ok: true, text: ok }); await load(); return true }
+    catch (e) { setMsg({ ok: false, text: e.message || "That didn't work." }); return false }
+    finally { setBusy('') }
+  }
+  const name = (x) => `${x.exam_section || (isMcq(x) ? 'A' : 'B')}${originalNumber(x)}`
+  const review = (status) => run('review', () => reviewQuestions([q.id], status), status === 'approved' ? `Approved ${name(q)}.` : status === 'rejected' ? `Rejected ${name(q)}: students won't see it.` : `${name(q)} is back in review.`)
+  const approveClean = async () => {
+    if (!(await confirmDialog(`Approve the ${plural(sum.cleanPending.length, 'question')} in ${label} that the checks found nothing wrong with? They go to students straight away.`, { confirm: 'Approve' }))) return
+    run('review', () => reviewQuestions(sum.cleanPending, 'approved'), `Approved ${plural(sum.cleanPending.length, 'question')}.`)
+  }
+  const deletePaper = async () => {
+    if (!(await confirmDialog(`Delete ${label}? Its ${plural(questions.length, 'question')} come out of the bank and the exam builder. Practice exams already built from it just leave them out. This can't be undone.`, { confirm: 'Delete paper', danger: true }))) return
+    if (await run('delete', () => bulkEditQuestions({ curriculumId: curriculum.id, ids: questions.map(x => x.id), action: 'delete' }), `Deleted ${label}.`)) onBack()
+  }
+  const startEdit = () => { baseline.current = null; latest.current = null; setDraft(null); setEditing(true); setSide('editor') }
+
+  const save = async (body) => {
+    setBusy('edit'); setMsg(null)
+    try {
+      const up = async (url, where) => {
+        if (!isPendingImage(url)) return url ?? null
+        const p = pending.current.get(url)
+        if (!p) throw new Error('An image chosen for this question is missing; choose it again.')
+        return uploadQuestionImage(p.blob, { questionId: q.id, where, kind: p.kind })
+      }
+      const b = { ...body }
+      if ('image_url' in b) b.image_url = await up(b.image_url, '')
+      if (Array.isArray(b.parts)) b.parts = await Promise.all(b.parts.map(async p => ({ ...p, image_url: await up(p.image_url, p.label) })))
+      const changed = changedFigures(q, b)
+      if (Array.isArray(b.parts)) await editExtendedQuestion(q.id, { question: b.question, parts: b.parts })
+      else await editQuestion(q.id, { question: b.question, options: b.options, answerIndex: b.answerIndex, solution: b.solution, ...(b.difficulty != null ? { difficulty: b.difficulty } : {}) })
+      if (changed.includes('')) await saveQuestionVisuals(q.id, { source: 'live', graph: q.graph ?? null, table_data: q.table_data ?? null, image_url: b.image_url })
+      for (const where of changed) await figureChanged(q.id, where)
+      stopEditing()
+      setMsg({ ok: true, text: `Saved ${name(q)}. It keeps its review status: approve it when it's right.` })
+      await load()
+    } catch (e) {
+      setMsg({ ok: false, text: e.message || "The question couldn't be saved." })
+    } finally { setBusy('') }
+  }
+
+  const renderFigure = (where, url, setUrl) => (
+    <FigureSlot where={where} url={url} canCrop={!!pdf}
+      onCrop={() => setCropping({ setUrl })}
+      onUpload={(file) => { const u = previewSrc(URL.createObjectURL(file), 'upload'); pending.current.set(u, { blob: file, kind: 'upload' }); setUrl(u) }}
+      onRemove={() => setUrl(null)} />
+  )
+
+  // Up / down move through the list (not while typing).
+  const onListKey = (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const i = visible.findIndex(x => x.id === q?.id)
+    const next = visible[Math.min(visible.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]
+    if (next) select(next.id)
+  }
+
+  if (error) return <div role="alert" style={note('danger')}>{error}</div>
+  if (!rows) return <div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div>
+  if (!questions.length) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <button type="button" onClick={onBack} style={{ ...btn('secondary'), alignSelf: 'flex-start', display: 'inline-flex', gap: 6, alignItems: 'center' }}><ArrowLeft size={14} /> Loaded papers</button>
+        <div style={note('info')}>No questions are loaded for “{label}”.</div>
+      </div>
+    )
+  }
+
+  if (!q) return <div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div>
+
+  const flags = shown ? reviewFlags(shown) : []
+  const page = Number(q?.review?.page) || 0
+  const statusText = status.state === 'checked'
+    ? `Checked${status.lastAt ? ` ${fmtDate(status.lastAt)}` : ''}${status.lastBy && names.get(status.lastBy) ? ` by ${names.get(status.lastBy)}` : ''}`
+    : status.state === 'partway' ? `${status.checked} of ${status.total} checked` : 'Not checked'
+  const tool = { ...btn('secondary'), padding: '6px 10px', fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 5 }
+
+  return (
+    <div className="pp" style={{ display: 'flex', flexDirection: 'column', gap: 12, fontFamily: FONT_B, color: 'var(--t-text)' }}>
+      <style>{`
+        .pp-grid { display: grid; grid-template-columns: 230px minmax(0, 1fr) minmax(320px, 0.85fr); gap: 12px; align-items: start; }
+        .pp-grid.no-side { grid-template-columns: 230px minmax(0, 1fr); }
+        .pp-col { border: 1px solid var(--t-border); border-radius: 12px; background: var(--t-bgCard); min-width: 0; }
+        .pp-sticky { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+        .pp-row { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--t-border); background: transparent; color: var(--t-text); cursor: pointer; font: inherit; }
+        .pp-row[aria-current="true"] { background: var(--t-bgHover); box-shadow: inset 3px 0 0 var(--t-accent); }
+        .pp-preview .xp-page { margin-bottom: 6mm; }
+        @media (max-width: 1100px) { .pp-grid, .pp-grid.no-side { grid-template-columns: 1fr; } .pp-sticky { position: static; max-height: none; } .pp-list { max-height: 260px; overflow: auto; } }
+      `}</style>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={back} style={tool}><ArrowLeft size={14} aria-hidden="true" /> Loaded papers</button>
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {label}
+            <Chip>{questions[0]?.source_kind === 'commercial' ? 'Trial' : 'Past paper'}</Chip>
+            <Chip bg={status.state === 'checked' ? 'var(--t-successBg, rgba(22,163,74,0.12))' : status.state === 'partway' ? 'rgba(241,190,67,0.2)' : undefined}
+              fg={status.state === 'checked' ? 'var(--t-success)' : status.state === 'partway' ? 'var(--t-goldText)' : undefined}>{statusText}</Chip>
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 3 }}>
+            {[sum.pending && `${sum.pending} to review`, sum.flagged && plural(sum.flagged, 'possible problem'), sum.rejected && `${sum.rejected} rejected`, plural(questions.length, 'question')].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <button type="button" onClick={toggleWhole} aria-pressed={whole} style={tool}><FileText size={14} aria-hidden="true" /> {whole ? 'One question' : 'Whole paper'}</button>
+        {sum.cleanPending.length > 0 && <button type="button" onClick={approveClean} disabled={!!busy} style={{ ...tool, ...btn('secondary', !!busy) }}>Approve {sum.cleanPending.length} without problems</button>}
+        <button type="button" onClick={deletePaper} disabled={!!busy} style={{ ...btn('danger', !!busy), padding: '6px 10px', fontSize: 12.5 }}>Delete paper</button>
+      </div>
+      {msg && <div role="status" style={note(msg.ok ? 'success' : 'danger')}>{msg.text}</div>}
+
+      <div className={`pp-grid${side === 'hidden' ? ' no-side' : ''}`}>
+        {/* Questions */}
+        <div className="pp-col pp-sticky">
+          <div style={{ padding: '10px 10px 8px', borderBottom: '1px solid var(--t-border)', fontSize: 12.5 }}>
+            {sum.attention > 0 ? (
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!onlyAttention} onChange={e => setOnlyAttention(e.target.checked)} />
+                Only the {sum.attention} that need checking
+              </label>
+            ) : <span style={{ color: 'var(--t-textMuted)' }}>Nothing needs checking.</span>}
+          </div>
+          <div className="pp-list" role="listbox" aria-label="Questions" tabIndex={0} onKeyDown={onListKey}>
+            {visible.length === 0 && <div style={{ padding: 10, fontSize: 12.5, color: 'var(--t-textMuted)' }}>None left to check.</div>}
+            {visible.map(x => {
+              const fl = reviewFlags(x).length
+              return (
+                <button key={x.id} type="button" role="option" aria-selected={x.id === q?.id} aria-current={x.id === q?.id} className="pp-row" onClick={() => select(x.id)}>
+                  <b style={{ fontSize: 12.5, minWidth: 30 }}>{name(x)}</b>
+                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(x.question || '').replace(/\$|\\ce\{|\}/g, '').slice(0, 70)}</span>
+                    <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <StateChip q={x} />
+                      {fl > 0 && reviewState(x) !== 'rejected' && reviewState(x) !== 'approved' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--t-goldText)' }}><AlertTriangle size={11} aria-hidden="true" />{fl}</span>}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Printed preview */}
+        <div className="pp-col" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <b style={{ fontSize: 13 }}>{whole ? 'Whole paper, as it prints' : `${name(q)} as it prints`}</b>
+            {editing && draft && !whole && <Chip bg="rgba(37,99,235,0.12)" fg="#2563eb">Showing your unsaved changes</Chip>}
+            <span style={{ flex: 1 }} />
+            <button type="button" onClick={() => setZoom(Math.max(0.3, scale / 1.2))} style={tool} aria-label="Zoom out"><Minus size={13} /></button>
+            <button type="button" onClick={() => setZoom(null)} style={tool}>Fit</button>
+            <button type="button" onClick={() => setZoom(Math.min(2, scale * 1.2))} style={tool} aria-label="Zoom in"><Plus size={13} /></button>
+            {side === 'hidden'
+              ? <button type="button" onClick={() => setSide(editing ? 'editor' : 'pdf')} style={tool}><PanelRightOpen size={14} aria-hidden="true" /> Show side panel</button>
+              : <button type="button" onClick={() => setSide('hidden')} style={tool}><PanelRightClose size={14} aria-hidden="true" /> Hide side panel</button>}
+          </div>
+          <div ref={setPreviewEl} className="pp-preview" style={{ background: 'var(--t-bgSubtle)', borderRadius: 10, padding: 12, overflow: 'auto', maxHeight: '80vh' }}>
+            {whole ? visible.map(x => (
+              <div key={x.id} style={{ marginBottom: 8 }}>
+                <button type="button" onClick={() => select(x.id)} style={{ ...tool, marginBottom: 6, ...(x.id === q?.id ? { borderColor: 'var(--t-accent)' } : {}) }}>
+                  {name(x)} <StateChip q={x} />
+                </button>
+                <Printed key={x.id} question={x.id === q?.id ? shown : x} meta={meta} zoom={scale} />
+              </div>
+            )) : shown && <Printed key={shown.id} question={shown} meta={meta} zoom={scale} />}
+          </div>
+
+          {!whole && q && (
+            <>
+              {flags.length > 0 && reviewState(q) !== 'rejected' && (
+                <div role="note" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 8, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.4)', fontSize: 12.5 }}>
+                  {flags.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                      <AlertTriangle size={13} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2, color: 'var(--t-goldText)' }} /><span>{f.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <StateChip q={q} />
+                {q.reviewed_at && reviewState(q) !== 'pending' && <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>{fmtDate(q.reviewed_at)}{names.get(q.reviewed_by) ? ` by ${names.get(q.reviewed_by)}` : ''}</span>}
+                <span style={{ flex: 1 }} />
+                {reviewState(q) !== 'approved' && <button type="button" onClick={() => review('approved')} disabled={!!busy || dirty} title={dirty ? 'Save or discard your changes first' : undefined} style={{ ...btn('primary', !!busy || dirty), padding: '6px 12px', fontSize: 12.5 }}>Approve</button>}
+                {reviewState(q) !== 'rejected' && <button type="button" onClick={() => review('rejected')} disabled={!!busy} style={{ ...btn('secondary', !!busy), padding: '6px 12px', fontSize: 12.5 }} title="Keep it out of exams and practice without deleting it">{q.review_status ? 'Reject' : 'Hide from students'}</button>}
+                {!editing && <button type="button" onClick={startEdit} disabled={!!busy} style={{ ...btn('secondary', !!busy), padding: '6px 12px', fontSize: 12.5 }}>Edit</button>}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Original paper / editor */}
+        {side !== 'hidden' && (
+          <div className="pp-col pp-sticky" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {editing && (
+              <div role="tablist" style={{ display: 'flex', gap: 6 }}>
+                <button type="button" role="tab" aria-selected={side === 'editor'} onClick={() => setSide('editor')} style={{ ...tool, ...(side === 'editor' ? { borderColor: 'var(--t-accent)' } : {}) }}>Editor</button>
+                <button type="button" role="tab" aria-selected={side === 'pdf'} onClick={() => setSide('pdf')} style={{ ...tool, ...(side === 'pdf' ? { borderColor: 'var(--t-accent)' } : {}) }}><Eye size={13} aria-hidden="true" /> Original</button>
+              </div>
+            )}
+            {/* The editor stays mounted while the original is shown, so nothing typed is lost. */}
+            {editing && q && (
+              <div style={{ display: side === 'editor' ? 'block' : 'none' }}>
+                {isMcq(q)
+                  ? <QuestionEditor key={q.id} q={q} busy={busy === 'edit' ? 'edit' : ''} onSave={save} onCancel={async () => { await leaveEdit() }} onChange={onDraft} renderFigure={renderFigure} />
+                  : <ExtendedQuestionEditor key={q.id} question={q} busy={busy === 'edit'} onSave={save} onCancel={async () => { await leaveEdit() }} onChange={onDraft} renderFigure={renderFigure} />}
+              </div>
+            )}
+            {(side === 'pdf' || !editing) && (
+              pdf === undefined ? <div style={{ fontSize: 13, color: 'var(--t-textMuted)' }}>Finding the paper…</div>
+                : pdf === null ? <div style={note('info')}>The original PDF isn't available for this paper (it was loaded from a link or an older batch). You can still edit, and upload figures.</div>
+                  : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                        <b>Original paper{page ? `, page ${page}` : ''}</b>
+                        <span style={{ flex: 1 }} />
+                        <a href={`${pdf}#page=${page || 1}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--t-text)' }}>Open in a tab <ExternalLink size={12} aria-hidden="true" /></a>
+                      </div>
+                      <iframe key={`${q?.id}-${page}`} title="The original paper" src={`${pdf}#page=${page || 1}&view=FitH`} style={{ width: '100%', height: '75vh', border: '1px solid var(--t-border)', borderRadius: 8, background: '#fff' }} />
+                    </>
+                  )
+            )}
+          </div>
+        )}
+      </div>
+
+      {cropping && pdf && (
+        <CropTool pdfUrl={pdf} startPage={page || 1} onCancel={() => setCropping(null)}
+          onUse={(blob) => { const u = previewSrc(URL.createObjectURL(blob), 'crop'); pending.current.set(u, { blob, kind: 'crop' }); cropping.setUrl(u); setCropping(null) }} />
+      )}
+    </div>
+  )
+}

@@ -17,3 +17,16 @@ export function parseReviewRequest(body: unknown): { ids: string[]; status: Revi
   if (ids.length > 1000) return { error: "Up to 1000 questions at a time" };
   return { ids, status: b.status as ReviewStatus };
 }
+
+type Flag = { code: string; where: string; message: string };
+
+/**
+ * A question's review after one of its figures was changed by hand (cropped
+ * again, uploaded or removed): the crop checks on that figure (figure_* flags
+ * at `where`, "" for the question's own figure) no longer apply.
+ */
+export function dropFigureFlags(review: unknown, where: string): Record<string, unknown> & { flags: Flag[] } {
+  const r = (review && typeof review === "object" ? review : {}) as Record<string, unknown>;
+  const flags = (Array.isArray(r.flags) ? r.flags : []) as Flag[];
+  return { ...r, flags: flags.filter((f) => !(String(f?.code || "").startsWith("figure_") && String(f?.where || "") === where)) };
+}

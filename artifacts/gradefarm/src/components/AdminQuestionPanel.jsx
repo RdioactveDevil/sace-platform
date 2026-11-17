@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ui, btn, note, FONT_B } from '../lib/adminUi'
 import MathText from './MathText'
@@ -112,12 +112,27 @@ export function QuestionPanel({ questionId, q, meta, outcome, open, busy, report
 }
 
 /** Rewrite a question's text, options, right answer, worked solution and level. */
-export function QuestionEditor({ q, busy, onSave, onCancel }) {
+/**
+ * Edit a multiple-choice question. onSave(body), body = { question, options,
+ * answerIndex, solution, difficulty? }. Optional: onChange(body) on every edit
+ * (a live preview), and renderFigure(where, url, setUrl) to show and change
+ * the question's figure (body then carries image_url).
+ */
+export function QuestionEditor({ q, busy, onSave, onCancel, onChange, renderFigure }) {
   const [question, setQuestion] = useState(q.question || '')
   const [options, setOptions] = useState(parseOptions(q.options).map(String))
   const [answer, setAnswer] = useState(q.answer_index ?? 0)
   const [solution, setSolution] = useState(q.solution || '')
   const [level, setLevel] = useState(q.difficulty ?? '')
+  const [imageUrl, setImageUrl] = useState(q.image_url || null)
+  const body = () => ({
+    question, options, answerIndex: answer, solution,
+    ...(level !== '' && level != null ? { difficulty: Number(level) } : {}),
+    ...(renderFigure ? { image_url: imageUrl } : {}),
+  })
+  const changed = useRef(onChange)
+  changed.current = onChange
+  useEffect(() => { changed.current?.(body()) }, [question, options, answer, solution, level, imageUrl]) // eslint-disable-line react-hooks/exhaustive-deps
   const input = { ...ui.input, width: '100%' }
   const label = { ...ui.label, fontSize: 12 }
   const canSave = question.trim() && options.length >= 2 && options.every(o => o.trim()) && answer < options.length
@@ -130,6 +145,7 @@ export function QuestionEditor({ q, busy, onSave, onCancel }) {
         <textarea id="rq-text" rows={3} value={question} onChange={e => setQuestion(e.target.value)} style={{ ...input, resize: 'vertical' }} />
         {question.trim() && <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: 9, background: 'var(--t-bgSubtle)', fontSize: 13.5, color: 'var(--t-text)' }}><MathText text={question} /></div>}
       </div>
+      {renderFigure && renderFigure('', imageUrl, setImageUrl)}
       <div>
         <span style={label}>Options <span style={{ fontWeight: 500, color: 'var(--t-textMuted)' }}>· tick the right one</span></span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -159,7 +175,7 @@ export function QuestionEditor({ q, busy, onSave, onCancel }) {
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" disabled={!!busy || !canSave} style={btn('primary', !!busy || !canSave)}
-          onClick={() => onSave({ question, options, answerIndex: answer, solution, ...(level !== '' && level != null ? { difficulty: Number(level) } : {}) })}>
+          onClick={() => onSave(body())}>
           {busy === 'edit' ? 'Saving…' : 'Save question'}
         </button>
         <button type="button" style={btn('secondary')} onClick={onCancel}>Cancel</button>
