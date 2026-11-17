@@ -71,7 +71,11 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain }) {
   }
 }
 
-export default function CalmBackground({ theme = 'dark' }) {
+/**
+ * `contained`: fill the positioned parent instead of the window (the homepage
+ * hero), and only animate while it's on screen.
+ */
+export default function CalmBackground({ theme = 'dark', contained = false }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -86,7 +90,8 @@ export default function CalmBackground({ theme = 'dark' }) {
 
     const size = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      w = window.innerWidth; h = window.innerHeight
+      const box = contained ? canvas.parentElement.getBoundingClientRect() : null
+      w = box ? box.width : window.innerWidth; h = box ? box.height : window.innerHeight
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
@@ -97,28 +102,37 @@ export default function CalmBackground({ theme = 'dark' }) {
       last = now
       drawCalm(ctx, w, h, now, opts)
     }
+    let onScreen = true
     const start = () => {
       cancelAnimationFrame(raf)
-      if (reduce?.matches || document.hidden) { still(); return }
+      if (reduce?.matches || document.hidden || !onScreen) { still(); return }
       raf = requestAnimationFrame(tick)
     }
     const onResize = () => { size(); if (reduce?.matches) still() }
 
     size()
     start()
+    // Contained: follow the parent's size, and rest while it's scrolled out of view.
+    const ro = contained && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null
+    ro?.observe(canvas.parentElement)
+    const io = contained && typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; start() }) : null
+    io?.observe(canvas.parentElement)
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', start)
     reduce?.addEventListener?.('change', start)
     return () => {
       cancelAnimationFrame(raf)
+      ro?.disconnect()
+      io?.disconnect()
       window.removeEventListener('resize', onResize)
       document.removeEventListener('visibilitychange', start)
       reduce?.removeEventListener?.('change', start)
     }
-  }, [theme])
+  }, [theme, contained])
 
   return (
     <canvas ref={ref} aria-hidden="true"
-      style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none', display: 'block' }} />
+      style={{ position: contained ? 'absolute' : 'fixed', inset: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none', display: 'block' }} />
   )
 }

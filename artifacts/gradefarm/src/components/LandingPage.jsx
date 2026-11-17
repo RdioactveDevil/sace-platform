@@ -7,6 +7,7 @@ import { SUBJECT_GROUPS as GROUPS, groupSubjects } from '../lib/homeSubjects'
 import { studentTiers, money } from '../lib/pricing'
 import { SITE_CSS, SITE_FONTS, themeVars, SiteNav, SiteFooter, siteFooterLinks, StartButton } from './SiteChrome'
 import CitySkyline from './CitySkyline'
+import CalmBackground from './CalmBackground'
 import TryItBox from './site/TryItBox'
 import { HOME_CSS } from './site/homeCss'
 import { FEATURE_SLUGS } from './site/features'
@@ -44,11 +45,12 @@ const PARTS = [
 
 const Wordmark = ({ size }) => <span className="wm" style={size ? { fontSize: size } : undefined}>grade<span>farm.</span></span>
 
-function Hero({ onStart, onTry }) {
+function Hero({ theme, onStart, onTry }) {
   const [on, setOn] = useState(false)
   return (
     <header className="hero">
-      <span className="glow a" aria-hidden="true" /><span className="glow b" aria-hidden="true" />
+      {/* Drifting gold glows and waves, the same calm background as sign-in. */}
+      <CalmBackground theme={theme} contained />
       <div className="in hg">
         <div>
           <h1 className="h1"><span className="s">The adaptive learning system for Australian students.</span></h1>
@@ -75,7 +77,6 @@ function Hero({ onStart, onTry }) {
                 </div>
               </div>
             ))}
-            <span className="hub" aria-hidden="true">Knows your level</span>
             <p className="mob-adapt"><Wordmark size={15} /> identifies what you already know and what you need to work on.</p>
             <p className="cap">Four separate things. None of them knows what you got wrong.</p>
           </div>
@@ -260,7 +261,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 
       <main>
-        <Hero onStart={start} onTry={(e) => { e.preventDefault(); go('try') }} />
+        <Hero theme={theme} onStart={start} onTry={(e) => { e.preventDefault(); go('try') }} />
         <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('inside') }} />
         <Inside open={openFeatures} />
         <Compare />
