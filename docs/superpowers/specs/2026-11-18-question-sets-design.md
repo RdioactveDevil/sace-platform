@@ -38,8 +38,8 @@ Question 30 with nothing to answer it from. 50 such sets are in the bank today
 ## Approaches
 
 1. **Mark the set on the questions (chosen).** Columns on `questions`: a set
-   key, a position, and the shared information (and its figure) stored on
-   every member, so whatever loads one question has what it needs.
+   key and a position on every member; the shared information (and its
+   figure) stored once, on the first question.
 2. A separate `question_sets` table. Tidier, but every student load path
    (practice, exams, the answer-free view) would need to join it. Not chosen.
 
@@ -48,12 +48,16 @@ Question 30 with nothing to answer it from. 50 such sets are in the bank today
 `questions` gains:
 - `set_key text`: the same for every question in a set (e.g. the lead's id).
 - `set_position smallint`: 1, 2, 3… in paper order.
-- `shared_info text`: the shared information, without the "Use the following
-  information…" sentence (that is generated, with the right numbers).
-- `shared_image_url text`: the shared figure, if any.
+- `shared_info text`: on the first question only: the shared information,
+  without the "Use the following information…" sentence (that is generated,
+  with the right numbers).
+- `shared_image_url text`: on the first question only: the shared figure.
 
-The shared fields are the same on every member; editing them on the paper page
-updates every member. `questions_student` exposes all four.
+Stored once, so there is nothing to keep in step. `questions_student` gives
+every member of a set the set's shared information and figure (read from the
+first question, even when that question is hidden from students), so a
+follow-on question always arrives with what it needs. Admin screens and the
+exam builder, which load whole papers, take it from the first question.
 
 ## Built exams (exam builder, ExamPaper)
 
@@ -114,13 +118,15 @@ questions aren't all found is flagged.
 - New fixtures with a pair and a three-question set: preview blocks identical
   to built-exam blocks; renumbering checked.
 - Unit tests: picking/ordering/swapping with sets, the split, the lead-sentence
-  wording, the backfill's matching on the real 50 leads (dry run listed for
-  the admin before writing).
+  wording, the backfill's matching on the real 50 leads.
+- Order: the migration, then the app, then the existing sets are linked and
+  split (so live questions are never shown split before the app can show the
+  shared information).
 
 ## Calls made without asking
 
-- Shared information stored on every member (not only the lead), so no view
-  has to look up another question.
+- Shared information stored once, on the first question; the students' view
+  fills it in for the others (the admin's call: one place to edit).
 - Swapping swaps the whole set.
 - The lead's existing figure becomes the shared figure.
 - Three or more questions: "Questions N to M".
