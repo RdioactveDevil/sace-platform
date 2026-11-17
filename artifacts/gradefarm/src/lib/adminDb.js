@@ -247,6 +247,14 @@ export async function saveQuestionVisuals(id, { source, graph, table_data, image
 }
 
 /** Rewrite a live question: any of { question, options, answerIndex, solution, difficulty }. */
+/**
+ * Approve or reject exam-paper questions after checking them against the paper
+ * (POST /api/admin/questions/review). status: 'approved' | 'rejected' | 'pending'.
+ */
+export async function reviewQuestions(ids, status) {
+  return adminAuthFetch('/api/admin/questions/review', { method: 'POST', body: JSON.stringify({ ids, status }) })
+}
+
 export async function editQuestion(id, fields) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/content`, { method: 'PATCH', body: JSON.stringify(fields) })
 }
@@ -339,19 +347,47 @@ export async function changePersonBilling(id, action) {
 
 // ─── LOADED EXAM PAPERS (a subject → Exam papers) ────────────────────────────
 
-const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, created_at'
+const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, created_at'
 
 /** Every question loaded from an exam paper into a subject (they have an exam section). */
 export async function fetchLoadedPaperQuestions(curriculumId) {
   const rows = []
+  // Before migration 20261118000000_question_review the review columns don't exist yet.
+  let fields = PAPER_FIELDS
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from('questions').select(PAPER_FIELDS)
+    let { data, error } = await supabase.from('questions').select(fields)
       .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999)
+    if (error && error.code === '42703' && fields === PAPER_FIELDS) {
+      fields = PAPER_FIELDS.replace(', review_status, review', '')
+      ;({ data, error } = await supabase.from('questions').select(fields)
+        .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999))
+    }
     if (error) throw error
     rows.push(...(data || []))
     if (!data || data.length < 1000) break
   }
   return rows
+}
+
+/**
+ * Links to the uploaded PDFs of a subject's loaded papers, by source label
+ * ("NEAP 2024 Trial Exam 2"), from the batches they came in (newest first).
+ * Signed for an hour; papers loaded from a link or older batches aren't listed.
+ */
+export async function fetchPaperPdfLinks(subject) {
+  const { data, error } = await supabase.from('exam_paper_batches').select('papers, created_at')
+    .eq('subject', subject).order('created_at', { ascending: false }).limit(100)
+  if (error) throw error
+  const paths = new Map()
+  for (const b of data || []) {
+    for (const p of b.papers || []) if (p?.source && p?.pdf && !paths.has(p.source) && !/^https?:/i.test(p.pdf)) paths.set(p.source, p.pdf)
+  }
+  const out = new Map()
+  if (!paths.size) return out
+  const list = [...paths]
+  const { data: signed } = await supabase.storage.from('admin-uploads').createSignedUrls(list.map(([, path]) => path), 3600)
+  ;(signed || []).forEach((s, i) => { if (s?.signedUrl) out.set(list[i][0], s.signedUrl) })
+  return out
 }
 
 /** Rewrite a multi-part exam question: { question, parts: [{ label, level, text, marks, solution, image_url }] }. */

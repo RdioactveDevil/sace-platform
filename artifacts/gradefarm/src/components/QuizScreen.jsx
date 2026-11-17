@@ -51,7 +51,7 @@ import TableView from './TableView'
 import DiagramView from './DiagramView'
 import PassageView from './PassageView'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
-import { usesMathAnswers } from '../lib/subjects'
+import { usesMathAnswers, dataBookletFor } from '../lib/subjects'
 import QuestionRenderer from './questions/QuestionRenderer'
 import { MarksBreakdown } from './questions/WrittenAnswer'
 import { AnnotatedQuestion, AdviceSteps, penColor } from './TitanAdvice'
@@ -2090,7 +2090,8 @@ export default function QuizScreen({
   const annotated = writtenAnswer && adviceOn && !!advice
   const isMcq = getQuestionType(currentQ) === 'mcq'
   const isBonus = bonusId === currentQ.id && !currentQ.is_variant && !examRun
-  const tools = toolsForSubject(subjectTile?.name || currentQ?.subject)
+  const booklet = dataBookletFor(subjectTile)
+  const tools = toolsForSubject(subjectTile?.name || currentQ?.subject, booklet)
   const mathInput = usesMathAnswers(subjectTile, currentQ?.subject)
   const roughSheetH = Math.min(520, Math.round(window.innerHeight * 0.68))
   // Titan checks rough work in practice (not in an exam), where Titan is offered.
@@ -2299,7 +2300,7 @@ export default function QuizScreen({
           {!examRun && !isMobile && streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: t.text, fontWeight: 700 }} title="Right in a row"><Flame size={14} color={t.goldText} aria-hidden="true" />{streak}</span>}
           {!examRun && !isMobile && <span style={{ whiteSpace: 'nowrap' }}>{signedXP(sessionXP)} XP</span>}
           {timer}
-          <QuizToolsDock theme={theme} tools={tools} inline />
+          <QuizToolsDock theme={theme} tools={tools} booklet={booklet} inline />
           <button type="button" onClick={() => setRoughOpen(o => !o)} aria-pressed={roughOpen}
             aria-label={isMobile ? 'Rough work' : undefined} title="Rough work: draw or type your working (W)"
             style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${roughOpen ? t.text : t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>

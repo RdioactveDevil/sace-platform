@@ -5,19 +5,28 @@
 import { supabase } from './supabase'
 import { tally } from './examMarking'
 
-const COLS = 'id, user_id, exam_id, subject, title, snapshot, question_ids, marks, scored, available, skipped, status, created_at, updated_at, marked_at'
+const BASE_COLS = 'id, user_id, exam_id, subject, title, snapshot, question_ids, marks, scored, available, skipped, status, created_at, updated_at, marked_at'
+const COLS = `${BASE_COLS}, sitting`
+
+// Until migration 20261117000001_exam_sittings.sql is applied there's no
+// `sitting` column: read without it, so Exams keeps working (just untimed).
+const noSittingColumn = (error) => !!error && /sitting/.test(`${error.message || ''} ${error.details || ''}`)
+async function withSitting(run) {
+  const res = await run(COLS)
+  return noSittingColumn(res.error) ? run(BASE_COLS) : res
+}
 
 /** The caller's attempts for a subject, newest first. */
 export async function listAttempts(subject, userId) {
   if (!subject || !userId) return null
-  const { data, error } = await supabase.from('built_exam_attempts').select(COLS)
-    .eq('user_id', userId).eq('subject', subject).order('created_at', { ascending: false }).limit(200)
+  const { data, error } = await withSitting(cols => supabase.from('built_exam_attempts').select(cols)
+    .eq('user_id', userId).eq('subject', subject).order('created_at', { ascending: false }).limit(200))
   return error ? null : data || []
 }
 
 export async function getAttempt(id) {
   if (!id) return null
-  const { data, error } = await supabase.from('built_exam_attempts').select(COLS).eq('id', id).maybeSingle()
+  const { data, error } = await withSitting(cols => supabase.from('built_exam_attempts').select(cols).eq('id', id).maybeSingle())
   return error ? null : data
 }
 
@@ -28,7 +37,7 @@ export async function createAttempt({ userId, examId = null, subject, title, sna
     question_ids: (snapshot?.questions || []).map(q => q.id),
     marks: {}, scored: 0, skipped: 0, available: tally(snapshot, {}).available, status: 'not_marked',
   }
-  const { data, error } = await supabase.from('built_exam_attempts').insert(row).select(COLS).maybeSingle()
+  const { data, error } = await withSitting(cols => supabase.from('built_exam_attempts').insert(row).select(cols).maybeSingle())
   return error ? null : data
 }
 
@@ -41,7 +50,14 @@ export async function saveMarks(attempt, marks, { finish = false } = {}) {
     status: finish ? 'marked' : attempt.status === 'marked' ? 'marked' : t.entered ? 'marking' : 'not_marked',
     ...(finish && !attempt.marked_at ? { marked_at: now } : {}),
   }
-  const { data, error } = await supabase.from('built_exam_attempts').update(row).eq('id', attempt.id).select(COLS).maybeSingle()
+  const { data, error } = await withSitting(cols => supabase.from('built_exam_attempts').update(row).eq('id', attempt.id).select(cols).maybeSingle())
+  return error ? null : data
+}
+
+/** Save a timed sitting's state (lib/examSitting.js). Returns the row, or null. */
+export async function saveSitting(attempt, sitting) {
+  const { data, error } = await supabase.from('built_exam_attempts')
+    .update({ sitting, updated_at: new Date().toISOString() }).eq('id', attempt.id).select(COLS).maybeSingle()
   return error ? null : data
 }
 
@@ -50,4 +66,4 @@ export async function deleteAttempt(id) {
   return !error
 }
 
-export const ATTEMPT_STORE = { list: listAttempts, get: getAttempt, create: createAttempt, save: saveMarks, remove: deleteAttempt }
+export const ATTEMPT_STORE = { list: listAttempts, get: getAttempt, create: createAttempt, save: saveMarks, saveSitting, remove: deleteAttempt }

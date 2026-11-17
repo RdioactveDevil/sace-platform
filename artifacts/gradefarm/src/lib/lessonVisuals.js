@@ -68,8 +68,8 @@ function cleanGraph(v) {
     type: 'graph', functions, points, asymptotes, shade,
     xRange: pair(v.xRange) || [-5, 5],
     yRange: pair(v.yRange) || [-6, 6],
-    xLabel: text(v.xLabel, 8) || 'x',
-    yLabel: text(v.yLabel, 8) || 'y',
+    xLabel: text(v.xLabel, 24) || 'x',
+    yLabel: text(v.yLabel, 24) || 'y',
   }
 }
 

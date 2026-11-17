@@ -47,6 +47,18 @@ export function subjectHasFeature(tile, feature) {
 }
 
 /**
+ * The subject's official data booklet or formula sheet (the SACE / VCAA PDF an
+ * admin uploads in Admin → Curricula → Student features), as
+ * { url, title }, or null when none is uploaded. Students only ever get the
+ * official booklet, never a generic sheet.
+ */
+export function dataBookletFor(tile) {
+  const b = tile?.features?.data_booklet
+  if (!b || typeof b !== 'object' || typeof b.url !== 'string' || !/^https:\/\//.test(b.url)) return null
+  return { url: b.url, title: (typeof b.title === 'string' && b.title.trim()) || 'Data booklet' }
+}
+
+/**
  * Maths subjects (by name): their written answers are set out as maths
  * working in the maths box rather than a plain text box.
  */

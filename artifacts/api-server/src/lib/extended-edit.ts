@@ -21,7 +21,9 @@ export function buildExtendedUpdate(body: unknown): { update: Record<string, unk
     if (!Number.isInteger(marks) || marks < 0 || marks > 40) return { error: `Part ${i + 1}: marks must be a whole number from 0 to 40.` };
     const level = Number(p.level);
     const img = typeof p.image_url === "string" && /^https:\/\//i.test(p.image_url.trim()) ? p.image_url.trim() : null;
-    if (!text && !img) return { error: `Part ${i + 1} needs its question.` };
+    // A question without lettered parts: the stem is its text, its one unlabelled part only the answer space.
+    const answerSpaceOnly = b.parts.length === 1 && !str(p.label, 12).trim() && !!question;
+    if (!text && !img && !answerSpaceOnly) return { error: `Part ${i + 1} needs its question.` };
     parts.push({
       label: str(p.label, 12).trim().replace(/^\(|\)?\.?$/g, ""),
       level: level === 2 || level === 3 ? level : 1,

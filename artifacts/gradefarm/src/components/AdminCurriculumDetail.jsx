@@ -25,6 +25,7 @@ import AdminReportsScreen from './AdminReportsScreen'
 import AdminGenerateScreen from './AdminGenerateScreen'
 import AdminVisionScreen from './AdminVisionScreen'
 import AdminUploadScreen from './AdminUploadScreen'
+import AdminDataBooklet from './AdminDataBooklet'
 import { countSubjectQuestions, loadSubjectHealth } from '../lib/adminDb'
 import { chip } from '../lib/adminUi'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS, usesMathAnswers } from '../lib/subjects'
@@ -994,7 +995,7 @@ export default function AdminCurriculumDetail({ curriculumId, profile, section =
     borrowed: generating ? waitNote : <SharedQuestionsPanel curriculumId={curriculumId} />,
     resources: generating ? waitNote : <CurriculumResourcesPanel curriculumId={curriculumId} />,
     scope: generating ? waitNote : <CourseScopePanel curriculumId={curriculumId} />,
-    features: generating ? waitNote : <FeatureSwitches name={curriculum.name} features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />,
+    features: generating ? waitNote : <FeatureSwitches curriculumId={curriculumId} name={curriculum.name} features={curriculum.features || {}} saving={featureSaving} onChange={saveFeatures} />,
     exam: generating ? waitNote : (
         <div style={{
           marginBottom: 20, padding: '14px 16px', borderRadius: 10,
@@ -1347,7 +1348,7 @@ const secondaryBtn = (disabled) => btn('secondary', disabled)
 const pill = { display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 999, background: 'var(--t-bgHover)', fontSize: 12, fontWeight: 700, color: 'var(--t-textSub)', whiteSpace: 'nowrap' }
 
 /** Optional student tools for this subject. Everything is off unless switched on here. */
-function FeatureSwitches({ name, features, saving, onChange }) {
+function FeatureSwitches({ curriculumId, name, features, saving, onChange }) {
   const row = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', cursor: 'pointer' }
   const numInput = {
     width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--t-border)',
@@ -1493,6 +1494,8 @@ function FeatureSwitches({ name, features, saving, onChange }) {
           </span>
         </span>
       </div>
+
+      <AdminDataBooklet curriculumId={curriculumId} name={name} booklet={features.data_booklet} onChange={onChange} />
     </div>
   )
 }

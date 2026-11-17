@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useLayoutEffect } from 'react'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'katex/contrib/mhchem/mhchem.js' // enables \ce{} for chemical equations
@@ -38,6 +38,47 @@ function renderToken(part) {
 
 const isDisplay = (p) => p.type === 'math' && p.display && p.html !== null
 
+// A display equation (a long reaction, say) can't wrap, so it's scaled down
+// to fit the width it has, to 60% at most; anything wider still scrolls.
+const MIN_SCALE = 0.6
+
+function DisplayMath({ html, tex }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return undefined
+    const fit = () => {
+      const inner = el.firstElementChild
+      if (!inner) return
+      el.style.fontSize = ''
+      const need = inner.scrollWidth, have = el.clientWidth
+      if (have > 0 && need > have + 1) el.style.fontSize = `${Math.max(MIN_SCALE, Math.floor((have / need) * 100) / 100)}em`
+    }
+    fit()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    // Refit when the width changes (not the height, which the fit itself
+    // changes), a frame later so it never re-enters the observer's loop.
+    let width = el.clientWidth, frame = 0
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(fit)
+    })
+    ro.observe(el)
+    return () => { ro.disconnect(); cancelAnimationFrame(frame) }
+  }, [html])
+  return (
+    <div
+      ref={ref}
+      data-tex={tex}
+      className="mt-display"
+      dangerouslySetInnerHTML={{ __html: html }}
+      style={{ overflowX: 'auto', textAlign: 'center', margin: '8px 0', maxWidth: '100%' }}
+    />
+  )
+}
+
 // Consecutive parts of the same mark, kept together so the mark can wrap them.
 function groupMarked(parts) {
   const groups = []
@@ -73,17 +114,7 @@ function InlineMath({ text, tokens, style, marks }) {
     const { html } = part
     if (html === null) return <span key={i} style={weight}>{part.content}</span>
     // data-tex: the segment's source, so Titan's Advice can find it on screen.
-    if (part.display) {
-      return (
-        <div
-          key={i}
-          data-tex={part.content}
-          className="mt-display"
-          dangerouslySetInnerHTML={{ __html: html }}
-          style={{ overflowX: 'auto', textAlign: 'center', margin: '8px 0', maxWidth: '100%' }}
-        />
-      )
-    }
+    if (part.display) return <DisplayMath key={i} html={html} tex={part.content} />
     return (
       <span
         key={i}

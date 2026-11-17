@@ -6,6 +6,7 @@ import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exe
 import { requireUser } from "../lib/auth";
 import { checkAiQuota } from "../lib/ai-quota";
 import { blockAwaitingParent, loadStudentContext, studentSafetyRules } from "../lib/parent-consent";
+import { verifyLessonText } from "../lib/lesson-verify";
 
 const router = Router();
 
@@ -309,6 +310,23 @@ router.post("/chat", async (req, res) => {
     }
 
     const data = (await response.json()) as Record<string, unknown>;
+
+    // A guided lesson is fact-checked before the student sees it: every
+    // question and the worked example are solved again by the checking model,
+    // and wrong answer keys, explanations and lines are fixed (lesson-verify.ts).
+    if (req.body?.purpose === "lesson" && Array.isArray(data.content)) {
+      const blocks = data.content as { type?: string; text?: string }[];
+      const at = blocks.findIndex((b) => b?.type === "text" && typeof b.text === "string");
+      if (at !== -1) {
+        try {
+          const text = await verifyLessonText(blocks[at].text as string, typeof subject === "string" ? subject : "");
+          data.content = blocks.map((b, i) => (i === at ? { ...b, text } : b));
+        } catch (err) {
+          logger.warn({ err }, "[lesson-verify] couldn't check the lesson; sending it as written");
+        }
+      }
+    }
+
     res.status(200).json(quota ? { ...data, quota } : data);
   } catch (err) {
     logger.error({ err }, "Chat API error");

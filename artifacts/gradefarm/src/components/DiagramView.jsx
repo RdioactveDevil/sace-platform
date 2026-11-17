@@ -9,6 +9,7 @@
 import FigureView, { isDrawableFigure } from './FigureView'
 import { StructureList } from './ChemFigure'
 import { THEMES } from '../lib/theme'
+import MathText from './MathText'
 
 function sanitizeSvg(svg) {
   return String(svg)
@@ -29,7 +30,7 @@ export default function DiagramView({ diagram, theme }) {
       <div style={{ margin: '0 0 18px', borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgSubtle, padding: '12px 12px 10px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {structures.length > 0 && <StructureList structures={structures} color={t.text} labelColor={t.text} />}
         {hasFigure && <FigureView figure={diagram.figure} theme={theme} />}
-        {caption && <div style={{ fontSize: 12, color: t.textMuted, textAlign: 'center' }}>{caption}</div>}
+        {caption && <div style={{ fontSize: 12, color: t.textMuted, textAlign: 'center' }}><MathText text={String(caption)} /></div>}
       </div>
     )
   }
@@ -52,7 +53,7 @@ export default function DiagramView({ diagram, theme }) {
     }}>
       <img src={uri} alt={caption || 'Question diagram'} style={{ display: 'block', width: '100%', maxHeight: 340, objectFit: 'contain' }} />
       {caption && (
-        <div style={{ marginTop: 8, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.45)' : '#64748b', textAlign: 'center' }}>{caption}</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.45)' : '#64748b', textAlign: 'center' }}><MathText text={String(caption)} /></div>
       )}
     </div>
   )

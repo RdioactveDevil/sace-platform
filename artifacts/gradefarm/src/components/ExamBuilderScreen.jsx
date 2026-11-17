@@ -7,10 +7,10 @@ import { listBuiltExams, getBuiltExam, saveBuiltExam, deleteBuiltExam } from '..
 import { ATTEMPT_STORE } from '../lib/examAttempts'
 import { snapshotOf, seenQuestionIds, questionsToRedo } from '../lib/examMarking'
 import {
-  bankSummary, examPool, pickExam, swapCandidate, examTotals, writingMinutes, isMathsSubject,
+  bankSummary, examPool, pickExam, swapCandidate, examTotals, isMathsSubject,
   sourceLabel, marksOf, sectionOf, BANK_SOURCE,
 } from '../lib/examBuilder'
-import { groupSubject } from '../lib/homeSubjects'
+import { boardOf, examTimes } from '../lib/examSitting'
 import ExamPaper from './ExamPaper'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -18,8 +18,6 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const strip = (name = '') => String(name).replace(/^(VCE|SACE)\s+/i, '').replace(/\s*(Units?\s*\d.*|Stage\s*\d.*)$/i, '').trim()
 const paperNumber = (paper = '') => (String(paper).match(/\d+/) || [''])[0]
 
-/** 'sace' for SACE subjects, else 'vce': which exam's look the paper takes. */
-const boardOf = (subject) => (groupSubject({ name: subject?.name, level: subject?.stage }).group === 'sace' ? 'sace' : 'vce')
 
 /** VCE: the cover's approved materials. SACE: the cover's instructions. One per line. */
 function defaultMaterials(board, subjectName, paper) {
@@ -41,8 +39,6 @@ function fullPaper(board, subjectName, paper) {
   return { mc: 20, b: 60 }
 }
 
-/** Writing time: VCE 1.5 minutes a mark; SACE papers are 130 minutes for a full paper. */
-const examMinutes = (board, marks) => (board === 'sace' ? (marks >= 90 ? 130 : Math.max(15, Math.round((marks * 1.3) / 5) * 5)) : writingMinutes(marks))
 
 /**
  * The exam builder: a full practice exam mixed from real past exams and
@@ -60,7 +56,7 @@ const examMinutes = (board, marks) => (board === 'sace' ? (marks >= 90 ? 130 : M
  */
 const DEFAULT_STORE = { list: listBuiltExams, get: getBuiltExam, save: saveBuiltExam, remove: deleteBuiltExam }
 
-export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, onMark = null, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions, attemptStore = ATTEMPT_STORE }) {
+export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, onMark = null, onSit = null, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions, attemptStore = ATTEMPT_STORE }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
   const board = boardOf(subject)
@@ -223,7 +219,8 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     B: picked.B.map(id => byId.get(id)).filter(Boolean),
   }), [picked, byId])
   const totals = examTotals(exam)
-  const minutes = examMinutes(board, totals.total)
+  // The cover's times, and the timer's when the exam is sat in Exams (lib/examSitting.js).
+  const { readingMinutes, writingMinutes: minutes } = examTimes(board, totals.total)
 
   // The bank comes without answers. For the solutions pages, ask the server for
   // them: tutors and admins get every one; students get those for questions
@@ -487,10 +484,14 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
       ) : (
         <div className="eb-grid">
           <div className="eb-side">
-            {downloaded && (
+            {(downloaded || (saveState === 'saved' && current)) && (
               <div className="eb-card" role="status" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: t.borderAccent }}>
-                <div style={{ fontSize: 13, color: t.textSub, lineHeight: 1.55 }}><b style={{ color: t.text }}>Saved to your Exams.</b> When you've sat it, mark it there against the solutions.</div>
-                {onMark && <button type="button" onClick={() => onMark(downloaded.id)} style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 10, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Mark it now</button>}
+                <div style={{ fontSize: 13, color: t.textSub, lineHeight: 1.55 }}><b style={{ color: t.text }}>Saved to your Exams.</b> Start it there under timed conditions, then mark it against the solutions.</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {onSit && downloaded && <button type="button" onClick={() => onSit(downloaded.id)} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Start this exam</button>}
+                  {onExit && !downloaded && <button type="button" onClick={onExit} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Go to my Exams</button>}
+                  {onMark && downloaded && <button type="button" onClick={() => onMark(downloaded.id)} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Mark it now</button>}
+                </div>
               </div>
             )}
             {notice && <div className="eb-card" role="status" style={{ fontSize: 12.5, color: t.textSub, lineHeight: 1.55 }}>{notice}</div>}
@@ -664,7 +665,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
                   board, subjectTitle: subjectTitle || strip(subjectName), paperTitle, paperNumber: paperNumber(paper || ''),
                   headerTitle: `GradeFarm Practice ${subjectTitle || strip(subjectName)} ${paperTitle}`.trim(),
                   materials: materials.split('\n').map(s => s.trim()).filter(Boolean),
-                  readingMinutes: 15, writingMinutes: minutes, isMaths: isMathsSubject(subjectName),
+                  readingMinutes, writingMinutes: minutes, isMaths: isMathsSubject(subjectName),
                   showSources, answerSheet: board === 'vce' && answerSheet, solutions, totals,
                 }} />
               ) : (

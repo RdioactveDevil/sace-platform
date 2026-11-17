@@ -15,7 +15,8 @@
 // Chemistry graphs, TLC plates, flow charts and apparatus are drawn by ChemFigure.jsx.
 
 import { THEMES } from '../lib/theme'
-import { XYPlot, TLCPlate, FlowChart, Apparatus, Particles } from './ChemFigure'
+import { XYPlot, TLCPlate, FlowChart, Apparatus, Particles, ChemString } from './ChemFigure'
+import { labelPlain } from '../lib/chemText'
 
 const GOLD = '#f1be43'
 const FONT = "'Plus Jakarta Sans', sans-serif"
@@ -31,11 +32,12 @@ function fmt(n) {
 }
 
 // Text with a halo in the background colour so labels stay readable over lines.
+// LaTeX in a label ("CO$_2$", "mol L$^{-1}$") is drawn as sub/superscripts.
 function Label({ x, y, children, c, size = 13, anchor = 'middle', weight = 600, fill }) {
   return (
     <text x={x} y={y} textAnchor={anchor} dominantBaseline="central" fontFamily={FONT} fontSize={size} fontWeight={weight}
       fill={fill || c.text} stroke={c.bg} strokeWidth={4} strokeLinejoin="round" paintOrder="stroke">
-      {children}
+      {typeof children === 'string' ? <ChemString text={children} size={size} chem={false} /> : children}
     </text>
   )
 }
@@ -203,6 +205,22 @@ function NumberLine({ fig, c }) {
   )
 }
 
+// Up to two lines of about 52 characters (of what's shown, not the LaTeX source), split at a space.
+function wrapTitle(title) {
+  const words = String(title ?? '').trim().split(/\s+/).filter(Boolean)
+  const lines = []
+  let line = ''
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w
+    if (line && labelPlain(next).length > 52) {
+      if (lines.length === 1) { lines.push(`${line} …`); return lines }
+      lines.push(line); line = w
+    } else line = next
+  }
+  if (line) lines.push(line)
+  return lines.slice(0, 2)
+}
+
 function BarChart({ fig, c }) {
   const bars = list(fig.bars).filter(b => num(b?.value) != null).slice(0, 12)
   if (bars.length === 0) return null
@@ -211,14 +229,16 @@ function BarChart({ fig, c }) {
   const mag = 10 ** Math.floor(Math.log10(rawStep))
   const stepV = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= rawStep) || rawStep
   const top = Math.ceil(maxV / stepV) * stepV
-  const W = 460, H = 260, L = 52, R = W - 16, T = fig.title ? 34 : 16, B = H - 46
+  // A long title wraps onto a second line instead of running off the chart.
+  const titleLines = wrapTitle(fig.title)
+  const W = 460, H = 260 + (titleLines.length > 1 ? 18 : 0), L = 52, R = W - 16, T = titleLines.length ? 16 + titleLines.length * 18 : 16, B = H - 46
   const Y = (v) => B - (v / top) * (B - T)
   const slot = (R - L) / bars.length
   const gridVals = []
   for (let v = 0; v <= top + 1e-9; v += stepV) gridVals.push(Math.round(v * 1e6) / 1e6)
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 300 }} role="img" aria-label={fig.title || fig.caption || 'Bar chart'}>
-      {fig.title && <Label c={c} x={W / 2} y={14} size={14} weight={700}>{String(fig.title).slice(0, 60)}</Label>}
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', maxHeight: 320 }} role="img" aria-label={labelPlain(fig.title || fig.caption || 'Bar chart')}>
+      {titleLines.map((line, i) => <Label key={`t${i}`} c={c} x={W / 2} y={14 + i * 18} size={14} weight={700}>{line}</Label>)}
       {gridVals.map(v => (
         <g key={v}>
           <line x1={L} y1={Y(v)} x2={R} y2={Y(v)} stroke={c.grid} strokeWidth={1} />
@@ -237,7 +257,7 @@ function BarChart({ fig, c }) {
       <line x1={L} y1={B} x2={R} y2={B} stroke={c.stroke} strokeWidth={1.5} />
       {fig.xLabel && <Label c={c} x={(L + R) / 2} y={H - 10} size={11} weight={600} fill={c.muted}>{str(fig.xLabel)}</Label>}
       {fig.yLabel && (
-        <text x={14} y={(T + B) / 2} transform={`rotate(-90 14 ${(T + B) / 2})`} textAnchor="middle" dominantBaseline="central" fontFamily={FONT} fontSize={11} fontWeight={600} fill={c.muted}>{str(fig.yLabel)}</text>
+        <text x={14} y={(T + B) / 2} transform={`rotate(-90 14 ${(T + B) / 2})`} textAnchor="middle" dominantBaseline="central" fontFamily={FONT} fontSize={11} fontWeight={600} fill={c.muted}><ChemString text={str(fig.yLabel)} size={11} chem={false} /></text>
       )}
     </svg>
   )

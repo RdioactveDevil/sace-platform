@@ -48,11 +48,18 @@ export function sectionOf(q) {
   return null
 }
 
+/** The same words, ignoring spacing and case. */
+export function sameWords(a, b) {
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return !!norm(a) && norm(a) === norm(b)
+}
+
 /** A written question's parts; a question without parts is one unlabelled part. */
 export function partsOf(q) {
   if (Array.isArray(q?.parts) && q.parts.length) {
     // A part with only a label still counts: "(iii)" printed alone before its (1) and (2).
-    return q.parts.filter(p => p && (p.text || p.image_url || p.label)).map(p => ({
+    // So does an unlabelled part with only marks: the answer space of a question without parts.
+    const parts = q.parts.filter(p => p && (p.text || p.image_url || p.label || Number(p.marks) > 0)).map(p => ({
       label: String(p.label || '').replace(/^\(|\)?\.?$/g, ''),
       text: p.text || '',
       marks: Math.max(0, Number(p.marks) || 0),
@@ -60,6 +67,10 @@ export function partsOf(q) {
       image_url: p.image_url || null,
       level: [2, 3].includes(Number(p.level)) ? Number(p.level) : 1,
     }))
+    // A question without parts was stored with its text in both the stem and its one
+    // unlabelled part: print it once, in the stem.
+    if (parts.length === 1 && !parts[0].label && sameWords(parts[0].text, q.question)) parts[0].text = ''
+    return parts
   }
   const type = getQuestionType(q)
   const marks = type === 'marked' ? (totalMarks(q) || 1) : Math.max(1, Number(q?.total_marks) || 1)
@@ -84,9 +95,12 @@ export function sourceLabel(q) {
   return q.source_question ? `${q.source}, Q${String(q.source_question).replace(/^q/i, '')}` : q.source
 }
 
-/** Usable on paper: in a section, not a reading-passage question, with a stem. */
+/**
+ * Usable on paper: in a section, not a reading-passage question, with a stem,
+ * and not waiting for (or failed) an admin's review (lib/questionChecks.js).
+ */
 export function isExamReady(q) {
-  return !!q?.question && !q.passage_id && !!sectionOf(q)
+  return !!q?.question && !q.passage_id && !!sectionOf(q) && q.review_status !== 'pending' && q.review_status !== 'rejected'
 }
 
 /**

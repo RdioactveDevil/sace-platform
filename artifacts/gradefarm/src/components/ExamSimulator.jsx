@@ -10,7 +10,8 @@ import TableView from './TableView'
 import DiagramView from './DiagramView'
 import PassageView from './PassageView'
 import QuestionRenderer from './questions/QuestionRenderer'
-import QuizToolsDock from './QuizToolsDock'
+import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
+import { dataBookletFor } from '../lib/subjects'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -92,8 +93,11 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
 // onResult({ trackId, title, paper, answers, secTimes }) marks the paper on the
 // server and resolves to { reveals: { [questionId]: answer fields }, stats }:
 // the questions arrive without their answers, which join them once marked.
-export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark', onExit, onResult }) {
+export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark', subject = null, onExit, onResult }) {
   const t = THEMES[theme]
+  // The subject's calculator and official data booklet (none for essay subjects).
+  const booklet = dataBookletFor(subject)
+  const tools = toolsForSubject(subject?.name, booklet)
   const [paper, setPaper] = useState(paperIn)
   const [marked, setMarked] = useState(false)
   const [markError, setMarkError] = useState(false)
@@ -270,7 +274,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
           <button onClick={() => { setReviewIdx(0); setPhase('review') }} style={primaryBtn}>Review answers →</button>
           <button onClick={onExit} style={{ ...ghostBtn(t), marginTop: 10 }}>Back to exams</button>
         </div>
-        <QuizToolsDock theme={theme} />
+        <QuizToolsDock theme={theme} tools={tools} booklet={booklet} />
       </Shell>
     )
   }
@@ -304,7 +308,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
               : <button onClick={onExit} style={{ ...primaryBtn, marginTop: 0, flex: 1 }}>Finish review</button>}
           </div>
         </div>
-        <QuizToolsDock theme={theme} />
+        <QuizToolsDock theme={theme} tools={tools} booklet={booklet} />
       </Shell>
     )
   }
@@ -377,7 +381,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
         </div>
       </div>
 
-      <QuizToolsDock theme={theme} />
+      <QuizToolsDock theme={theme} tools={tools} booklet={booklet} />
     </div>
   )
 }

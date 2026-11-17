@@ -43,6 +43,7 @@ if (typeof window !== 'undefined') {
 // LiveKit, MathLive, the entire admin bundle, marketing pages, etc.) are split
 // out of the initial app bundle and only fetched when the route is visited.
 const LandingPage           = lazyWithReload(() => import('./components/LandingPage'))
+const FeaturesPage          = lazyWithReload(() => import('./components/FeaturesPage'))
 const Year6Page             = lazyWithReload(() => import('./components/Year6Page'))
 const ReadinessCheckScreen  = lazyWithReload(() => import('./components/ReadinessCheckScreen'))
 const AuthScreen            = lazyWithReload(() => import('./components/AuthScreen'))
@@ -1634,6 +1635,8 @@ function AppInner() {
       <Route path="/terms"   element={<TermsScreen />} />
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
+      {/* Features — public, signed in or not */}
+      <Route path="/features" element={<FeaturesPage {...commonProps} onSignIn={() => navigate('/auth')} />} />
       <Route path="/pricing" element={<PricingPage {...commonProps} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} profileState={(user && profile?.state) || null} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
@@ -1662,12 +1665,12 @@ function AppInner() {
         : subjectLocked || selectedAccess === 'free'
           ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
         : subjectHasFeature(selectedSubject, 'test_maker')
-          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} />
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} onSit={(id) => navigate(`/exams/${id}/sit`)} />
           : <Navigate to="/question-bank" replace />
       } />
 
       {/* Exams: the student's downloaded exams, self-marking and their scores. In AppShell, with the sidebar. */}
-      {[['/exams', 'dashboard'], ['/exams/:attemptId/mark', 'mark'], ['/exams/:attemptId', 'result']].map(([path, view]) => (
+      {[['/exams', 'dashboard'], ['/exams/:attemptId/mark', 'mark'], ['/exams/:attemptId/sit', 'sit'], ['/exams/:attemptId', 'result']].map(([path, view]) => (
         <Route key={path} path={path} element={
           !(user && profile)
             ? <Navigate to="/home" replace />

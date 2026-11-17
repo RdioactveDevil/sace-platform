@@ -53,7 +53,20 @@ const FURNITURE = [
   /end of booklet/i,
   /^you may write on this page/i,
   /^question booklet \d/i,
+  // Trial papers: "SECTION B – Question 1 – continued", "SECTION B - Continued TURNOVER".
+  /^section\s+[a-z0-9]+\s*[-–—:]\s*(question\s+\d+\s*[-–—:]\s*)?continued/i,
+  /^question\s+\d+\s*[-–—:]?\s*continued/i,
+  /^(continued|continues)(\s+(over(leaf)?|on)(\s+the)?(\s+next)?(\s+page)?)?\.?$/i,
+  /^turn\s*over\.?$/i,
+  /^end of (section|question|examination|paper)/i,
+  /^do not write in this area/i,
+  /^(copyright\s*)?©/i,
+  // A mark allocation printed on its own: "2 marks", "[2 marks]".
+  /^\[?\s*\d+\s*marks?\s*\]?$/i,
 ];
+
+/** Whether a line of text is page furniture: header, footer, page number, mark allocation. */
+export const isFurniture = (text: string) => FURNITURE.some((re) => re.test(String(text || "").trim()));
 const PART_LABEL = /^(\(?[a-z]{1,4}\)|\(\d{1,2}\)|\d{1,2}\.)\s/i;
 
 /** Every page's text lines with positions and what each line is. */
@@ -130,7 +143,7 @@ function classify(lines: Line[], pageWidth: number) {
   // a part label). A row of atom labels or captions across a figure does not.
   const sentence = (l: Line) => l.fill >= 0.5 && l.maxGap <= 2.5 * l.size;
   for (const l of lines) {
-    if (FURNITURE.some((re) => re.test(l.text))) l.kind = "furniture";
+    if (isFurniture(l.text)) l.kind = "furniture";
     else if (/^source:/i.test(l.text)) l.kind = "other"; // a figure's citation, printed with it
     else if (sentence(l) && ((l.x1 - l.x0 > wide && words(l.text) >= 4) || (PART_LABEL.test(l.text) && words(l.text) >= 3))) l.kind = "body";
   }

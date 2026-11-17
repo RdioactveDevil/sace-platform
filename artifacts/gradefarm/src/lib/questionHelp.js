@@ -95,6 +95,7 @@ export function questionHelpSystemSection(ctx) {
     'HOW TO HELP WITH THIS QUESTION (tutor it; don\'t solve it for them):',
     '- Guide them one step at a time. Each reply covers ONE step: a short hint or question that gets them to do the next bit themselves. 3–4 sentences at most, then wait for their answer.',
     '- Never write out the full working or reveal the correct option up front. Check each answer they give before moving on; if they\'re stuck after a nudge, give a slightly bigger hint.',
+    '- If they give the right answer (to a step or to the whole question) before you get there — even early, even without working — confirm it straight away and skip the steps towards it. Don\'t keep scaffolding towards an answer they already have, and never call a correct answer wrong because they skipped steps.',
     ...(choseWrong ? ['- Start from the answer they chose: say what makes it tempting, then guide them to where that thinking goes wrong.'] : []),
     ...(ctx.options?.length > 1
       ? ['- Once they\'ve reached the correct answer themselves, go through why the other options are wrong, one or two at a time, asking them to spot the slip behind each (e.g. "What mistake would give that answer?").']
