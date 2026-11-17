@@ -1662,12 +1662,12 @@ function AppInner() {
         : subjectLocked || selectedAccess === 'free'
           ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
         : subjectHasFeature(selectedSubject, 'test_maker')
-          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} />
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} onSit={(id) => navigate(`/exams/${id}/sit`)} />
           : <Navigate to="/question-bank" replace />
       } />
 
       {/* Exams: the student's downloaded exams, self-marking and their scores. In AppShell, with the sidebar. */}
-      {[['/exams', 'dashboard'], ['/exams/:attemptId/mark', 'mark'], ['/exams/:attemptId', 'result']].map(([path, view]) => (
+      {[['/exams', 'dashboard'], ['/exams/:attemptId/mark', 'mark'], ['/exams/:attemptId/sit', 'sit'], ['/exams/:attemptId', 'result']].map(([path, view]) => (
         <Route key={path} path={path} element={
           !(user && profile)
             ? <Navigate to="/home" replace />
