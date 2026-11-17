@@ -139,7 +139,7 @@ Opened from a figure's "Crop from the paper" while editing.
 Each paper on Loaded papers, and the paper page's header, shows where it is:
 
 - **Checked**: every question approved or rejected. Shows when and by whom
-  it was last reviewed ("Checked 18 Nov by Adhyayan").
+  it was last reviewed ("Checked 18 Nov by Sam").
 - **Part way**: some questions reviewed, with "12 of 40 checked".
 - **Not checked**: none reviewed yet, including papers loaded before reviews
   existed.
