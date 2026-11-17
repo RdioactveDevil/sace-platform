@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowRight, ArrowDown } from 'lucide-react'
 import { getPlatformSettings } from '../lib/db'
@@ -30,6 +30,12 @@ const EXTRA_CSS = `
 .gfx .sec { scroll-margin-top: 72px; }
 .gfx .hc { color: inherit; text-decoration: none; }
 .gfx .wq .mt > span { white-space: nowrap !important; }
+/* The hero's changing word keeps the width of "adaptive", so the line doesn't jump. */
+.gfx .scw-stack { display: inline-grid; vertical-align: bottom; }
+.gfx .scw-stack > span { grid-area: 1 / 1; text-align: center; white-space: nowrap; }
+.gfx .scw-size { visibility: hidden; }
+.gfx .scw-live { transition: color .25s; }
+.gfx .scw-live.busy { color: var(--goldt); }
 .gfx .end .city { color: var(--city); }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
 .gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
@@ -43,6 +49,61 @@ const PARTS = [
   { name: 'Practice papers', what: 'Full practice exams from past and trial papers, laid out like your SACE or VCE paper.', img: '/home/exam-sace.jpg', old: ['Past papers (PDF)', 'Printed, half done, never marked.'] },
 ]
 
+// The hero's "adaptive": on load it scrambles through "smart" and "personal"
+// and settles back on "adaptive" (about 7 seconds), then stays still. Hovering
+// plays it again. Screen readers and reduced motion only ever get "adaptive".
+const HEADLINE_WORDS = ['adaptive', 'smart', 'personal', 'adaptive']
+const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
+const SCRAMBLE_MS = 520
+const HOLD_MS = 1700
+
+function ScrambleWord() {
+  const [text, setText] = useState(HEADLINE_WORDS[0])
+  const [busy, setBusy] = useState(false)
+  const timers = useRef([])
+  const running = useRef(false)
+  const stop = () => { timers.current.forEach(t => clearTimeout(t)); timers.current = [] }
+  const wait = (fn, ms) => timers.current.push(setTimeout(fn, ms))
+
+  const scramble = (to, done) => {
+    const start = performance.now()
+    const frame = () => {
+      const p = Math.min(1, (performance.now() - start) / SCRAMBLE_MS)
+      const fixed = Math.floor(p * to.length)
+      setText(Array.from(to, (c, i) => (i < fixed ? c : LETTERS[Math.floor(Math.random() * 26)])).join(''))
+      if (p < 1) wait(frame, 40)
+      else done()
+    }
+    frame()
+  }
+  const play = () => {
+    if (running.current) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    running.current = true
+    setBusy(true)
+    const step = (i) => scramble(HEADLINE_WORDS[i], () => {
+      if (i === HEADLINE_WORDS.length - 1) { setBusy(false); running.current = false; return }
+      setBusy(false)
+      wait(() => { setBusy(true); step(i + 1) }, HOLD_MS)
+    })
+    step(0)
+  }
+  useEffect(() => {
+    wait(play, 500)
+    return () => { stop(); running.current = false }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <span className="scw" onMouseEnter={play}>
+      <span className="lp-sr">{HEADLINE_WORDS[0]}</span>
+      <span className="scw-stack" aria-hidden="true">
+        <span className="scw-size">{HEADLINE_WORDS[0]}</span>
+        <span className={`scw-live${busy ? ' busy' : ''}`}>{text}</span>
+      </span>
+    </span>
+  )
+}
+
 const Wordmark = ({ size }) => <span className="wm" style={size ? { fontSize: size } : undefined}>grade<span>farm.</span></span>
 
 function Hero({ theme, onStart, onTry }) {
@@ -53,7 +114,7 @@ function Hero({ theme, onStart, onTry }) {
       <CalmBackground theme={theme} contained />
       <div className="in hg">
         <div>
-          <h1 className="h1"><span className="s">The adaptive learning system for Australian students.</span></h1>
+          <h1 className="h1"><span className="s">The <ScrambleWord /> learning system for Australian students.</span></h1>
         </div>
         <div className={on ? 'on' : ''}>
           <div className="swr">
