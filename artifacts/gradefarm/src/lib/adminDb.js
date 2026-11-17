@@ -347,7 +347,7 @@ export async function changePersonBilling(id, action) {
 
 // ─── LOADED EXAM PAPERS (a subject → Exam papers) ────────────────────────────
 
-const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, created_at'
+const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, graph, table_data, diagram, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, created_at'
 
 /** Every question loaded from an exam paper into a subject (they have an exam section). */
 export async function fetchLoadedPaperQuestions(curriculumId) {
