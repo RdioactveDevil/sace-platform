@@ -50,9 +50,9 @@ const EXTRA_CSS = `
   .gfx .tile.junk.x1 { left: 84%; top: 300px; transform: rotate(6deg); }
   .gfx .tile.junk.x2 { left: 31%; top: 196px; transform: rotate(-4deg); }
   .gfx .on .tile.junk { width: 23.5%; opacity: 0; pointer-events: none; }
-  .gfx .on .tile.junk.x0 { left: -4%; top: 18px; transform: translate(-80px, -40px) rotate(-18deg) scale(.8); }
-  .gfx .on .tile.junk.x1 { left: 84%; top: 300px; transform: translate(90px, 40px) rotate(16deg) scale(.8); }
-  .gfx .on .tile.junk.x2 { left: 31%; top: 196px; transform: translateY(60px) rotate(-10deg) scale(.7); }
+  .gfx .on .tile.junk.x0 { left: -4%; top: 18px; transform: rotate(-7deg) scale(.97); }
+  .gfx .on .tile.junk.x1 { left: 84%; top: 300px; transform: rotate(6deg) scale(.97); }
+  .gfx .on .tile.junk.x2 { left: 31%; top: 196px; transform: rotate(-4deg) scale(.97); }
 }
 @media (max-width: 760px) {
   .gfx .tile.junk { display: none; }
@@ -91,8 +91,8 @@ const EXTRA_CSS = `
 .gfx .tile .x-mark { right: 10px; bottom: 8px; width: 54px; height: 54px; }
 .gfx .tile .strike { left: 12px; top: 52px; width: 70%; height: 16px; }
 /* Loose on the desk. */
-.gfx .mess { position: absolute; inset: 0; pointer-events: none; transition: opacity .4s, transform .5s; }
-.gfx .on .mess { opacity: 0; transform: translateY(12px); }
+.gfx .mess { position: absolute; inset: 0; pointer-events: none; transition: opacity .5s ease; }
+.gfx .on .mess { opacity: 0; }
 .gfx .mess .coffee { position: absolute; left: -13%; top: 236px; width: 230px; z-index: 0; }
 .gfx .mess .coffee .spill { fill: rgba(140, 88, 38, .17); }
 .gfx .mess .coffee .ring { fill: none; stroke: rgba(118, 70, 28, .33); stroke-width: 5; stroke-dasharray: 230 40; }
@@ -116,12 +116,10 @@ const EXTRA_CSS = `
 .gfx .on .t1 .snake rect { animation-delay: -1.1s; } .gfx .on .t2 .snake rect { animation-delay: -2.4s; } .gfx .on .t3 .snake rect { animation-delay: -3.6s; }
 .gfx .on .t4 .snake rect { animation-delay: -.5s; } .gfx .on .t5 .snake rect { animation-delay: -4.4s; }
 @media (min-width: 761px) {
-  /* The tidy grid needs less room than the mess, so the hero closes up when you switch. */
-  .gfx .stage { transition: height .6s cubic-bezier(.65,0,.25,1); }
-  .gfx .on .stage { height: 430px; }
-  .gfx .on .tile.t0 { top: 40px; } .gfx .on .tile.t1 { top: 40px; } .gfx .on .tile.t2 { top: 40px; }
-  .gfx .on .tile.t3 { top: 206px; } .gfx .on .tile.t4 { top: 206px; } .gfx .on .tile.t5 { top: 206px; }
-  .gfx .mob-adapt { display: block; position: absolute; left: 0; right: 0; top: 390px; margin: 0; text-align: center; font-size: 17px; font-weight: 700; color: var(--ink); opacity: 0; transition: opacity .4s; pointer-events: none; }
+  /* The hero stays the same size both ways (so the background never moves); the tidy grid sits in the middle of it. */
+  .gfx .on .tile.t0 { top: 62px; } .gfx .on .tile.t1 { top: 62px; } .gfx .on .tile.t2 { top: 62px; }
+  .gfx .on .tile.t3 { top: 228px; } .gfx .on .tile.t4 { top: 228px; } .gfx .on .tile.t5 { top: 228px; }
+  .gfx .mob-adapt { display: block; position: absolute; left: 0; right: 0; top: 412px; margin: 0; text-align: center; font-size: 17px; font-weight: 700; color: var(--ink); opacity: 0; transition: opacity .4s; pointer-events: none; }
   .gfx .mob-adapt .wm { font-size: 17px !important; }
   .gfx .on .mob-adapt { opacity: 1; transition-delay: .6s; }
 }

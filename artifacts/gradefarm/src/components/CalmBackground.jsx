@@ -34,13 +34,16 @@ const WAVES = [[0.72, 34, 0.0042, 0], [0.84, 26, 0.0055, 2.1], [0.58, 22, 0.0035
 // Each wave is three strokes, wide and faint to narrow, so it reads as a soft band.
 const STROKES = [[150, 0.035], [80, 0.04], [26, 0.05]]
 
-export function drawCalm(ctx, w, h, t, { gold, dark, grain }) {
+export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH }) {
   ctx.clearRect(0, 0, w, h)
+  // Glows and waves are placed against refH when given (a contained background
+  // keeps its layout when its box grows), else against the canvas height.
+  const H = refH || h
   const a = t / 5200
-  const R = Math.max(w, h)
+  const R = Math.max(w, H)
   const spots = [
-    [w * (0.82 + 0.1 * Math.sin(a)), h * (0.12 + 0.12 * Math.cos(a * 1.3)), R * 0.55, dark ? 0.16 : 0.3],
-    [w * (0.12 + 0.09 * Math.cos(a * 0.8)), h * (0.92 + 0.07 * Math.sin(a * 1.1)), R * 0.45, dark ? 0.1 : 0.2],
+    [w * (0.82 + 0.1 * Math.sin(a)), H * (0.12 + 0.12 * Math.cos(a * 1.3)), R * 0.55, dark ? 0.16 : 0.3],
+    [w * (0.12 + 0.09 * Math.cos(a * 0.8)), H * (0.92 + 0.07 * Math.sin(a * 1.1)), R * 0.45, dark ? 0.1 : 0.2],
   ]
   for (const [x, y, r, al] of spots) {
     const gr = ctx.createRadialGradient(x, y, 0, x, y, r)
@@ -52,7 +55,7 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain }) {
   ctx.lineCap = 'round'
   const sp = t / 2600
   for (const [yb, amp, f, ph] of WAVES) {
-    const y0 = h * yb
+    const y0 = H * yb
     for (const [lw, al] of STROKES) {
       ctx.strokeStyle = rgba(gold, al * (dark ? 0.8 : 1))
       ctx.lineWidth = lw
@@ -86,12 +89,15 @@ export default function CalmBackground({ theme = 'dark', contained = false }) {
     const t = THEMES[theme] || THEMES.dark
     const opts = { gold: t.accent, dark: theme === 'dark', grain: makeGrain() }
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    let w = 0, h = 0, raf = 0, last = 0
+    let w = 0, h = 0, raf = 0, last = 0, refW = 0
 
     const size = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const box = contained ? canvas.parentElement.getBoundingClientRect() : null
       w = box ? box.width : window.innerWidth; h = box ? box.height : window.innerHeight
+      // Contained: lay out against the first height seen, and again only if the width changes
+      // (e.g. a phone turned sideways), so content growing or shrinking never moves the waves.
+      if (contained && (!opts.refH || w !== refW)) { opts.refH = h; refW = w }
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
