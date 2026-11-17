@@ -255,6 +255,26 @@ export async function reviewQuestions(ids, status) {
   return adminAuthFetch('/api/admin/questions/review', { method: 'POST', body: JSON.stringify({ ids, status }) })
 }
 
+/**
+ * Upload a figure made in Admin for a loaded exam question and return its
+ * public address. A crop from the paper goes under exam-papers/ (the printed
+ * paper sizes those at the ingest's 3 px per point); an uploaded image goes
+ * under question-uploads/ and prints at its own size. The name carries a hash
+ * of the image, so a new image is never served from a cache.
+ */
+export async function uploadQuestionImage(blob, { questionId, where, kind }) {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-1', bytes))].slice(0, 4).map(b => b.toString(16).padStart(2, '0')).join('')
+  const type = blob.type || 'image/png'
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
+  const id = String(questionId).replace(/[^A-Za-z0-9_-]/g, '')
+  const name = `${String(where || 'q').replace(/[^A-Za-z0-9]/g, '') || 'q'}-${hash}.${ext}`
+  const path = kind === 'crop' ? `exam-papers/edits/${id}/${name}` : `question-uploads/${id}/${name}`
+  const { error } = await supabase.storage.from('question-images').upload(path, blob, { contentType: type, upsert: false })
+  if (error && !/exists|duplicate/i.test(error.message || '')) throw new Error(`The image couldn't be uploaded: ${error.message}`)
+  return supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl
+}
+
 /** Tell the server a loaded question's figure was changed by hand, so its crop checks are dropped. where: '' or a part's label. */
 export async function figureChanged(id, where) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/figure-changed`, { method: 'POST', body: JSON.stringify({ where }) })
