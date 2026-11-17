@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ArrowDown } from 'lucide-react'
 import MathText from '../MathText'
 import { StartButton } from '../SiteChrome'
 import { tryStart, tryAnswer, tryContinue, tryFinish, tryResult, tryLegend, trySummary, TRY_RUN_LENGTH, TRY_WALL } from '../../lib/tryIt'
@@ -22,7 +22,7 @@ const LOOP = 'M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7
 const CLOCK = <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
 const STAR = 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z'
 
-export default function TryItBox({ onStart }) {
+export default function TryItBox({ onStart, onNext }) {
   const [s, setS] = useState(tryStart)
   const [flash, setFlash] = useState(null) // the answer just picked, before the result shows
   const [workOpen, setWorkOpen] = useState(false)
@@ -154,6 +154,11 @@ export default function TryItBox({ onStart }) {
           <div className={`lgi${lit.spaced ? ' lit' : ''}`}><span className="li">{CLOCK}</span><div><b>Spaced Repetition</b><span>Miss one and it comes back in 1 hour, then days later.</span></div></div>
           <div className={`lgi${lit.comeback ? ' lit' : ''}`}><span className="li"><Icon d={LOOP} /></span><div><b>Comeback Mode</b><span>Answer 3 similar questions to progress.</span></div></div>
         </div>
+        {onNext && (
+          <p className="tonext">
+            <a className="btn lg try" href="#inside" onClick={onNext}>See what's inside<ArrowDown size={18} strokeWidth={2.6} aria-hidden="true" /></a>
+          </p>
+        )}
       </div>
     </section>
   )

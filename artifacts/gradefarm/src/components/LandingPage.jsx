@@ -30,6 +30,8 @@ const EXTRA_CSS = `
 .gfx .hc { color: inherit; text-decoration: none; }
 .gfx .wq .mt > span { white-space: nowrap !important; }
 .gfx .end .city { color: var(--city); }
+.gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
+.gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
 `
 
 /** The four parts of gradefarm. in the hero: what they replace, and the real screen. */
@@ -257,7 +259,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
       <main>
         <Hero onStart={start} onTry={(e) => { e.preventDefault(); go('try') }} />
-        <TryItBox onStart={start} />
+        <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('inside') }} />
         <Inside open={openFeatures} />
         <Compare />
         <Subjects onPick={start} />
