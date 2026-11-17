@@ -17,7 +17,8 @@ const EXTRA_CSS = `
 .gfx .end .city { color: var(--city); }
 .gfx .link { display: inline-flex; align-items: center; gap: 6px; }
 .gfx .fhead .fh1, .gfx .fp-h { text-align: center; }
-.gfx .fhead { padding-bottom: 32px; }
+.gfx .fhead { padding-bottom: 72px; }
+@media (max-width: 760px) { .gfx .fhead { padding-bottom: 44px; } }
 .gfx .fp-h { margin-bottom: 10px; }
 .gfx .fp .ex { text-align: center; margin-left: auto; margin-right: auto; max-width: 46ch; text-wrap: balance; }
 /* The source chips' tick boxes share .bx with the Ranks cards; keep them small. */
