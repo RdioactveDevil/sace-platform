@@ -1,19 +1,26 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { TRY_QUESTIONS, TRY_WALL, tryStart, tryAnswer, tryContinue, tryFinish, tryResult, tryLegend, trySummary } from './tryIt.js'
+import { TRY_QUESTIONS, TRY_SUBJECTS, TRY_WALL, tryStart, tryAnswer, tryContinue, tryFinish, tryResult, tryLegend, trySummary } from './tryIt.js'
 
 const right = (s) => tryAnswer(s, s.question.answer)
 const wrong = (s) => tryAnswer(s, (s.question.answer + 1) % 4)
 
 /** Play until the finish, choosing each answer with `choose`; returns the final state. */
-function play(choose, limit = 20) {
-  let s = tryStart()
+function play(choose, subject = 'methods', limit = 20) {
+  let s = tryStart(subject)
   for (let i = 0; i < limit && s.phase !== 'done'; i++) s = tryContinue(choose(s))
   return s
 }
 
-test('every question has four options, a valid answer and one similar question', () => {
-  for (const list of Object.values(TRY_QUESTIONS)) {
+test('every subject has a full set: four options, a valid answer and one similar question each', () => {
+  assert.deepEqual(TRY_SUBJECTS.map(x => x.id), ['chemistry', 'english', 'methods'])
+  for (const { id } of TRY_SUBJECTS) {
+    assert.equal(TRY_QUESTIONS[id][2].length, 3, id)
+    assert.equal(TRY_QUESTIONS[id][3].length, 2, id)
+    assert.equal(TRY_QUESTIONS[id][4].length, 1, id)
+    assert.equal(TRY_WALL[id].length, 2, id)
+  }
+  for (const list of Object.values(TRY_QUESTIONS).flatMap(bank => Object.values(bank))) {
     for (const q of list) {
       for (const x of [q, q.similar]) {
         assert.equal(x.options.length, 4)
@@ -23,7 +30,6 @@ test('every question has four options, a valid answer and one similar question',
       }
     }
   }
-  assert.equal(TRY_WALL.length, 2)
 })
 
 test('all right: three questions, each harder than the last', () => {
@@ -35,9 +41,9 @@ test('all right: three questions, each harder than the last', () => {
   assert.equal(tryResult(s).nextTitle, 'Question 2 of 3: a harder one')
   assert.deepEqual(tryLegend(s), { difficulty: true, spaced: false, comeback: false })
   s = tryContinue(s)
-  assert.equal(s.question, TRY_QUESTIONS[3][0])
+  assert.equal(s.question, TRY_QUESTIONS.methods[3][0])
   s = tryContinue(right(s))
-  assert.equal(s.question, TRY_QUESTIONS[4][0])
+  assert.equal(s.question, TRY_QUESTIONS.methods[4][0])
   s = right(s)
   assert.equal(tryResult(s).button, 'See your results')
   s = tryContinue(s)
@@ -57,7 +63,7 @@ test('the first miss opens one Comeback Mode question, then back to the run', ()
   assert.equal(s.level, 2, 'a miss keeps the difficulty')
   s = tryContinue(s)
   assert.equal(s.mode, 'comeback')
-  assert.equal(s.question, TRY_QUESTIONS[2][0].similar)
+  assert.equal(s.question, TRY_QUESTIONS.methods[2][0].similar)
   assert.equal(tryLegend(s).comeback, true, 'Comeback Mode stays lit while you are in it')
   s = right(s)
   assert.equal(tryResult(s).button, 'Back to your questions')
@@ -96,4 +102,18 @@ test('skip goes straight to the finish; answering twice does nothing', () => {
   const answered = right(tryStart())
   assert.equal(tryAnswer(answered, 0), answered)
   assert.equal(tryContinue(tryStart()).phase, 'ask', 'continue before answering does nothing')
+})
+
+test('each subject runs on its own questions, 4 answers at most', () => {
+  for (const { id } of TRY_SUBJECTS) {
+    const start = tryStart(id)
+    assert.equal(start.subject, id)
+    assert.equal(start.question, TRY_QUESTIONS[id][2][0])
+    let s = tryContinue(right(start))
+    assert.equal(s.question, TRY_QUESTIONS[id][3][0], `${id}: a right answer moves to its own difficulty 3`)
+    const allWrong = play(wrong, id)
+    assert.equal(allWrong.answers, 4, id)
+    assert.ok(Object.values(TRY_QUESTIONS[id]).flat().some(q => q.topic === allWrong.missed[0]), id)
+  }
+  assert.equal(tryStart('nonsense').subject, 'methods', 'an unknown subject falls back to Methods')
 })

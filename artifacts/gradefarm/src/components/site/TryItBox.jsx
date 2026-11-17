@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { ArrowRight, ArrowDown } from 'lucide-react'
 import MathText from '../MathText'
 import { StartButton } from '../SiteChrome'
-import { tryStart, tryAnswer, tryContinue, tryFinish, tryResult, tryLegend, trySummary, TRY_RUN_LENGTH, TRY_WALL } from '../../lib/tryIt'
+import { tryStart, tryAnswer, tryContinue, tryFinish, tryResult, tryLegend, trySummary, TRY_RUN_LENGTH, TRY_WALL, TRY_SUBJECTS } from '../../lib/tryIt'
 
-// "Try it now. See what happens." on the homepage: three sample questions
-// that show the engine reacting to each answer (rules in lib/tryIt.js).
+// "Try it now. See what happens." on the homepage: pick a subject, then three
+// sample questions that show the engine reacting to each answer (rules in
+// lib/tryIt.js).
 // Styles are in homeCss.js (scoped under .gfx).
 
 const PICK_FLASH_MS = 450 // the picked answer shows green or red before the result
@@ -22,7 +23,15 @@ const LOOP = 'M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7
 const CLOCK = <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
 const STAR = 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z'
 
+/** The right answer inside a sentence: maths as it is, words in quotes, no doubled full stop. */
+function Answer({ text }) {
+  const maths = text.includes('$')
+  const shown = maths ? text : `\u2018${text.replace(/\.$/, '')}\u2019`
+  return <><span className="mth"><MathText text={shown} /></span>.</>
+}
+
 export default function TryItBox({ onStart, onNext }) {
+  const [subject, setSubject] = useState(null) // nothing until they pick one
   const [s, setS] = useState(tryStart)
   const [flash, setFlash] = useState(null) // the answer just picked, before the result shows
   const [workOpen, setWorkOpen] = useState(false)
@@ -43,10 +52,13 @@ export default function TryItBox({ onStart, onNext }) {
     if (next.phase === 'done') finish(next); else setS(next)
   }
   const skip = () => { clearTimers(); setFlash(null); finish(tryFinish(s)) }
-  const restart = () => { clearTimers(); setFlash(null); setAdding(false); setWorkOpen(false); setS(tryStart()) }
+  const choose = (id) => { setSubject(id); setS(tryStart(id)) }
+  const restart = () => { clearTimers(); setFlash(null); setAdding(false); setWorkOpen(false); setSubject(null); setS(tryStart()) }
 
   const q = s.question
-  const playing = s.phase !== 'done'
+  const picking = !subject
+  const playing = !picking && s.phase !== 'done'
+  const subjectName = TRY_SUBJECTS.find(x => x.id === s.subject)?.name
   const inComeback = s.mode === 'comeback'
   const r = s.phase === 'result' ? tryResult(s) : null
   const lit = tryLegend(s)
@@ -57,6 +69,16 @@ export default function TryItBox({ onStart, onNext }) {
       <div className="in">
         <h2 className="h2" id="gfx-try-h">Try it now. See what happens.</h2>
         <div className="card tq">
+          {picking && (
+            <div className="pick">
+              <p className="pk-h">Pick a subject</p>
+              <div className="pk-opts">
+                {TRY_SUBJECTS.map(x => (
+                  <button key={x.id} type="button" className="pk" onClick={() => choose(x.id)}><b>{x.name}</b><span>{x.note}</span></button>
+                ))}
+              </div>
+            </div>
+          )}
           {playing && (
             <>
               <div className="top">
@@ -64,6 +86,7 @@ export default function TryItBox({ onStart, onNext }) {
                   <div className="prog"><span className="cbp"><Icon d={LOOP} width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />Comeback Mode</span><span>One like the one you missed</span></div>
                 ) : (
                   <div className="prog">
+                    <span className="subj-tag">{subjectName}</span>
                     <span>Question {s.step + 1} of {TRY_RUN_LENGTH}</span>
                     <span className="dots" aria-hidden="true">{Array.from({ length: TRY_RUN_LENGTH }, (_, j) => <i key={j} className={j < s.step ? 'done' : j === s.step ? 'cur' : ''} />)}</span>
                   </div>
@@ -92,7 +115,7 @@ export default function TryItBox({ onStart, onNext }) {
                     <div className="rt">
                       <b>{r.title}</b>
                       <span>
-                        {r.answer && <>The answer is <span className="mth"><MathText text={r.answer} /></span>.{r.line ? ' ' : ''}</>}
+                        {r.answer && <>The answer is <Answer text={r.answer} />{r.line ? ' ' : ''}</>}
                         {r.line}
                       </span>
                     </div>
@@ -110,7 +133,7 @@ export default function TryItBox({ onStart, onNext }) {
               )}
             </>
           )}
-          {!playing && adding && (
+          {!picking && !playing && adding && (
             <div className="fin">
               <div className="adding" role="status">
                 <span className="spin" aria-hidden="true" />
@@ -119,10 +142,10 @@ export default function TryItBox({ onStart, onNext }) {
               </div>
             </div>
           )}
-          {!playing && !adding && (
+          {!picking && !playing && !adding && (
             <div className="fin">
               <div className="wall" aria-hidden="true">
-                {TRY_WALL.map((row, li) => (
+                {TRY_WALL[s.subject].map((row, li) => (
                   <div key={li} className={`lane l${li + 1}`}>
                     <div className="track">
                       {[...row, ...row].map((text, j) => (

@@ -137,6 +137,17 @@ const EXTRA_CSS = `
 .gfx .scw-size { visibility: hidden; }
 .gfx .scw-live { transition: color .25s; }
 .gfx .scw-live.busy { color: var(--goldt); }
+/* Try it now: pick a subject first. */
+.gfx .pick { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 8px 0 4px; }
+.gfx .pk-h { font-size: 21px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+.gfx .pk-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.gfx .pk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 100px; padding: 14px 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); text-align: center; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
+.gfx .pk:hover { border-color: var(--gold); background: var(--sel); transform: translateY(-2px); }
+.gfx .pk:active { transform: scale(.98); }
+.gfx .pk b { font-size: 18px; font-weight: 800; }
+.gfx .pk span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.gfx .prog .subj-tag { padding: 3px 10px; border-radius: 999px; background: var(--sel); border: 1px solid var(--sq2); font-size: 12.5px; font-weight: 800; color: var(--ink); }
+@media (max-width: 760px) { .gfx .pk-opts { grid-template-columns: minmax(0, 1fr); } .gfx .pk { min-height: 64px; } }
 /* "gradefarm is the rest.": the wordmark at the heading's own size. */
 .gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
