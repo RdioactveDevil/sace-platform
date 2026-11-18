@@ -275,6 +275,15 @@ export async function uploadQuestionImage(blob, { questionId, where, kind }) {
   return supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl
 }
 
+/**
+ * Change a loaded exam question's set (questions sharing information,
+ * lib/questionSets.js): any of { set_key, set_position, shared_info,
+ * shared_image_url }; null clears one (PATCH /api/admin/questions/:id/set).
+ */
+export async function updateQuestionSet(id, fields) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/set`, { method: 'PATCH', body: JSON.stringify(fields) })
+}
+
 /** Tell the server a loaded question's figure was changed by hand, so its crop checks are dropped. where: '' or a part's label. */
 export async function figureChanged(id, where) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/figure-changed`, { method: 'POST', body: JSON.stringify({ where }) })
@@ -381,7 +390,7 @@ export async function changePersonBilling(id, action) {
 
 // ─── LOADED EXAM PAPERS (a subject → Exam papers) ────────────────────────────
 
-const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, graph, table_data, diagram, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, reviewed_at, reviewed_by, created_at'
+const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, graph, table_data, diagram, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, reviewed_at, reviewed_by, set_key, set_position, shared_info, shared_image_url, created_at'
 
 /** Every question loaded from an exam paper into a subject (they have an exam section). */
 export async function fetchLoadedPaperQuestions(curriculumId) {
@@ -392,7 +401,7 @@ export async function fetchLoadedPaperQuestions(curriculumId) {
     let { data, error } = await supabase.from('questions').select(fields)
       .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999)
     if (error && error.code === '42703' && fields === PAPER_FIELDS) {
-      fields = PAPER_FIELDS.replace(', review_status, review, reviewed_at, reviewed_by', '')
+      fields = PAPER_FIELDS.replace(', review_status, review, reviewed_at, reviewed_by, set_key, set_position, shared_info, shared_image_url', '')
       ;({ data, error } = await supabase.from('questions').select(fields)
         .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999))
     }

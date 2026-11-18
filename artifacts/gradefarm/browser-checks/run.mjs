@@ -29,7 +29,8 @@ const here = path.dirname(new URL(import.meta.url).pathname)
 const server = await createServer({ configFile: path.join(here, 'vite.config.mjs') })
 await server.listen()
 const browser = await chromium.launch()
-const CASES = [['vce', '0'], ['sace', '0'], ['sace', '1']]
+// [board, maths, sets]: the last cases add questions that share information (question sets).
+const CASES = [['vce', '0', '0'], ['sace', '0', '0'], ['sace', '1', '0'], ['vce', '0', '1'], ['sace', '0', '1']]
 
 async function open(params) {
   const page = await browser.newPage({ viewport: { width: 1000, height: 1400 }, deviceScaleFactor: 1 })
@@ -91,28 +92,32 @@ const BLOCKS = '.xp-print .xp-page .xp-blk:not(:has(.xv-sec)):not(:has(.xv-endse
 
 let failed = 0
 const same = (a, b) => a.length === b.length && a.equals(b)
-for (const [board, maths] of CASES) {
-  const name = `${board}${maths === '1' ? '-maths' : ''}`
-  const full = await shots(`board=${board}&maths=${maths}&mode=full`, PAGES)
+for (const [board, maths, sets] of CASES) {
+  const name = `${board}${maths === '1' ? '-maths' : ''}${sets === '1' ? '-sets' : ''}`
+  const q = `board=${board}&maths=${maths}&sets=${sets}`
+  const full = await shots(`${q}&mode=full`, PAGES)
   if (cmd === 'snapshot') {
     full.forEach((png, i) => fs.writeFileSync(path.join(dir, `${name}-page-${i + 1}.png`), png))
     console.log(`${name}: saved ${full.length} pages`)
     continue
   }
   // 1. Built exam unchanged.
-  const before = fs.readdirSync(dir).filter(f => f.startsWith(`${name}-page-`)).length
-  if (before !== full.length) { failed++; console.log(`✗ ${name}: ${full.length} pages now, ${before} before`) }
+  const before = fs.readdirSync(dir).filter(f => new RegExp(`^${name}-page-\\d+\\.png$`).test(f)).length
+  if (!before) {
+    full.forEach((png, i) => fs.writeFileSync(path.join(dir, `${name}-page-${i + 1}.png`), png))
+    console.log(`${name}: no snapshot yet; saved ${full.length} pages`)
+  } else if (before !== full.length) { failed++; console.log(`✗ ${name}: ${full.length} pages now, ${before} before`) }
   full.forEach((png, i) => {
     const file = path.join(dir, `${name}-page-${i + 1}.png`)
-    if (!fs.existsSync(file) || !same(png, fs.readFileSync(file))) {
+    if (before && (!fs.existsSync(file) || !same(png, fs.readFileSync(file)))) {
       failed++
       fs.writeFileSync(path.join(dir, `${name}-page-${i + 1}.now.png`), png)
       console.log(`✗ ${name}: page ${i + 1} differs (saved .now.png)`)
     }
   })
   // 2. Preview blocks = built exam blocks: same HTML, same size, same pixels.
-  const built = await blocks(`board=${board}&maths=${maths}&mode=full`)
-  const prev = await blocks(`board=${board}&maths=${maths}&mode=preview`)
+  const built = await blocks(`${q}&mode=full`)
+  const prev = await blocks(`${q}&mode=preview`)
   if (built.length !== prev.length) { failed++; console.log(`✗ ${name}: ${prev.length} preview blocks, ${built.length} in the built exam`) }
   prev.forEach((b, i) => {
     const o = built[i]
@@ -124,7 +129,7 @@ for (const [board, maths] of CASES) {
       console.log(`✗ ${name}: question block ${i + 1}: ${why}`)
     }
   })
-  const previewPages = await shots(`board=${board}&maths=${maths}&mode=preview`, PAGES)
+  const previewPages = await shots(`${q}&mode=preview`, PAGES)
   console.log(`${name}: ${full.length} built pages compared; ${prev.length} question blocks compared with the preview (${previewPages.length} preview pages)`)
 }
 

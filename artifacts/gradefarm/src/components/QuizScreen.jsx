@@ -46,6 +46,7 @@ import {
   REMEDIATION_DB_TIMEOUT_MS,
 } from '../lib/remediation'
 import MathText from './MathText'
+import SharedInfoBox from './SharedInfoBox'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
@@ -2394,6 +2395,7 @@ export default function QuizScreen({
                   {penMarksSwitch()}
                 </div>
               )}
+              <SharedInfoBox q={currentQ} theme={theme} />
               {currentQ.passage && !sidePassage && <PassageView passage={currentQ.passage} theme={theme} />}
               {currentQ.graph && <GraphView graph={currentQ.graph} theme={theme} />}
               {currentQ.table_data && !annotated && <TableView table={currentQ.table_data} theme={theme} />}

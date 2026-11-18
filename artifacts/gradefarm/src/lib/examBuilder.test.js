@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   sectionOf, partsOf, marksOf, sourceLabel, bankSummary, examPool, pickExam, swapCandidate,
   examTotals, writingMinutes, formatMinutes, subjectCode, paginate, linesForMarks, BANK_SOURCE,
-  splitAtFigure, wantsDrawing, figureSizeMm,
+  splitAtFigure, wantsDrawing, figureSizeMm, isExamReady, keepSetsTogether, moveUnit, removeUnit, addWithSet, swapSet,
 } from './examBuilder.js'
 
 const mc = (id, extra = {}) => ({ id, question: `MC ${id}`, options: ['a', 'b', 'c', 'd'], answer_index: 0, question_type: 'mcq', topic: 'T1', ...extra })
@@ -160,4 +160,55 @@ test('a question without lettered parts keeps its answer space and prints its te
 test('questions waiting for review, or rejected, stay out of built exams', () => {
   const qs = [mc('1'), mc('2', { review_status: 'pending' }), mc('3', { review_status: 'rejected' }), mc('4', { review_status: 'approved' })]
   assert.deepEqual(examPool(qs).A.map(q => q.id), ['1', '4'])
+})
+
+// ── Question sets (questions sharing information) ────────────────────────────
+const setQ = (id, key, pos, extra = {}) => mc(id, { set_key: key, set_position: pos, ...extra })
+
+test('a set is picked whole, in order, and the count still lands on the number asked for', () => {
+  const pool = { A: [setQ('s1', 'S', 1), setQ('s2', 'S', 2), setQ('t1', 'T', 1), setQ('t2', 'T', 2), setQ('t3', 'T', 3), mc('x'), mc('y'), mc('z')], B: [] }
+  for (let seed = 1; seed <= 30; seed++) {
+    const { A } = pickExam(pool, { mcCount: 4, bMarks: 0, seed })
+    assert.equal(A.length, 4, `seed ${seed}`)
+    // Never part of a set, and members together and in order.
+    for (const [key, members] of [['S', ['s1', 's2']], ['T', ['t1', 't2', 't3']]]) {
+      const at = members.map(id => A.indexOf(id))
+      if (at.some(i => i >= 0)) {
+        assert.ok(at.every(i => i >= 0), `seed ${seed}: set ${key} picked whole`)
+        assert.ok(at.every((i, k) => k === 0 || i === at[k - 1] + 1), `seed ${seed}: set ${key} together, in order`)
+      }
+    }
+  }
+})
+
+test('sets stay together when questions are reordered, moved, removed or added', () => {
+  const byId = new Map([setQ('a1', 'A', 1), setQ('a2', 'A', 2), mc('x'), mc('y'), setQ('b1', 'B', 1), setQ('b2', 'B', 2)].map(q => [q.id, q]))
+  assert.deepEqual(keepSetsTogether(['x', 'a2', 'y', 'a1'], byId), ['x', 'a1', 'a2', 'y'])
+  // Moving a set's question moves the set past the next question.
+  assert.deepEqual(moveUnit(['a1', 'a2', 'x', 'y'], 1, 1, byId), ['x', 'a1', 'a2', 'y'])
+  assert.deepEqual(moveUnit(['x', 'a1', 'a2', 'y'], 0, 1, byId), ['a1', 'a2', 'x', 'y'])
+  assert.deepEqual(moveUnit(['a1', 'a2', 'x'], 0, -1, byId), ['a1', 'a2', 'x'])
+  // Removing one removes the set.
+  assert.deepEqual(removeUnit(['x', 'a1', 'a2', 'y'], 2, byId), ['x', 'y'])
+  // Adding one adds its set, in order.
+  assert.deepEqual(addWithSet(['x'], 'b2', [...byId.values()]), ['x', 'b1', 'b2'])
+  assert.deepEqual(addWithSet(['x'], 'y', [...byId.values()]), ['x', 'y'])
+})
+
+test('swapping a set\'s question swaps the whole set: for a set the same size, else for single questions', () => {
+  const unit = [setQ('a1', 'A', 1, { topic: 'T1' }), setQ('a2', 'A', 2, { topic: 'T1' })]
+  const pool = { A: [...unit, setQ('b1', 'B', 1), setQ('b2', 'B', 2), setQ('c1', 'C', 1), setQ('c2', 'C', 2), setQ('c3', 'C', 3), mc('x'), mc('y')], B: [] }
+  const same = swapSet(pool, unit, ['a1', 'a2'], 1)
+  assert.deepEqual(same.map(q => q.id), ['b1', 'b2'])
+  // No other pair left: two single questions.
+  const singles = swapSet(pool, unit, ['a1', 'a2', 'b1', 'b2'], 1)
+  assert.equal(singles.length, 2)
+  assert.ok(singles.every(q => !q.set_key))
+})
+
+test('a multi-part question with no stem is still usable, and not mistaken for another one', () => {
+  const noStem = (id, text) => ext(id, [{ label: 'a', text, marks: 2 }], { question: '', exam_section: 'B' })
+  assert.equal(isExamReady(noStem('n1', 'Determine dy/dx.')), true)
+  assert.equal(isExamReady(ext('n0', [{ label: 'a', text: '', marks: 2 }], { question: '' })), false)
+  assert.deepEqual(examPool([noStem('n1', 'Determine dy/dx.'), noStem('n2', 'Evaluate the integral.')]).B.map(q => q.id), ['n1', 'n2'])
 })

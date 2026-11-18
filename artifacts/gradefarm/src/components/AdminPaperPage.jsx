@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { stripSizeTags } from '../lib/textSize'
 import { AlertTriangle, ArrowLeft, Crop, ExternalLink, Eye, FileText, Minus, PanelRightClose, PanelRightOpen, Plus, Trash2, Upload } from 'lucide-react'
 import ExamPaper from './ExamPaper'
 import CropTool from './CropTool'
+import EditorTools, { useEditorSize } from './EditorTools'
 import ExtendedQuestionEditor from './ExtendedQuestionEditor'
 import { QuestionEditor } from './AdminQuestionPanel'
 import { confirmDialog } from '../lib/dialog'
@@ -9,11 +11,12 @@ import { btn, note, FONT_B } from '../lib/adminUi'
 import { groupLoadedPapers } from '../lib/examPapers'
 import { groupSubject } from '../lib/homeSubjects'
 import { isMathsSubject } from '../lib/examBuilder'
+import { fillShared, setUnits } from '../lib/questionSets'
 import { reviewFlags, reviewState, needsAttention, reviewSummary, paperStatus } from '../lib/questionChecks'
 import { draftQuestion, changedFigures, originalNumber, previewSrc, isPendingImage } from '../lib/paperPage'
 import {
   fetchLoadedPaperQuestions, fetchPaperPdfLinks, fetchReviewerNames, reviewQuestions, bulkEditQuestions,
-  editQuestion, editExtendedQuestion, saveQuestionVisuals, figureChanged, uploadQuestionImage,
+  editQuestion, editExtendedQuestion, saveQuestionVisuals, figureChanged, uploadQuestionImage, updateQuestionSet,
 } from '../lib/adminDb'
 
 const PAGE_PX = 210 * 96 / 25.4 // an A4 page's width on screen at 100%
@@ -32,16 +35,16 @@ function StateChip({ q }) {
   return <Chip bg={bg} fg={fg}>{label}</Chip>
 }
 
-/** One printed question, exactly as the exam builder prints it, scaled to its column. */
-function Printed({ question, meta, zoom }) {
-  const exam = useMemo(() => (isMcq(question) ? { A: [question], B: [] } : { A: [], B: [question] }), [question])
+/** Questions (one, or a set sharing information) exactly as the exam builder prints them, scaled to the column. */
+function Printed({ questions, meta, zoom }) {
+  const exam = useMemo(() => ({ A: questions.filter(isMcq), B: questions.filter(x => !isMcq(x)) }), [questions])
   return <div style={{ zoom }}><ExamPaper exam={exam} meta={meta} /></div>
 }
 
 /** A figure in the editor: what it is now, and crop it from the paper, upload one, or remove it. */
-function FigureSlot({ where, url, canCrop, onCrop, onUpload, onRemove }) {
+function FigureSlot({ where, url, canCrop, onCrop, onUpload, onRemove, title }) {
   const file = useRef(null)
-  const name = where ? `Part ${where}'s figure` : "The question's figure"
+  const name = title || (where ? `Part ${where}'s figure` : "The question's figure")
   const small = { ...btn('secondary'), padding: '5px 9px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }
   return (
     <div style={{ border: '1px dashed var(--t-borderMid, var(--t-border))', borderRadius: 9, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -78,6 +81,9 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(null) // the editor's latest draft, for the preview (debounced)
   const [cropping, setCropping] = useState(null) // { setUrl }
+  const [sharedDraft, setSharedDraft] = useState(null) // { info, image } while editing a set's shared information
+  const [editorSize, changeEditorSize] = useEditorSize()
+  const lastField = useRef(null) // the edit box last typed in, for the symbol bar
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState(null)
   const latest = useRef(null) // the newest draft, before the debounce
@@ -99,7 +105,11 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   useEffect(() => { load() }, [load])
   useEffect(() => { fetchPaperPdfLinks(curriculum.name).then(m => setPdf(m.get(label) || null)).catch(() => setPdf(null)) }, [curriculum.name, label])
 
-  const questions = rows || []
+  // Each question of a set with the set's shared information (kept on its first question).
+  const questions = useMemo(() => fillShared(rows || []), [rows])
+  const membersOf = useCallback((x) => (x?.set_key
+    ? questions.filter(m => m.set_key === x.set_key).sort((a, b) => (Number(a.set_position) || 0) - (Number(b.set_position) || 0))
+    : x ? [x] : []), [questions])
   const sum = useMemo(() => reviewSummary(questions), [questions])
   const status = useMemo(() => paperStatus(questions), [questions])
   // Once the paper loads: list only what needs checking if anything does, and open on its first question.
@@ -128,8 +138,17 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
     debounce.current = setTimeout(() => setDraft(body), 250)
   }, [])
   useEffect(() => () => clearTimeout(debounce.current), [])
-  const dirty = editing && latest.current !== null && JSON.stringify(latest.current) !== baseline.current
+  const lead = q?.set_key ? (rows || []).filter(m => m.set_key === q.set_key).sort((a, b) => (Number(a.set_position) || 0) - (Number(b.set_position) || 0))[0] : null
+  const sharedDirty = !!(editing && sharedDraft && lead && ((sharedDraft.info || '') !== (lead.shared_info || '') || (sharedDraft.image || null) !== (lead.shared_image_url || null)))
+  const dirty = (editing && latest.current !== null && JSON.stringify(latest.current) !== baseline.current) || sharedDirty
   const shown = useMemo(() => (editing && draft ? draftQuestion(q, draft) : q), [editing, draft, q])
+  // What the preview prints: the question, or its whole set, with any unsaved changes.
+  const previewList = useMemo(() => {
+    if (!q) return []
+    const list = membersOf(q).map(m => (m.id === q.id ? shown : m))
+    if (!editing || !sharedDraft || !q.set_key) return list
+    return list.map(m => ({ ...m, shared_info: sharedDraft.info || null, shared_image_url: sharedDraft.image || null }))
+  }, [q, shown, membersOf, editing, sharedDraft])
 
   useEffect(() => {
     if (!dirty) return
@@ -139,7 +158,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   })
 
   const stopEditing = () => {
-    setEditing(false); setDraft(null); latest.current = null; baseline.current = null
+    setEditing(false); setDraft(null); setSharedDraft(null); latest.current = null; baseline.current = null
     for (const url of pending.current.keys()) URL.revokeObjectURL(url.split('#')[0])
     pending.current.clear()
     setSide(s => (s === 'editor' ? 'pdf' : s))
@@ -183,7 +202,63 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
     if (!(await confirmDialog(`Delete ${label}? Its ${plural(questions.length, 'question')} come out of the bank and the exam builder. Practice exams already built from it just leave them out. This can't be undone.`, { confirm: 'Delete paper', danger: true }))) return
     if (await run('delete', () => bulkEditQuestions({ curriculumId: curriculum.id, ids: questions.map(x => x.id), action: 'delete' }), `Deleted ${label}.`)) onBack()
   }
-  const startEdit = () => { baseline.current = null; latest.current = null; setDraft(null); setEditing(true); setSide('editor') }
+  const startEdit = () => {
+    baseline.current = null; latest.current = null; setDraft(null)
+    setSharedDraft(lead ? { info: lead.shared_info || '', image: lead.shared_image_url || null } : null)
+    setEditing(true); setSide('editor')
+  }
+
+  // ── Sets: the shared information, linking and breaking up ──────────────────
+  const setName = (x) => {
+    const ms = membersOf(x)
+    return `${name(ms[0])}–${originalNumber(ms[ms.length - 1])}`
+  }
+  const saveShared = async () => {
+    if (!lead || !sharedDraft) return
+    setBusy('shared'); setMsg(null)
+    try {
+      let image = sharedDraft.image || null
+      if (isPendingImage(image)) {
+        const p = pending.current.get(image)
+        if (!p) throw new Error('The figure chosen for the set is missing; choose it again.')
+        image = await uploadQuestionImage(p.blob, { questionId: lead.id, where: 'set', kind: p.kind })
+      }
+      await updateQuestionSet(lead.id, { shared_info: sharedDraft.info || null, shared_image_url: image })
+      setSharedDraft({ info: sharedDraft.info || '', image })
+      setMsg({ ok: true, text: `Saved the shared information for ${setName(q)}.` })
+      await load()
+    } catch (e) {
+      setMsg({ ok: false, text: e.message || "The shared information couldn't be saved." })
+    } finally { setBusy('') }
+  }
+  // The next multiple-choice question in the paper, for linking.
+  const nextMc = (() => {
+    if (!q || !isMcq(q)) return null
+    const mcs = questions.filter(isMcq).sort((a, b) => Number(originalNumber(a)) - Number(originalNumber(b)))
+    const last = membersOf(q).slice(-1)[0]
+    return mcs[mcs.findIndex(x => x.id === last.id) + 1] || null
+  })()
+  const linkNext = async () => {
+    if (!nextMc || nextMc.set_key || !(await leaveEdit())) return
+    const ms = membersOf(q)
+    const key = q.set_key || q.id
+    run('set', async () => {
+      if (!q.set_key) await updateQuestionSet(q.id, { set_key: key, set_position: 1 })
+      await updateQuestionSet(nextMc.id, { set_key: key, set_position: ms.length + 1 })
+    }, `Linked ${name(nextMc)} into the set. Put the information they share in the set's shared information (Edit).`)
+  }
+  const breakUp = async () => {
+    if (!q?.set_key || !(await leaveEdit())) return
+    const ms = membersOf(q)
+    const first = (rows || []).find(m => m.id === ms[0].id)
+    if (!(await confirmDialog(`Break up the set ${setName(q)}? Its shared information goes back into ${name(first)}'s question, and the questions are no longer kept together.`, { confirm: 'Break up the set', danger: true }))) return
+    run('set', async () => {
+      if (first.shared_info) await editQuestion(first.id, { question: [first.shared_info, first.question].filter(Boolean).join('\n\n') })
+      if (first.shared_image_url && !first.image_url) await saveQuestionVisuals(first.id, { source: 'live', graph: first.graph ?? null, table_data: first.table_data ?? null, image_url: first.shared_image_url })
+      await updateQuestionSet(first.id, { set_key: null, set_position: null, shared_info: null, shared_image_url: null })
+      for (const m of ms.slice(1)) await updateQuestionSet(m.id, { set_key: null, set_position: null })
+    }, 'The set is broken up.')
+  }
 
   const save = async (body) => {
     setBusy('edit'); setMsg(null)
@@ -210,6 +285,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
     } finally { setBusy('') }
   }
 
+  const pendingFile = (file, setUrl) => { const u = previewSrc(URL.createObjectURL(file), 'upload'); pending.current.set(u, { blob: file, kind: 'upload' }); setUrl(u) }
   const renderFigure = (where, url, setUrl) => (
     <FigureSlot where={where} url={url} canCrop={!!pdf}
       onCrop={() => setCropping({ setUrl })}
@@ -297,9 +373,10 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
                 <button key={x.id} type="button" role="option" aria-selected={x.id === q?.id} aria-current={x.id === q?.id} className="pp-row" onClick={() => select(x.id)}>
                   <b style={{ fontSize: 12.5, minWidth: 30 }}>{name(x)}</b>
                   <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(x.question || '').replace(/\$|\\ce\{|\}/g, '').slice(0, 70)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripSizeTags(x.question || x.parts?.find(p => p?.text)?.text || '').replace(/\$|\\ce\{|\}/g, '').slice(0, 70)}</span>
                     <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                       <StateChip q={x} />
+                      {x.set_key && <Chip>Set {setName(x)}</Chip>}
                       {fl > 0 && reviewState(x) !== 'rejected' && reviewState(x) !== 'approved' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--t-goldText)' }}><AlertTriangle size={11} aria-hidden="true" />{fl}</span>}
                     </span>
                   </span>
@@ -312,8 +389,8 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
         {/* Printed preview */}
         <div className="pp-col" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <b style={{ fontSize: 13 }}>{whole ? 'Whole paper, as it prints' : `${name(q)} as it prints`}</b>
-            {editing && draft && !whole && <Chip bg="rgba(37,99,235,0.12)" fg="#2563eb">Showing your unsaved changes</Chip>}
+            <b style={{ fontSize: 13 }}>{whole ? 'Whole paper, as it prints' : q.set_key ? `Set ${setName(q)} as it prints` : `${name(q)} as it prints`}</b>
+            {editing && (draft || sharedDirty) && !whole && <Chip bg="rgba(37,99,235,0.12)" fg="#2563eb">Showing your unsaved changes</Chip>}
             <span style={{ flex: 1 }} />
             <button type="button" onClick={() => setZoom(Math.max(0.3, scale / 1.2))} style={tool} aria-label="Zoom out"><Minus size={13} /></button>
             <button type="button" onClick={() => setZoom(null)} style={tool}>Fit</button>
@@ -323,14 +400,19 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
               : <button type="button" onClick={() => setSide('hidden')} style={tool}><PanelRightClose size={14} aria-hidden="true" /> Hide side panel</button>}
           </div>
           <div ref={setPreviewEl} className="pp-preview" style={{ background: 'var(--t-bgSubtle)', borderRadius: 10, padding: 12, overflow: 'auto', maxHeight: '80vh' }}>
-            {whole ? visible.map(x => (
-              <div key={x.id} style={{ marginBottom: 8 }}>
-                <button type="button" onClick={() => select(x.id)} style={{ ...tool, marginBottom: 6, ...(x.id === q?.id ? { borderColor: 'var(--t-accent)' } : {}) }}>
-                  {name(x)} <StateChip q={x} />
-                </button>
-                <Printed key={x.id} question={x.id === q?.id ? shown : x} meta={meta} zoom={scale} />
+            {whole ? setUnits(visible).map(unit => (
+              // A set prints together, as in a built exam.
+              <div key={unit[0].id} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {unit.map(x => (
+                    <button key={x.id} type="button" onClick={() => select(x.id)} style={{ ...tool, ...(x.id === q?.id ? { borderColor: 'var(--t-accent)' } : {}) }}>
+                      {name(x)} <StateChip q={x} />
+                    </button>
+                  ))}
+                </div>
+                <Printed key={unit[0].id} questions={unit.length > 1 || unit[0].set_key ? membersOf(unit[0]).map(m => (m.id === q?.id ? shown : m)) : [unit[0].id === q?.id ? shown : unit[0]]} meta={meta} zoom={scale} />
               </div>
-            )) : shown && <Printed key={shown.id} question={shown} meta={meta} zoom={scale} />}
+            )) : shown && <Printed key={q.set_key || shown.id} questions={previewList} meta={meta} zoom={scale} />}
           </div>
 
           {!whole && q && (
@@ -342,6 +424,16 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
                       <AlertTriangle size={13} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2, color: 'var(--t-goldText)' }} /><span>{f.message}</span>
                     </div>
                   ))}
+                </div>
+              )}
+              {isMcq(q) && (q.set_key || (nextMc && !nextMc.set_key)) && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 12.5, color: 'var(--t-textMuted)' }}>
+                  {q.set_key
+                    ? <span>In set {setName(q)}: these questions share information and are always kept together.</span>
+                    : <span>Shares information with {name(nextMc)}?</span>}
+                  <span style={{ flex: 1 }} />
+                  {nextMc && !nextMc.set_key && membersOf(q).slice(-1)[0]?.id && <button type="button" onClick={linkNext} disabled={!!busy} style={{ ...btn('secondary', !!busy), padding: '5px 10px', fontSize: 12 }}>Link with {name(nextMc)}</button>}
+                  {q.set_key && <button type="button" onClick={breakUp} disabled={!!busy} style={{ ...btn('secondary', !!busy), padding: '5px 10px', fontSize: 12 }}>Break up this set</button>}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -368,9 +460,29 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
             {/* The editor stays mounted while the original is shown, so nothing typed is lost. */}
             {editing && q && (
               <div style={{ display: side === 'editor' ? 'block' : 'none' }}>
+                <EditorTools getTarget={() => lastField.current} size={editorSize} onSize={changeEditorSize} />
+                {/* The editing side at the chosen text size; the printed preview stays the real size. */}
+                <div style={{ zoom: editorSize }} onFocusCapture={e => { if (e.target.matches?.('textarea, input:not([type]), input[type="text"]')) lastField.current = e.target }}>
+                {q.set_key && sharedDraft && (
+                  // The set's shared information lives on its first question; it's saved on its own.
+                  <div style={{ border: '1px solid var(--t-border)', borderRadius: 10, padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--t-bgSubtle)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 800 }}>Shared information for set {setName(q)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>Printed once, before the set's first question, after "Use the following information to answer Questions …". Don't include that sentence.</div>
+                    <textarea rows={5} value={sharedDraft.info} onChange={e => setSharedDraft(d => ({ ...d, info: e.target.value }))} aria-label="Shared information"
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 9, border: '1px solid var(--t-border)', background: 'var(--t-bgCard)', color: 'var(--t-text)', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
+                    <FigureSlot where="set" title="The set's shared figure" url={sharedDraft.image} canCrop={!!pdf}
+                      onCrop={() => setCropping({ setUrl: (u) => setSharedDraft(d => ({ ...d, image: u })) })}
+                      onUpload={(f) => pendingFile(f, (u) => setSharedDraft(d => ({ ...d, image: u })))}
+                      onRemove={() => setSharedDraft(d => ({ ...d, image: null }))} />
+                    <button type="button" onClick={saveShared} disabled={!sharedDirty || !!busy} style={{ ...btn('primary', !sharedDirty || !!busy), alignSelf: 'flex-start', padding: '6px 12px', fontSize: 12.5 }}>
+                      {busy === 'shared' ? 'Saving…' : 'Save shared information'}
+                    </button>
+                  </div>
+                )}
                 {isMcq(q)
                   ? <QuestionEditor key={q.id} q={q} busy={busy === 'edit' ? 'edit' : ''} onSave={save} onCancel={async () => { await leaveEdit() }} onChange={onDraft} renderFigure={renderFigure} />
                   : <ExtendedQuestionEditor key={q.id} question={q} busy={busy === 'edit'} onSave={save} onCancel={async () => { await leaveEdit() }} onChange={onDraft} renderFigure={renderFigure} />}
+                </div>
               </div>
             )}
             {(side === 'pdf' || !editing) && (

@@ -1,12 +1,16 @@
 import { createRoot } from 'react-dom/client'
 import ExamPaper from '../src/components/ExamPaper'
-import { A, B } from './fixtures'
+import { A as A0, B, SETS } from './fixtures'
+import { fillShared } from '../src/lib/questionSets'
 
 // ?board=vce|sace&mode=full|preview&maths=1
 const q = new URLSearchParams(location.search)
 const board = q.get('board') || 'vce'
 const preview = q.get('mode') === 'preview'
 const isMaths = q.get('maths') === '1'
+// With sets: the multiple choice gains a pair and a three-question set, each
+// question taking its set's shared information as the exam builder's bank does.
+const A = q.get('sets') === '1' ? fillShared([...A0, ...SETS]) : A0
 const exam = { A, B }
 const totals = { aCount: A.length, aMarks: A.length, bCount: B.length, bMarks: 20, total: A.length + 20 }
 const meta = {

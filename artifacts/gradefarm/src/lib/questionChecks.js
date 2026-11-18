@@ -15,6 +15,7 @@
 // the part's label.
 
 import { partsOf, sameWords } from './examBuilder.js'
+import { parseSetLead } from './questionSets.js'
 
 /** Text that points at a figure: "Figure 3", "shown below", "the diagram above", "in the circles provided". */
 const FIGURE_REF = new RegExp([
@@ -88,7 +89,18 @@ export function checkQuestion(q) {
     if (!near) add('figure_missing', t.where, `${name(t.where)} refers to a figure, table or diagram, but none is attached.`)
   })
 
+  // Questions that share information (lib/questionSets.js).
+  const lead = parseSetLead(stem)
+  if (q.set_key) {
+    if (!q.shared_info && !q.shared_image_url) add('set_no_info', '', 'This question is in a set, but the set has no shared information or figure. Add it on the set\'s first question, or break up the set.')
+    if (lead) add('set_sentence_left', '', 'The question still starts with "Use the following information…". The exam prints that line itself with its own numbers, so take it out of the question.')
+  } else if (lead) {
+    add('set_not_linked', '', `This question says it shares information with Questions ${lead.numbers.join(', ')}, but they aren't linked as a set. Link them so they stay together.`)
+  }
+
   for (const t of texts) {
+    // A set's lead sentence is handled above.
+    if (t.where === '' && lead) continue
     // "SECTION B – Question 1 – continued" is a footer, not a reference.
     const plain = t.text.replace(new RegExp(FURNITURE.source, 'gi'), ' ')
     if (OTHER_QUESTION.test(plain)) add('other_question', t.where, `${name(t.where)} refers to another question by number ("${plain.match(OTHER_QUESTION)[0]}"). In a built exam that question is somewhere else or missing.`)
