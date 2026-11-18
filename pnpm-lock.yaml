@@ -272,6 +272,9 @@ importers:
       '@livekit/track-processors':
         specifier: ^0.8.2
         version: 0.8.2(livekit-client@2.18.9)
+      '@stripe/stripe-js':
+        specifier: 10.3.0
+        version: 10.3.0
       '@supabase/supabase-js':
         specifier: ^2.105.1
         version: 2.105.1
@@ -3348,6 +3351,10 @@ packages:
 
   '@stardazed/streams-text-encoding@1.0.2':
     resolution: {integrity: sha512-f2Z15BId3t44a/u21yYSGXFAkCyKocmAyduoAy7swnZ4xIfbaZlOWsgly/jDNNOuj6hYQN72UaBRe3Z/tOHfqg==}
+
+  '@stripe/stripe-js@10.3.0':
+    resolution: {integrity: sha512-/C+qwO7bkDIYbIHypxppg8qGnWXdqQEOM855lJ8wTkd2VPoRAYLTGDOFTpJ8B7kso3o9cjMy2r1KPw8WQregNA==}
+    engines: {node: '>=12.16'}
 
   '@supabase/auth-js@2.105.1':
     resolution: {integrity: sha512-zc4s8Xg4truwE1Q4Q8M8oUVDARMd05pKh73NyQsMbYU1HDdDN2iiKzena/yu+yJze3WrD4c092FdckPiK1rLQw==}
@@ -11141,6 +11148,8 @@ snapshots:
   '@stablelib/base64@1.0.1': {}
 
   '@stardazed/streams-text-encoding@1.0.2': {}
+
+  '@stripe/stripe-js@10.3.0': {}
 
   '@supabase/auth-js@2.105.1':
     dependencies:

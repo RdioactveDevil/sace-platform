@@ -160,12 +160,19 @@ export default function LearnScreen({
   questionContext, setQuestionContext, onConsolidate,
   // Open a saved chat or lesson picked elsewhere (Progress): { type: 'chat', id } | { type: 'lesson', topic }.
   learnRequest, setLearnRequest,
+  // The free subject: opens the upgrade pop-up ({ doneLabel }), else the plan builder.
+  onUpgrade = null,
 }) {
   const navigate = useNavigate()
+  const goUnlimited = () => (onUpgrade ? onUpgrade({ doneLabel: 'Back to my chat' }) : navigate('/get-access', { state: { subject } }))
   // Free-tier Titan AI allowance for today: { chat_used, chat_limit } (chat_limit null = unlimited).
   const [aiQuota, setAiQuota] = useState(null)
   useEffect(() => {
-    supabase.rpc('ai_chat_usage_today').then(({ data }) => { if (data) setAiQuota(data) }, () => {})
+    const load = () => supabase.rpc('ai_chat_usage_today').then(({ data }) => { if (data) setAiQuota(data) }, () => {})
+    load()
+    // After upgrading in the pop-up the limit's gone: read it again.
+    window.addEventListener('gradefarm:upgraded', load)
+    return () => window.removeEventListener('gradefarm:upgraded', load)
   }, [profile?.id])
   const aiLeft = aiQuota?.chat_limit != null ? Math.max(0, aiQuota.chat_limit - aiQuota.chat_used) : null
   const outOfAi = aiLeft === 0
@@ -987,7 +994,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
     <div style={{ display: 'flex', justifyContent: 'center', gap: 8, fontSize: 12, color: outOfAi ? t.danger : t.textMuted }}>
       <span>{outOfAi ? 'No free Titan AI messages left today. They reset tomorrow.' : `${aiLeft} of ${aiQuota.chat_limit} free Titan AI messages left today`}</span>
       {subject && (
-        <button type="button" onClick={() => navigate('/get-access', { state: { subject } })}
+        <button type="button" onClick={goUnlimited}
           style={{ border: 'none', background: 'none', padding: 0, color: t.goldText, fontFamily: FONT_B, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
           Go unlimited
         </button>
@@ -1259,7 +1266,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
             <div className="ls-ask-dock">
             {outOfAi && !waitingOnParent ? (
               <div style={{ width: '100%' }}>
-                <TitanLimitNote t={t} onCarryOn={() => navigate('/get-access', { state: { subject } })} onDone={onBack} />
+                <TitanLimitNote t={t} onCarryOn={goUnlimited} onDone={onBack} />
               </div>
             ) : (<>
             <div className="ls-ask-box" data-tutorial-target="learn-composer"
@@ -1760,7 +1767,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
             <TitanLimitNote t={t} question={lastTitanQuestion(messages)}
               practiseLabel={consolidateTarget && onConsolidate ? consolidateTarget.label : ''}
               onPractise={consolidateTarget && onConsolidate ? () => onConsolidate(consolidateTarget) : null}
-              onCarryOn={() => navigate('/get-access', { state: { subject } })} onDone={onBack} />
+              onCarryOn={goUnlimited} onDone={onBack} />
           ) : (<>
           {/* Titan's suggested replies on the left, "Practise <topic>" on the right. */}
           {(showChips || showPractise) && (

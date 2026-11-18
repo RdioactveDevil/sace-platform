@@ -27,6 +27,15 @@ import { getResend, sendEmail } from "../lib/email";
 // Checkout still takes a card, and Stripe charges it when the trial ends unless
 // the plan was cancelled. Adding a second subject ends the trial and bills now.
 //
+// A first weekly plan for one subject starts at an intro price instead
+// (platform_settings.pricing.student_intro_price, default $2 for the first
+// week; 0 turns it off): a one-off discount on the first week's bill, then
+// the weekly price. Monthly first plans keep the free trial.
+//
+// The upgrade pop-up (gradefarm UpgradeSheet) pays inside the app with
+// Stripe's embedded Checkout (`ui: "embedded"` → { clientSecret, sessionId });
+// the pricing page still redirects to hosted Checkout.
+//
 // Which subjects are paid for is recorded in user_subscriptions (source =
 // 'stripe', linked by stripe_subscription_id); the subscription's state comes
 // from Stripe — the webhook and post-checkout sync re-read it before writing.
@@ -82,6 +91,36 @@ async function readTrialDays(admin: SupabaseClient): Promise<number> {
   if (raw === undefined || raw === null || raw === "") return DEFAULT_TRIAL_DAYS;
   const days = Math.floor(Number(raw));
   return Number.isFinite(days) && days > 0 ? Math.min(days, 90) : 0;
+}
+
+const DEFAULT_INTRO_PRICE = 2;
+
+/** $ a first weekly plan for one subject pays for its first week; 0 = no intro price. */
+export async function readIntroPrice(admin: SupabaseClient): Promise<number> {
+  const raw = (await readPricing(admin)).student_intro_price;
+  if (raw === undefined || raw === null || raw === "") return DEFAULT_INTRO_PRICE;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+
+/** The intro price a first plan gets: only weekly, one subject, and cheaper than the week it replaces. */
+export const introFor = (intro: number, interval: Interval, subjects: number, firstWeek: number) =>
+  interval === "week" && subjects === 1 && intro > 0 && intro < firstWeek ? intro : 0;
+
+/** A one-off AUD discount bringing the first bill down to the intro price (created on first use). */
+async function introCouponId(stripe: Stripe, firstWeek: number, intro: number): Promise<string> {
+  const off = Math.round((firstWeek - intro) * 100);
+  const id = `gradefarm_first_week_aud_${off}`;
+  try {
+    return (await stripe.coupons.retrieve(id)).id;
+  } catch (err) {
+    if (!isMissing(err)) throw err;
+  }
+  try {
+    return (await stripe.coupons.create({ id, amount_off: off, currency: "aud", duration: "once", name: `First week $${intro}` })).id;
+  } catch {
+    return (await stripe.coupons.retrieve(id)).id; // made by a concurrent request
+  }
 }
 
 /** Price of the nth paid subject (1-based). */
@@ -343,8 +382,19 @@ router.get("/billing/config", async (req: Request, res: Response) => {
       });
     }
   }
+  // What a first weekly plan for one subject pays for its first week (0: none, or they've had a plan).
+  let introPrice = 0;
+  if (stripe && paid.length === 0) {
+    const intro = introFor(await readIntroPrice(ctx.admin), "week", 1, tierPrice(prices.week, 1));
+    if (intro > 0) {
+      introPrice = await trialEligible(ctx.admin, stripe, ctx.userId).then((ok) => (ok ? intro : 0), () => 0);
+    }
+  }
   res.json({
     enabled: !!stripe,
+    // Paying inside the app (embedded Checkout) needs this; without it the app redirects to Checkout.
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+    introPrice,
     currency: "AUD",
     tiers: prices.week,
     monthlyTiers: prices.month,
@@ -439,11 +489,16 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
     }
 
     const tiers = prices[requested];
-    const [priceId, customer, days] = await Promise.all([
-      planPriceId(stripe, tiers, requested), customerFor(admin, stripe, userId), readTrialDays(admin),
+    const [priceId, customer, days, introSetting] = await Promise.all([
+      planPriceId(stripe, tiers, requested), customerFor(admin, stripe, userId), readTrialDays(admin), readIntroPrice(admin),
     ]);
+    const firstPlan = await trialEligible(admin, stripe, userId);
+    // A first weekly plan for one subject: the intro price for its first week, instead of a trial.
+    const intro = firstPlan ? introFor(introSetting, requested, n, tierPrice(tiers, 1)) : 0;
     // The free trial covers one subject: a first plan for several bills now.
-    const trialDays = n === 1 && days > 0 && (await trialEligible(admin, stripe, userId)) ? days : 0;
+    const trialDays = !intro && n === 1 && days > 0 && firstPlan ? days : 0;
+    const coupon = intro ? await introCouponId(stripe, tierPrice(tiers, 1), intro) : null;
+    const embedded = req.body?.ui === "embedded";
     const metadata = { user_id: userId, curriculum_id: subjects[0].id, curriculum_ids: subjects.map((c) => c.id).join(",") };
     const more = `Add more subjects later for $${tierPrice(tiers, n + 1)}${per(requested)}${n + 1 < tiers.length ? `, then $${tierPrice(tiers, n + 2)}${per(requested)}` : ""} each.`;
     const firstBill = shortDay(new Date(Date.now() + trialDays * 86_400_000));
@@ -454,7 +509,8 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
       customer,
       client_reference_id: userId,
       line_items: [{ price: priceId, quantity: n }],
-      allow_promotion_codes: true,
+      // Stripe takes either a discount or promotion codes, not both.
+      ...(coupon ? { discounts: [{ coupon }] } : { allow_promotion_codes: true }),
       // A card is taken even for a free trial; it's charged when the trial ends.
       payment_method_collection: "always",
       subscription_data: {
@@ -463,12 +519,20 @@ router.post("/billing/subjects", async (req: Request, res: Response) => {
         ...(trialDays > 0 ? { trial_period_days: trialDays, trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } } } : {}),
       },
       metadata,
-      custom_text: { submit: { message: trialDays > 0
-        ? `${list} free for ${trialDays} days, then $${tierPrice(tiers, 1)}${per(requested)} from ${firstBill}. Cancel before then in My Account and you won't be charged. ${more}`
-        : `${list}: $${planTotal(tiers, n)}${per(requested)}. ${more}` } },
-      success_url: `${appUrl()}/subject-picker?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl()}/subject-picker?checkout=cancelled`,
+      custom_text: { submit: { message: intro
+        ? `${list}: $${intro} for your first week, then $${tierPrice(tiers, 1)}${per(requested)} from ${shortDay(new Date(Date.now() + 7 * 86_400_000))}. Cancel any time in My Account. ${more}`
+        : trialDays > 0
+          ? `${list} free for ${trialDays} days, then $${tierPrice(tiers, 1)}${per(requested)} from ${firstBill}. Cancel before then in My Account and you won't be charged. ${more}`
+          : `${list}: $${planTotal(tiers, n)}${per(requested)}. ${more}` } },
+      // In the app's pop-up: Checkout inside the page, and the app shows its own "You're in".
+      ...(embedded
+        ? { ui_mode: "embedded_page" as const, redirect_on_completion: "never" as const }
+        : {
+          success_url: `${appUrl()}/subject-picker?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${appUrl()}/subject-picker?checkout=cancelled`,
+        }),
     });
+    if (embedded) return void res.json({ clientSecret: session.client_secret, sessionId: session.id, intro });
     res.json({ url: session.url });
   } catch (err) {
     logger.error({ err }, "billing: add subject failed");

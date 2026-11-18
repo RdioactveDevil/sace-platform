@@ -1765,34 +1765,36 @@ export default function QuizScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingSummary])
 
-  if (showingSummary) {
-    const startMode = (mode, ids = []) => {
-      generatingMoreRef.current = false
-      bankExhaustionAttempted.current = false
-      backgroundPrefetchAttempted.current = false
-      setGeneratingMore(false)
-      setGenerationError(null)
-      setSessionEpoch(e => e + 1)
-      setCompletedGoal(null)
-      setEndedForGoal(false)
-      setEndedForExam(false)
-      setEndedEarly(false)
-      setOpenAnswers(new Set())
-      setTimeLeft(timerSeconds)
-      setQuizMode(mode)
-      setReviewIds?.(ids)
-      setSessionAnswered([])
-      setSessionResults([])
-      setQNumber(1)
-      setSessionXP(0)
-      setSessionTip('')
-      setSessionTipLoading(false)
-      clearRemediation()
-      setFinished(false)
-      beginSession()
-      loadNext([], struggleMap, mode, effectiveSubtopics, null, ids)
-    }
+  // A new session in `mode` (from the summary, and after upgrading from the
+  // daily limit: 'review' of the questions they missed today).
+  const startMode = (mode, ids = []) => {
+    generatingMoreRef.current = false
+    bankExhaustionAttempted.current = false
+    backgroundPrefetchAttempted.current = false
+    setGeneratingMore(false)
+    setGenerationError(null)
+    setSessionEpoch(e => e + 1)
+    setCompletedGoal(null)
+    setEndedForGoal(false)
+    setEndedForExam(false)
+    setEndedEarly(false)
+    setOpenAnswers(new Set())
+    setTimeLeft(timerSeconds)
+    setQuizMode(mode)
+    setReviewIds?.(ids)
+    setSessionAnswered([])
+    setSessionResults([])
+    setQNumber(1)
+    setSessionXP(0)
+    setSessionTip('')
+    setSessionTipLoading(false)
+    clearRemediation()
+    setFinished(false)
+    beginSession()
+    loadNext([], struggleMap, mode, effectiveSubtopics, null, ids)
+  }
 
+  if (showingSummary) {
     // ── Session summary ─────────────────────────────────────────────────────
     const mainResults   = sessionResults.filter(r => !r.remediation)
     const sessCorrect   = mainResults.filter(r => r.correct).length
@@ -2039,7 +2041,7 @@ export default function QuizScreen({
   // Free subject: once today's questions are used up, stop before the next one,
   // with the next question waiting behind the lock.
   if (freeQuota && freeQuota.used >= freeQuota.limit && !showAns) {
-    return <FreeLimitScreen t={t} limit={freeQuota.limit} userId={profile?.id} questions={questions} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onHome={onHome} />
+    return <FreeLimitScreen t={t} limit={freeQuota.limit} userId={profile?.id} questions={questions} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onRetry={(ids) => startMode('review', ids)} onHome={onHome} />
   }
 
   const { pct } = getLevelProgress(profile.xp, rankAccuracy(profile))

@@ -13,7 +13,7 @@ const INK = '#2a2118'
  * questions that got away, with Retry (a plan) or come back at midnight.
  * The words fit how many got away (lib/freeLimit.js sheetCopy).
  */
-export default function FreeLimitScreen({ t, limit, userId, questions = [], results = [], nextQ, onUpgrade, onHome, loadAnswers = getAnswersSince }) {
+export default function FreeLimitScreen({ t, limit, userId, questions = [], results = [], nextQ, onUpgrade, onRetry = null, onHome, loadAnswers = getAnswersSince }) {
   const byId = useMemo(() => new Map((questions || []).map(q => [q.id, q])), [questions])
   // Today's answers from the log; this session's until they arrive (or if they can't be read).
   const [answers, setAnswers] = useState(null)
@@ -79,7 +79,14 @@ export default function FreeLimitScreen({ t, limit, userId, questions = [], resu
             {more > 0 && <li style={{ padding: '10px 0', fontSize: 13, color: t.textMuted, borderBottom: `1px solid ${t.border}` }}>+ {more} more</li>}
           </ul>
         )}
-        <button type="button" onClick={onUpgrade}
+        <button type="button" onClick={() => {
+          // The upgrade pop-up; once they're in, straight into the questions they missed.
+          const ids = sheet.misses.map(m => m.id)
+          const n = ids.length
+          onUpgrade?.(n && onRetry
+            ? { doneLabel: n === 1 ? 'Retry it now' : `Retry my ${n} mistakes`, onDone: () => onRetry(ids) }
+            : { doneLabel: 'Keep going' })
+        }}
           style={{ height: 48, borderRadius: 12, border: 'none', background: t.text, color: t.bg, fontFamily: FONT_B, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
           {copy.cta}
         </button>

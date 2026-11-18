@@ -89,6 +89,7 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const freeDaily        = billing?.freeDailyQuestions ?? 20
   const tiers            = studentTiers(billing?.tiers)
   const priceLabel       = !hasFreeSubject ? 'Try free'
+    : billing?.introPrice > 0 ? `$${billing.introPrice} first week`
     : billing?.trialDays > 0 ? `${billing.trialDays} days free`
     : `$${billing?.nextPrice ?? tiers[0]}/${billing?.interval ?? 'week'}`
 

@@ -948,6 +948,15 @@ export async function addPaidSubjects(curriculumIds, interval = 'week', { endTri
   return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumIds, interval, endTrial }) })
 }
 
+/**
+ * The upgrade pop-up's payment: a first weekly plan for this subject in Stripe's
+ * embedded Checkout. Resolves to { clientSecret, sessionId, intro }; with a plan
+ * already, the subject is added to it and it resolves to { added, total, interval }.
+ */
+export async function startUpgradeCheckout(curriculumId, { endTrial = false } = {}) {
+  return tutorFetch('/api/billing/subjects', { method: 'POST', body: JSON.stringify({ curriculumId, interval: 'week', ui: 'embedded', endTrial }) })
+}
+
 /** Switch the plan to weekly or monthly billing: resolves to { interval, total }. */
 export async function switchBillingInterval(interval) {
   return tutorFetch('/api/billing/interval', { method: 'POST', body: JSON.stringify({ interval }) })
