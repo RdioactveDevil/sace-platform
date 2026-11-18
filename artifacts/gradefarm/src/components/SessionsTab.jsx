@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { Calendar, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import InfinityLoader from './InfinityLoader'
+import SegmentedToggle from './SegmentedToggle'
 import {
   fetchRoster,
   fetchStudentEmails,
@@ -660,15 +661,7 @@ export default function SessionsTab({ profile, theme }) {
 
   const isDarkMain = theme === 'dark'
 
-  // One-off lessons or recurring series: a segmented switch. Filters: pills,
-  // ink when chosen (gold is kept for the action buttons).
-  const tabBtn = (id) => ({
-    padding: '7px 14px', border: 'none', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700,
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    background: view === id ? 'var(--t-text)' : 'var(--t-bgCard)',
-    color: view === id ? 'var(--t-bg)' : 'var(--t-textMuted)',
-  })
-
+  // Filters: pills, ink when chosen (gold is kept for the action buttons).
   const filterStyle = (id) => ({
     padding: '6px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700,
     border: `1px solid ${filter === id ? 'var(--t-text)' : 'var(--t-border)'}`,
@@ -682,14 +675,10 @@ export default function SessionsTab({ profile, theme }) {
 
       {/* Toolbar: view toggle + primary action (page title lives in the shell top bar) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div role="group" aria-label="Show" style={{ display: 'inline-flex', border: '1px solid var(--t-border)', borderRadius: 9, overflow: 'hidden' }}>
-          <button type="button" aria-pressed={view === 'sessions'} style={tabBtn('sessions')} onClick={() => setView('sessions')}>
-            Lessons {sessions.length > 0 && <span style={{ fontWeight: 600, opacity: 0.75 }}>{sessions.length}</span>}
-          </button>
-          <button type="button" aria-pressed={view === 'recurring'} style={tabBtn('recurring')} onClick={() => setView('recurring')}>
-            <Repeat size={14} aria-hidden="true" /> Recurring {seriesList.length > 0 && <span style={{ fontWeight: 600, opacity: 0.75 }}>{seriesList.length}</span>}
-          </button>
-        </div>
+        <SegmentedToggle size="sm" label="Show" value={view} onChange={setView} options={[
+          { value: 'sessions', label: <>Lessons {sessions.length > 0 && <span style={{ fontWeight: 600, opacity: 0.75 }}>{sessions.length}</span>}</> },
+          { value: 'recurring', label: <><Repeat size={14} aria-hidden="true" /> Recurring {seriesList.length > 0 && <span style={{ fontWeight: 600, opacity: 0.75 }}>{seriesList.length}</span>}</> },
+        ]} />
         <button
           onClick={() => setShowModal(true)}
           style={{ marginLeft: 'auto', background: 'var(--t-accent)', color: 'var(--t-onAccent)', border: 'none', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer' }}

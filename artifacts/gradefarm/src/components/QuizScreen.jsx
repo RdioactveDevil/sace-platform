@@ -169,7 +169,7 @@ export default function QuizScreen({
   // and the session ends after questionLimit questions (0 = no limit) or when
   // the timer runs out.
   examMode = false, timerSeconds = 0, questionLimit = 0, subjectTile,
-  onOpenLearn,
+  onOpenLearn, onAskTitan = null,
   // A consolidation round from Titan AI ({ label, subtopics, canReturn }) and how to end it.
   consolidation, onEndConsolidation,
   currentQ: _currentQ, setCurrentQ,
@@ -336,6 +336,8 @@ export default function QuizScreen({
   // Set just before the quiz sends them elsewhere itself, so that isn't asked about.
   const leavingRef = useRef(false)
   const openLearn = (...args) => { leavingRef.current = true; onOpenLearn(...args) }
+  // Titan opens beside the question when the app offers that (TitanDock), else in Learn.
+  const askTitan = (...args) => (onAskTitan ? onAskTitan(...args) : openLearn(...args))
   // Rows opened in the summary's answer list.
   const [openAnswers, setOpenAnswers] = useState(() => new Set())
   const [timeLeft, setTimeLeft] = useState(timerSeconds)
@@ -2501,7 +2503,7 @@ export default function QuizScreen({
                       {nextButtonLabel}
                     </button>
                     {onOpenLearn && !examMode && (
-                      <button type="button" onClick={() => openLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                      <button type="button" onClick={() => askTitan(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan">
                         {isMobile ? 'Ask Titan' : correct ? 'Ask Titan about this' : 'Ask Titan why'}
                       </button>
                     )}
@@ -2529,7 +2531,7 @@ export default function QuizScreen({
                     {nextButtonLabel}
                   </button>
                   {onOpenLearn && !examMode && (
-                    <button type="button" onClick={() => openLearn(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan in Learn">
+                    <button type="button" onClick={() => askTitan(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={btn('secondary')} title="Talk it through with Titan">
                       {correct ? 'Ask Titan about this' : 'Ask Titan why'}
                     </button>
                   )}

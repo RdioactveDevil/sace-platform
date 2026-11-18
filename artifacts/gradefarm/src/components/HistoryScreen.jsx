@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { fetchMyExamAttempts } from '../lib/db'
 import { fetchLessons } from '../lib/learnStore'
 import { groupAnswersIntoSessions } from '../lib/sessionHistory'
+import SegmentedToggle from './SegmentedToggle'
 
 const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -119,7 +120,6 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
   const redo = (ids) => onStartSession({ mode: 'review', subtopics: [], subject: subjectName || undefined, reviewIds: ids })
 
   const toneOf = (pct) => (pct < 40 ? t.danger : pct < 70 ? t.goldText : t.success)
-  const segOn = { background: t.text, color: t.bg }
   const linkBtn = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }
 
   return (
@@ -133,14 +133,7 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
       <div className="hi-inner">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: t.textMuted }}>Practice sessions, lessons and chats, newest first</span>
-          <div role="group" aria-label="Show" style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
-            {[['all', 'All'], ['practice', 'Practice'], ['learn', 'Learn']].map(([id, label]) => (
-              <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}
-                style={{ padding: '6px 13px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', ...(filter === id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
-                {label}
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle size="sm" label="Show" options={[['all', 'All'], ['practice', 'Practice'], ['learn', 'Learn']]} value={filter} onChange={setFilter} />
         </div>
 
         {loading ? (

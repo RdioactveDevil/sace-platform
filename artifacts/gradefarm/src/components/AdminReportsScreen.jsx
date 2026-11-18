@@ -7,6 +7,7 @@ import {
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { ui, chip, btn, note, FONT_B } from '../lib/adminUi'
 import { QuestionPanel } from './AdminQuestionPanel'
+import SegmentedToggle from './SegmentedToggle'
 
 const LETTERS = 'ABCDEFGH'
 const FLAG_TAGS = ['Typo', 'Confusing', 'Too hard', 'Too easy']
@@ -64,7 +65,6 @@ export default function AdminReportsScreen({ onChange, subject: fixedSubject = '
   useEffect(() => { loadReports(); loadFlags() }, [loadReports, loadFlags])
 
   const openCount = reports ? new Set(reports.filter(isOpenReport).map(r => r.question_id)).size : null
-  const segOn = { background: 'var(--t-text)', color: 'var(--t-bg)' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: FONT_B }}>
@@ -75,14 +75,10 @@ export default function AdminReportsScreen({ onChange, subject: fixedSubject = '
         @media (max-width: 900px) { .rp-layout { grid-template-columns: minmax(0, 1fr); } }
       `}</style>
 
-      <div role="group" aria-label="View" style={{ display: 'inline-flex', alignSelf: 'flex-start', border: '1px solid var(--t-border)', borderRadius: 9, overflow: 'hidden' }}>
-        {[['reports', 'Wrong answers', openCount], ['flags', 'Student flags', flags?.length]].map(([id, label, n]) => (
-          <button key={id} type="button" aria-pressed={view === id} onClick={() => setView(id)}
-            style={{ padding: '7px 14px', border: 'none', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer', ...(view === id ? segOn : { background: 'var(--t-bgCard)', color: 'var(--t-textMuted)' }) }}>
-            {label}{n ? <span style={{ marginLeft: 6, fontWeight: 600, opacity: 0.75 }}>{n}</span> : null}
-          </button>
-        ))}
-      </div>
+      <SegmentedToggle size="sm" label="View" style={{ alignSelf: 'flex-start' }} value={view} onChange={setView}
+        options={[['reports', 'Wrong answers', openCount], ['flags', 'Student flags', flags?.length]].map(([id, label, n]) => ({
+          value: id, label: <>{label}{n ? <span style={{ fontWeight: 600, opacity: 0.75 }}>{n}</span> : null}</>,
+        }))} />
       {error && <div role="alert" style={note('danger')}>{error}</div>}
 
       {view === 'reports'

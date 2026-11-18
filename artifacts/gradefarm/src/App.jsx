@@ -81,6 +81,7 @@ const ResetPasswordScreen   = lazyWithReload(() => import('./components/ResetPas
 const SubjectPicker     = lazyWithReload(() => import('./components/SubjectPicker'))
 const HomeScreen        = lazyWithReload(() => import('./components/HomeScreen'))
 const QuizScreen        = lazyWithReload(() => import('./components/QuizScreen'))
+const TitanDock         = lazyWithReload(() => import('./components/TitanDock'))
 const LearnScreen       = lazyWithReload(() => import('./components/LearnScreen'))
 const LeaderboardScreen = lazyWithReload(() => import('./components/LeaderboardScreen'))
 const ProfileScreen     = lazyWithReload(() => import('./components/ProfileScreen'))
@@ -136,6 +137,7 @@ const NAV_SECTIONS = [
   ]},
   { icon: 'profile', label: 'Progress', id: 'progress', pages: [
     { id: 'profile',     label: 'Overview',    path: '/my-progress' },
+    { id: 'stats',       label: 'Your Statistics', path: '/my-stats' },
     { id: 'history',     label: 'History',     path: '/history' },
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
   ]},
@@ -865,6 +867,13 @@ function AppShellScreens({
         <ProfileScreen {...commonProps}
           profile={profile} questions={questions} subject={subject}
           struggleMap={struggleMap} embedded
+          onStartSession={onStartSession} onProfileUpdated={onProfileUpdated}
+          onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
+      </div>}
+      {wasOpened('my-stats') && <div style={show('my-stats')}>
+        <ProfileScreen {...commonProps} view="stats"
+          profile={profile} questions={questions} subject={subject}
+          struggleMap={struggleMap} embedded
           onStartSession={onStartSession}
           onOpenLesson={(lessonTopic) => openInLearn({ type: 'lesson', topic: lessonTopic })} />
       </div>}
@@ -1113,6 +1122,13 @@ function AppInner() {
   const [learnTopic,      setLearnTopic]      = useState('')
   const [learnMessages,   setLearnMessages]   = useState([])
   const [learnInterests,  setLearnInterests]  = useState(null)
+  // Titan beside a practice question (components/TitanDock.jsx).
+  const [titanRequest, setTitanRequest] = useState(null)
+  const [titanOpen, setTitanOpen] = useState(false)
+  // A new practice session starts without the pane; the chat is still in History.
+  useEffect(() => {
+    if (location.pathname !== '/quiz') { setTitanOpen(false); setTitanRequest(null) }
+  }, [location.pathname])
   const [learnDocContext, setLearnDocContext]  = useState('')
   const [learnDocName,    setLearnDocName]    = useState('')
 
@@ -1874,7 +1890,10 @@ function AppInner() {
           : subjectLocked
             ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} />
           : <AppShell {...shellProps}>
+            <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
               <QuizScreen {...commonProps} {...quizState}
+              onAskTitan={(topic, ctx) => { setTitanRequest({ topic, ctx, at: Date.now() }); setTitanOpen(true) }}
               freeQuota={selectedAccess === 'free' && freeQuota ? { ...freeQuota, onAnswered: onFreeQuestionAnswered, onUpgrade: (ctx) => openUpgrade(ctx) } : null}
               profile={profile} setProfile={setProfile} subjectTile={selectedSubject}
               questions={quizQuestions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
@@ -1914,6 +1933,15 @@ function AppInner() {
                 setQuestions(prev => prev.map(q => (reveals[q.id] ? { ...q, ...reveals[q.id] } : q)))
               }}
               onGoToStudyPlan={() => navigate('/my-progress')} />
+            </div>
+            {/* Ask Titan from a question: a resizable pane beside it, like in a lesson. */}
+            {titanRequest && (
+              <TitanDock open={titanOpen} request={titanRequest} onClose={() => setTitanOpen(false)}
+                profile={profile} struggleMap={struggleMap} questions={questions} subject={selectedSubject} theme={theme}
+                interests={learnInterests} setInterests={setLearnInterests}
+                onUpgrade={selectedAccess === 'free' ? openUpgrade : null} />
+            )}
+            </div>
             </AppShell>
       } />
 

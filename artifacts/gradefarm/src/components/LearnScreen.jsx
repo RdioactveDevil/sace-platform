@@ -15,10 +15,11 @@ import { visualPromptLines } from '../lib/lessonVisuals'
 import { buildCards, stepOfCard, upgradeLesson, lessonScore, runEndingAt, lessonProgressLabel, parseLessonJson, answerAt, withAnswer, cardLabel, describeLessonCard } from '../lib/lessonCards'
 import { awaitingParent } from '../lib/parentConsent'
 import { ANALOGY_STYLES, analogyInstruction, analogyLabel, cleanAnalogy, isCustomAnalogy, lessonAnalogyLine } from '../lib/analogy'
-import { ArrowUp, Camera, CircleHelp, History, Plus, RotateCcw, Search } from 'lucide-react'
+import { ArrowUp, Camera, CircleHelp, History, Plus, RotateCcw, Search, X } from 'lucide-react'
 import { greetingContext, pickGreeting } from '../lib/greetings'
 import { QUICK_REPLIES_RULE, splitQuickReplies } from '../lib/quickReplies'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
+import SegmentedToggle from './SegmentedToggle'
 
 const GOLD   = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -162,6 +163,9 @@ export default function LearnScreen({
   learnRequest, setLearnRequest,
   // The free subject: opens the upgrade pop-up ({ doneLabel }), else the plan builder.
   onUpgrade = null,
+  // In a side pane beside a practice question (TitanDock): chat only, with a
+  // compact header and a close button.
+  docked = false, onClose = null,
 }) {
   const navigate = useNavigate()
   const goUnlimited = () => (onUpgrade ? onUpgrade({ doneLabel: 'Back to my chat' }) : navigate('/get-access', { state: { subject } }))
@@ -586,7 +590,7 @@ export default function LearnScreen({
     const measure = () => {
       const el = startRef.current || chatRef.current
       if (!el || el.offsetParent === null) return // not on screen (another page is showing)
-      if (window.innerWidth > 640) { setStartMinH(null); return }
+      if (docked || window.innerWidth > 640) { setStartMinH(null); return }
       const top = el.getBoundingClientRect().top + window.scrollY
       setStartMinH(Math.max(320, Math.floor(window.innerHeight - top)))
     }
@@ -811,7 +815,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
 
   // Titan offers a lesson once the student has said they're stuck twice.
   const stuckCount = messages.filter(m => m.role === 'user' && typeof m.content === 'string' && /(don'?t|do not|still) (get|understand)|confused|lost|makes no sense/i.test(m.content)).length
-  const showLessonOffer = phase === 'chat' && stuckCount >= 2 && !offerDismissed && !loading
+  const showLessonOffer = !docked && phase === 'chat' && stuckCount >= 2 && !offerDismissed && !loading
 
   const startNew = () => {
     setMessages([])
@@ -826,7 +830,8 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
     chatIdRef.current = null
     savedCountRef.current = 0
     setGreetSeed(Math.random())
-    setPhase('setup')
+    // The side pane has no start screen: a new chat is an empty conversation.
+    setPhase(docked ? 'chat' : 'setup')
   }
 
   /** Send from the start screen: the chat opens with this first message. */
@@ -855,7 +860,6 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   const linkBtn = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }
   const primaryBtn = (enabled = true) => ({ padding: '11px 16px', borderRadius: 10, border: 'none', background: enabled ? t.accent : t.bgHover, color: enabled ? 'var(--t-onAccent)' : t.textFaint, fontSize: 13.5, fontWeight: 800, cursor: enabled ? 'pointer' : 'default', fontFamily: FONT_B })
   const secondaryBtn = { padding: '10px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }
-  const segOn = { background: t.text, color: t.bg }
 
   // "Explain it simply / with sport / … / with your own analogy".
   const saveCustomAnalogy = () => {
@@ -900,14 +904,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   )
 
   const modeSwitch = (current) => (
-    <div role="group" aria-label="Chat or lesson" style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
-      {[['chat', 'Chat'], ['lesson', 'Lesson']].map(([id, label]) => (
-        <button key={id} type="button" aria-pressed={current === id} onClick={() => current !== id && switchMode(id)}
-          style={{ padding: '6px 13px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: current === id ? 'default' : 'pointer', ...(current === id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
-          {label}
-        </button>
-      ))}
-    </div>
+    <SegmentedToggle size="sm" label="Chat or lesson" options={[['chat', 'Chat'], ['lesson', 'Lesson']]} value={current} onChange={switchMode} />
   )
 
   const attachments = (
@@ -1177,10 +1174,6 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
     else { setTopicSearch(''); setTopicPickerOpen(true) }
   }
   const canAsk = (input.trim() || attachedImages.length > 0) && !loading && !processingImages && !aiBlocked
-  const pill = (on) => ({
-    position: 'relative', zIndex: 1, width: 'var(--ls-pill)', height: 38, padding: 0, borderRadius: 999, border: 'none', background: 'transparent', fontFamily: FONT_B, fontSize: 14,
-    fontWeight: on ? 800 : 700, color: on ? segOn.color : t.textMuted, cursor: on ? 'default' : 'pointer', transition: 'color 0.25s ease',
-  })
 
   if (!phase || phase === 'setup') return (
     <div style={{ color: t.text, fontFamily: FONT_B, height: '100%', minHeight: 0, overflowY: 'auto', background: t.bg }}>
@@ -1230,13 +1223,8 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
       <div className="ls-start" ref={startRef} style={startMinH ? { minHeight: startMinH } : undefined}>
         {/* Ask or Lesson, and recent chats */}
         <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div role="group" aria-label="Ask or lesson" style={{ position: 'relative', display: 'inline-flex', padding: 4, borderRadius: 999, background: t.bgCard, border: `1px solid ${t.border}` }}>
-            {/* The highlight slides between Ask and Lesson. */}
-            <span aria-hidden="true" className="ls-pill-thumb"
-              style={{ position: 'absolute', top: 4, left: 4, width: 'var(--ls-pill)', height: 38, borderRadius: 999, background: segOn.background, transform: startMode === 'lesson' ? 'translateX(var(--ls-pill))' : 'none' }} />
-            <button type="button" aria-pressed={startMode === 'ask'} onClick={() => setStartMode('ask')} style={pill(startMode === 'ask')}>Ask</button>
-            <button type="button" data-tutorial-target="learn-lessons" aria-pressed={startMode === 'lesson'} onClick={() => setStartMode('lesson')} style={pill(startMode === 'lesson')}>Lesson</button>
-          </div>
+          <SegmentedToggle optionMinWidth={96} label="Ask or lesson" value={startMode} onChange={setStartMode}
+            options={[{ value: 'ask', label: 'Ask' }, { value: 'lesson', label: <span data-tutorial-target="learn-lessons">Lesson</span> }]} />
           {recentItems.length > 0 && (
             <div className="ls-recent-btn" style={{ position: 'absolute', right: 0 }}>
               <button type="button" aria-expanded={recentOpen} onClick={() => setRecentOpen(v => !v)} aria-label="Recent chats and lessons"
@@ -1680,7 +1668,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   const showChips = lastReplies.length > 0 && !loading && attachedImages.length === 0 && !aiBlocked
   const showPractise = consolidateTarget && onConsolidate && messages.filter(m => m.role === 'assistant').length >= 2 && !loading
   return (
-    <div ref={chatRef} className="ls-chat" style={{ display: 'flex', flexDirection: 'column', height: startMinH || '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, overflow: 'hidden', background: t.bg }}>
+    <div ref={chatRef} className={`ls-chat${docked ? ' ls-docked' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: startMinH || '100%', minHeight: 0, color: t.text, fontFamily: FONT_B, overflow: 'hidden', background: t.bg }}>
       {styles}
       {hiddenInputs}
       <style>{`
@@ -1703,19 +1691,36 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           .ls-chat-chips { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 20px; }
         }
         @media (max-width: 380px) { .ls-chat { --ls-pill: 88px; } }
+        .ls-docked .ls-chat-msgs { padding: 14px 14px 12px !important; gap: 16px !important; }
+        .ls-docked .ls-chat-bottom { padding: 6px 12px 12px !important; }
+        .ls-docked .ls-chat-row .ls-explain-word, .ls-docked .ls-practise-topic { display: none; }
       `}</style>
 
+      {docked ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 800 }}>Ask Titan</div>
+            {topic && <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</div>}
+          </div>
+          <button type="button" onClick={startNew} aria-label="New chat" title="New chat"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 10px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+            <Plus size={14} aria-hidden="true" />New
+          </button>
+          {onClose && (
+            <button type="button" onClick={onClose} aria-label="Close Titan" title="Close"
+              style={{ width: 32, height: 32, borderRadius: 999, border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+              <X size={17} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      ) : (<>
       {/* New chat · Ask / Lesson · Recent */}
       <div className="ls-chat-top" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px 24px', flexShrink: 0 }}>
         <button type="button" onClick={startNew} aria-label="New chat"
           style={{ position: 'absolute', insetInlineStart: 'clamp(12px, 3vw, 24px)', display: 'inline-flex', alignItems: 'center', gap: 6, height: 38, minWidth: 38, padding: '0 12px', justifyContent: 'center', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
           <Plus size={16} aria-hidden="true" /><span className="ls-new-word">New chat</span>
         </button>
-        <div role="group" aria-label="Ask or lesson" style={{ position: 'relative', display: 'inline-flex', padding: 4, borderRadius: 999, background: t.bgCard, border: `1px solid ${t.border}` }}>
-          <span aria-hidden="true" className="ls-pill-thumb" style={{ position: 'absolute', top: 4, left: 4, width: 'var(--ls-pill)', height: 38, borderRadius: 999, background: segOn.background }} />
-          <button type="button" aria-pressed="true" style={pill(true)}>Ask</button>
-          <button type="button" aria-pressed="false" onClick={() => switchMode('lesson')} style={pill(false)}>Lesson</button>
-        </div>
+        <SegmentedToggle optionMinWidth={96} label="Ask or lesson" value="ask" onChange={switchMode} options={[['ask', 'Ask'], ['lesson', 'Lesson']]} />
         {recentItems.length > 0 && (
           <div style={{ position: 'absolute', insetInlineEnd: 'clamp(12px, 3vw, 24px)' }}>
             <button type="button" aria-expanded={recentOpen} onClick={() => setRecentOpen(v => !v)} aria-label="Recent chats and lessons"
@@ -1738,10 +1743,15 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         )}
       </div>
 
+      </>)}
+
       {/* The conversation */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div className="ls-chat-msgs" style={{ maxWidth: 760, margin: '0 auto', padding: '8px 24px 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {topic && <div style={{ textAlign: 'center', fontSize: 12.5, color: t.textMuted }}>{topic}</div>}
+          {topic && !docked && <div style={{ textAlign: 'center', fontSize: 12.5, color: t.textMuted }}>{topic}</div>}
+          {docked && messages.length === 0 && !loading && (
+            <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6 }}>Ask Titan anything about this question. Your quiz stays where it is.</div>
+          )}
           {messageList(messages)}
           {typing && <div style={{ paddingLeft: 40 }}>{typing}</div>}
 

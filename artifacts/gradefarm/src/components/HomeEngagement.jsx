@@ -3,7 +3,7 @@ import { Flame } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { currentStreak, freezesNeeded } from '../lib/streak'
 import {
-  answersToday, dailyGoal, DAILY_GOAL_OPTIONS, daysUntil, gradeAbove, MAX_FREEZES, FREEZE_EVERY,
+  answersToday, dailyGoal, DAILY_GOAL_OPTIONS, daysUntil, gradeAbove, MAX_FREEZES,
   predictGrade, PREDICT_MIN_ANSWERS, streakWeek,
 } from '../lib/engagement'
 import { fetchRecentAnswers, setDailyGoal } from '../lib/db'
@@ -76,7 +76,7 @@ export default function HomeEngagement({ theme = 'dark', profile, subject, quest
   const dotName = { done: 'answered', freeze: 'covered by a freeze', today: 'today, not yet', missed: 'missed', future: 'to come' }
   const streakNote = pendingFreeze > 0
     ? `${pendingFreeze === 1 ? 'A freeze covers yesterday' : `Freezes cover the ${pendingFreeze} days missed`} when you answer today`
-    : freezes > 0 ? `${freezes} of ${MAX_FREEZES} freezes held` : `${FREEZE_EVERY} right in a row earns a freeze`
+    : freezes > 0 ? `${freezes} of ${MAX_FREEZES} freezes held` : ''
 
   return (
     <section aria-label="Today" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 14, fontFamily: FONT_B, color: t.text }}>
@@ -116,7 +116,7 @@ export default function HomeEngagement({ theme = 'dark', profile, subject, quest
           <ol aria-label="This week" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 4 }}>
             {week.map(d => <li key={d.date} aria-label={`${d.date}: ${dotName[d.state]}`} title={`${d.label}: ${dotName[d.state]}`} style={dot(d.state)} />)}
           </ol>
-          <span style={{ ...sub, fontSize: 12, color: pendingFreeze > 0 || freezes > 0 ? t.blue : t.textMuted }}>{streakNote}</span>
+          {streakNote && <span style={{ ...sub, fontSize: 12, color: t.blue }}>{streakNote}</span>}
         </div>
       </div>
 
