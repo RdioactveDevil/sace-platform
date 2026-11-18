@@ -147,7 +147,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
       <div className="au-wrap">
         <section className="au-why af-in" aria-label="What GradeFarm does">
           <h2 style={{ margin: 0, fontSize: 'clamp(30px, 3.6vw, 44px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: t.text, textWrap: 'balance' }}>
-            Know exactly what to practise next.
+            Every question makes the next one <span style={{ color: t.goldText }}>smarter</span>.
           </h2>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
             {HELPS.map(({ Icon, title: head, body }) => (
