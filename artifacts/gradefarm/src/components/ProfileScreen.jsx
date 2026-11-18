@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from '../lib/engine'
 import RankIcon from './RankIcon'
 import ProgressLeagueBests from './ProgressLeagueBests'
+import YearPlanCard from './YearPlanCard'
+import HomeEngagement from './HomeEngagement'
+import { useNavigate } from 'react-router-dom'
 import { daysUntil, predictGrade } from '../lib/engagement'
 import { localDate } from '../lib/streak'
 import { lessonProgressLabel } from '../lib/lessonCards'
@@ -25,12 +28,16 @@ function weekStart(date) {
 }
 
 /**
- * Progress overview: is the student improving (this week's numbers and accuracy
- * by week), what's coming up (assessments), what to do this week (reviews due,
- * unfinished lessons, weakest topics) and mastery by topic group.
+ * Progress, in two tabs.
+ * view 'overview': today and this week (the daily goal and streak, this week's
+ *   numbers and rank, the year plan's week, this week's plan, coming up).
+ * view 'stats' (Your Statistics): accuracy by week, topic mastery, this
+ *   week's league and personal bests.
  */
-export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLesson, subject }) {
+export default function ProfileScreen({ profile, questions, struggleMap, theme, embedded, onStartSession, onOpenLesson, subject, view = 'overview', onProfileUpdated }) {
   const t = THEMES[theme]
+  const navigate = useNavigate()
+  const isStats = view === 'stats'
   const topicConfig = useCurriculumTopicConfig(subject, { withFallback: true })
   const { normFn, macroGroups, isTwoLevel = false } = topicConfig
   const [answerLog, setAnswerLog] = useState([])
@@ -226,6 +233,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
     <div style={{ height: embedded ? '100%' : '100vh', minHeight: 0, background: embedded ? 'transparent' : t.bg, color: t.text, fontFamily: FONT_B, overflowY: 'auto' }}>
       <style>{`
         .po-inner { max-width: 1180px; margin: 0 auto; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 16px; }
+        .po-inner > section { margin-bottom: 0 !important; }
         .po-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
         .po-row.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
         .po-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid ${t.border}; }
@@ -236,6 +244,10 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
         @media (max-width: 860px) { .po-inner { padding: 18px 14px 28px; } }
       `}</style>
       <div className="po-inner">
+
+        {!isStats && <>
+        {/* Today: the daily goal and streak */}
+        <HomeEngagement theme={theme} profile={profile} subject={subject} questions={questions} onProfileUpdated={onProfileUpdated} />
 
         {/* This week, and rank */}
         <div data-tutorial-target="progress-week" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -279,6 +291,10 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
             </div>
           </div>
         )}
+
+        {/* The year plan's week (set up from Practice) */}
+        <YearPlanCard theme={theme} profile={profile} subject={subject} questions={questions} struggleMap={struggleMap}
+          onStartSession={onStartSession} onSetUp={() => navigate('/year-setup')} />
 
         {/* What to do this week, and what's coming up */}
         <div className="po-row">
@@ -364,6 +380,9 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
           </div>
         </div>
 
+        </>}
+
+        {isStats && <>
         <div className="po-row">
           {/* Accuracy by week */}
           <div style={{ ...card, padding: '14px 16px' }}>
@@ -437,6 +456,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
         {/* This week's league and personal bests */}
         <ProgressLeagueBests theme={theme} profile={profile} />
 
+        </>}
       </div>
     </div>
   )

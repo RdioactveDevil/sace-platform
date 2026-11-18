@@ -6,6 +6,7 @@ import { THEMES } from '../lib/theme'
 import { SkeletonRow } from './Skeleton'
 import RankIcon from './RankIcon'
 import LeagueView from './LeagueView'
+import SegmentedToggle from './SegmentedToggle'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const GOLD = 'var(--t-accent)'
@@ -49,7 +50,6 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
 
   // How far behind the person above: the gap that's worth chasing.
   const above = me && me.position > 1 ? visibleBoard.find(r => r.position === me.position - 1) : null
-  const segOn = { background: t.text, color: t.bg }
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
   const cell = { padding: '10px 12px', borderTop: `1px solid ${t.border}`, fontSize: 13.5, textAlign: 'left' }
 
@@ -61,27 +61,13 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
         @media (max-width: 860px) { .lb-inner { padding: 18px 14px 28px; } .lb-hide { display: none; } }
       `}</style>
       <div className="lb-inner">
-        <div role="group" aria-label="Leaderboard" style={{ display: 'inline-flex', alignSelf: 'flex-start', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
-          {[['class', 'My class'], ['league', 'Weekly league']].map(([id, label]) => (
-            <button key={id} type="button" aria-pressed={view === id} onClick={() => pickView(id)}
-              style={{ padding: '8px 16px', border: 'none', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer', ...(view === id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle label="Leaderboard" style={{ alignSelf: 'flex-start' }} options={[['class', 'My class'], ['league', 'Weekly league']]} value={view} onChange={pickView} />
 
         {view === 'league' ? <LeagueView theme={theme} profile={profile} /> : <>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <span style={{ fontSize: 13, color: t.textMuted }}>{active ? `${active.name} · ranked by XP` : 'Ranked by XP within your class'}</span>
           {classes.length > 1 && (
-            <div role="group" aria-label="Class" style={{ display: 'inline-flex', flexWrap: 'wrap', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', maxWidth: '100%' }}>
-              {classes.map(c => (
-                <button key={c.id} type="button" aria-pressed={active?.id === c.id} onClick={() => pickClass(c.id)}
-                  style={{ padding: '6px 13px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', ...(active?.id === c.id ? segOn : { background: 'transparent', color: t.textMuted }) }}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
+            <SegmentedToggle size="sm" label="Class" options={classes.map(c => [c.id, c.name])} value={active?.id} onChange={pickClass} />
           )}
         </div>
 

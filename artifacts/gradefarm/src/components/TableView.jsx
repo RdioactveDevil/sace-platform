@@ -3,8 +3,14 @@
 // renderCell (optional) draws a header or cell's text, e.g. with MathText; it's
 // also told where the cell is: { header: true, col } or { row, col } (body rows from 0).
 
+import MathText from './MathText'
+
+// Cells often carry LaTeX ("$f(x)$", "$2.4$"), so by default they go through
+// MathText rather than printing the dollar signs.
+const defaultCell = (v) => <MathText text={String(v ?? '')} />
+
 export default function TableView({ table, theme, renderCell }) {
-  const show = (v, at) => (renderCell ? renderCell(v ?? '', at) : (v ?? ''))
+  const show = (v, at) => (renderCell || defaultCell)(v ?? '', at)
   const { headers = [], rows = [], caption } = table || {}
   if (!headers.length && !rows.length) return null
 
@@ -37,8 +43,9 @@ export default function TableView({ table, theme, renderCell }) {
                       borderBottom: `1px solid ${borderColor}`,
                       borderRight: i < headers.length - 1 ? `1px solid ${borderColor}` : 'none',
                       whiteSpace: 'nowrap',
-                      fontSize: 11,
-                      textTransform: 'uppercase',
+                      fontSize: 12,
+                      // Uppercasing would turn a math header like $x$ into X.
+                      textTransform: /[$\\]/.test(String(h ?? '')) ? 'none' : 'uppercase',
                       letterSpacing: '0.04em',
                     }}
                   >
@@ -72,7 +79,7 @@ export default function TableView({ table, theme, renderCell }) {
       </div>
       {caption && (
         <div style={{ padding: '6px 14px 8px', color: captionColor, fontSize: 11, fontStyle: 'italic', textAlign: 'center' }}>
-          {caption}
+          <MathText text={String(caption)} />
         </div>
       )}
     </div>

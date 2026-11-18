@@ -2,6 +2,7 @@ import { confirmDialog } from '../lib/dialog'
 import { useEffect, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { getTutorBilling, chooseTutorPlan, openTutorBillingPortal, removeTutorPlanSubject, syncCheckout } from '../lib/db'
+import SegmentedToggle from './SegmentedToggle'
 
 // Tutor plans (api-server lib/tutor-plan.ts): the tutor portal needs a live
 // plan unless the tutor is an admin or an admin made them exempt.
@@ -63,15 +64,8 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
 
   return (
     <div>
-      <div role="radiogroup" aria-label="Billing period" style={{ display: 'inline-flex', gap: 4, padding: 4, borderRadius: 12, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bgInput, marginBottom: 18 }}>
-        {[['month', 'Monthly'], ['year', discount ? `Annual · save ${discount}%` : 'Annual']].map(([value, label]) => (
-          <button key={value} type="button" role="radio" aria-checked={period === value} onClick={() => setPeriod(value)} disabled={!!busy}
-            style={{ padding: '8px 16px', borderRadius: 9, border: 'none', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer',
-              background: period === value ? 'var(--t-text)' : 'transparent', color: period === value ? 'var(--t-bg)' : t.textMuted }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedToggle kind="radio" label="Billing period" disabled={!!busy} style={{ marginBottom: 18 }} value={period} onChange={setPeriod}
+        options={[['month', 'Monthly'], ['year', discount ? `Annual · save ${discount}%` : 'Annual']]} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
         {billing.plans.map(plan => {
           const current = billing.plan === plan.name && billing.interval === period && !billing.endsAtPeriodEnd

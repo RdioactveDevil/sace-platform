@@ -6,6 +6,7 @@ import { enabledProviders, rememberParentSignup } from '../lib/oauth'
 import { THEMES } from '../lib/theme'
 import { AuthLayout, Field, PasswordInput, Note, authBtn, linkStyle, FONT_B } from './AuthLayout'
 import CalmBackground from './CalmBackground'
+import SegmentedToggle from './SegmentedToggle'
 
 // Which of Google and Apple to offer (lib/oauth.js): set once each is switched on in Supabase.
 const PROVIDERS = enabledProviders(import.meta.env?.VITE_OAUTH_PROVIDERS)
@@ -187,15 +188,8 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
 
           <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
             {mode === 'signup' && !invite && (
-              <div role="radiogroup" aria-label="Who is this account for?" style={{ display: 'flex', padding: 3, gap: 3, borderRadius: 10, background: t.bgSubtle }}>
-                {[[false, 'For me'], [true, 'For my child']].map(([v, label]) => (
-                  <button key={label} type="button" role="radio" aria-checked={asParent === v} className="af-btn" onClick={() => { setAsParent(v); setError('') }}
-                    style={{ flex: 1, minHeight: 38, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, border: 'none',
-                      background: asParent === v ? t.bgCard : 'transparent', color: asParent === v ? t.text : t.textMuted, boxShadow: asParent === v ? `0 0 0 1px ${t.border}` : 'none' }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedToggle kind="radio" fill label="Who is this account for?" value={asParent} onChange={(v) => { setAsParent(v); setError('') }}
+                options={[[false, 'For me'], [true, 'For my child']]} />
             )}
 
             {providers.length > 0 && (

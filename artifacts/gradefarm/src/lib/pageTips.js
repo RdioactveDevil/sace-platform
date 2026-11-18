@@ -36,7 +36,7 @@ export const PAGE_TIPS = {
     steps: [
       { target: 'progress-week', title: 'This week', body: "How much you've practised and how well, compared with last week. Your rank grows with XP and accuracy; All ranks shows them all." },
       { target: 'progress-plan', title: "This week's plan", body: 'What to work on this week. It fills in as you practise.' },
-      { target: 'tabs-progress', title: 'History and Leaderboard', body: 'Your past sessions and the class leaderboard are in the other tabs.' },
+      { target: 'tabs-progress', title: 'Statistics, History and Leaderboard', body: 'Your accuracy, topic mastery, personal bests and league are in Your Statistics; past sessions and the class leaderboard are in the other tabs.' },
     ],
   },
   portal: {

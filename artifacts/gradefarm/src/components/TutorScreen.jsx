@@ -53,6 +53,7 @@ import {
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
+import SegmentedToggle from './SegmentedToggle'
 
 const GOLD   = 'var(--t-accent)'
 const GOLDL  = 'var(--t-accentLight)'
@@ -2447,16 +2448,8 @@ export default function TutorScreen({ profile, theme, subject }) {
   }[activeTab]
 
   const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? 'var(--t-onAccent)' : t.text })
-  const segOn = { background: 'var(--t-text)', color: 'var(--t-bg)' }
   const segment = (options, value, onChange, label) => (
-    <div role="group" aria-label={label} style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
-      {options.map(([v, l]) => (
-        <button key={String(v)} type="button" aria-pressed={value === v} onClick={() => onChange(v)}
-          style={{ padding: '6px 12px', border: 'none', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', ...(value === v ? segOn : { background: 'transparent', color: t.textMuted }) }}>
-          {l}
-        </button>
-      ))}
-    </div>
+    <SegmentedToggle size="sm" options={options} value={value} onChange={onChange} label={label} />
   )
 
   return (

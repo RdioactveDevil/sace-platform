@@ -11,7 +11,7 @@ import { getTopicConfigForSubject, buildCurriculumTopicConfig } from '../lib/top
 import { subjectHasFeature } from '../lib/subjects'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { filterByFormat, questionFormat, isAiMarked } from '../lib/questionTypes'
-import HomeEngagement from './HomeEngagement'
+import SegmentedToggle from './SegmentedToggle'
 
 const GOLD   = 'var(--t-accent)'
 const GOLDL  = 'var(--t-accentLight)'
@@ -256,23 +256,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   }
 
   const segment = (options, value, onChange, label) => (
-    <div role="radiogroup" aria-label={label} style={{ display: 'flex', border: `1px solid ${t.border}`, borderRadius: 9, overflow: 'hidden' }}>
-      {options.map((o, i) => {
-        const on = o.value === value
-        return (
-          <button key={String(o.value)} type="button" role="radio" aria-checked={on} disabled={o.disabled}
-            onClick={() => onChange(o.value)}
-            style={{
-              flex: 1, padding: '8px 4px', border: 'none', borderLeft: i > 0 ? `1px solid ${t.border}` : 'none',
-              background: on ? segOnBg : 'transparent', color: on ? segOnFg : o.disabled ? t.textFaint : t.textMuted,
-              fontFamily: FONT_B, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-              cursor: o.disabled ? 'not-allowed' : 'pointer', opacity: o.disabled ? 0.6 : 1,
-            }}>
-            {o.label}
-          </button>
-        )
-      })}
-    </div>
+    <SegmentedToggle kind="radio" size="sm" fill options={options} value={value} onChange={onChange} label={label} />
   )
 
   // Selected options stay quiet: navy on light, off-white on dark. Gold is
@@ -680,11 +664,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           </div>
 
           <YearPlanCard theme={theme} profile={profile} subject={subject} questions={questions} struggleMap={currentStruggleMap}
-            onStartSession={onStartSession} onSetUp={() => navigate('/year-setup')} />
+            mode="prompt" onStartSession={onStartSession} onSetUp={() => navigate('/year-setup')} />
 
           <TutorWorkStrip />
-
-          <HomeEngagement theme={theme} profile={profile} subject={subject} questions={questions} onProfileUpdated={onProfileUpdated} />
 
           <div className="hs-mobile-cards" style={{ marginBottom: 14 }}>
             {renderBuilder()}
