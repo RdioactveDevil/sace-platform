@@ -4,12 +4,9 @@ import { Timer, PenLine } from 'lucide-react'
 import { saveWritingAttempt, updateWritingAttemptFeedback, getWritingAttempts } from '../lib/writingDb'
 import { downloadWritingReportPdf } from '../lib/db'
 import { THEMES } from '../lib/theme'
+import SegmentedToggle from './SegmentedToggle'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
-const GOLD   = 'var(--t-accent)'
-const GOLDL  = 'var(--t-accentLight)'
-const NAVY   = 'var(--t-onAccent)'
 
 const NARRATIVE_FIELDS = [
   { key: 'context',        label: 'Context / Scene' },
@@ -124,7 +121,7 @@ function buildStudyInsights(attempts) {
   return { weakCriteria, topImprovements, lowestAttempts: scored, hasData: withFb.length > 0 }
 }
 
-export default function WritingScreen({ subject, profile, theme = 'dark', onBack }) {
+export default function WritingScreen({ subject, profile, theme = 'dark' }) {
   const location = useLocation()
   const navigate = useNavigate()
   const writingTab = normalizeWritingTab(location.pathname || '')
@@ -321,14 +318,14 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
   }
 
   // ── Theme ─────────────────────────────────────────────────────────────────────
+  // The app's own tokens, like every other page: ink for what's chosen, gold
+  // for the main action and highlights.
   const t = THEMES[theme] || THEMES.dark
-  const light = theme === 'light'
-  // Writing keeps its teal accent, deepened in light mode so it reads on white.
-  const accent       = light ? '#0f766e' : '#2dd4bf'
-  const accentBg     = light ? 'rgba(15,118,110,0.07)' : 'rgba(45,212,191,0.08)'
-  const accentBorder = light ? 'rgba(15,118,110,0.30)' : 'rgba(45,212,191,0.28)'
-  const warn         = light ? '#b45309' : '#fbbf24'
-  const warnBg       = light ? 'rgba(180,83,9,0.08)' : 'rgba(251,191,36,0.08)'
+  const accent       = t.text
+  const accentBg     = t.bgSubtle
+  const accentBorder = t.borderStrong
+  const warn         = t.goldText
+  const warnBg       = 'color-mix(in srgb, var(--t-accent) 12%, transparent)'
   const scoreColor = (n) => (typeof n !== 'number' ? t.textMuted : n >= 7 ? t.success : n >= 5 ? warn : t.danger)
 
   // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -338,62 +335,41 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
       background: t.bg,
     },
     container: {
-      maxWidth: 820, margin: '0 auto', padding: '28px 24px 56px',
+      maxWidth: 860, margin: '0 auto', padding: '24px 32px 48px',
       fontFamily: FONT_B, color: t.text,
     },
     card: {
-      background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16,
-      boxShadow: t.shadowCard, padding: '20px 22px',
+      background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12,
+      padding: '18px 20px',
     },
     label: {
-      display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted,
-      textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10,
+      display: 'block', fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10,
     },
     sectionTitle: {
-      fontSize: 11, fontWeight: 800, color: t.textMuted,
-      textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10,
+      fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 10,
     },
     optionBtn: (active) => ({
       flex: '1 1 200px', textAlign: 'left', padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
-      border: `1.5px solid ${active ? accent : t.border}`,
-      background: active ? accentBg : 'transparent',
-      fontFamily: FONT_B, transition: 'border-color 0.15s, background 0.15s',
-    }),
-    toggleBtn: (active) => ({
-      padding: '9px 18px', borderRadius: 10, cursor: 'pointer',
-      border: `1.5px solid ${active ? accent : t.borderMid}`,
-      background: active ? accentBg : 'transparent',
-      color: active ? accent : t.textSub,
-      fontSize: 13, fontWeight: 700, fontFamily: FONT_B,
+      border: `1px solid ${active ? t.text : t.border}`, boxShadow: active ? `0 0 0 1px ${t.text}` : 'none',
+      background: t.bgCard,
+      fontFamily: FONT_B, transition: 'border-color 0.15s, box-shadow 0.15s',
     }),
     primaryBtn: (disabled = false) => ({
-      padding: '13px 28px', borderRadius: 12, border: 'none',
-      background: disabled ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`,
-      color: disabled ? t.textFaint : NAVY,
+      padding: '11px 20px', borderRadius: 10, border: 'none',
+      background: disabled ? t.bgHover : 'var(--t-accent)',
+      color: disabled ? t.textFaint : 'var(--t-onAccent)',
       fontSize: 14, fontWeight: 800, cursor: disabled ? 'not-allowed' : 'pointer',
-      fontFamily: FONT_B, boxShadow: disabled ? 'none' : t.shadowGold,
+      fontFamily: FONT_B, whiteSpace: 'nowrap',
     }),
     ghostBtn: {
-      padding: '11px 18px', borderRadius: 12,
-      border: `1px solid ${t.borderMid}`,
-      background: 'transparent', color: t.textSub,
-      fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-    },
-    accentBtn: {
-      padding: '11px 18px', borderRadius: 12,
-      border: `1px solid ${accentBorder}`,
-      background: accentBg, color: accent,
-      fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-    },
-    backBtn: {
-      display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 18,
-      padding: '6px 12px', borderRadius: 999, border: `1px solid ${t.border}`,
-      background: t.bgCard, color: t.textMuted,
-      fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
+      padding: '10px 16px', borderRadius: 10,
+      border: `1px solid ${t.border}`,
+      background: t.bgCard, color: t.text,
+      fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap',
     },
     textarea: {
       width: '100%', padding: '14px 16px', borderRadius: 12,
-      border: `1px solid ${t.borderMid}`,
+      border: `1px solid ${t.border}`,
       background: t.bgCard, color: t.text,
       fontSize: 14, fontFamily: FONT_B, resize: 'vertical',
       outline: 'none', lineHeight: 1.7, boxSizing: 'border-box',
@@ -418,21 +394,27 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
   // Focus ring for the text areas (inline styles can't express :focus).
   const focusCss = (
     <style>{`
-      .gf-writing-input:focus { border-color: ${accent} !important; box-shadow: 0 0 0 3px ${accentBg}; }
+      .gf-writing-input:focus { border-color: ${t.borderStrong} !important; box-shadow: 0 0 0 3px ${t.accentGlow}; }
       .gf-writing-input::placeholder { color: ${t.textFaint}; }
+      .gf-writing button:focus-visible, .gf-writing [role="button"]:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; }
+      .gf-writing-row:hover { background: ${t.bgSubtle}; }
+      @media (max-width: 860px) { .gf-writing-wrap { padding: 18px 14px 32px !important; } }
     `}</style>
   )
 
-  const wrap = (inner) => <div style={s.scrollWrap}>{focusCss}{inner}</div>
+  const wrap = (inner) => <div className="gf-writing" style={s.scrollWrap}>{focusCss}{inner}</div>
 
+  // Like Practice's heading. Changing subject is in the sidebar, as on every page.
   const header = ({ title, subtitle, back, backLabel = 'Back' }) => (
-    <div style={{ marginBottom: 24 }}>
-      {back && <button type="button" onClick={back} style={s.backBtn}>← {backLabel}</button>}
-      <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>
-        Writing · {subject.stage} {subject.name}
-      </div>
-      <h1 style={{ margin: 0, fontSize: 24, fontFamily: FONT_D, fontWeight: 400, letterSpacing: 1.5, color: t.text }}>{title}</h1>
-      {subtitle && <p style={{ margin: '6px 0 0', fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>{subtitle}</p>}
+    <div style={{ marginBottom: 18 }}>
+      {back && (
+        <button type="button" onClick={back}
+          style={{ border: 'none', background: 'none', padding: '4px 0', marginBottom: 6, color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          ← {backLabel}
+        </button>
+      )}
+      <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{title}</h1>
+      {subtitle && <p style={{ margin: '2px 0 0', fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>{subtitle}</p>}
     </div>
   )
 
@@ -440,7 +422,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
   const modeLabel = (m) => (m === 'prompt_planner' ? 'Prompt planner' : 'Full essay')
 
   const promptPanel = (compact = false) => (
-    <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginBottom: compact ? 16 : 22, borderColor: accentBorder }}>
+    <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginBottom: compact ? 16 : 20 }}>
       {imageUrl && (
         <img
           src={imageUrl}
@@ -448,8 +430,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
           style={{ width: '100%', maxHeight: compact ? 160 : 300, objectFit: 'cover', display: 'block' }}
         />
       )}
-      <div style={{ padding: compact ? '14px 18px' : '22px 24px', borderLeft: `4px solid ${accent}` }}>
-        <div style={{ fontSize: 11, color: accent, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+      <div style={{ padding: compact ? '14px 18px' : '20px 22px', borderLeft: '4px solid var(--t-accent)' }}>
+        <div style={{ fontSize: 12, color: t.goldText, fontWeight: 800, marginBottom: 6 }}>
           {typeLabel} prompt
         </div>
         <div style={{ fontSize: compact ? 14 : 17, lineHeight: 1.7, color: t.text, fontWeight: compact ? 500 : 600 }}>{prompt}</div>
@@ -489,8 +471,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
         )}
 
         {fb.overallImpression && (
-          <div style={{ ...s.card, background: accentBg, borderColor: accentBorder, boxShadow: 'none', padding: compact ? '14px 16px' : '18px 20px' }}>
-            <div style={{ ...s.sectionTitle, color: accent, marginBottom: 6 }}>Overall impression</div>
+          <div style={{ ...s.card, borderLeft: '4px solid var(--t-accent)', padding: compact ? '14px 16px' : '18px 20px' }}>
+            <div style={{ ...s.sectionTitle, marginBottom: 6 }}>Overall impression</div>
             <div style={{ fontSize: compact ? 13 : 15, lineHeight: 1.7, color: t.text }}>{fb.overallImpression}</div>
           </div>
         )}
@@ -533,8 +515,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
         )}
 
         {Array.isArray(fb.improvements) && fb.improvements.length > 0 && (
-          <div style={{ ...s.card, background: t.purpleBg, borderColor: `${t.purple}33`, boxShadow: 'none', padding: compact ? '14px 16px' : '18px 20px' }}>
-            <div style={{ ...s.sectionTitle, color: t.purple }}>What to improve</div>
+          <div style={{ ...s.card, padding: compact ? '14px 16px' : '18px 20px' }}>
+            <div style={s.sectionTitle}>What to improve</div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {fb.improvements.map((imp, i) => (
                 <li key={i} style={{ fontSize: 13, color: t.textSub, lineHeight: 1.55 }}>{imp}</li>
@@ -549,8 +531,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
   // ─── History tab ───────────────────────────────────────────────────────────
   if (writingTab === 'history') {
     return wrap((
-      <div style={s.container}>
-        {header({ title: 'Writing History', subtitle: 'Your past attempts, feedback reports and PDFs.', back: onBack, backLabel: 'Change subject' })}
+      <div className="gf-writing-wrap" style={s.container}>
+        {header({ title: 'Writing History', subtitle: 'Your past attempts, feedback reports and PDFs.' })}
         {loadingList ? (
           <div style={{ color: t.textMuted, fontSize: 14 }}>Loading…</div>
         ) : listAttempts.length === 0 ? (
@@ -570,7 +552,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
                     aria-expanded={open}
                     onClick={() => setSelectedListId(open ? null : a.id)}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedListId(open ? null : a.id) } }}
-                    style={{ padding: '16px 18px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}
+                    className="gf-writing-row"
+                    style={{ padding: '16px 18px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, transition: 'background 0.15s' }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
@@ -606,7 +589,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
                                 setPdfLoadingId(a.id)
                                 void downloadWritingReportPdf(a.id, profile?.display_name).finally(() => setPdfLoadingId(null))
                               }}
-                              style={{ ...s.accentBtn, padding: '7px 14px', fontSize: 12 }}
+                              style={{ ...s.ghostBtn, padding: '7px 14px', fontSize: 12 }}
                             >
                               {pdfLoadingId === a.id ? 'Preparing PDF…' : 'Download PDF'}
                             </button>
@@ -630,8 +613,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
   // ─── Study Plan tab ───────────────────────────────────────────────────────
   if (writingTab === 'study-plan') {
     return wrap((
-      <div style={s.container}>
-        {header({ title: 'Writing Plan', subtitle: 'What to work on next, based on your feedback so far.', back: onBack, backLabel: 'Change subject' })}
+      <div className="gf-writing-wrap" style={s.container}>
+        {header({ title: 'Writing Plan', subtitle: 'What to work on next, based on your feedback so far.' })}
         {loadingList ? (
           <div style={{ color: t.textMuted, fontSize: 14 }}>Loading…</div>
         ) : !studyInsights.hasData ? (
@@ -657,7 +640,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
                       </div>
                       {scoreBar(c.avg)}
                       <div style={{ fontSize: 13, color: t.textSub, marginTop: 12, lineHeight: 1.6 }}>
-                        <strong style={{ color: t.purple }}>Practice:</strong>{' '}
+                        <strong style={{ color: t.text }}>Practice:</strong>{' '}
                         {PRACTICE_BY_CRITERION[c.name] || 'Do one timed short response focused only on this criterion, then compare to the rubric comments in History.'}
                       </div>
                     </div>
@@ -691,7 +674,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
                     </div>
                   ))}
                 </div>
-                <button type="button" onClick={() => navigate('/writing/history')} style={{ ...s.accentBtn, marginTop: 12 }}>Open History →</button>
+                <button type="button" onClick={() => navigate('/writing/history')} style={{ ...s.ghostBtn, marginTop: 12 }}>Open History →</button>
               </section>
             )}
           </div>
@@ -712,14 +695,12 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
       { id: 'persuasive', title: 'Persuasive', desc: 'Take a position and argue it with evidence.' },
     ]
     return wrap((
-      <div style={s.container}>
+      <div className="gf-writing-wrap" style={s.container}>
         {header({
           title: isPlanner ? 'Prompt Planner' : 'Write an Essay',
           subtitle: isPlanner
             ? 'Plan the structure of a response in a few minutes, then get feedback on your plan.'
             : 'Write a full response to a fresh prompt, then get marked feedback.',
-          back: onBack,
-          backLabel: 'Change subject',
         })}
 
         <div style={{ ...s.card, display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -730,7 +711,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
                 const active = essayType === o.id
                 return (
                   <button key={o.id} type="button" aria-pressed={active} style={s.optionBtn(active)} onClick={() => setEssayType(o.id)}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: active ? accent : t.text }}>{o.title}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{o.title}</div>
                     <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.45 }}>{o.desc}</div>
                   </button>
                 )
@@ -741,8 +722,8 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
           <div>
             <span style={s.label}>{isPlanner ? 'Planning timer' : 'Timer'}</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
-              <button type="button" aria-pressed={!isTimed} style={s.toggleBtn(!isTimed)} onClick={() => setTimedFn(false)}>Untimed</button>
-              <button type="button" aria-pressed={isTimed} style={s.toggleBtn(isTimed)} onClick={() => setTimedFn(true)}><Timer size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} aria-hidden="true" />Timed</button>
+              <SegmentedToggle size="sm" label={isPlanner ? 'Planning timer' : 'Timer'} value={isTimed} onChange={setTimedFn}
+                options={[{ value: false, label: 'Untimed' }, { value: true, label: <><Timer size={14} aria-hidden="true" />Timed</> }]} />
               {isTimed && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
                   <input
@@ -780,7 +761,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
 
   // ── Stage: Prompt ───────────────────────────────────────────────────────────
   if (stage === 'prompt') return wrap((
-    <div style={s.container}>
+    <div className="gf-writing-wrap" style={s.container}>
       {header({ title: 'Your writing prompt', subtitle: 'Read it carefully, then start when you’re ready.', back: () => setStage('setup') })}
       {promptPanel()}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
@@ -805,7 +786,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
     const words = essayText.trim() ? essayText.trim().split(/\s+/).length : 0
 
     return wrap(
-      <div style={s.container}>
+      <div className="gf-writing-wrap" style={s.container}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <span style={s.pill(accent, accentBg)}>{typeLabel}</span>
@@ -867,7 +848,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
 
   // ── Stage: Feedback ─────────────────────────────────────────────────────────
   if (stage === 'feedback') return wrap((
-    <div style={s.container}>
+    <div className="gf-writing-wrap" style={s.container}>
       {header({ title: 'Feedback', subtitle: `${typeLabel} · ${modeLabel(mode).toLowerCase()}` })}
 
       {loadingFeedback && (
@@ -899,7 +880,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark', onBack
                 } catch (e) { console.warn(e) }
                 finally { setPdfLoading(false) }
               }}
-              style={s.accentBtn}
+              style={s.ghostBtn}
             >
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF report'}
             </button>
