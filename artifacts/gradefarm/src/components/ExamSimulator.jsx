@@ -5,6 +5,7 @@ import { getQuestionType, gradeResponse, describeCorrectAnswer, emptyResponse } 
 import { gradePaper, formatClock, countQuestions } from '../lib/examEngine'
 import { predictScore, readiness, percentileLabel } from '../lib/examScore'
 import MathText from './MathText'
+import SharedInfoBox from './SharedInfoBox'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
@@ -55,6 +56,7 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
   const value = answers[q.id]
   return (
     <div>
+      <SharedInfoBox q={q} theme={theme} />
       {q.passage && <PassageView passage={q.passage} theme={theme} />}
       {q.graph && <GraphView graph={q.graph} theme={theme} />}
       {q.table_data && <TableView table={q.table_data} theme={theme} />}
