@@ -27,7 +27,7 @@ function Field({ label, hint, children }) {
 const inputStyle = { ...ui.input, width: '100%' }
 
 // Default values (used as fallback while loading or if DB is empty)
-const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, free_daily_marked_answers: 5, student_trial_days: 7, tutor_plans: [
+const DEFAULT_PRICING   = { student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS, free_daily_questions: 20, free_daily_ai_messages: 10, free_daily_marked_answers: 5, student_trial_days: 7, student_intro_price: 2, tutor_plans: [
   { name: 'Starter', price: 59, students: 3, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
   { name: 'Pro', price: 89, students: 10, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
   { name: 'Agency', price: 129, students: 20, subjects: 999, subject_swaps: true, recordings: true, parent_reports: true },
@@ -148,7 +148,18 @@ export default function AdminSettingsTab() {
               placeholder="5"
             />
           </Field>
-          <Field label="Free trial days on a first paid subject" hint="Card required. 0 turns trials off.">
+          <Field label="First week price ($) on a first weekly subject" hint="Instead of the free trial, for weekly billing. 0 turns it off (weekly plans then get the trial).">
+            <input
+              style={inputStyle}
+              type="number"
+              min={0}
+              step="0.5"
+              value={pr.student_intro_price ?? ''}
+              onChange={e => setPr(p => ({ ...p, student_intro_price: e.target.value === '' ? '' : Number(e.target.value) }))}
+              placeholder="2"
+            />
+          </Field>
+          <Field label="Free trial days on a first paid subject" hint="Card required. 0 turns trials off. Monthly plans, and weekly ones when the first week price is 0.">
             <input
               style={inputStyle}
               type="number"

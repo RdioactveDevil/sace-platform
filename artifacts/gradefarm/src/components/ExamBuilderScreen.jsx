@@ -850,7 +850,7 @@ function UnlockDialog({ t, subjectName, totals, minutes, pageRoot, onPlans, onCl
           </ul>
           <div style={{ fontSize: 13, color: t.textSub }}>Included with a plan for <b style={{ color: t.text }}>{subjectName}</b>. Cancel any time.</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button type="button" onClick={onPlans} style={{ padding: '12px 20px', borderRadius: 12, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>See plans →</button>
+            <button type="button" onClick={onPlans} style={{ padding: '12px 20px', borderRadius: 12, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>Unlock it →</button>
             <button type="button" ref={closeRef} onClick={onClose} style={{ padding: '12px 14px', borderRadius: 12, border: 'none', background: 'none', color: t.textSub, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Not now</button>
           </div>
         </div>

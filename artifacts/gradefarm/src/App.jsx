@@ -16,6 +16,7 @@ import { THEMES, shellFor, modeOf, paletteById, setActivePalette } from './lib/t
 import { getLevel, getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
+import UpgradeSheet from './components/UpgradeSheet'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { compareSubjects } from './lib/subjectFilter'
 import { signupAsParent, forgetParentSignup } from './lib/oauth'
@@ -540,7 +541,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
 
 
 // ── Locked Subject Screen ─────────────────────────────────────────────────────
-function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, theme }) {
+function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, theme, onUpgrade = null }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
   const exam = reason === 'exam' || reason === 'test'
@@ -556,8 +557,8 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
             : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
           : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
-      <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        See plans →
+      <button onClick={onUpgrade || (() => navigate('/get-access', { state: { subject } }))} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        {onUpgrade ? 'Unlock it →' : 'See plans →'}
       </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {exam ? '← Back to practice' : '← Back to subject picker'}
@@ -808,6 +809,7 @@ function AppShellScreens({
   interests, setInterests, docContext, setDocContext, docName, setDocName,
   questionContext, setQuestionContext, onConsolidate,
   learnRequest, setLearnRequest,
+  onUpgrade,
 }) {
   const navigate   = useNavigate()
   const location   = useLocation()
@@ -853,7 +855,7 @@ function AppShellScreens({
       {wasOpened('learn') && <div style={show('learn')}>
         <LearnScreen key={subject?.id || 'none'} {...commonProps} {...learnState}
           profile={profile} struggleMap={struggleMap}
-          questions={questions} subject={subject}
+          questions={questions} subject={subject} onUpgrade={onUpgrade}
           onBack={() => navigate('/question-bank')} />
       </div>}
       {wasOpened('leaderboard') && <div style={show('leaderboard')}>
@@ -979,6 +981,20 @@ function AppInner() {
       .catch(() => { if (!cancelled) setFreeQuota({ used: 0, limit: 20 }) })
     return () => { cancelled = true }
   }, [selectedAccess, selectedSubject?.id, user?.id])
+  // The upgrade pop-up (UpgradeSheet), opened where a free student runs out:
+  // { doneLabel, onDone } says where "You're in" takes them back to. Subjects
+  // that aren't curricula go to the plan builder, as before.
+  const [upgradeCtx, setUpgradeCtx] = useState(null)
+  const upgradeCurriculumId = String(selectedSubject?.id || '').startsWith('curriculum_') ? selectedSubject.id.slice('curriculum_'.length) : null
+  const openUpgrade = useCallback((ctx = {}) => {
+    if (upgradeCurriculumId && selectedAccess !== 'full') setUpgradeCtx(ctx)
+    else navigate('/get-access', { state: { subject: selectedSubject } })
+  }, [upgradeCurriculumId, selectedAccess, selectedSubject]) // eslint-disable-line react-hooks/exhaustive-deps
+  const onUpgraded = async () => {
+    await refreshSubscriptions()
+    window.dispatchEvent(new Event('gradefarm:upgraded'))
+  }
+
   const onFreeQuestionAnswered = useCallback(() => {
     setFreeQuota(q => (q ? { ...q, used: q.used + 1 } : q))
     countFreeQuestion().then(r => setFreeQuota({ used: r.used, limit: r.limit })).catch(() => {})
@@ -1667,7 +1683,8 @@ function AppInner() {
       {/* Exam Mode — timed paper drawn from the subject's bank; only for subjects with exam_mode on */}
       <Route path="/exam" element={
         subjectLocked || selectedAccess === 'free'
-          ? <LockedSubjectScreen subject={selectedSubject} reason={subjectLocked ? 'locked' : 'exam'} onChangeSubject={() => navigate('/question-bank')} theme={theme} />
+          ? <LockedSubjectScreen subject={selectedSubject} reason={subjectLocked ? 'locked' : 'exam'} onChangeSubject={() => navigate('/question-bank')} theme={theme}
+              onUpgrade={!subjectLocked && selectedAccess === 'free' ? () => openUpgrade({ doneLabel: 'Start Exam Mode' }) : null} />
         : subjectHasFeature(selectedSubject, 'exam_mode')
           ? <ExamModeScreen theme={theme} questions={questions} struggleMap={struggleMap} setStruggleMap={setStruggleMap} subject={selectedSubject} profile={profile} onExit={() => navigate('/home')} />
           : <Navigate to="/question-bank" replace />
@@ -1684,7 +1701,7 @@ function AppInner() {
           ? <Navigate to="/question-bank" replace />
         : selectedAccess === 'free'
           // The free subject: the whole builder to try, with downloading and saving behind a plan.
-          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} preview exitLabel="Practice" onExit={() => navigate('/home')} onUnlock={() => navigate('/get-access', { state: { subject: selectedSubject } })} />
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} preview exitLabel="Practice" onExit={() => navigate('/home')} onUnlock={() => openUpgrade({ doneLabel: 'Back to my exam' })} />
           : <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} onSit={(id) => navigate(`/exams/${id}/sit`)} />
       } />
 
@@ -1854,7 +1871,7 @@ function AppInner() {
             ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} />
           : <AppShell {...shellProps}>
               <QuizScreen {...commonProps} {...quizState}
-              freeQuota={selectedAccess === 'free' && freeQuota ? { ...freeQuota, onAnswered: onFreeQuestionAnswered, onUpgrade: () => navigate('/get-access', { state: { subject: selectedSubject } }) } : null}
+              freeQuota={selectedAccess === 'free' && freeQuota ? { ...freeQuota, onAnswered: onFreeQuestionAnswered, onUpgrade: (ctx) => openUpgrade(ctx) } : null}
               profile={profile} setProfile={setProfile} subjectTile={selectedSubject}
               questions={quizQuestions} struggleMap={struggleMap} setStruggleMap={setStruggleMap}
               onHome={() => navigate('/question-bank')}
@@ -1948,6 +1965,7 @@ function AppInner() {
         diagnosticDue && !PORTAL_PATHS.includes(location.pathname)
           ? <DiagnosticDueScreen subject={selectedSubject} diagnostic={diagnosticDue} onChangeSubject={shellProps.onChangeSubject} theme={theme} /> :
         <AppShellScreens {...shellProps} {...learnState}
+          onUpgrade={selectedAccess === 'free' ? openUpgrade : null}
           profile={profile} questions={questions} struggleMap={struggleMap}
           setStruggleMap={setStruggleMap} subject={selectedSubject}
           assignmentsVersion={assignmentsVersion}
@@ -2052,6 +2070,10 @@ function AppInner() {
     </ErrorBoundary>
     {/* In-app confirm and alert dialogs (lib/dialog.js), instead of the browser's own. */}
     <DialogHost theme={theme} />
+    {upgradeCtx && selectedSubject && (
+      <UpgradeSheet subject={selectedSubject} curriculumId={upgradeCurriculumId} ctx={upgradeCtx}
+        onClose={() => setUpgradeCtx(null)} onUpgraded={onUpgraded} />
+    )}
     {showThemeCard && (
       <ThemeCard palette={palette} onChoose={choosePalette} onClose={closeThemeCard}
         level={getLevel(profile.xp, rankAccuracy(profile))} staff={!!(profile.is_admin || profile.is_tutor)} />

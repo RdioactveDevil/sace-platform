@@ -163,7 +163,7 @@ export default function GetAccessScreen({ profile, subscriptions = [], onAccessC
           groups={groups} loading={tiles === null} picked={picked} onPick={(ids) => { setError(''); setPicked(ids) }}
           top={<span><MapPin size={16} aria-hidden="true" />Subjects for <b>{where || 'you'}</b></span>}
           empty={<>No more subjects for {where || 'you'} yet. <button type="button" className="lp-link" onClick={() => navigate('/subject-picker')}>Back to your subjects</button></>}
-          tiers={tiers} per={per} onPlan={onPlan} already={already} trialDays={onPlan ? 0 : billing?.trialDays || 0} trialing={!!billing?.trialing}
+          tiers={tiers} per={per} onPlan={onPlan} already={already} trialDays={onPlan ? 0 : billing?.trialDays || 0} introPrice={onPlan ? 0 : billing?.introPrice || 0} trialing={!!billing?.trialing}
           onCheckout={checkout} busy={busy === 'paid'} error={error}
           unavailable={billing?.enabled === false ? "Payments aren't switched on yet. You can start free in the meantime." : ''}
           footer={footer} />

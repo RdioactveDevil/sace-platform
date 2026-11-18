@@ -188,7 +188,7 @@ const ordinal = (n) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st
  */
 export default function PlanBuilder({
   groups, loading = false, empty = null, top = null, picked, onPick,
-  tiers, per, onPlan = false, already = 0, trialDays = 0, trialing = false,
+  tiers, per, onPlan = false, already = 0, trialDays = 0, trialing = false, introPrice = 0,
   onCheckout, busy = false, error = '', unavailable = '', footer = null, details = null,
 }) {
   const all = groups.flatMap(g => g.items)
@@ -225,14 +225,19 @@ export default function PlanBuilder({
     return () => clearTimeout(t)
   }, [nudge])
 
-  const trial = !onPlan && n === 1 && trialDays > 0
+  // A first weekly plan for one subject: $2 (introPrice) for its first week, instead of the trial.
+  const intro = !onPlan && n === 1 && per === 'a week' && introPrice > 0 ? introPrice : 0
+  const trial = !intro && !onPlan && n === 1 && trialDays > 0
   const cta = busy ? (onPlan ? 'Adding…' : 'Opening checkout…')
     : unavailable ? 'Payments are coming soon'
     : onPlan ? (trialing ? 'End trial and add' : `Add ${n === 1 ? 'this subject' : `${n} subjects`}`)
+    : intro ? `Start for $${money(intro)}`
     : trial ? `Start ${trialDays}-day free trial`
     : n === 1 ? 'Start 1 subject' : `Start ${n} subjects`
-  const note = trial ? null
+  const note = intro ? `$${money(intro)} for your first week, then $${money(total)} ${per}. Cancel any time from your Account.`
+    : trial ? null
     : onPlan && trialing ? `Your free trial covers one subject. Adding ${n === 1 ? 'this one' : 'these'} ends it today, and billing starts now.`
+    : !onPlan && n > 1 && per === 'a week' && introPrice > 0 ? `The $${money(introPrice)} first week is for one subject. Start with one, and add the rest later.`
     : !onPlan && n > 1 && trialDays > 0 ? `The ${trialDays}-day free trial is for one subject. Start with one to try it free, and add the rest later.`
     : 'Cancel any time from your Account.'
 
@@ -265,8 +270,8 @@ export default function PlanBuilder({
           {details ? (
             <DetailsStep details={details} chosen={chosen}
               names={lines.map(l => l.name).join(', ')}
-              summary={trial ? `${trialDays} days free, then $${money(total)} ${per} from ${dayAfter(trialDays)}` : `$${money(total)} ${per}`}
-              today={`$${trial ? 0 : money(total)} today.`} />
+              summary={intro ? `$${money(intro)} for your first week, then $${money(total)} ${per} from ${dayAfter(7)}` : trial ? `${trialDays} days free, then $${money(total)} ${per} from ${dayAfter(trialDays)}` : `$${money(total)} ${per}`}
+              today={`$${intro ? money(intro) : trial ? 0 : money(total)} today.`} />
           ) : (<>
           <b>Your plan</b>
           {onPlan && <p className="pp-note" style={{ textAlign: 'left' }}>You're on a plan with {already} subject{already === 1 ? '' : 's'}. New ones go on the same bill.</p>}
@@ -284,8 +289,9 @@ export default function PlanBuilder({
           )}
           <div className="pp-row tot"><span>{onPlan ? 'Added to your bill' : 'Total'}</span><span className="pp-amt" key={per}>${money(total)} {per}</span></div>
           <p className="pp-day">That's just <b className="pp-amt" key={per}>{perDay(total, per === 'a month' ? 'month' : 'week')}</b> a day.</p>
+          {intro > 0 && <div className="pp-row free"><span>First week</span><span><s>${money(total)}</s> ${money(intro)}</span></div>}
           {trial && <div className="pp-row free"><span>First {trialDays} days</span><span>Free</span></div>}
-          {!onPlan && <div className="pp-row"><span>Today</span><span><b>${trial ? 0 : money(total)}</b></span></div>}
+          {!onPlan && <div className="pp-row"><span>Today</span><span><b>${intro ? money(intro) : trial ? 0 : money(total)}</b></span></div>}
           {error && <p className="pp-err" role="alert">{error}</p>}
           <button type="button" className="lp-btn gold lg" onClick={() => onCheckout(chosen)} disabled={busy || !!unavailable}>{cta}</button>
           {(unavailable || note) && <p className="pp-note">{unavailable || note}</p>}

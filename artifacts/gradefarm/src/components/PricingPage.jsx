@@ -35,7 +35,7 @@ import CitySkyline from './CitySkyline'
 
 const DEFAULT_PRICING = {
   student_tiers: DEFAULT_STUDENT_TIERS, student_monthly_tiers: DEFAULT_MONTHLY_TIERS,
-  free_daily_questions: 20, free_daily_ai_messages: 10, free_daily_marked_answers: 5, student_trial_days: 7,
+  free_daily_questions: 20, free_daily_ai_messages: 10, free_daily_marked_answers: 5, student_trial_days: 7, student_intro_price: 2,
   tutor_plans: [
     { name: 'Starter', price: 59, students: 3, subjects: 1, subject_swaps: false, recordings: false, parent_reports: false },
     { name: 'Pro', price: 89, students: 10, subjects: 3, subject_swaps: true, recordings: true, parent_reports: true },
@@ -202,6 +202,9 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
   // Days free on a first plan: signed in, the server says whether they still get it.
   const settingTrial = Math.max(0, Math.floor(Number(pricing.student_trial_days ?? 7)) || 0)
   const trialDays = billing ? billing.trialDays || 0 : settingTrial
+  // $ for the first week of a first weekly plan (one subject); signed in, the server says whether they still get it.
+  const settingIntro = Math.max(0, Number(pricing.student_intro_price ?? 2) || 0)
+  const introPrice = billing ? billing.introPrice || 0 : settingIntro < weekTiers[0] ? settingIntro : 0
 
   const signUp = () => navigate('/auth', { state: { mode: 'signup' } })
   const homeSection = (id) => navigate('/home', { state: { scrollTo: id } })
@@ -316,7 +319,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
             empty={subjects?.length
               ? <>No subjects for {stateLabel(studyState)} yet. <button type="button" className="lp-link" onClick={() => setChangingState(true)}>Pick another state</button>.</>
               : <>Couldn't load the subjects just now. <button type="button" className="lp-link" onClick={signUp}>Make an account</button> and pick yours inside.</>}
-            tiers={tiers} per={per} onPlan={onPlan} already={already} trialDays={trialDays} trialing={!!billing?.trialing}
+            tiers={tiers} per={per} onPlan={onPlan} already={already} trialDays={trialDays} introPrice={onPlan ? 0 : introPrice} trialing={!!billing?.trialing}
             onCheckout={checkout} busy={busy} error={error}
             details={details && !signedIn ? { onBack: () => setDetails(false), onSubmit: submitDetails, busy: detailsBusy, error: detailsError, onSignIn: signInWith, onParent: parentSignUp } : null}
             unavailable={billing?.enabled === false ? "Payments aren't switched on yet. You can start free in the meantime." : ''}
@@ -346,7 +349,8 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
         <section className="lp-in lp-sec" aria-labelledby="pp-faq">
           <div className="lp-sec-head"><h2 id="pp-faq">Questions about paying</h2></div>
           <div className="lp-faq pp-faq">
-            {settingTrial > 0 && <details open><summary>How does the free trial work?</summary><p>Your first paid subject starts with {settingTrial} days free. We take a card when you start, charge nothing for {settingTrial} days, and you can cancel in your Account before then and pay nothing.</p></details>}
+            {settingIntro > 0 && settingIntro < weekTiers[0] && <details open><summary>How does the ${money(settingIntro)} first week work?</summary><p>Your first subject on weekly billing costs ${money(settingIntro)} for its first week, then ${money(weekTiers[0])} a week. Cancel any time in your Account.</p></details>}
+            {settingTrial > 0 && <details><summary>How does the free trial work?</summary><p>Your first paid subject on monthly billing starts with {settingTrial} days free. We take a card when you start, charge nothing for {settingTrial} days, and you can cancel in your Account before then and pay nothing.</p></details>}
             <details open={settingTrial === 0}><summary>Can I cancel any time?</summary><p>Yes, from your Account, whenever you like. There's no contract.</p></details>
             <details><summary>What happens after {freeDaily} questions on the free plan?</summary><p>You can carry on tomorrow, or go unlimited on that subject.</p></details>
             <details><summary>Can I change my free subject?</summary><p>Yes, any time.</p></details>
