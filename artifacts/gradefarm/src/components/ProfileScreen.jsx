@@ -3,7 +3,6 @@ import { getLevelProgress, nextRankHint, rankAccuracy, RANKS, RANK_TIERS } from 
 import RankIcon from './RankIcon'
 import ProgressLeagueBests from './ProgressLeagueBests'
 import YearPlanCard from './YearPlanCard'
-import HomeEngagement from './HomeEngagement'
 import { useNavigate } from 'react-router-dom'
 import { daysUntil, predictGrade } from '../lib/engagement'
 import { localDate } from '../lib/streak'
@@ -29,8 +28,7 @@ function weekStart(date) {
 
 /**
  * Progress, in two tabs.
- * view 'overview': today and this week (the daily goal and streak, this week's
- *   numbers and rank, the year plan's week, this week's plan, coming up).
+ * view 'overview': this week (this week's numbers and rank, the year plan's week, this week's plan, coming up).
  * view 'stats' (Your Statistics): accuracy by week, topic mastery, this
  *   week's league and personal bests.
  */
@@ -246,9 +244,6 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
       <div className="po-inner">
 
         {!isStats && <>
-        {/* Today: the daily goal and streak */}
-        <HomeEngagement theme={theme} profile={profile} subject={subject} questions={questions} onProfileUpdated={onProfileUpdated} />
-
         {/* This week, and rank */}
         <div data-tutorial-target="progress-week" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>

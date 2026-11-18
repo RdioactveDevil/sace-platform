@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import YearPlanCard from './YearPlanCard'
+import HomeEngagement from './HomeEngagement'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardList, GraduationCap, Target, Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
@@ -667,6 +668,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             mode="prompt" onStartSession={onStartSession} onSetUp={() => navigate('/year-setup')} />
 
           <TutorWorkStrip />
+
+          <HomeEngagement theme={theme} profile={profile} subject={subject} questions={questions} onProfileUpdated={onProfileUpdated} />
 
           <div className="hs-mobile-cards" style={{ marginBottom: 14 }}>
             {renderBuilder()}
