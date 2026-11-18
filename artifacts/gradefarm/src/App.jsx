@@ -52,6 +52,7 @@ const Year6Page             = lazyWithReload(() => import('./components/Year6Pag
 const ReadinessCheckScreen  = lazyWithReload(() => import('./components/ReadinessCheckScreen'))
 const AuthScreen            = lazyWithReload(() => import('./components/AuthScreen'))
 const OnboardingScreen      = lazyWithReload(() => import('./components/OnboardingScreen'))
+const YearSetupScreen       = lazyWithReload(() => import('./components/YearSetupScreen'))
 const TutorOnboardingScreen = lazyWithReload(() => import('./components/TutorOnboardingScreen'))
 const TutorSignupScreen     = lazyWithReload(() => import('./components/TutorSignupScreen'))
 const GetAccessScreen       = lazyWithReload(() => import('./components/GetAccessScreen'))
@@ -1819,6 +1820,17 @@ function AppInner() {
       } />
 
       {/* Get access / purchase page */}
+      {/* Set up your year: from the card on Practice (components/YearPlanCard.jsx) */}
+      <Route path="/year-setup" element={
+        !(user && profile)
+          ? <Navigate to="/home" replace />
+          : !profile.onboarding_completed
+            ? <Navigate to={onboardingDest} replace />
+          : !selectedSubject
+            ? <Navigate to="/subject-picker" replace />
+          : <YearSetupScreen {...commonProps} profile={profile} subject={selectedSubject} onDone={() => navigate('/question-bank')} />
+      } />
+
       <Route path="/get-access" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
