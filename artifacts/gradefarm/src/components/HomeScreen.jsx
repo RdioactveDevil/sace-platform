@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
+import YearPlanCard from './YearPlanCard'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardList, GraduationCap, Target, Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
@@ -677,6 +678,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
                 : 'Nothing answered yet this week'}
             </div>
           </div>
+
+          <YearPlanCard theme={theme} profile={profile} subject={subject} questions={questions} struggleMap={currentStruggleMap}
+            onStartSession={onStartSession} onSetUp={() => navigate('/year-setup')} />
 
           <TutorWorkStrip />
 
