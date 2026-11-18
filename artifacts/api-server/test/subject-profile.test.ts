@@ -51,6 +51,21 @@ test("the marker speaks to the subject", () => {
   assert.doesNotMatch(y6, /SACE|VCE/);
 });
 
+test("another valid route earns the marks", () => {
+  // A student solved 9^x = 27^(x-1)/3 by multiplying both sides by 3
+  // (3^(2x+1) = 3^(3x-3), so x = 4) and got 1/3 because the scheme's points
+  // described dividing the right-hand side instead.
+  for (const subject of ["SACE Mathematical Methods Stage 2", "SACE Chemistry Stage 2", "Year 6 Mathematics"]) {
+    const rules = markingSystem(subject);
+    assert.match(rules, /describes one way to answer/);
+    assert.match(rules, /does the same job/);
+    assert.match(rules, /Before you say a step is wrong, check it/);
+    assert.doesNotMatch(rules, /Mark strictly/);
+  }
+  const maths = markingSystem("SACE Mathematical Methods Stage 2");
+  assert.match(maths, /correct final answer by a valid method.*earns full marks/);
+});
+
 test("maths questions are set out as typed working", () => {
   const rules = draftRules({ subject: "VCE Mathematical Methods Units 1 and 2", levelLabel: "Year 11" }).join("\n");
   assert.match(rules, /VCAA/);

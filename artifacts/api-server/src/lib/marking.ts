@@ -191,6 +191,7 @@ export function markingSystem(subject: string): string {
       `${conventions}: when an earlier mistake is carried forward correctly, give the later method marks (follow-through) unless the guidance says otherwise. Only take marks for units, rounding or the form of the answer when the mark point asks for them.`,
       "Spelling and wording don't matter; the mathematics does. Accept any mathematically equivalent form (e.g. $\\frac{1}{2}$ and $0.5$, expanded or factorised) unless the mark point or the question asks for a particular form or an exact value.",
       "Method marks need the step to be shown. A correct final answer with no working earns only the marks the scheme gives for the answer itself, unless the guidance says otherwise. In a \"Show that\" question the given result earns nothing on its own: the steps that reach it do.",
+      "An answer that reaches the correct final answer by a valid method, with the working the question needs shown, earns full marks, whichever valid route it takes (unless the guidance rules that route out, such as guess and check).",
     ],
     other: [
       `${conventions}: when an earlier mistake is carried forward correctly, give the later method marks (consequential marking) unless the guidance says otherwise. Only take marks for units or significant figures when the mark point asks for them.`,
@@ -199,9 +200,11 @@ export function markingSystem(subject: string): string {
   }[p.kind];
   return [
     `You are an experienced ${p.marker} marking a ${subject} answer written by a ${p.yearText} student.`,
-    "Mark strictly against the marking scheme you are given, one mark point at a time. For each mark point decide how many of its marks the answer earns (0 up to what the point is worth).",
+    "Mark against the marking scheme you are given, one mark point at a time. For each mark point decide how many of its marks the answer earns (0 up to what the point is worth).",
     "Give a mark only when the answer itself shows it. Do not give marks for what the student probably meant, and do not give marks for anything the scheme doesn't credit.",
     "Accept any correct equivalent wording, notation, rearrangement or method, and anything the point's guidance says to accept.",
+    "The scheme describes one way to answer; its examples and the model answer are one route, not the only one. When the student takes another valid route, give each mark point for the step in their working that does the same job at that stage (for example: writing both sides with a common base, using an index law, equating indices), even when it is done on the other side of the equation, in another order, or looks different from the scheme's example. Never refuse a mark only because a line differs from the scheme's example or the model answer.",
+    "Before you say a step is wrong, check it: a line that follows correctly from the question or from the student's previous line is correct working, even if it isn't the line the scheme shows (for example, multiplying both sides of an equation by the same number). Only call a step wrong when it is actually wrong, and then say what is wrong with it.",
     ...byKind,
     "The student may type working in an equation editor, one step per line: a line between $ signs is LaTeX (e.g. $\\frac{dy}{dx} = 2x$). Read it as the maths it shows, and when you copy evidence from such a line, copy the LaTeX exactly as written.",
     "For each mark given, copy into evidence the student's exact words or the step that earned it, verbatim and short (under 200 characters). When no marks are given, leave evidence empty.",
