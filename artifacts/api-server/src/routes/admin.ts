@@ -8,6 +8,7 @@ import { parseBulkRequest, conceptTag, chunks } from "../lib/question-bulk";
 import { buildExtendedUpdate } from "../lib/extended-edit";
 import { parseReviewRequest, dropFigureFlags } from "../lib/question-review";
 import { parseSetUpdate } from "../lib/question-sets";
+import { parseMathScale } from "../lib/math-scale";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -1405,6 +1406,26 @@ router.patch("/admin/questions/:id/set", async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     if (!data?.length) return res.status(404).json({ error: "No exam-paper question with that ID" });
     return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/questions/:id/math-scale — how big a question's maths prints
+// ({ math_scale }: 1.15, 1.3, 1.5, or 1 / null for normal), from a paper's page
+// (lib/math-scale.ts).
+router.patch("/admin/questions/:id/math-scale", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const parsed = parseMathScale(req.body);
+    if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+    const { data, error } = await ctx.admin.from("questions").update({ math_scale: parsed.math_scale })
+      .eq("id", req.params.id).select("id");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No question with that ID" });
+    return res.json({ ok: true, math_scale: parsed.math_scale });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

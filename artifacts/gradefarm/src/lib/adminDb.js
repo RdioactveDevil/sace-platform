@@ -284,6 +284,11 @@ export async function updateQuestionSet(id, fields) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/set`, { method: 'PATCH', body: JSON.stringify(fields) })
 }
 
+/** How big a question's maths prints: one of lib/mathScale.js's MATH_SCALES (1 = normal). */
+export async function setQuestionMathScale(id, mathScale) {
+  return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/math-scale`, { method: 'PATCH', body: JSON.stringify({ math_scale: mathScale }) })
+}
+
 /** Tell the server a loaded question's figure was changed by hand, so its crop checks are dropped. where: '' or a part's label. */
 export async function figureChanged(id, where) {
   return adminAuthFetch(`/api/admin/questions/${encodeURIComponent(id)}/figure-changed`, { method: 'POST', body: JSON.stringify({ where }) })
@@ -390,18 +395,18 @@ export async function changePersonBilling(id, action) {
 
 // ─── LOADED EXAM PAPERS (a subject → Exam papers) ────────────────────────────
 
-const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, graph, table_data, diagram, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, reviewed_at, reviewed_by, set_key, set_position, shared_info, shared_image_url, created_at'
+const PAPER_FIELDS = 'id, question, question_type, options, answer_index, solution, parts, total_marks, image_url, graph, table_data, diagram, difficulty, topic, subtopic, source, source_kind, source_publisher, source_year, source_paper, source_question, exam_section, review_status, review, reviewed_at, reviewed_by, set_key, set_position, shared_info, shared_image_url, math_scale, created_at'
 
 /** Every question loaded from an exam paper into a subject (they have an exam section). */
 export async function fetchLoadedPaperQuestions(curriculumId) {
   const rows = []
-  // Before migrations 20261118000000/1 (question review) the review columns don't exist yet.
+  // Before migrations 20261118000000/1/2/4 (review, sets, maths size) those columns don't exist yet.
   let fields = PAPER_FIELDS
   for (let from = 0; ; from += 1000) {
     let { data, error } = await supabase.from('questions').select(fields)
       .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999)
     if (error && error.code === '42703' && fields === PAPER_FIELDS) {
-      fields = PAPER_FIELDS.replace(', review_status, review, reviewed_at, reviewed_by, set_key, set_position, shared_info, shared_image_url', '')
+      fields = PAPER_FIELDS.replace(', review_status, review, reviewed_at, reviewed_by, set_key, set_position, shared_info, shared_image_url, math_scale', '')
       ;({ data, error } = await supabase.from('questions').select(fields)
         .eq('curriculum_id', curriculumId).not('exam_section', 'is', null).order('id').range(from, from + 999))
     }

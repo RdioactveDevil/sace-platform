@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { stripSizeTags } from '../lib/textSize'
+import { MATH_SCALES, mathScaleOf, stepMathScale, mathScaleLabel } from '../lib/mathScale'
+import { appZoom } from '../lib/appZoom'
 import { AlertTriangle, ArrowLeft, Crop, ExternalLink, Eye, FileText, Minus, PanelRightClose, PanelRightOpen, Plus, Trash2, Upload } from 'lucide-react'
 import ExamPaper from './ExamPaper'
 import CropTool from './CropTool'
@@ -16,7 +18,7 @@ import { reviewFlags, reviewState, needsAttention, reviewSummary, paperStatus } 
 import { draftQuestion, changedFigures, originalNumber, previewSrc, isPendingImage } from '../lib/paperPage'
 import {
   fetchLoadedPaperQuestions, fetchPaperPdfLinks, fetchReviewerNames, reviewQuestions, bulkEditQuestions,
-  editQuestion, editExtendedQuestion, saveQuestionVisuals, figureChanged, uploadQuestionImage, updateQuestionSet,
+  editQuestion, editExtendedQuestion, saveQuestionVisuals, figureChanged, uploadQuestionImage, updateQuestionSet, setQuestionMathScale,
 } from '../lib/adminDb'
 
 const PAGE_PX = 210 * 96 / 25.4 // an A4 page's width on screen at 100%
@@ -39,6 +41,19 @@ function StateChip({ q }) {
 function Printed({ questions, meta, zoom }) {
   const exam = useMemo(() => ({ A: questions.filter(isMcq), B: questions.filter(x => !isMcq(x)) }), [questions])
   return <div style={{ zoom }}><ExamPaper exam={exam} meta={meta} /></div>
+}
+
+/**
+ * The paper page takes the whole window: no app sidebar, subject header or
+ * subject tools, just the paper and its own tools. It sits under the crop tool
+ * (z-index 1000) and the app's dialogs and toasts.
+ */
+function Focus({ label, children }) {
+  return (
+    <div role="region" aria-label={label} style={{ position: 'fixed', inset: 0, zIndex: 900, overflow: 'auto', background: 'var(--t-bg)', padding: '16px 20px 24px' }}>
+      {children}
+    </div>
+  )
 }
 
 /** A figure in the editor: what it is now, and crop it from the paper, upload one, or remove it. */
@@ -194,6 +209,22 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   }
   const name = (x) => `${x.exam_section || (isMcq(x) ? 'A' : 'B')}${originalNumber(x)}`
   const review = (status) => run('review', () => reviewQuestions([q.id], status), status === 'approved' ? `Approved ${name(q)}.` : status === 'rejected' ? `Rejected ${name(q)}: students won't see it.` : `${name(q)} is back in review.`)
+  // How big this question's maths prints. Saved straight away; the preview shows it at once.
+  const changeMathScale = async (dir) => {
+    const before = mathScaleOf(q)
+    const k = stepMathScale(before, dir)
+    if (k === before) return
+    const id = q.id, qName = name(q)
+    const put = (v) => setRows(rs => rs.map(r => (r.id === id ? { ...r, math_scale: v === 1 ? null : v } : r)))
+    put(k); setMsg(null)
+    try {
+      await setQuestionMathScale(id, k)
+      setMsg({ ok: true, text: `${qName}'s maths prints at ${mathScaleLabel(k)}${k === 1 ? ', the normal size' : ''}.` })
+    } catch (e) {
+      put(before)
+      setMsg({ ok: false, text: e.message || "The maths size couldn't be saved." })
+    }
+  }
   const approveClean = async () => {
     if (!(await confirmDialog(`Approve the ${plural(sum.cleanPending.length, 'question')} in ${label} that the checks found nothing wrong with? They go to students straight away.`, { confirm: 'Approve' }))) return
     run('review', () => reviewQuestions(sum.cleanPending, 'approved'), `Approved ${plural(sum.cleanPending.length, 'question')}.`)
@@ -302,18 +333,20 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
     if (next) select(next.id)
   }
 
-  if (error) return <div role="alert" style={note('danger')}>{error}</div>
-  if (!rows) return <div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div>
+  if (error) return <Focus label={label}><div role="alert" style={note('danger')}>{error}</div></Focus>
+  if (!rows) return <Focus label={label}><div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div></Focus>
   if (!questions.length) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <button type="button" onClick={onBack} style={{ ...btn('secondary'), alignSelf: 'flex-start', display: 'inline-flex', gap: 6, alignItems: 'center' }}><ArrowLeft size={14} /> Loaded papers</button>
-        <div style={note('info')}>No questions are loaded for “{label}”.</div>
-      </div>
+      <Focus label={label}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <button type="button" onClick={onBack} style={{ ...btn('secondary'), alignSelf: 'flex-start', display: 'inline-flex', gap: 6, alignItems: 'center' }}><ArrowLeft size={14} /> Loaded papers</button>
+          <div style={note('info')}>No questions are loaded for “{label}”.</div>
+        </div>
+      </Focus>
     )
   }
 
-  if (!q) return <div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div>
+  if (!q) return <Focus label={label}><div style={{ color: 'var(--t-textMuted)', fontSize: 13.5 }}>Loading the paper…</div></Focus>
 
   const flags = shown ? reviewFlags(shown) : []
   const page = Number(q?.review?.page) || 0
@@ -322,13 +355,16 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
     : status.state === 'partway' ? `${status.checked} of ${status.total} checked` : 'Not checked'
   const tool = { ...btn('secondary'), padding: '6px 10px', fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 5 }
 
+  // One window tall in the app's own (zoomed) CSS pixels (lib/appZoom.js).
+  const screenH = `calc(100vh / ${appZoom()})`
   return (
-    <div className="pp" style={{ display: 'flex', flexDirection: 'column', gap: 12, fontFamily: FONT_B, color: 'var(--t-text)' }}>
+    <Focus label={label}>
+    <div className="pp" style={{ display: 'flex', flexDirection: 'column', gap: 12, fontFamily: FONT_B, color: 'var(--t-text)', '--pp-h': screenH }}>
       <style>{`
         .pp-grid { display: grid; grid-template-columns: 230px minmax(0, 1fr) minmax(320px, 0.85fr); gap: 12px; align-items: start; }
         .pp-grid.no-side { grid-template-columns: 230px minmax(0, 1fr); }
         .pp-col { border: 1px solid var(--t-border); border-radius: 12px; background: var(--t-bgCard); min-width: 0; }
-        .pp-sticky { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+        .pp-sticky { position: sticky; top: 0; max-height: calc(var(--pp-h) - 40px); overflow: auto; }
         .pp-row { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--t-border); background: transparent; color: var(--t-text); cursor: pointer; font: inherit; }
         .pp-row[aria-current="true"] { background: var(--t-bgHover); box-shadow: inset 3px 0 0 var(--t-accent); }
         .pp-preview .xp-page { margin-bottom: 6mm; }
@@ -392,6 +428,15 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
             <b style={{ fontSize: 13 }}>{whole ? 'Whole paper, as it prints' : q.set_key ? `Set ${setName(q)} as it prints` : `${name(q)} as it prints`}</b>
             {editing && (draft || sharedDirty) && !whole && <Chip bg="rgba(37,99,235,0.12)" fg="#2563eb">Showing your unsaved changes</Chip>}
             <span style={{ flex: 1 }} />
+            {!whole && (
+              <span role="group" aria-label={`Maths size for ${name(q)}`} title="How big this question's equations print: superscripts, fractions, integrals and all"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, paddingRight: 8, marginRight: 2, borderRight: '1px solid var(--t-border)' }}>
+                <span style={{ fontSize: 12, color: 'var(--t-textMuted)' }}>Maths</span>
+                <button type="button" onClick={() => changeMathScale(-1)} disabled={mathScaleOf(q) === MATH_SCALES[0]} style={{ ...tool, ...(mathScaleOf(q) === MATH_SCALES[0] ? { opacity: 0.45, cursor: 'default' } : {}) }} aria-label="Smaller maths"><Minus size={13} /></button>
+                <span aria-live="polite" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 38, textAlign: 'center' }}>{mathScaleLabel(mathScaleOf(q))}</span>
+                <button type="button" onClick={() => changeMathScale(1)} disabled={mathScaleOf(q) === MATH_SCALES[MATH_SCALES.length - 1]} style={{ ...tool, ...(mathScaleOf(q) === MATH_SCALES[MATH_SCALES.length - 1] ? { opacity: 0.45, cursor: 'default' } : {}) }} aria-label="Bigger maths"><Plus size={13} /></button>
+              </span>
+            )}
             <button type="button" onClick={() => setZoom(Math.max(0.3, scale / 1.2))} style={tool} aria-label="Zoom out"><Minus size={13} /></button>
             <button type="button" onClick={() => setZoom(null)} style={tool}>Fit</button>
             <button type="button" onClick={() => setZoom(Math.min(2, scale * 1.2))} style={tool} aria-label="Zoom in"><Plus size={13} /></button>
@@ -399,7 +444,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
               ? <button type="button" onClick={() => setSide(editing ? 'editor' : 'pdf')} style={tool}><PanelRightOpen size={14} aria-hidden="true" /> Show side panel</button>
               : <button type="button" onClick={() => setSide('hidden')} style={tool}><PanelRightClose size={14} aria-hidden="true" /> Hide side panel</button>}
           </div>
-          <div ref={setPreviewEl} className="pp-preview" style={{ background: 'var(--t-bgSubtle)', borderRadius: 10, padding: 12, overflow: 'auto', maxHeight: '80vh' }}>
+          <div ref={setPreviewEl} className="pp-preview" style={{ background: 'var(--t-bgSubtle)', borderRadius: 10, padding: 12, overflow: 'auto', maxHeight: 'calc(var(--pp-h) - 150px)' }}>
             {whole ? setUnits(visible).map(unit => (
               // A set prints together, as in a built exam.
               <div key={unit[0].id} style={{ marginBottom: 8 }}>
@@ -495,7 +540,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
                         <span style={{ flex: 1 }} />
                         <a href={`${pdf}#page=${page || 1}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--t-text)' }}>Open in a tab <ExternalLink size={12} aria-hidden="true" /></a>
                       </div>
-                      <iframe key={`${q?.id}-${page}`} title="The original paper" src={`${pdf}#page=${page || 1}&view=FitH`} style={{ width: '100%', height: '75vh', border: '1px solid var(--t-border)', borderRadius: 8, background: '#fff' }} />
+                      <iframe key={`${q?.id}-${page}`} title="The original paper" src={`${pdf}#page=${page || 1}&view=FitH`} style={{ width: '100%', height: 'calc(var(--pp-h) - 110px)', border: '1px solid var(--t-border)', borderRadius: 8, background: '#fff' }} />
                     </>
                   )
             )}
@@ -508,5 +553,6 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
           onUse={(blob) => { const u = previewSrc(URL.createObjectURL(blob), 'crop'); pending.current.set(u, { blob, kind: 'crop' }); cropping.setUrl(u); setCropping(null) }} />
       )}
     </div>
+    </Focus>
   )
 }
