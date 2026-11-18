@@ -183,7 +183,13 @@ async function cascadeSubjectRename(
   }
 
   // Tables where the rename is a plain column swap: one UPDATE per chunk of spellings.
-  for (const table of ["draft_questions", "sessions", "study_plan_items", "assignments", "tutor_classes"] as const) {
+  // curriculum_resource_exemplars: question generation finds its exemplar packs
+  // by subject name, so a rename that missed them cut generation off from them.
+  // exam_paper_batches: past-paper loads file their questions under it.
+  for (const table of [
+    "draft_questions", "sessions", "study_plan_items", "assignments", "tutor_classes",
+    "curriculum_resource_exemplars", "exam_paper_batches",
+  ] as const) {
     for (const grp of chunk(srcs, 50)) {
       const { error } = await admin.from(table).update({ subject: newSubject }).in("subject", grp);
       if (error) throw new Error(error.message);

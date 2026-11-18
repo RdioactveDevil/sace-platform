@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fitsStudent, subjectBoard, subjectYear, stateLabel, stateBoard, schoolStage } from './subjectFilter.js'
+import { fitsStudent, subjectBoard, subjectYear, stateLabel, stateBoard, schoolStage, compareSubjects } from './subjectFilter.js'
 
 const vceMethods12 = { name: 'VCE Mathematical Methods Units 1 and 2', stage: 'Year 11' }
 const vceMethods34 = { name: 'VCE Mathematical Methods', stage: 'Units 3 & 4' }
@@ -82,4 +82,25 @@ test('only Victoria and South Australia have a board of their own', () => {
   assert.equal(stateBoard('SA'), 'sace')
   assert.equal(stateBoard('NSW'), null)
   assert.equal(stateBoard(null), null)
+})
+
+test('subjects sort by school year, then name', () => {
+  const list = [
+    { name: 'VCE Chemistry Units 3 and 4', stage: 'Year 12' },
+    { name: 'Year 6 English', stage: 'Year 6' },
+    { name: 'SACE Specialist Mathematics Stage 1', stage: 'Year 11' },
+    { name: 'SACE Chemistry Stage 2', stage: 'Year 12' },
+    { name: 'Year 6 Mathematics', stage: 'Year 6' },
+    { name: 'VCE Mathematical Methods Units 1 and 2', stage: 'Year 11' },
+    { name: 'Study Skills', stage: '' },
+  ]
+  assert.deepEqual([...list].sort(compareSubjects).map(s => s.name), [
+    'Year 6 English',
+    'Year 6 Mathematics',
+    'SACE Specialist Mathematics Stage 1',
+    'VCE Mathematical Methods Units 1 and 2',
+    'SACE Chemistry Stage 2',
+    'VCE Chemistry Units 3 and 4',
+    'Study Skills',
+  ])
 })

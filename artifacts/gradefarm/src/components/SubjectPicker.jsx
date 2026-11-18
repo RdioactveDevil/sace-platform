@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { curriculumToSubjectTile, subjectAccess } from '../lib/subjects'
 import { fetchSubjectBankCounts, getBillingConfig, updateProfile } from '../lib/db'
-import { AU_STATES, fitsStudent, subjectYear, stateLabel } from '../lib/subjectFilter'
+import { AU_STATES, compareSubjects, fitsStudent, subjectYear, stateLabel } from '../lib/subjectFilter'
 import { studentTiers } from '../lib/pricing'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { SubjectIconByName } from './SubjectIcons'
@@ -96,8 +96,6 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   // Subjects for this student's state and year. Staff see everything.
   const fits = (s) => fullAccess || fitsStudent(s, { state: profile.state, year })
   const forYear = year ? allSubjects.filter(s => s.available && fits(s) && subjectYear(s) === year) : []
-  // Lower years first, so a list reads like a school.
-  const byYear = (a, b) => (subjectYear(a) ?? 99) - (subjectYear(b) ?? 99) || a.name.localeCompare(b.name)
 
   // One subject gets the big card: the one they used last, else their own,
   // else the one for their year. Everything else is a list under it.
@@ -105,9 +103,9 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const lastId = (() => { try { return JSON.parse(localStorage.getItem('gf-subject') || 'null')?.id } catch { return null } })()
   const pick = hasOwn
     ? subscribed.find(s => s.id === lastId) || subscribed[0]
-    : forYear[0] || notSubscribed.filter(fits).sort(byYear)[0]
-  const ownOthers = subscribed.filter(s => s !== pick).sort(byYear)
-  const others = notSubscribed.filter(s => s !== pick).sort(byYear)
+    : forYear[0] || notSubscribed.filter(fits).sort(compareSubjects)[0]
+  const ownOthers = subscribed.filter(s => s !== pick).sort(compareSubjects)
+  const others = notSubscribed.filter(s => s !== pick).sort(compareSubjects)
   const more = others.filter(fits)
   const comingSoon = allSubjects.filter(s => !s.available && fits(s))
 

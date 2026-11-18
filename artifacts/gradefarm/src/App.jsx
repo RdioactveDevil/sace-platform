@@ -17,6 +17,7 @@ import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
+import { compareSubjects } from './lib/subjectFilter'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import { filterByFormat } from './lib/questionTypes'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
@@ -304,7 +305,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
       .catch(() => { if (!cancelled) setSubjectTiles([]) })
     return () => { cancelled = true }
   }, [subjectsOpen, workspace])
-  const mySubjects = (subjectTiles || []).filter(s => s.available && subjectAccess(subscriptions, s, fullAccess) !== 'none')
+  const mySubjects = (subjectTiles || []).filter(s => s.available && subjectAccess(subscriptions, s, fullAccess) !== 'none').sort(compareSubjects)
 
   const switchTo = (tile) => {
     setSubjectsOpen(false)
@@ -431,7 +432,10 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
                     <button key={tile.id} type="button" role="option" aria-selected={current} className="gf-side-btn"
                       onClick={() => (current ? setSubjectsOpen(false) : switchTo(tile))}
                       style={{ ...menuItem, fontWeight: current ? 700 : 500 }}>
-                      <span style={{ flex: 1, minWidth: 0 }}>{formatSubjectLabel(tile)}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block' }}>{formatSubjectLabel(tile)}</span>
+                        {tile.stage && <span style={{ display: 'block', fontSize: 11.5, color: SB.dim, fontWeight: 500 }}>{tile.stage}</span>}
+                      </span>
                       {current && <Check size={15} color={GOLD} aria-hidden="true" style={{ flexShrink: 0 }} />}
                     </button>
                   )
