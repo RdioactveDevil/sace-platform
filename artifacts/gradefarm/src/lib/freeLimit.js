@@ -63,3 +63,20 @@ export function sheetCopy(misses, nextTopic = '', limit = 15) {
   if (n <= 4) return { title: [`${n} got away.`, 'Get them back while they’re fresh.'], cta: `Retry these ${n} now`, lead: '' }
   return { title: ['A tough set today.', `Go back over the ${n} you missed.`], cta: 'Retry them now', lead: '' }
 }
+
+/**
+ * The last question Titan asked in a chat, to show where it paused: the last
+ * sentence ending in "?" of Titan's last message, without markdown or maths
+ * markers. '' when there isn't one.
+ */
+export function lastTitanQuestion(messages) {
+  const last = [...(messages || [])].reverse().find(m => m && m.role === 'assistant')
+  if (!last) return ''
+  const text = typeof last.content === 'string' ? last.content
+    : Array.isArray(last.content) ? last.content.filter(b => b && b.type === 'text').map(b => b.text).join(' ') : ''
+  const plain = text.replace(/\$\$?([^$]*)\$\$?/g, '$1').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim()
+  const questions = plain.split(/(?<=[.?!])\s+/).filter(s => s.endsWith('?'))
+  let q = (questions[questions.length - 1] || '').replace(/^(or|and|so|now)\s+/i, '')
+  q = q.charAt(0).toUpperCase() + q.slice(1)
+  return q.length > 160 ? `${q.slice(0, 157).trimEnd()}…` : q
+}

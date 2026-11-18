@@ -65,3 +65,18 @@ test('the headline fits how many got away', () => {
   assert.equal(sheetCopy([{}, {}, {}]).title[0], '3 got away.')
   assert.equal(sheetCopy(Array(8).fill({})).title[1], 'Go back over the 8 you missed.')
 })
+
+import { lastTitanQuestion } from './freeLimit.js'
+
+test("where a Titan chat paused: its last question", () => {
+  const messages = [
+    { role: 'assistant', content: 'What is a log?' },
+    { role: 'user', content: 'asdf' },
+    { role: 'assistant', content: 'Still just letters. That\'s okay.\n\nWhen you\'re ready, how many **bacteria** are there after $4$ hours? Or tell me you\'d like a break.' },
+    { role: 'user', content: 'sfd' },
+  ]
+  assert.equal(lastTitanQuestion(messages), 'When you\'re ready, how many bacteria are there after 4 hours?')
+  assert.equal(lastTitanQuestion([{ role: 'assistant', content: [{ type: 'text', text: 'Nice. Or shall we try another?' }] }]), 'Shall we try another?')
+  assert.equal(lastTitanQuestion([{ role: 'assistant', content: 'Good work.' }]), '')
+  assert.equal(lastTitanQuestion([]), '')
+})
