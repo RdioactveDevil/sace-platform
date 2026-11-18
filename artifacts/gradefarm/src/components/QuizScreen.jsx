@@ -2039,7 +2039,7 @@ export default function QuizScreen({
   // Free subject: once today's questions are used up, stop before the next one,
   // with the next question waiting behind the lock.
   if (freeQuota && freeQuota.used >= freeQuota.limit && !showAns) {
-    return <FreeLimitScreen t={t} limit={freeQuota.limit} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onHome={onHome} />
+    return <FreeLimitScreen t={t} limit={freeQuota.limit} userId={profile?.id} questions={questions} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onHome={onHome} />
   }
 
   const { pct } = getLevelProgress(profile.xp, rankAccuracy(profile))

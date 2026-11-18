@@ -17,3 +17,49 @@ export function formatWait(minutes) {
   if (!h) return `${m} min`
   return m ? `${h} h ${m} min` : `${h} h`
 }
+
+/** When today started in Adelaide, as a Date. */
+export function dayStart(now = new Date()) {
+  return new Date(now.getTime() + minutesUntilReset(now) * 60000 - 86400000)
+}
+
+const LETTERS = 'ABCDEFGH'
+
+/**
+ * Today's free questions as a marked sheet. `answers`: answer_log rows today
+ * ({ question_id, correct, selected, answered_at }), or this session's results
+ * ({ id, correct }) when today's log can't be read. `byId`: the subject's
+ * questions. Only this subject's questions count; the last `limit` are shown.
+ * → { items: [{ n, label, correct }], right, misses: [{ id, label, note }], note }
+ */
+export function markedSheet(answers, byId, limit = 15) {
+  const rows = (answers || [])
+    .map(a => ({ id: a.question_id ?? a.id, correct: !!a.correct, selected: a.selected ?? null, at: a.answered_at || '' }))
+    .filter(a => byId.has(a.id))
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+    .slice(-limit)
+  const label = (q) => q.subtopic || q.topic || 'Question'
+  const items = rows.map((r, i) => ({ n: i + 1, label: label(byId.get(r.id)), correct: r.correct }))
+  const right = rows.filter(r => r.correct).length
+  // Each question once, at its latest answer: still wrong means a miss.
+  const latest = new Map()
+  rows.forEach((r, i) => latest.set(r.id, { ...r, n: i + 1 }))
+  const misses = [...latest.values()].filter(r => !r.correct).sort((a, b) => a.n - b.n).map(r => {
+    const q = byId.get(r.id)
+    const mcq = Array.isArray(q.options) && q.options.length && typeof r.selected === 'number' && r.selected >= 0
+    return { id: r.id, n: r.n, label: label(q), note: mcq ? `you picked ${LETTERS[r.selected] || '?'}` : 'not quite' }
+  })
+  const pct = items.length ? right / items.length : 0
+  const opener = pct === 1 ? 'Full marks.' : pct >= 0.8 ? 'Good work.' : pct >= 0.5 ? 'Solid effort.' : 'Keep at it.'
+  const note = misses.length ? `${opener} Have another go at ${misses[0].label.toLowerCase()}.` : `${opener} See you tomorrow.`
+  return { items, right, misses, note }
+}
+
+/** The right-hand side's words for a marked sheet: how many got away decides the tone. */
+export function sheetCopy(misses, nextTopic = '', limit = 15) {
+  const n = misses.length
+  if (!n) return { title: ['Clean sheet.', 'Keep the run going?'], cta: 'Keep going', lead: nextTopic ? `Question ${limit + 1} is waiting: ${nextTopic}.` : '' }
+  if (n === 1) return { title: ['1 got away.', 'One more go for a clean sheet.'], cta: 'Retry it now', lead: '' }
+  if (n <= 4) return { title: [`${n} got away.`, 'Get them back while they’re fresh.'], cta: `Retry these ${n} now`, lead: '' }
+  return { title: ['A tough set today.', `Go back over the ${n} you missed.`], cta: 'Retry them now', lead: '' }
+}

@@ -1,93 +1,94 @@
-import { useEffect, useState } from 'react'
-import { Lock, Check, X } from 'lucide-react'
-import { scramble } from '../lib/examPreview'
-import { minutesUntilReset, formatWait } from '../lib/freeLimit'
+import { useEffect, useMemo, useState } from 'react'
+import { getAnswersSince } from '../lib/db'
+import { dayStart, markedSheet, sheetCopy, minutesUntilReset, formatWait } from '../lib/freeLimit'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
+const HAND = "'Caveat', 'Segoe Print', 'Comic Sans MS', cursive"
+const PEN = '#c2362d' // the red pen, on white paper in every theme
+const INK = '#2a2118'
 
 /**
- * The free subject after today's free questions: the next question waiting,
- * blurred (scrambled text, so there's nothing real to un-blur), this
- * session's answers, when the free questions come back, and Get unlimited.
+ * The free subject after today's free questions: today's answers marked
+ * like a test (red-pen ticks, the score circled, a note), and beside it the
+ * questions that got away, with Retry (a plan) or come back at midnight.
+ * The words fit how many got away (lib/freeLimit.js sheetCopy).
  */
-export default function FreeLimitScreen({ t, limit, nextQ, results = [], onUpgrade, onHome }) {
+export default function FreeLimitScreen({ t, limit, userId, questions = [], results = [], nextQ, onUpgrade, onHome, loadAnswers = getAnswersSince }) {
+  const byId = useMemo(() => new Map((questions || []).map(q => [q.id, q])), [questions])
+  // Today's answers from the log; this session's until they arrive (or if they can't be read).
+  const [answers, setAnswers] = useState(null)
+  useEffect(() => {
+    if (!userId) return
+    let alive = true
+    loadAnswers(userId, dayStart().toISOString()).then(rows => { if (alive && rows?.length) setAnswers(rows) }).catch(() => {})
+    return () => { alive = false }
+  }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const sheet = useMemo(() => markedSheet(answers || results, byId, limit), [answers, results, byId, limit])
+  const copy = sheetCopy(sheet.misses, nextQ?.subtopic || nextQ?.topic || '', limit)
+
   const [wait, setWait] = useState(() => minutesUntilReset())
   useEffect(() => {
     const id = setInterval(() => setWait(minutesUntilReset()), 30000)
     return () => clearInterval(id)
   }, [])
 
-  const right = results.filter(r => r.correct).length
-  const topic = nextQ?.subtopic || nextQ?.topic || ''
-  const seed = nextQ?.id || 'next'
-  const stem = scramble(String(nextQ?.question || 'What is the value of the expression when the reaction reaches equilibrium?').slice(0, 220), seed)
-  const options = Array.isArray(nextQ?.options) && nextQ.options.length
-    ? nextQ.options.slice(0, 4).map((o, i) => scramble(String(o).slice(0, 60) || 'answer', `${seed}:${i}`))
-    : null
+  const today = new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Australia/Adelaide' }).format(new Date())
+  const rows = Math.ceil(sheet.items.length / 2)
+  const shown = sheet.misses.slice(0, 3)
+  const more = sheet.misses.length - shown.length
 
   return (
-    <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px', fontFamily: FONT_B, boxSizing: 'border-box' }}>
-      <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: t.textMuted }}>
-          <span style={{ fontWeight: 800, color: t.text }}>Question {limit + 1} is ready</span>
-          {topic && <span style={{ padding: '3px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--t-accent) 16%, transparent)', color: t.goldText, fontSize: 12, fontWeight: 800 }}>{topic}</span>}
-        </div>
+    <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '40px 56px', padding: '40px 20px', boxSizing: 'border-box', fontFamily: FONT_B, color: t.text }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');"}</style>
 
-        <div style={{ position: 'relative' }}>
-          {/* The next question, unreadable. */}
-          <div aria-hidden="true" style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 18, padding: '26px 26px 30px', minHeight: 480, boxSizing: 'border-box', filter: 'blur(5px)', userSelect: 'none', pointerEvents: 'none' }}>
-            <div style={{ fontSize: 17, lineHeight: 1.6, color: t.text, marginBottom: 22 }}>{stem}</div>
-            {options ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {options.map((o, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', borderRadius: 12, border: `1px solid ${t.border}`, fontSize: 15, color: t.text }}>
-                    <span style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${t.border}`, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800 }}>{'ABCD'[i]}</span>{o}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ height: 150, borderRadius: 12, border: `1px solid ${t.border}`, background: t.bgSubtle }} />
-            )}
+      {sheet.items.length > 0 && (
+        <figure aria-label={`Today's practice: ${sheet.right} of ${sheet.items.length} right`} style={{ margin: 0, width: 'min(400px, 100%)', minHeight: 470, background: '#fff', color: INK, boxShadow: '0 2px 0 rgba(0,0,0,0.06), 0 18px 40px rgba(40,25,5,0.14)', padding: '30px 32px 26px', boxSizing: 'border-box', position: 'relative', transform: 'rotate(-1.2deg)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6f6455', borderBottom: '1px solid #e8e0d2', paddingBottom: 10 }}>
+            <b style={{ color: INK }}>Today&rsquo;s practice</b><span>{today}</span>
           </div>
-
-          {/* The lock, over it. */}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div role="status" style={{ width: '100%', maxWidth: 420, textAlign: 'center', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: '28px 26px', boxShadow: '0 16px 50px rgba(0,0,0,0.18)', boxSizing: 'border-box' }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--t-accent)', color: 'var(--t-onAccent)' }}>
-                <Lock size={22} aria-hidden="true" />
-              </div>
-              <div style={{ fontSize: 19, fontWeight: 800, color: t.text, marginBottom: 6, lineHeight: 1.3 }}>That&rsquo;s your {limit} free questions for today</div>
-
-              {results.length > 0 && (
-                <div style={{ margin: '10px 0 12px' }}>
-                  <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-                    {results.map((r, i) => (
-                      <span key={i} style={{ width: 18, height: 18, borderRadius: 6, display: 'grid', placeItems: 'center', background: r.correct ? 'color-mix(in srgb, var(--t-success) 20%, transparent)' : 'color-mix(in srgb, var(--t-danger) 16%, transparent)', color: r.correct ? t.success : t.danger }}>
-                        {r.correct ? <Check size={12} strokeWidth={3} /> : <X size={12} strokeWidth={3} />}
-                      </span>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 13, color: t.textSub }}><b style={{ color: t.text }}>{right} of {results.length}</b> right this session</div>
-                </div>
-              )}
-
-              <p style={{ fontSize: 13.5, color: t.textMuted, lineHeight: 1.6, margin: '0 0 18px' }}>
-                {limit} more in <b style={{ color: t.text }}>{formatWait(wait)}</b>, or keep going now with unlimited questions, Exam Mode and the exam builder.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button type="button" onClick={onUpgrade}
-                  style={{ height: 44, borderRadius: 12, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>
-                  Unlock question {limit + 1}
-                </button>
-                <button type="button" onClick={onHome}
-                  style={{ height: 40, borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  Back to Practice
-                </button>
-              </div>
-            </div>
+          <div aria-hidden="true" style={{ alignSelf: 'flex-end', position: 'relative', width: 150, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -4 }}>
+            <svg width="150" height="92" viewBox="0 0 150 92" style={{ position: 'absolute', inset: 0 }}>
+              <path d="M18 50 C 10 16, 120 4, 136 38 C 150 74, 40 94, 16 64 C 8 54, 24 32, 44 26" fill="none" stroke={PEN} strokeWidth="3" strokeLinecap="round" />
+            </svg>
+            <span style={{ fontFamily: HAND, fontSize: 50, fontWeight: 700, color: PEN, transform: 'rotate(-6deg)', whiteSpace: 'nowrap' }}>{sheet.right}/{sheet.items.length}</span>
           </div>
+          <ol aria-hidden="true" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gridTemplateRows: `repeat(${rows}, auto)`, gridAutoFlow: 'column', columnGap: 18, rowGap: 7, fontSize: 13, color: '#4b4033' }}>
+            {sheet.items.map(it => (
+              <li key={it.n} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.n}. {it.label}</span>
+                <span style={{ fontFamily: HAND, fontSize: 22, lineHeight: '16px', color: PEN, width: 14, textAlign: 'center' }}>{it.correct ? '✓' : '✗'}</span>
+              </li>
+            ))}
+          </ol>
+          <div aria-hidden="true" style={{ marginTop: 'auto', paddingTop: 12, fontFamily: HAND, fontSize: 25, color: PEN, lineHeight: 1.1, transform: 'rotate(-2deg)' }}>{sheet.note}</div>
+        </figure>
+      )}
+
+      <section aria-labelledby="fl-title" style={{ width: 'min(380px, 100%)', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.textMuted }}>That&rsquo;s your {limit} for today</div>
+        <h1 id="fl-title" style={{ margin: 0, fontSize: 32, lineHeight: 1.15, fontWeight: 800, letterSpacing: '-0.01em' }}>{copy.title[0]}<br />{copy.title[1]}</h1>
+        {copy.lead && <div style={{ fontSize: 14.5, color: t.textSub }}>{copy.lead}</div>}
+        {shown.length > 0 && (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: `1px solid ${t.border}` }}>
+            {shown.map(m => (
+              <li key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '12px 0', borderBottom: `1px solid ${t.border}`, fontSize: 14 }}>
+                <span style={{ minWidth: 0 }}><b>Q{m.n}</b> {m.label}</span>
+                <span style={{ fontSize: 12.5, color: t.textMuted, whiteSpace: 'nowrap' }}>{m.note}</span>
+              </li>
+            ))}
+            {more > 0 && <li style={{ padding: '10px 0', fontSize: 13, color: t.textMuted, borderBottom: `1px solid ${t.border}` }}>+ {more} more</li>}
+          </ul>
+        )}
+        <button type="button" onClick={onUpgrade}
+          style={{ height: 48, borderRadius: 12, border: 'none', background: t.text, color: t.bg, fontFamily: FONT_B, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
+          {copy.cta}
+        </button>
+        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
+          {sheet.misses.length ? 'Retrying needs unlimited questions. ' : 'Keeping going needs unlimited questions. '}
+          Or come back at midnight, in {formatWait(wait)}, for {limit} more.{' '}
+          <button type="button" onClick={onHome} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}>Back to Practice</button>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
