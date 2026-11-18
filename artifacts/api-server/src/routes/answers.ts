@@ -70,7 +70,17 @@ const timeMs = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v
 /** Which of these questions the caller may answer. */
 async function readableIds(caller: Caller, ids: string[]): Promise<Set<string>> {
   if (!ids.length) return new Set();
-  if (isStaff(caller)) return new Set(ids);
+  if (isStaff(caller)) {
+    // Staff can read any question, but only one that exists: a deleted question
+    // isn't readable (a hold left on one would otherwise block their answers).
+    const out = new Set<string>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await caller.admin.from("questions").select("id").in("id", ids.slice(i, i + 200));
+      if (error) throw error;
+      for (const r of (data || []) as { id: string }[]) out.add(r.id);
+    }
+    return out;
+  }
   const out = new Set<string>();
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await caller.admin.rpc("readable_question_ids_for", { p_user: caller.userId, p_ids: ids.slice(i, i + 200) });
@@ -191,6 +201,28 @@ async function getHold(admin: SupabaseClient, userId: string, context: string) {
   return data || null;
 }
 
+/**
+ * Whether a hold still keeps its question on screen: the question exists and
+ * is still theirs to read, they haven't answered it since it was shown, and
+ * its assignment (if any) is open. skipDue: the student chose to skip the
+ * review on screen, which lets go of a question due back for review in
+ * practice. /answers/present and /answers/check both go by this, so a hold
+ * that no longer stands never blocks an answer.
+ */
+async function holdStands(caller: Caller, hold: { question_id: string; shown_at: string }, context: string, skipDue = false): Promise<boolean> {
+  const { admin, userId } = caller;
+  const [readable, answered] = await Promise.all([
+    readableIds(caller, [hold.question_id]),
+    admin.from("answer_log").select("id").eq("user_id", userId).eq("question_id", hold.question_id)
+      .gte("answered_at", hold.shown_at).limit(1),
+  ]);
+  if (!readable.has(hold.question_id) || answered.data?.length) return false;
+  const assignmentId = context.startsWith("assignment:") ? context.slice(11) : null;
+  if (assignmentId && !(await openAssignment(admin, userId, uuid(assignmentId)))) return false;
+  if (skipDue && context.startsWith("practice:") && await dueForReview(admin, userId, hold.question_id)) return false;
+  return true;
+}
+
 type Assignment = {
   id: string; student_id: string; subject: string | null; topics: string[] | null;
   question_count: number | null; completed_at: string | null;
@@ -294,20 +326,9 @@ router.post("/answers/present", async (req, res) => {
   try {
     const { admin, userId } = caller;
     const hold = await getHold(admin, userId, context);
-    if (hold && hold.question_id !== questionId) {
-      // Still theirs to answer: readable, and not answered since it was shown.
-      const [readable, answered] = await Promise.all([
-        readableIds(caller, [hold.question_id]),
-        admin.from("answer_log").select("id").eq("user_id", userId).eq("question_id", hold.question_id)
-          .gte("answered_at", hold.shown_at).limit(1),
-      ]);
-      const assignmentId = context.startsWith("assignment:") ? context.slice(11) : null;
-      const assignmentOpen = !assignmentId || !!(await openAssignment(admin, userId, uuid(assignmentId)));
-      const skipped = skipDue && context.startsWith("practice:") && await dueForReview(admin, userId, hold.question_id);
-      if (readable.has(hold.question_id) && !answered.data?.length && assignmentOpen && !skipped) {
-        res.json({ questionId: hold.question_id, held: true, bonus: await isBonusQuestion(admin, userId, hold.question_id, context) });
-        return;
-      }
+    if (hold && hold.question_id !== questionId && await holdStands(caller, hold, context, skipDue)) {
+      res.json({ questionId: hold.question_id, held: true, bonus: await isBonusQuestion(admin, userId, hold.question_id, context) });
+      return;
     }
     if (!hold || hold.question_id !== questionId) {
       if (!(await readableIds(caller, [questionId])).has(questionId)) {
@@ -377,7 +398,7 @@ router.post("/answers/check", async (req, res) => {
 
     // The question on screen in this context is the one that can be answered.
     const hold = context && keepsRecord ? await getHold(admin, userId, context) : null;
-    if (hold && hold.question_id !== q.id) {
+    if (hold && hold.question_id !== q.id && await holdStands(caller, hold, context!)) {
       res.status(409).json({ code: "held", heldQuestionId: hold.question_id, error: "Finish the question you were given first." });
       return;
     }
