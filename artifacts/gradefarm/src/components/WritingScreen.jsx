@@ -698,9 +698,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark' }) {
       <div className="gf-writing-wrap" style={s.container}>
         {header({
           title: isPlanner ? 'Prompt Planner' : 'Write an Essay',
-          subtitle: isPlanner
-            ? 'Plan the structure of a response in a few minutes, then get feedback on your plan.'
-            : 'Write a full response to a fresh prompt, then get marked feedback.',
+          subtitle: isPlanner ? 'Plan the structure of a response in a few minutes, then get feedback on your plan.' : null,
         })}
 
         <div style={{ ...s.card, display: 'flex', flexDirection: 'column', gap: 22 }}>
