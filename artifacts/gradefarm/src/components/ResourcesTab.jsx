@@ -12,7 +12,6 @@ import {
 } from '../lib/db'
 
 const GOLD   = 'var(--t-accent)'
-const GOLDL  = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const RESOURCE_TYPES = [
@@ -191,7 +190,7 @@ export default function ResourcesTab({ profile, theme }) {
 
       {showForm && (
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ fontSize: 13, fontFamily: "'Sifonn Pro', sans-serif", color: t.text, marginBottom: 16 }}>Add a resource</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 16 }}>Add a resource</div>
           <form onSubmit={handleSubmit}>
             {/* Source toggle */}
             <div style={{ marginBottom: 14 }}>
@@ -212,8 +211,8 @@ export default function ResourcesTab({ profile, theme }) {
               </div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>
                 {form.source === 'file'
-                  ? 'Notes, worksheets, slides, PDFs, images or video — up to 5 GB (large files upload resumably).'
-                  : 'Best for recordings — paste a Zoom, Google Drive, Loom or YouTube link.'}
+                  ? 'Notes, worksheets, slides, PDFs, images or video, up to 5 GB.'
+                  : 'Best for recordings: paste a Zoom, Google Drive, Loom or YouTube link.'}
               </div>
             </div>
 
@@ -233,7 +232,7 @@ export default function ResourcesTab({ profile, theme }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={labelStyle}>Title</label>
-                <input className="td-input-gold" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Acids & Bases — class notes" style={inputStyle} />
+                <input className="td-input-gold" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Acids and bases class notes" style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>Type</label>
@@ -314,7 +313,7 @@ export default function ResourcesTab({ profile, theme }) {
 
       <div style={card}>
         <div style={{ padding: '14px 20px', borderBottom: `1px solid ${divider}` }}>
-          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>Your resources</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>Your resources</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{resources.length} resource{resources.length !== 1 ? 's' : ''}</div>
         </div>
         {loading ? (

@@ -15,10 +15,8 @@ import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import { dataBookletFor } from '../lib/subjects'
 
 const GOLD = 'var(--t-accent)'
-const GOLDL = 'var(--t-accentLight)'
 const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 // MCQ rendered for the exam — collects a selection (collect mode) or reveals
 // correctness (review mode). Kept inline so the exam never shows feedback mid-test.
@@ -34,7 +32,7 @@ function ExamMcq({ q, value, onChange, review, theme }) {
           if (isCorrect) { bg = t.successBg; border = `1px solid ${t.success}55`; color = t.success; lBg = `${t.success}33`; lCol = t.success }
           else if (picked) { bg = t.dangerBg; border = `1px solid ${t.danger}55`; color = t.danger; lBg = `${t.danger}33`; lCol = t.danger }
           else { bg = 'transparent'; color = t.textFaint; lCol = t.textFaint }
-        } else if (picked) { bg = t.accentGlow; border = `1px solid ${t.borderAccent}`; color = t.text; lBg = t.accentGlow; lCol = GOLD }
+        } else if (picked) { bg = t.bgCard; border = `1.5px solid ${t.text}`; color = t.text; lBg = t.text; lCol = t.bg }
         return (
           <button key={i} onClick={() => { if (!review) onChange(i) }}
             style={{ background: bg, border, color, padding: '12px 16px', borderRadius: 11, fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: review ? 'default' : 'pointer', fontFamily: FONT_B, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -81,7 +79,7 @@ function ExamQuestion({ q, answers, setAnswer, review, theme }) {
       )}
       {review && (
         <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
-          <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Explanation</div>
+          <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 6 }}>Explanation</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7 }}><MathText text={q.solution || ''} /></div>
           {type !== 'mcq' && (
             <div style={{ marginTop: 8, fontSize: 12, color: t.success, fontWeight: 700 }}>Correct answer: <MathText text={describeCorrectAnswer(q)} /></div>
@@ -179,10 +177,10 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
     return (
       <Shell theme={theme}>
         <div style={{ textAlign: 'center', maxWidth: 460 }}>
-          <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontSize: 13, color: t.textMuted, fontWeight: 700, marginBottom: 6 }}>
             {paper.title} · Section {secIdx + 1} of {paper.sections.length}
           </div>
-          <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text, marginBottom: 16 }}>{section.name}</div>
+          <h1 style={{ margin: '0 0 16px', fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{section.name}</h1>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 18 }}>
             <Stat t={t} label="Questions" value={section.questions.length} />
             <Stat t={t} label="Time" value={formatClock(section.durationSec)} />
@@ -200,7 +198,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
     return (
       <Shell theme={theme}>
         <div role="status" style={{ textAlign: 'center', maxWidth: 420 }}>
-          <div style={{ fontFamily: FONT_D, fontSize: 24, color: t.text, marginBottom: 10 }}>{markError ? "Your exam couldn't be marked" : 'Marking your exam…'}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, marginBottom: 10 }}>{markError ? "Your exam couldn't be marked" : 'Marking your exam…'}</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginBottom: 20 }}>
             {markError ? 'Your answers are still here. Check your connection and try again.' : 'This takes a few seconds.'}
           </div>
@@ -219,7 +217,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
         <div style={{ width: '100%', maxWidth: 520 }}>
           <div style={{ textAlign: 'center', marginBottom: 26 }}>
             <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'center', color: accColor }}><ResultIcon size={46} aria-hidden="true" /></div>
-            <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text }}>Exam complete</div>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>Exam complete</h1>
             <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>{paper.title}</div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 22 }}>
@@ -228,7 +226,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
             <Stat t={t} label="Sections" value={paper.sections.length} big />
           </div>
           <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Section breakdown</div>
+            <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 14 }}>Section breakdown</div>
             {r.perSection.map((s) => {
               const c = s.percent >= 70 ? t.success : s.percent >= 40 ? GOLD : t.danger
               return (
@@ -246,10 +244,10 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
           </div>
           {insights && (
             <div style={{ background: t.bgCard, border: `1px solid ${t.borderAccent}`, borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Predicted performance</div>
+              <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 14 }}>Predicted performance</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 <div style={{ textAlign: 'center', minWidth: 110 }}>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: GOLD, fontFamily: FONT_D }}>{insights.band.label}</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: t.goldText, letterSpacing: '-0.02em' }}>{insights.band.label}</div>
                   <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>{insights.band.sublabel}</div>
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
@@ -323,13 +321,13 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
   return (
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: FONT_B, display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
-      <div style={{ background: `linear-gradient(135deg,${GOLD},${GOLDL})`, padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>{section.name}</span>
+      <div style={{ background: t.bgCard, borderBottom: `1px solid ${t.border}`, padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{section.name}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: urgent ? '#b91c1c' : NAVY, background: urgent ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.12)', padding: '3px 12px', borderRadius: 20, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: urgent ? t.danger : t.text, background: urgent ? t.dangerBg : t.bgSubtle, padding: '3px 12px', borderRadius: 20, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <Timer size={15} aria-hidden="true" />{formatClock(timeLeft)}
           </span>
-          <button onClick={finishSection} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', color: NAVY, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+          <button onClick={finishSection} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
             {secIdx + 1 < paper.sections.length ? 'Finish section' : 'Finish exam'}
           </button>
         </div>
@@ -359,7 +357,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
 
         {/* Navigator */}
         <div style={{ width: 200, flexShrink: 0, borderLeft: `1px solid ${t.border}`, background: t.bgSubtle, padding: 18, overflowY: 'auto' }}>
-          <div style={{ fontSize: 10, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Questions</div>
+          <div style={{ fontSize: 12.5, color: t.textMuted, fontWeight: 800, marginBottom: 4 }}>Questions</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>{answeredCount}/{section.questions.length} answered</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
             {section.questions.map((qq, i) => {
@@ -371,7 +369,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
                   style={{
                     aspectRatio: '1', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, position: 'relative',
                     border: `1px solid ${isCurrent ? GOLD : isAnswered ? t.success + '55' : t.border}`,
-                    background: isCurrent ? t.accentGlow : isAnswered ? t.successBg : t.bgCard,
+                    background: isCurrent ? t.bgSubtle : isAnswered ? t.successBg : t.bgCard,
                     color: isCurrent ? GOLD : isAnswered ? t.success : t.textMuted,
                   }}>
                   {i + 1}
@@ -401,15 +399,15 @@ function Shell({ children, theme, scroll }) {
 function Stat({ t, label, value, big, color }) {
   return (
     <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 14, padding: big ? '16px 10px' : '10px 16px', textAlign: 'center', minWidth: 80 }}>
-      <div style={{ fontSize: big ? 22 : 16, fontWeight: 800, color: color || t.text, fontFamily: FONT_D }}>{value}</div>
-      <div style={{ fontSize: 10, color: t.textMuted, marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: big ? 22 : 16, fontWeight: 800, color: color || t.text, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3, fontWeight: 600 }}>{label}</div>
     </div>
   )
 }
 
 const primaryBtn = {
   width: '100%', padding: '14px', borderRadius: 12, border: 'none',
-  background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY,
+  background: GOLD, color: NAVY,
   fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, marginTop: 16,
 }
 function ghostBtn(t) {

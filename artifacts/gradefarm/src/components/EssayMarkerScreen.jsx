@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { PenLine, RefreshCw, Sparkles, Timer } from 'lucide-react'
+import { PenLine, RefreshCw, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 const GOLD = 'var(--t-accent)'
-const GOLDL = 'var(--t-accentLight)'
 const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 // Essay types map to the /api/writing pipeline. `subject` drives the school-level
 // year range; GAMSAT types ignore it (assessed at adult/graduate level).
@@ -117,58 +115,54 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
         {onExit && (
           <button onClick={onExit} style={{ marginBottom: 14, padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>← Back</button>
         )}
-        <div style={{ textAlign: 'center', marginBottom: 26 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: GOLD, fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            <PenLine size={13} aria-hidden="true" />
-            AI Essay Marker
-          </div>
-          <div style={{ fontFamily: FONT_D, fontSize: 28, color: t.text, letterSpacing: 1 }}>Get your writing marked instantly</div>
-          <div style={{ fontSize: 14, color: t.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 540, margin: '8px auto 0' }}>
-            Pick a task, generate a real-style prompt, write under timed conditions, and get a band score with criterion-by-criterion feedback.
-          </div>
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>Essay Marker</h1>
+          <p style={{ margin: '2px 0 0', fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
+            Pick a task, write to a prompt under timed conditions, and get a band score with feedback on each criterion.
+          </p>
         </div>
 
         {/* Type picker */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 18 }}>
+        <div role="radiogroup" aria-label="Task" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
           {ESSAY_TYPES.map((x) => (
-            <button key={x.id} onClick={() => { setTypeId(x.id); setFeedback(null); setPrompt('') }}
-              style={{ padding: '8px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B,
-                border: `1px solid ${typeId === x.id ? t.borderAccent : t.border}`,
-                background: typeId === x.id ? t.accentGlow : t.bgCard,
-                color: typeId === x.id ? GOLD : t.textMuted }}>
-              {x.label}<span style={{ opacity: 0.6, marginLeft: 6, fontSize: 11 }}>{x.blurb}</span>
+            <button key={x.id} type="button" role="radio" aria-checked={typeId === x.id} onClick={() => { setTypeId(x.id); setFeedback(null); setPrompt('') }}
+              style={{ padding: '8px 14px', borderRadius: 999, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B,
+                border: `1px solid ${typeId === x.id ? t.text : t.border}`,
+                background: typeId === x.id ? t.text : t.bgCard,
+                color: typeId === x.id ? t.bg : t.text, transition: 'background 0.2s, color 0.2s, border-color 0.2s' }}>
+              {x.label}<span style={{ opacity: 0.65, marginLeft: 6, fontSize: 11.5, fontWeight: 600 }}>{x.blurb}</span>
             </button>
           ))}
         </div>
 
         {/* Prompt */}
-        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: 18, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: prompt ? 12 : 0 }}>
-            <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Prompt</span>
+            <span style={{ fontSize: 14.5, color: t.text, fontWeight: 800 }}>Prompt</span>
             <button onClick={generatePrompt} disabled={loadingPrompt}
-              style={{ padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.borderAccent}`, background: t.accentGlow, color: GOLD, fontSize: 12, fontWeight: 700, cursor: loadingPrompt ? 'default' : 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {loadingPrompt ? 'Generating…' : prompt ? <><RefreshCw size={14} aria-hidden="true" />New prompt</> : <><Sparkles size={14} aria-hidden="true" />Generate prompt</>}
+              style={{ padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 12.5, fontWeight: 800, cursor: loadingPrompt ? 'default' : 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {loadingPrompt ? 'Generating…' : prompt ? <><RefreshCw size={14} aria-hidden="true" />New prompt</> : <><PenLine size={14} aria-hidden="true" />Generate prompt</>}
             </button>
           </div>
           {prompt && <div style={{ fontSize: 14, color: t.text, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{prompt}</div>}
         </div>
 
         {/* Composer */}
-        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: 18, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Your response</span>
+            <span style={{ fontSize: 14.5, color: t.text, fontWeight: 800 }}>Your response</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>{words} words</span>
               {timed
-                ? <span style={{ fontSize: 12, fontWeight: 800, color: timeLeft <= 60 ? t.danger : GOLD, background: t.accentGlow, padding: '3px 10px', borderRadius: 999, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Timer size={14} aria-hidden="true" />{clock(timeLeft)}</span>
+                ? <span style={{ fontSize: 12, fontWeight: 800, color: timeLeft <= 60 ? t.danger : t.text, background: timeLeft <= 60 ? t.dangerBg : t.bgSubtle, padding: '3px 10px', borderRadius: 999, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Timer size={14} aria-hidden="true" />{clock(timeLeft)}</span>
                 : <button onClick={startTimer} style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Timer size={14} aria-hidden="true" />Start {type.timed}-min timer</button>}
               {timed && <button onClick={stopTimer} style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Stop</button>}
             </div>
           </div>
           <textarea value={essay} onChange={(e) => setEssay(e.target.value)} placeholder="Write your essay here…"
-            style={{ ...inputBg, width: '100%', minHeight: 280, borderRadius: 12, padding: '14px 16px', fontSize: 15, lineHeight: 1.7, resize: 'vertical', outline: 'none' }} />
+            style={{ ...inputBg, width: '100%', boxSizing: 'border-box', minHeight: 280, borderRadius: 12, padding: '14px 16px', fontSize: 15, lineHeight: 1.7, resize: 'vertical', outline: 'none' }} />
           <button onClick={getMarking} disabled={marking}
-            style={{ marginTop: 14, width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: marking ? t.bgHover : `linear-gradient(135deg,${GOLD},${GOLDL})`, color: marking ? t.textFaint : NAVY, fontSize: 15, fontWeight: 800, cursor: marking ? 'default' : 'pointer', fontFamily: FONT_B }}>
+            style={{ marginTop: 14, width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: marking ? t.bgHover : GOLD, color: marking ? t.textFaint : NAVY, fontSize: 15, fontWeight: 800, cursor: marking ? 'default' : 'pointer', fontFamily: FONT_B }}>
             {marking ? 'Marking your essay…' : 'Mark my essay →'}
           </button>
           {error && <div style={{ marginTop: 10, fontSize: 13, color: t.danger }}>{error}</div>}
@@ -176,12 +170,12 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
 
         {/* Feedback */}
         {feedback && (
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: 22, animation: 'ess-in 0.25s ease' }}>
+          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: 22, animation: 'ess-in 0.25s ease' }}>
             <style>{`@keyframes ess-in { from { opacity:0; transform: translateY(10px);} to {opacity:1; transform:none;} }`}</style>
             {typeof feedback.overallScore === 'number' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
-                <div style={{ width: 72, height: 72, borderRadius: '50%', flexShrink: 0, background: t.accentGlow, border: `2px solid ${t.borderAccent}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 26, fontWeight: 800, color: GOLD, fontFamily: FONT_D, lineHeight: 1 }}>{feedback.overallScore}</span>
+                <div style={{ width: 72, height: 72, borderRadius: '50%', flexShrink: 0, background: t.bgCard, border: '3px solid var(--t-accent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 26, fontWeight: 800, color: t.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{feedback.overallScore}</span>
                   <span style={{ fontSize: 10, color: t.textMuted }}>/ 10</span>
                 </div>
                 <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.65 }}>{feedback.overallImpression}</div>
@@ -193,14 +187,14 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
 
             {Array.isArray(feedback.criteriaScores) && feedback.criteriaScores.length > 0 && (
               <div style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Criterion scores</div>
+                <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 12 }}>Criterion scores</div>
                 {feedback.criteriaScores.map((c, i) => <ScoreBar key={i} t={t} name={c.name} score={c.score} comment={c.comment} />)}
               </div>
             )}
 
             {Array.isArray(feedback.annotations) && feedback.annotations.length > 0 && (
               <div style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Specific feedback</div>
+                <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 10 }}>Specific feedback</div>
                 {feedback.annotations.map((a, i) => (
                   <div key={i} style={{ marginBottom: 10, padding: '10px 12px', background: t.bgSubtle, borderRadius: 10, border: `1px solid ${t.border}` }}>
                     {a.aspect && <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 3 }}>{a.aspect}</div>}
@@ -213,10 +207,10 @@ export default function EssayMarkerScreen({ theme = 'dark', onExit }) {
 
             {Array.isArray(feedback.improvements) && feedback.improvements.length > 0 && (
               <div>
-                <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>What to improve next time</div>
+                <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 10 }}>What to improve next time</div>
                 {feedback.improvements.map((imp, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 7, fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-                    <span style={{ color: GOLD, flexShrink: 0 }}>→</span><span>{imp}</span>
+                    <span style={{ color: t.goldText, flexShrink: 0 }}>→</span><span>{imp}</span>
                   </div>
                 ))}
               </div>

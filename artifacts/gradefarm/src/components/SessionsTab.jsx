@@ -20,7 +20,6 @@ import {
 } from '../lib/db'
 
 const GOLD  = 'var(--t-accent)'
-const GOLDL = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 function fmtDateTime(iso) {
@@ -216,7 +215,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
       <div style={{ background: modalBg, border: modalBdr, borderRadius: 12, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
-        <h2 style={{ margin: '0 0 24px', fontSize: 15, fontFamily: "'Sifonn Pro', sans-serif", fontWeight: 400, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={17} aria-hidden="true" />New lesson</h2>
+        <h2 style={{ margin: '0 0 24px', fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em', color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={17} aria-hidden="true" />New lesson</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Session type toggle */}
@@ -237,7 +236,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: toggleBg, border: toggleBdr, borderRadius: 10, padding: '12px 16px' }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text, display: 'flex', alignItems: 'center', gap: 6 }}><Repeat size={15} aria-hidden="true" />Recurring session</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Same link every week — students bookmark it once</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Same link every week, so students only need to save it once</div>
             </div>
             <button
               type="button"
@@ -293,9 +292,9 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           {/* Individual: student picker (optional) */}
           {!isGroup && (
             <div>
-              <label style={labelStyle}>Invite student <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional — or share the link directly)</span></label>
+              <label style={labelStyle}>Invite student <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional; you can also share the link yourself)</span></label>
               <select className="td-input-gold" value={studentId} onChange={e => setStudentId(e.target.value)} style={inputStyle}>
-                <option value="">None — I'll share the link myself</option>
+                <option value="">None. I'll share the link myself</option>
                 {roster.map(s => (
                   <option key={s.student_id} value={s.student_id}>
                     {s.display_name || emails[s.student_id] || s.student_id.slice(0, 8)}
@@ -312,7 +311,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                 <div>
                   <label style={labelStyle}>Add entire class (optional)</label>
                   <select className="td-input-gold" value={classId} onChange={e => setClassId(e.target.value)} style={inputStyle}>
-                    <option value="">None — pick students individually below</option>
+                    <option value="">None. Pick students below</option>
                     {classes.map(c => (
                       <option key={c.id} value={c.id}>{c.name}{c.subject ? ` · ${c.subject}` : ''}</option>
                     ))}
@@ -349,7 +348,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                 {(selectedStudentIds.length > 0 || classId) && (
                   <p style={{ margin: '6px 0 0', fontSize: 12, color: t.textMuted }}>
                     {classId && `Class selected`}{classId && selectedStudentIds.length > 0 ? ` + ` : ''}{selectedStudentIds.length > 0 ? `${selectedStudentIds.length} individual student${selectedStudentIds.length !== 1 ? 's' : ''}` : ''}
-                    {' '}— all will receive an email invite
+                    . Each one gets an email invite.
                   </p>
                 )}
               </div>
@@ -390,7 +389,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 
           <div>
             <label style={labelStyle}>Topic / Title</label>
-            <input className="td-input-gold" type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Chemistry Unit 3 — Acids & Bases" style={inputStyle} />
+            <input className="td-input-gold" type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Chemistry Unit 3: Acids and bases" style={inputStyle} />
           </div>
 
           <div>

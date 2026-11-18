@@ -31,7 +31,7 @@ import { countSubjectQuestions, loadSubjectHealth } from '../lib/adminDb'
 import { chip } from '../lib/adminUi'
 import { COHORT_LEVEL_OPTIONS, WRITING_LEVELS, usesMathAnswers } from '../lib/subjects'
 import { DEFAULT_EXAM_QUESTIONS } from '../lib/examEngine'
-import { TriangleAlert, Sparkles } from 'lucide-react'
+import { TriangleAlert, Lightbulb } from 'lucide-react'
 
 import { ui, btn, note, FONT_B } from '../lib/adminUi'
 
@@ -1202,7 +1202,7 @@ export default function AdminCurriculumDetail({ curriculumId, profile, section =
                     display: 'inline-flex', alignItems: 'center', gap: 6,
                   }}
                 >
-                  <Sparkles size={13} aria-hidden="true" />
+                  <Lightbulb size={13} aria-hidden="true" />
                   {remapSuggesting ? 'Suggesting…' : 'Suggest with AI'}
                 </button>
                 <button

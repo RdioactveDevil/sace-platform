@@ -454,7 +454,7 @@ export default function LearnScreen({
       const { text: reply, replies } = splitQuickReplies(readChatReply(res, data))
       setMessages(prev => [...prev, { role: 'assistant', content: reply || "Let me try a different approach...", ...(replies.length > 0 && { replies }) }])
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Connection issue — try again?" }])
+      setMessages(prev => [...prev, { role: 'assistant', content: "Couldn't reach Titan. Try again?" }])
     }
     setLoading(false)
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -490,7 +490,7 @@ export default function LearnScreen({
       const { text: reply, replies } = splitQuickReplies(readChatReply(res, data))
       setMessages(prev => [...prev, { role: 'assistant', content: reply || 'Let me try differently...', ...(replies.length > 0 && { replies }) }])
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Connection issue — try again?' }])
+      setMessages(prev => [...prev, { role: 'assistant', content: "Couldn't reach Titan. Try again?" }])
     }
     setLoading(false)
   }

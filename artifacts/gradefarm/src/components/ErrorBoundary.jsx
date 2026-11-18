@@ -5,7 +5,6 @@ import { TriangleAlert } from 'lucide-react'
 
 const GOLD   = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 /**
  * Catches render/lifecycle errors in its subtree so a single broken screen
@@ -68,7 +67,7 @@ export default class ErrorBoundary extends Component {
       >
         <div style={{ maxWidth: 420 }}>
           <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}><TriangleAlert size={compact ? 34 : 48} color={GOLD} aria-hidden="true" /></div>
-          <div style={{ fontFamily: FONT_D, fontSize: compact ? 18 : 22, color: 'var(--t-text)', letterSpacing: 0.5, marginBottom: 8 }}>
+          <div style={{ fontSize: compact ? 18 : 22, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '-0.01em', marginBottom: 8 }}>
             Something went wrong
           </div>
           <p style={{ fontSize: 14, color: 'var(--t-textMuted)', lineHeight: 1.6, margin: '0 0 22px' }}>

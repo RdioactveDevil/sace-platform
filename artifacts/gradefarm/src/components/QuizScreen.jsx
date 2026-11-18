@@ -72,7 +72,6 @@ import InfinityLoader from './InfinityLoader'
 import FreeLimitScreen from './FreeLimitScreen'
 
 const GOLD = 'var(--t-accent)'
-const GOLDL = 'var(--t-accentLight)'
 // Question-area width from which a reading passage sits beside the question
 // (a ~340px question column + gap + a comfortable reading column). Laptops at
 // 125% zoom only have ~890px here, and stacking the passage inside the 600px
@@ -83,7 +82,6 @@ const SIDE_PASSAGE_MIN_WIDTH = 760
 const PREFETCH_LOW_WATER = 8
 const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 /**
  * Derive a target difficulty (1–5) from the student's session performance.
@@ -2033,7 +2031,7 @@ export default function QuizScreen({
     return (
       <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textFaint, fontFamily: FONT_B }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: NAVY }}><Zap size={22} aria-hidden="true" /></div>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: NAVY }}><Zap size={22} aria-hidden="true" /></div>
           <div style={{ fontSize: 13 }}>Loading questions…</div>
         </div>
       </div>
