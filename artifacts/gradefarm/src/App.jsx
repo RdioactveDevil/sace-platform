@@ -16,7 +16,7 @@ import { THEMES, shellFor, modeOf, paletteById, setActivePalette } from './lib/t
 import { getLevel, getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
-import UpgradeSheet from './components/UpgradeSheet'
+import UpgradeSheet, { prefetchUpgrade } from './components/UpgradeSheet'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { compareSubjects } from './lib/subjectFilter'
 import { signupAsParent, forgetParentSignup } from './lib/oauth'
@@ -990,6 +990,10 @@ function AppInner() {
     if (upgradeCurriculumId && selectedAccess !== 'full') setUpgradeCtx(ctx)
     else navigate('/get-access', { state: { subject: selectedSubject } })
   }, [upgradeCurriculumId, selectedAccess, selectedSubject]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Load the offer while they study, so the pop-up opens on the right price.
+  useEffect(() => {
+    if (user && selectedAccess === 'free') prefetchUpgrade(user.id).catch(() => {})
+  }, [user?.id, selectedAccess]) // eslint-disable-line react-hooks/exhaustive-deps
   const onUpgraded = async () => {
     await refreshSubscriptions()
     window.dispatchEvent(new Event('gradefarm:upgraded'))
