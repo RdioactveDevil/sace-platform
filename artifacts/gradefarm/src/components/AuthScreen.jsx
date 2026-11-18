@@ -167,7 +167,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
               style={{ ...at, fontSize: size, '--r': `${tilt}deg`, '--d': `${secs}s`, '--delay': `${delay}s` }}>{text}</span>
           ))}
           <h2 style={{ margin: 0, fontSize: 'clamp(30px, 3.6vw, 44px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: t.text, textWrap: 'balance' }}>
-            Textbooks had a good run<span style={{ color: t.goldText }}>.</span>
+            Study like you&rsquo;ve already seen the exam<span style={{ color: t.goldText }}>.</span>
           </h2>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
             {HELPS.map(({ Icon, title: head, body }) => (
