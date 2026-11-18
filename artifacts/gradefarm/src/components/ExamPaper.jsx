@@ -7,6 +7,7 @@ import TableView from './TableView'
 import DiagramView from './DiagramView'
 import { partsOf, marksOf, sourceLabel, paginate, linesForMarks, formatMinutes, splitAtFigure, wantsDrawing, figureSizeMm } from '../lib/examBuilder'
 import { setSentence } from '../lib/questionSets'
+import { isRedactedBlock } from '../lib/examPreview'
 
 // Practice exams laid out like the real papers, in two house styles matched
 // to the 2025 papers: VCE (VCAA question and answer book) and SACE (question
@@ -237,7 +238,12 @@ function PartText({ text, src, onLoad }) {
 }
 
 /** A block's own style: the maths size of the question it belongs to, when that isn't the normal size. */
-const blkStyle = (b) => (b.math && b.math !== 1 ? { '--xp-math': b.math } : undefined)
+const blkStyle = (b) => {
+  const style = b.math && b.math !== 1 ? { '--xp-math': b.math } : undefined
+  // The exam builder's free preview: a scrambled question, drawn blurred (lib/examPreview.js).
+  return b.redact ? { ...style, filter: 'blur(4.5px)', userSelect: 'none' } : style
+}
+const markRedacted = (blocks, redact) => (redact && redact.size ? blocks.map(b => (isRedactedBlock(b.key, redact) ? { ...b, redact: true } : b)) : blocks)
 
 /** Where `node` sits on its page, in the page's own layout pixels (the preview's zoom doesn't matter). */
 function pageOffset(node, page) {
@@ -531,7 +537,7 @@ function vceBlocks(exam, meta, onLoad) {
     if (sections) furniture({ key: 'endB', section: 'B', el: <div className="xv-endsec"><span>End of Section B</span></div> })
   }
   furniture({ key: 'end', section: 'end', el: <div className="xv-endsec" style={{ paddingTop: '10mm' }}><span style={{ width: '45mm' }}>End of examination</span></div> })
-  return blocks
+  return markRedacted(blocks, meta.redact)
 }
 
 function VcePage({ n, total, title, section, children, footer }) {
@@ -554,7 +560,7 @@ function VcePage({ n, total, title, section, children, footer }) {
 function VceExam({ exam, meta }) {
   const sol = useMemo(() => (meta.solutions ? solutionBlocks(exam, (_, i) => i + 1) : []), [exam, meta.solutions])
   const bumpRef = useRef(() => {})
-  const blocks = useMemo(() => vceBlocks(exam, meta, () => bumpRef.current()), [exam, meta.showSources, meta.isMaths, meta.preview, meta.numberOf]) // eslint-disable-line react-hooks/exhaustive-deps
+  const blocks = useMemo(() => vceBlocks(exam, meta, () => bumpRef.current()), [exam, meta.showSources, meta.isMaths, meta.preview, meta.numberOf, meta.redact]) // eslint-disable-line react-hooks/exhaustive-deps
   const lists = useMemo(() => [blocks, sol], [blocks, sol])
   const { heights, portal, bump } = useHeights(lists, 'xv xv-body', VCE.width)
   bumpRef.current = bump
@@ -779,7 +785,7 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
       })
     })
   })
-  return blocks
+  return markRedacted(blocks, meta.redact)
 }
 
 /** Split the questions into two booklets at about half the marks, as full SACE papers are. */
@@ -816,7 +822,7 @@ function SaceExam({ exam, meta }) {
   const bookletBlocks = useMemo(() => {
     let start = 1
     return booklets.map(qs => { const b = saceBlocks(qs, start, meta, () => bumpRef.current()); start += qs.length; return b })
-  }, [booklets, meta.showSources, meta.isMaths, meta.numberOf]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [booklets, meta.showSources, meta.isMaths, meta.numberOf, meta.redact]) // eslint-disable-line react-hooks/exhaustive-deps
   const sol = useMemo(() => (meta.solutions ? solutionBlocks(exam, (s, i) => (s === 'A' ? i + 1 : exam.A.length + i + 1)) : []), [exam, meta.solutions])
   const lists = useMemo(() => [...bookletBlocks, sol], [bookletBlocks, sol])
   const { heights, portal, bump } = useHeights(lists, 'xs xs-body', SACE.width)

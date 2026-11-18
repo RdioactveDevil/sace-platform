@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { checkAiQuota } from "../lib/ai-quota";
 import { bonusXP, isBonusPick } from "../lib/bonus";
+import { solutionAllowed } from "../lib/solution-access";
 
 /**
  * Answers are marked here, not in the app (migration 20261110000000).
@@ -86,6 +87,28 @@ async function readableIds(caller: Caller, ids: string[]): Promise<Set<string>> 
     const { data, error } = await caller.admin.rpc("readable_question_ids_for", { p_user: caller.userId, p_ids: ids.slice(i, i + 200) });
     if (error) throw error;
     for (const id of (data as string[] | null) || []) out.add(typeof id === "string" ? id : String((id as Record<string, unknown>).readable_question_ids_for ?? ""));
+  }
+  return out;
+}
+
+/**
+ * The ids among `ids` the student reads through a paid subscription (not their
+ * free subject): migration 20261118000008_paid_question_ids.sql. Until that
+ * migration is applied: every readable id if they have any paid subscription,
+ * else none.
+ */
+async function paidIds(caller: Caller, ids: string[], readable: Set<string>): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!ids.length) return out;
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await caller.admin.rpc("paid_question_ids_for", { p_user: caller.userId, p_ids: ids.slice(i, i + 200) });
+    if (error) {
+      logger.warn({ err: error }, "[answers] paid_question_ids_for failed; falling back to any paid subscription");
+      const { data: subs } = await caller.admin.from("user_subscriptions").select("source")
+        .eq("user_id", caller.userId).eq("active", true).neq("source", "free").limit(1);
+      return (subs || []).length ? new Set(readable) : new Set();
+    }
+    for (const id of (data as string[] | null) || []) out.add(typeof id === "string" ? id : String((id as Record<string, unknown>).paid_question_ids_for ?? ""));
   }
   return out;
 }
@@ -755,8 +778,9 @@ router.post("/answers/tip", async (req, res) => {
 // Body: { questionIds }. Answers and solutions for questions on an exam the
 // student built (the exam builder's solutions pages and the Exams marking
 // screen). Tutors and admins get them all; students get them for questions
-// they've already answered, for questions from real past or trial papers, and
-// for questions in their own exam attempts (which then earn no practice XP).
+// they've already answered and, with a paid plan for the subject (not their
+// free subject), for questions from real past or trial papers and in their own
+// exam attempts (which then earn no practice XP). lib/solution-access.ts.
 // → { solutions: { [id]: reveal } }
 router.post("/answers/solutions", async (req, res) => {
   const caller = await requireUser(req, res);
@@ -766,19 +790,22 @@ router.post("/answers/solutions", async (req, res) => {
   try {
     const { admin, userId } = caller;
     const [rows, readable] = await Promise.all([loadQuestions(admin, ids), readableIds(caller, ids)]);
-    let answered = new Set<string>();
-    if (!isStaff(caller)) {
-      answered = await inOwnExamAttempts(admin, userId, ids);
+    const staff = isStaff(caller);
+    const answered = new Set<string>();
+    let inAttempts = new Set<string>();
+    let paid = new Set<string>();
+    if (!staff) {
+      [inAttempts, paid] = await Promise.all([inOwnExamAttempts(admin, userId, ids), paidIds(caller, ids, readable)]);
       for (let i = 0; i < ids.length; i += 200) {
         const { data } = await admin.from("struggle_profiles").select("question_id").eq("user_id", userId).in("question_id", ids.slice(i, i + 200));
-        for (const r of (data || []) as { question_id: string }[]) answered = answered.add(r.question_id);
+        for (const r of (data || []) as { question_id: string }[]) answered.add(r.question_id);
       }
     }
     const solutions: Record<string, Record<string, unknown>> = {};
     for (const [id, q] of rows) {
       if (!readable.has(id)) continue;
       const pastPaper = q.source_kind === "official" || q.source_kind === "commercial";
-      if (isStaff(caller) || pastPaper || answered.has(id)) solutions[id] = revealOf(q);
+      if (solutionAllowed({ staff, answered: answered.has(id), paid: paid.has(id), pastPaper, inOwnAttempt: inAttempts.has(id) })) solutions[id] = revealOf(q);
     }
     res.json({ solutions });
   } catch (err) {

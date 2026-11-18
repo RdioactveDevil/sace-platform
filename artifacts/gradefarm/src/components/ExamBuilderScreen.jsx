@@ -12,6 +12,7 @@ import {
 } from '../lib/examBuilder'
 import { boardOf, examTimes } from '../lib/examSitting'
 import ExamPaper from './ExamPaper'
+import { previewExam } from '../lib/examPreview'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -247,6 +248,8 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     B: picked.B.map(id => byId.get(id)).filter(Boolean),
   }), [picked, byId])
   const totals = examTotals(exam)
+  // Preview: real text for about the first page, filler of the same shape after it.
+  const shown = useMemo(() => (preview ? previewExam(exam) : { exam, redact: null }), [preview, exam])
   // The cover's times, and the timer's when the exam is sat in Exams (lib/examSitting.js).
   const { readingMinutes, writingMinutes: minutes } = examTimes(board, totals.total)
 
@@ -709,7 +712,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
                           <button key={q.id} type="button" onClick={() => add(section, q.id)}
                             style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderTop: `1px solid ${t.border}`, background: 'transparent', color: t.text, padding: '7px 4px', cursor: 'pointer', fontFamily: FONT_B }}>
                             <div style={{ fontSize: 12, fontWeight: 700 }}>{sourceLabel(q)}{section === 'B' ? ` · ${marksOf(q)} marks` : ''}</div>
-                            <div style={{ fontSize: 11.5, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.topic} · {String(q.question || '').replace(/\$/g, '').slice(0, 90)}</div>
+                            <div style={{ fontSize: 11.5, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.topic}{preview ? '' : ` · ${String(q.question || '').replace(/\$/g, '').slice(0, 90)}`}</div>
                           </button>
                         ))}
                       </div>
@@ -743,12 +746,12 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
             <div className="eb-zoom" style={{ zoom }}>
               {totals.total > 0 ? (
                 <PreviewClip on={preview}>
-                <ExamPaper exam={exam} meta={{
+                <ExamPaper exam={shown.exam} meta={{
                   board, subjectTitle: subjectTitle || strip(subjectName), paperTitle, paperNumber: paperNumber(paper || ''),
                   headerTitle: `GradeFarm Practice ${subjectTitle || strip(subjectName)} ${paperTitle}`.trim(),
                   materials: materials.split('\n').map(s => s.trim()).filter(Boolean),
                   readingMinutes, writingMinutes: minutes, isMaths: isMathsSubject(subjectName),
-                  showSources, answerSheet: board === 'vce' && answerSheet, solutions: solutions && !preview, totals,
+                  showSources, answerSheet: board === 'vce' && answerSheet, solutions: solutions && !preview, totals, redact: shown.redact,
                 }} />
                 </PreviewClip>
               ) : (
