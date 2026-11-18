@@ -96,10 +96,14 @@ const num = (q) => Number(String(q.source_question || '').replace(/\D+/g, ''))
  * carried the sentence keeps only its own question. Returns the updates and
  * the sets that couldn't be linked.
  */
+// The paper a question came from: its load (ep_<load>_A3), so two loads of a
+// paper with the same label are never mixed; else its label.
+const paperOf = (r) => `${r.curriculum_id}|${/^ep_[0-9a-f]+_/.exec(r.id || '')?.[0] || r.source}|${r.exam_section}`
+
 export function planSetLinks(rows) {
   const byPaper = new Map()
   for (const r of rows || []) {
-    const k = `${r.curriculum_id}|${r.source}|${r.exam_section}`
+    const k = paperOf(r)
     if (!byPaper.has(k)) byPaper.set(k, new Map())
     byPaper.get(k).set(num(r), r)
   }
@@ -108,7 +112,7 @@ export function planSetLinks(rows) {
   for (const r of rows || []) {
     const lead = parseSetLead(r.question)
     if (!lead) continue
-    const pk = `${r.curriculum_id}|${r.source}|${r.exam_section}`
+    const pk = paperOf(r)
     const key = `${pk}|${lead.numbers.join(',')}`
     if (!sets.has(key)) sets.set(key, { pk, numbers: lead.numbers, holders: [] })
     sets.get(key).holders.push(r)

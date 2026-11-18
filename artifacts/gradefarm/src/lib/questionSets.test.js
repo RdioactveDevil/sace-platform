@@ -105,3 +105,14 @@ test('a copy of the shared information in a follow-on question is removed, and t
   const by2 = Object.fromEntries(p2.updates.map(u => [u.id, u]))
   assert.deepEqual([by2.B2.set_position, by2.B2.shared_info, by2.B2.question, by2.B3.set_position, by2.B3.question], [1, 'A compound was analysed.', undefined, 2, 'What is its mass?'])
 })
+
+test('two loads of a paper with the same label are never linked together', () => {
+  const row = (id, num, question) => ({ id, source: 'Access 2024 Trial Exam', exam_section: 'A', curriculum_id: 'c', source_question: String(num), question, image_url: null, set_key: null })
+  const rows = [
+    row('ep_aaa_A3', 3, 'The following information is to be used to answer questions 3 & 4\n\nThe IUPAC name of the compound is:'),
+    row('ep_bbb_A3', 3, 'The IUPAC name of the compound is:'), row('ep_bbb_A4', 4, 'This molecule is an example of'),
+    row('ep_aaa_A4', 4, 'This molecule is an example of'),
+  ]
+  const { updates } = planSetLinks(rows)
+  assert.deepEqual(updates.map(u => [u.id, u.set_key]), [['ep_aaa_A3', 'ep_aaa_A3'], ['ep_aaa_A4', 'ep_aaa_A3']])
+})
