@@ -812,6 +812,16 @@ export async function getAnswerLogSince(userId, days) {
     'answered_at')
 }
 
+/** Answers since `sinceIso`, with the option picked: the daily free-limit screen's marked sheet. */
+export async function getAnswersSince(userId, sinceIso) {
+  const { data, error } = await supabase.from('answer_log')
+    .select('question_id, correct, selected, answered_at')
+    .eq('user_id', userId).gte('answered_at', sinceIso)
+    .order('answered_at').limit(500)
+  if (error) throw error
+  return data || []
+}
+
 export async function getAnswerLogLast30Days(userId) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   // Heavy users can log >1000 answers in 30 days; an unpaginated ascending

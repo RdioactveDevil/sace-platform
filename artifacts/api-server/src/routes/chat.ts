@@ -4,7 +4,7 @@ import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { fetchExemplarContext, exemplarSystemLines } from "../lib/curriculum-exemplars";
 import { requireUser } from "../lib/auth";
-import { checkAiQuota } from "../lib/ai-quota";
+import { checkAiQuota, lastFreeMessageNote } from "../lib/ai-quota";
 import { blockAwaitingParent, loadStudentContext, studentSafetyRules } from "../lib/parent-consent";
 import { verifyLessonText } from "../lib/lesson-verify";
 
@@ -234,6 +234,11 @@ router.post("/chat", async (req, res) => {
 
     // Students get the safety rules ahead of whatever prompt the app sent.
     if (student) effectiveSystem = [studentSafetyRules(student), effectiveSystem].filter(Boolean).join("\n\n");
+    // Their last free Titan message today: the reply wraps the chat up.
+    if (isChat) {
+      const note = lastFreeMessageNote(quota);
+      if (note) effectiveSystem = [effectiveSystem, note].filter(Boolean).join("\n\n");
+    }
 
     const typedMessages: ChatMessage[] = Array.isArray(messages)
       ? messages.filter(
