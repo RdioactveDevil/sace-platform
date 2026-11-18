@@ -7,7 +7,7 @@ import { listBuiltExams, getBuiltExam, saveBuiltExam, deleteBuiltExam } from '..
 import { ATTEMPT_STORE } from '../lib/examAttempts'
 import { snapshotOf, seenQuestionIds, questionsToRedo } from '../lib/examMarking'
 import {
-  bankSummary, examPool, pickExam, swapCandidate, examTotals, isMathsSubject,
+  bankSummary, examPool, pickExam, swapCandidate, swapSet, keepSetsTogether, moveUnit, removeUnit, addWithSet, examTotals, isMathsSubject,
   sourceLabel, marksOf, sectionOf, BANK_SOURCE,
 } from '../lib/examBuilder'
 import { boardOf, examTimes } from '../lib/examSitting'
@@ -214,8 +214,9 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     setNotice(`${title}: ${ids.length} question${ids.length === 1 ? '' : 's'}.`)
   }
 
+  // A set of questions sharing information is always printed together, in order (lib/questionSets.js).
   const exam = useMemo(() => ({
-    A: picked.A.map(id => byId.get(id)).filter(Boolean),
+    A: keepSetsTogether(picked.A, byId).map(id => byId.get(id)).filter(Boolean),
     B: picked.B.map(id => byId.get(id)).filter(Boolean),
   }), [picked, byId])
   const totals = examTotals(exam)
@@ -243,19 +244,37 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
   const used = [...picked.A, ...picked.B]
   const swapSeed = useRef(1)
   const edit = (fn) => { setPicked(prev => fn({ A: [...prev.A], B: [...prev.B] })); setEdited(true) }
+  // In Section A a set of questions sharing information is one unit: it is
+  // swapped, moved, removed and added whole.
+  // The rows as the exam prints them: Section A with each set together.
+  const listed = (section) => (section === 'A' ? keepSetsTogether(picked.A, byId) : picked[section])
   const swap = (section, i) => {
-    const current = byId.get(picked[section][i])
-    const next = swapCandidate(pool, current, used, seed + swapSeed.current++, seen)
+    const current = byId.get(listed(section)[i])
+    if (section === 'A' && current?.set_key) {
+      const ids = keepSetsTogether(picked.A, byId)
+      const unit = ids.filter(id => byId.get(id)?.set_key === current.set_key).map(id => byId.get(id))
+      const next = swapSet(pool, unit, used, seed + swapSeed.current++, seen)
+      if (!next) return
+      const at = ids.indexOf(unit[0].id)
+      edit(p => { const out = ids.filter(id => !unit.some(u => u.id === id)); out.splice(at, 0, ...next.map(q => q.id)); p.A = out; return p })
+      return
+    }
+    const next = section === 'A' ? swapSet(pool, [current], used, seed + swapSeed.current++, seen)?.[0] : swapCandidate(pool, current, used, seed + swapSeed.current++, seen)
     if (next) edit(p => { p[section][i] = next.id; return p })
   }
-  const remove = (section, i) => edit(p => { p[section].splice(i, 1); return p })
+  const remove = (section, i) => edit(p => {
+    if (section === 'A') p.A = removeUnit(keepSetsTogether(p.A, byId), i, byId)
+    else p[section].splice(i, 1)
+    return p
+  })
   const move = (section, i, d) => edit(p => {
+    if (section === 'A') { p.A = moveUnit(keepSetsTogether(p.A, byId), i, d, byId); return p }
     const j = i + d
     if (j < 0 || j >= p[section].length) return p
     ;[p[section][i], p[section][j]] = [p[section][j], p[section][i]]
     return p
   })
-  const add = (section, id) => edit(p => { p[section].push(id); return p })
+  const add = (section, id) => edit(p => { p[section] = section === 'A' ? addWithSet(p.A, id, pool.A) : [...p[section], id]; return p })
 
   const [adding, setAdding] = useState(null)
   const [search, setSearch] = useState('')
@@ -404,7 +423,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
         <span style={{ fontSize: 12, fontWeight: 800, color: t.textMuted, minWidth: 26 }}>{section === 'A' ? `A${i + 1}` : `B${i + 1}`}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.topic || 'Question'}{section === 'B' ? ` · ${marksOf(q)} marks` : ''}</div>
-          <div style={{ fontSize: 11.5, color: q.source ? t.textMuted : t.textFaint }}>{sourceLabel(q)}</div>
+          <div style={{ fontSize: 11.5, color: q.source ? t.textMuted : t.textFaint }}>{sourceLabel(q)}{q.set_key ? ' · shares information with its set' : ''}</div>
         </div>
         <button type="button" title="Move up" aria-label="Move up" style={iconBtn} onClick={() => move(section, i, -1)}><ChevronUp size={15} /></button>
         <button type="button" title="Move down" aria-label="Move down" style={iconBtn} onClick={() => move(section, i, 1)}><ChevronDown size={15} /></button>
@@ -635,7 +654,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
                     </div>
                   )}
                   {picked[section].length === 0 && <div style={{ fontSize: 12, color: t.textFaint, padding: '6px 0' }}>No questions.</div>}
-                  {picked[section].map((id, i) => questionRow(section, id, i))}
+                  {listed(section).map((id, i) => questionRow(section, id, i))}
                 </div>
               ))}
             </div>

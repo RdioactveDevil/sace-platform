@@ -24,3 +24,17 @@ export const B = [
     { label: 'b', level: 1, text: 'The power supply runs at 8.5 A for exactly 30.0 minutes. Calculate the mass of copper deposited.', marks: 4, image_url: FIG },
   ] },
 ]
+
+// Questions that share information (lib/questionSets.js): a pair with a shared
+// figure, and three questions sharing a method. The shared information is on
+// the first question only; the others take it from there (fillShared).
+const sets = { ...base, exam_section: 'A', question_type: 'mcq' }
+export const SETS = [
+  { ...sets, id: 's1', source_question: '4', set_key: 's1', set_position: 1, shared_info: 'A sample of biscuit was burnt under a beaker of water, as shown below.\nInitial temperature of the water: 22.50 °C\nFinal temperature of the water: 38.25 °C', shared_image_url: FIG,
+    question: 'The energy released, in kJ, is closest to', options: ['1.65', '3.28', '5.61', '19.1'], answer_index: 2 },
+  { ...sets, id: 's2', source_question: '5', set_key: 's1', set_position: 2, question: 'The energy content of the biscuit, in kJ $\\text{g}^{-1}$, is closest to', options: ['0.224', '1.65', '3.28', '19.1'], answer_index: 1 },
+  { ...sets, id: 't1', source_question: '6', set_key: 't1', set_position: 1, shared_info: 'The following method was used.\n1. Weigh a clean 250 mL conical flask.\n2. Add 20 mL of deionised water.\n3. Titrate against the $\\ce{I2}$ solution.',
+    question: 'Which error would underestimate the concentration?', options: ['w', 'x', 'y', 'z'], answer_index: 0 },
+  { ...sets, id: 't2', source_question: '7', set_key: 't1', set_position: 2, question: 'The titre was 21.50 mL. The amount of $\\ce{I2}$, in mol, was', options: ['w', 'x', 'y', 'z'], answer_index: 1 },
+  { ...sets, id: 't3', source_question: '8', set_key: 't1', set_position: 3, question: 'The percentage of vitamin C was', options: ['w', 'x', 'y', 'z'], answer_index: 2 },
+]

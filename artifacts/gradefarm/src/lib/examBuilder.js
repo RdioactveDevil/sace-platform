@@ -15,6 +15,7 @@
 //                     for multi-part questions (question_type 'extended')
 
 import { getQuestionType, totalMarks } from './questionTypes.js'
+import { setUnits } from './questionSets.js'
 
 /** A small seeded random number generator (mulberry32), so an exam can be rebuilt. */
 export function seededRandom(seed) {
@@ -200,7 +201,24 @@ export function pickExam(pool, { mcCount = 20, bMarks = 60, seed = 1, allQuestio
   const order = topicOrder(allQuestions.length ? allQuestions : [...pool.A, ...pool.B])
   const byCourse = (a, b) => (order.get(a.topic) ?? 999) - (order.get(b.topic) ?? 999) || (Number(a.difficulty) || 3) - (Number(b.difficulty) || 3)
 
-  const A = spread(pool.A, rand, seen).slice(0, mcCount).sort(byCourse)
+  // Multiple choice by units: a set of questions sharing information is taken
+  // whole or not at all, and kept together in its order (lib/questionSets.js).
+  const units = setUnits(spread(pool.A, rand, seen))
+  // reach[i][n]: units i… can make exactly n questions; a unit is taken only
+  // if the rest can still make the count exactly, so sets never leave it short.
+  const reach = Array.from({ length: units.length + 1 }, () => new Array(mcCount + 1).fill(false))
+  reach[units.length][0] = true
+  for (let i = units.length - 1; i >= 0; i--) {
+    for (let n = 0; n <= mcCount; n++) reach[i][n] = reach[i + 1][n] || (n >= units[i].length && reach[i + 1][n - units[i].length])
+  }
+  const exact = reach[0][mcCount]
+  const unitsA = []
+  let left = mcCount
+  for (let i = 0; i < units.length && left > 0; i++) {
+    const size = units[i].length
+    if (size <= left && (!exact || reach[i + 1][left - size])) { unitsA.push(units[i]); left -= size }
+  }
+  const A = unitsA.sort((x, y) => byCourse(x[0], y[0])).flat()
 
   const B = []
   let marks = 0
@@ -237,6 +255,60 @@ export function swapCandidate(pool, current, usedIds, seed = 1, seen = null) {
   const pickFrom = sameTopic.length ? sameTopic : options
   const ranked = close(shuffle(pickFrom, rand))
   return ranked[0]
+}
+
+// ── Question sets in a built exam: edits keep each set whole and in order ──────
+
+const unitsOf = (ids, byId) => setUnits(ids.map(id => byId.get(id) || { id })).map(u => u.map(q => q.id))
+
+/** The ids with each set's questions together, in position order, where the set's first-listed question was. */
+export function keepSetsTogether(ids, byId) {
+  return unitsOf(ids, byId).flat()
+}
+
+/** Move the question at `i` (with the rest of its set) one unit up (d = -1) or down (d = 1). */
+export function moveUnit(ids, i, d, byId) {
+  const units = unitsOf(ids, byId)
+  const at = units.findIndex(u => u.includes(ids[i]))
+  const to = at + d
+  if (at < 0 || to < 0 || to >= units.length) return units.flat()
+  ;[units[at], units[to]] = [units[to], units[at]]
+  return units.flat()
+}
+
+/** Remove the question at `i`, and the rest of its set with it. */
+export function removeUnit(ids, i, byId) {
+  return unitsOf(ids, byId).filter(u => !u.includes(ids[i])).flat()
+}
+
+/** Add a question, with the rest of its set (those in `questions`, in order) if it's in one. */
+export function addWithSet(ids, id, questions) {
+  const q = (questions || []).find(x => x.id === id)
+  if (!q?.set_key) return ids.includes(id) ? ids : [...ids, id]
+  const members = questions.filter(x => x.set_key === q.set_key).sort((a, b) => (Number(a.set_position) || 0) - (Number(b.set_position) || 0)).map(x => x.id)
+  return [...ids, ...members.filter(m => !ids.includes(m))]
+}
+
+/**
+ * A replacement for a whole set (`unit`, its questions in the exam): another
+ * set of the same size if there is one, else as many single questions;
+ * not already in the exam, not seen before if possible, the same topic if
+ * possible. Null if there's nothing to swap in.
+ */
+export function swapSet(pool, unit, usedIds, seed = 1, seen = null) {
+  const rand = seededRandom(seed)
+  const free = (pool.A || []).filter(q => !usedIds.includes(q.id) && !unit.some(u => u.id === q.id))
+  const units = setUnits(free)
+  const prefer = (list) => {
+    const fresh = seen?.size ? list.filter(u => u.every(q => !seen.has(q.id))) : list
+    const options = fresh.length ? fresh : list
+    const sameTopic = options.filter(u => u[0].topic === unit[0]?.topic)
+    return shuffle(sameTopic.length ? sameTopic : options, rand)
+  }
+  const sets = prefer(units.filter(u => u.length === unit.length && u[0].set_key))
+  if (sets.length) return sets[0]
+  const singles = prefer(units.filter(u => u.length === 1 && !u[0].set_key)).slice(0, unit.length).flat()
+  return singles.length === unit.length ? singles : null
 }
 
 /** Totals for the cover's structure table. */

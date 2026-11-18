@@ -5,6 +5,7 @@ import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
 import { partsOf, marksOf, sourceLabel, paginate, linesForMarks, formatMinutes, splitAtFigure, wantsDrawing, figureSizeMm } from '../lib/examBuilder'
+import { setSentence } from '../lib/questionSets'
 
 // Practice exams laid out like the real papers, in two house styles matched
 // to the 2025 papers: VCE (VCAA question and answer book) and SACE (question
@@ -183,6 +184,38 @@ function Figure({ q, src, onLoad }) {
       {q?.table_data && <TableView table={q.table_data} theme="light" />}
       {q?.diagram && <DiagramView diagram={q.diagram} theme="light" />}
       {src && <img src={src} alt="" onLoad={loaded} onError={onLoad} style={size ? { width: `${size.width}mm`, height: 'auto' } : undefined} />}
+    </div>
+  )
+}
+
+/**
+ * Questions that share information (lib/questionSets.js): for the first
+ * question of each set in `list` (or a follow-on printed without the rest of
+ * its set), the numbers it is printed with and the shared information and
+ * figure. `numberFor(q, i)` is the number question i is printed with.
+ */
+function setBlocks(list, numberFor) {
+  const out = new Map()
+  const seen = new Map()
+  list.forEach((q, i) => {
+    if (!q?.set_key) return
+    if (!seen.has(q.set_key)) seen.set(q.set_key, { first: q, numbers: [], info: null, image: null })
+    const s = seen.get(q.set_key)
+    s.numbers.push(numberFor(q, i))
+    s.info = s.info || q.shared_info || null
+    s.image = s.image || q.shared_image_url || null
+  })
+  for (const s of seen.values()) if (s.info || s.image) out.set(s.first.id, s)
+  return out
+}
+
+/** "Use the following information to answer Questions 7 and 8.", the information, and its figure. */
+function SharedInfo({ set, serif, onLoad }) {
+  return (
+    <div className={serif ? 'xv-serif' : undefined}>
+      <div><MathText text={setSentence(set.numbers)} /></div>
+      {set.info && <div style={{ marginTop: '1.5mm' }}><MathText text={set.info} /></div>}
+      {set.image && <Figure src={set.image} onLoad={onLoad} />}
     </div>
   )
 }
@@ -428,7 +461,12 @@ function vceBlocks(exam, meta, onLoad) {
         </div>
       ),
     })
-    exam.A.forEach((q, i) => blocks.push({
+    const sets = setBlocks(exam.A, (q, i) => num(q, 'A', i))
+    exam.A.forEach((q, i) => {
+      // A set's shared information goes before its first question, with that question.
+      const set = sets.get(q.id)
+      if (set) blocks.push({ key: `A-set-${q.set_key}`, section: 'A', keepWithNext: true, el: <div style={{ paddingBottom: '2.5mm' }}><SharedInfo set={set} serif onLoad={onLoad} /></div> })
+      blocks.push({
       key: `A-${q.id}`, section: 'A', tailMm: 7, el: (
         <div className="xv-q">
           <div className="xv-qh"><b>Question {num(q, 'A', i)}</b>{src(q)}</div>
@@ -439,7 +477,8 @@ function vceBlocks(exam, meta, onLoad) {
           </div>
         </div>
       ),
-    }))
+      })
+    })
     furniture({ key: 'endA', section: 'A', el: <div className="xv-endsec"><span>End of Section A</span></div> })
   }
 
@@ -644,11 +683,24 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
   const src = (q) => meta.showSources && q.source ? <span className="xs-src">{sourceLabel(q)}</span> : null
   // meta.numberOf gets each question's place within its section, as in VCE.
   const inSection = { A: 0, B: 0 }
+  // The number each multiple-choice question is printed with, for its set's shared information.
+  const mcNums = new Map()
+  {
+    const seenIn = { A: 0, B: 0 }
+    questions.forEach((q, qi) => {
+      const sec = q._section === 'A' ? 'A' : 'B'
+      const k = seenIn[sec]++
+      if (sec === 'A') mcNums.set(q.id, meta.numberOf ? meta.numberOf(q, 'A', k) : startNumber + qi)
+    })
+  }
+  const sets = setBlocks(questions.filter(q => q._section === 'A'), (q) => mcNums.get(q.id))
   questions.forEach((q, qi) => {
     const sectionIndex = inSection[q._section === 'A' ? 'A' : 'B']++
     const num = meta.numberOf ? meta.numberOf(q, q._section === 'A' ? 'A' : 'B', sectionIndex) : startNumber + qi
     const qid = q.id
     if (q._section === 'A') {
+      const set = sets.get(q.id)
+      if (set) blocks.push({ key: `S-set-${q.set_key}`, qid, num, keepWithNext: true, el: <div style={{ paddingBottom: '3mm' }}><SharedInfo set={set} onLoad={onLoad} /></div> })
       blocks.push({
         key: `S-${qid}`, qid, num, el: (
           <div className="xs-q">
