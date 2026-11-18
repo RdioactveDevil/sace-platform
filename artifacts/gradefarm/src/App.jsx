@@ -725,10 +725,14 @@ function LiveLessonBanner({ profile, theme }) {
   )
 }
 
-function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, onProfileUpdated }) {
+// focus: a practice or exam session. On a phone it fills the screen exactly,
+// with no app bar (End leaves it), so the question can sit in the middle and
+// its buttons along the bottom; the screen inside scrolls on its own.
+function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, onProfileUpdated, focus = false }) {
   const t = THEMES[theme]
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860)
+  const fit = focus && isMobile
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -786,7 +790,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
     {/* Desktop: the sidebar sits on the window colour and the page is an inset
         sheet beside it. Phones: the page fills the screen. Wide screens draw
         the whole shell at appZoom(). */}
-    <div style={{ display: 'flex', minHeight: isMobile ? '100dvh' : screenH, height: isMobile ? 'auto' : screenH, overflow: isMobile ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg, zoom }}>
+    <div style={{ display: 'flex', minHeight: isMobile ? '100dvh' : screenH, height: isMobile ? (fit ? '100dvh' : 'auto') : screenH, overflow: isMobile && !fit ? 'visible' : 'hidden', background: isMobile ? t.bg : shell.bg, zoom }}>
       <style>{`@font-face{font-family:'Sifonn Pro';src:url('/SIFONN_PRO.otf') format('opentype');font-display:swap;}@keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:860px){.qs-right-col{height:auto!important;overflow:visible!important}}@media(min-width:860px){.gf-panel .tutor-desktop-sidebar,.gf-panel .td-main{height:100%!important}}`}</style>
 
       {!isMobile && (
@@ -805,10 +809,10 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
       )}
 
       <div className="gf-panel" style={{
-        flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile ? '100dvh' : 0, overflow: isMobile ? 'visible' : 'hidden',
+        flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile && !fit ? '100dvh' : 0, overflow: isMobile && !fit ? 'visible' : 'hidden',
         ...(isMobile ? {} : { background: t.bg, margin: '8px 8px 8px 0', borderRadius: 12, border: `1px solid ${shell.line}` }),
       }}>
-        {isMobile && (
+        {isMobile && !fit && (
           <div style={{ position: 'sticky', top: 0, zIndex: 100, background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <button onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
@@ -829,7 +833,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
         <LiveLessonBanner profile={profile} theme={theme} />
         <ParentConsentBanner profile={profile} theme={theme} onProfileUpdated={onProfileUpdated} />
         <SectionTabs theme={theme} subject={subject} />
-        <div style={{ flex: isMobile ? '0 0 auto' : 1, minHeight: isMobile ? 'auto' : 0, overflow: isMobile ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: isMobile && !fit ? '0 0 auto' : 1, minHeight: isMobile && !fit ? 'auto' : 0, overflow: isMobile && !fit ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Suspense fallback={<RouteFallback theme={theme} />}>{children}</Suspense>
         </div>
       </div>
@@ -1934,7 +1938,7 @@ function AppInner() {
             ? <Navigate to={onboardingDest} replace />
           : subjectLocked
             ? <LockedSubjectScreen subject={selectedSubject} onChangeSubject={shellProps.onChangeSubject} theme={theme} />
-          : <AppShell {...shellProps}>
+          : <AppShell {...shellProps} focus>
             <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
               <QuizScreen {...commonProps} {...quizState}

@@ -333,6 +333,8 @@ export default function QuizScreen({
   const [endedEarly, setEndedEarly] = useState(false)
   // Set just before the quiz sends them elsewhere itself, so that isn't asked about.
   const leavingRef = useRef(false)
+  // The result under a just-answered question (phones scroll it into view).
+  const feedbackRef = useRef(null)
   const openLearn = (...args) => { leavingRef.current = true; onOpenLearn(...args) }
   // Titan opens beside the question when the app offers that (TitanDock), else in Learn.
   const askTitan = (...args) => (onAskTitan ? onAskTitan(...args) : openLearn(...args))
@@ -433,6 +435,11 @@ export default function QuizScreen({
     }
   }
   const showAns = _showAns ?? false
+  useEffect(() => {
+    if (!showAns || window.innerWidth >= 860) return undefined
+    const id = setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120)
+    return () => clearTimeout(id)
+  }, [showAns])
   const correct = _correct ?? null
   const streak = _streak ?? 0
   const sessionXP = _sessionXP ?? 0
@@ -2033,6 +2040,10 @@ export default function QuizScreen({
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: NAVY }}><Zap size={22} aria-hidden="true" /></div>
           <div style={{ fontSize: 13 }}>Loading questions…</div>
+          {/* Phones have no app bar during a session, so a way back while it loads. */}
+          {isMobile && onHome && (
+            <button type="button" onClick={onHome} style={{ marginTop: 8, border: 'none', background: 'none', padding: 8, color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}>Back to Practice</button>
+          )}
         </div>
       </div>
     )
@@ -2075,6 +2086,9 @@ export default function QuizScreen({
   // Titan's Advice drawn over the question (after answering).
   const annotated = writtenAnswer && adviceOn && !!advice
   const isMcq = getQuestionType(currentQ) === 'mcq'
+  // Phones: Check, Next, Ask Titan and the exam's Previous / Next sit in a bar
+  // along the bottom edge, in reach of a thumb (not while rough work's sheet covers it).
+  const barMode = isMobile && !roughOpen
   const isBonus = bonusId === currentQ.id && !currentQ.is_variant && !examRun
   const booklet = dataBookletFor(subjectTile)
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject, booklet)
@@ -2090,10 +2104,10 @@ export default function QuizScreen({
   } : null
   const btn = (kind, disabled = false) => ({
     padding: '9px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap',
-    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
+    cursor: disabled ? 'default' : 'pointer',
     ...(kind === 'primary'
-      ? { border: 'none', background: t.accent, color: NAVY }
-      : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
+      ? (disabled ? { border: 'none', background: t.bgHover, color: t.textFaint } : { border: 'none', background: t.accent, color: NAVY })
+      : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, opacity: disabled ? 0.5 : 1 }),
   })
   const linkBtn = { border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, color: t.textMuted, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.border, textUnderlineOffset: 3 }
 
@@ -2143,7 +2157,7 @@ export default function QuizScreen({
   })()
 
   return (
-    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, overflow: isMobile ? 'visible' : 'hidden' }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, fontFamily: FONT_B, overflow: 'hidden' }}>
       <style>{`
         @keyframes fadeUp  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes floatXP { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-70px) scale(1.5)} }
@@ -2153,7 +2167,7 @@ export default function QuizScreen({
         .qopt:not(:disabled):hover { border-color: ${t.textMuted} !important; }
         .qopt:focus-visible, .qz-sq:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 2px; }
       `}</style>
-      {freeQuota && (
+      {freeQuota && !isMobile && (
         <div role="status" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '7px 16px', fontSize: 12.5, color: t.textMuted, borderBottom: `1px solid ${t.border}`, background: t.bgSubtle }}>
           <span><strong style={{ color: t.text }}>{Math.max(0, freeQuota.limit - freeQuota.used)}</strong> of {freeQuota.limit} free questions left today</span>
           <button type="button" onClick={() => { leavingRef.current = true; freeQuota.onUpgrade() }} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>Go unlimited</button>
@@ -2254,7 +2268,18 @@ export default function QuizScreen({
             <span style={{ fontSize: 13, fontWeight: 800, color: t.text, whiteSpace: 'nowrap' }}>{isMobile ? `Q${examIndex + 1} of ${examSet.length}` : `Exam · Question ${examIndex + 1} of ${examSet.length}`}</span>
           ) : (
             <>
-              <span style={{ fontSize: 13, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentQ.subtopic || currentQ.topic}</span>
+              {isMobile && freeQuota ? (
+                // Phones: the free count is a second line under the topic, not a bar of its own.
+                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentQ.subtopic || currentQ.topic}</span>
+                  <span role="status" style={{ fontSize: 12, color: t.textMuted, whiteSpace: 'nowrap' }}>
+                    {Math.max(0, freeQuota.limit - freeQuota.used)} of {freeQuota.limit} free left ·{' '}
+                    <button type="button" onClick={() => { leavingRef.current = true; freeQuota.onUpgrade() }} style={{ border: 'none', background: 'none', padding: 0, color: t.text, fontFamily: FONT_B, fontSize: 12, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textDecorationThickness: 2, textUnderlineOffset: 2 }}>Go unlimited</button>
+                  </span>
+                </span>
+              ) : (
+                <span style={{ fontSize: isMobile ? 14 : 13, fontWeight: 800, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentQ.subtopic || currentQ.topic}</span>
+              )}
               {!isMobile && currentQ.difficulty != null && <span style={{ whiteSpace: 'nowrap' }} title="How hard this question is, from 1 to 5">Level {currentQ.difficulty}</span>}
               {dueBackId === currentQ.id && !remediationMode && (
                 <span title="You answered this before. It's back on its review schedule." style={{ ...chip, color: t.goldText, borderColor: t.borderAccent, whiteSpace: 'nowrap' }}>Due back</span>
@@ -2300,9 +2325,11 @@ export default function QuizScreen({
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: isMobile ? 'visible' : 'hidden' }}>
-        <div ref={setQuestionAreaEl} style={{ position: 'relative', flex: 1, padding: isMobile ? (roughOpen ? `14px 14px ${roughSheetH + 16}px` : '14px') : '28px 28px 48px', overflowY: isMobile ? 'visible' : 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, display: 'flex', flexDirection: markedLayout && isMobile ? 'column' : 'row', gap: markedLayout && isMobile ? 12 : 24, alignItems: markedLayout && isMobile ? 'stretch' : 'flex-start' }}>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+        <div ref={setQuestionAreaEl} style={{ position: 'relative', flex: 1, padding: isMobile ? (roughOpen ? `14px 14px ${roughSheetH + 16}px` : '16px 14px') : '28px 28px 48px', overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* Phones: a short question sits in the middle of the screen (auto margins
+              centre it, and fall to zero once it's taller, so nothing is cut off). */}
+          <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, ...(isMobile ? { marginTop: 'auto', marginBottom: 'auto' } : {}), display: 'flex', flexDirection: markedLayout && isMobile ? 'column' : 'row', gap: markedLayout && isMobile ? 12 : 24, alignItems: markedLayout && isMobile ? 'stretch' : 'flex-start' }}>
           {sidePassage && (
             // The passage is what students read closely, so it gets ~60% of the row.
             <div style={{ flex: '3 1 0', minWidth: 0, position: 'sticky', top: 0 }}>
@@ -2410,7 +2437,7 @@ export default function QuizScreen({
                         disabled={showAns}
                         // Choosing only selects: a misclick can be changed before Check answer.
                         onClick={() => { if (showAns || checking) return; if (examRun) chooseExamResponse(i); else setSelected(i) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, textAlign: 'left', fontFamily: FONT_B, fontSize: 14.5, fontWeight: 500,
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '13px 14px' : '11px 14px', minHeight: isMobile ? 54 : undefined, borderRadius: isMobile ? 12 : 10, textAlign: 'left', fontFamily: FONT_B, fontSize: isMobile ? 15.5 : 14.5, fontWeight: 500, WebkitTapHighlightColor: 'transparent',
                           border: `1px solid ${t.border}`, background: t.bgCard, color: s.text, cursor: showAns ? 'default' : 'pointer', ...s.box }}
                       >
                         <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, flexShrink: 0, color: t.textMuted, ...s.key }}>
@@ -2440,7 +2467,7 @@ export default function QuizScreen({
               )}
 
               {/* Exam: move between questions; answers are kept until Finish. */}
-              {examRun && (
+              {examRun && !barMode && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
                   <button type="button" onClick={() => goToExamQuestion(examIndex - 1)} disabled={examIndex === 0} style={btn('secondary', examIndex === 0)}>Previous</button>
                   {!isMobile && <span style={{ fontSize: 12, color: t.textFaint, marginLeft: 6 }}>{isMcq ? 'Press 1–4 to choose, Enter for the next question' : ''}</span>}
@@ -2451,7 +2478,7 @@ export default function QuizScreen({
               )}
 
               {/* Practice, before answering: check the chosen option. */}
-              {!examRun && !showAns && isMcq && (
+              {!examRun && !showAns && isMcq && !barMode && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
                   <button type="button" onClick={() => { if (selected != null) handleAnswer(selected) }} disabled={selected == null || checking} style={btn('primary', selected == null || checking)}>{checking ? 'Checking…' : 'Check answer'}</button>
                   {!isMobile && <span style={{ fontSize: 12, color: t.textFaint, marginLeft: 'auto' }}>Press 1–{currentQ.options.length} to choose, Enter to check</span>}
@@ -2464,7 +2491,7 @@ export default function QuizScreen({
 
               {/* Practice, after answering: the result, why, and what's next (in the side panel for a marked written answer on a wide screen). */}
               {!examRun && showAns && !markedLayout && (
-                <div className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease' }}>
+                <div ref={feedbackRef} className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease', scrollMarginBottom: 16 }}>
                   {/* Written answers show their marks above, with the feedback. */}
                   {!isAiMarked(currentQ) && (
                     <div role="status" style={{ fontSize: 15, fontWeight: 800, color: correct ? t.success : t.text }}>
@@ -2496,7 +2523,7 @@ export default function QuizScreen({
                   )}
                   {writtenAnswer && <AdviceBlock />}
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, position: 'relative' }}>
+                  {!barMode && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, position: 'relative' }}>
                     <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), ...(isMobile ? { flex: 1 } : {}) }}>
                       {nextButtonLabel}
                     </button>
@@ -2506,7 +2533,7 @@ export default function QuizScreen({
                       </button>
                     )}
                     {!isMobile && <ReportLink />}
-                  </div>
+                  </div>}
                   {isMobile && <ReportLink />}
                 </div>
               )}
@@ -2524,7 +2551,7 @@ export default function QuizScreen({
             <aside aria-label="Help with this question" className="qz-anim" style={{ flex: isMobile ? 'none' : '0 1 400px', minWidth: 0, width: isMobile ? '100%' : undefined, position: isMobile ? 'static' : 'sticky', top: 0, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.25s ease' }}>
               {helpPanel()}
               <div style={{ padding: isMobile ? '14px 16px' : '16px 22px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
+                {!barMode && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
                   <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...btn('primary', remediationStatus === 'generating'), flex: 1 }}>
                     {nextButtonLabel}
                   </button>
@@ -2533,7 +2560,7 @@ export default function QuizScreen({
                       {correct ? 'Ask Titan about this' : 'Ask Titan why'}
                     </button>
                   )}
-                </div>
+                </div>}
                 {remediationPendingEntry && remediationStatus === 'generating' && (
                   <div style={{ fontSize: 12.5, color: t.textMuted }}>Getting practice questions like this one ready…</div>
                 )}
@@ -2559,6 +2586,38 @@ export default function QuizScreen({
           )}
         </div>
       </div>
+      {/* Phones: the next step, along the bottom edge. */}
+      {barMode && (() => {
+        const pending = !examRun && !showAns && isMcq
+        const after = !examRun && showAns
+        if (!examRun && !pending && !after) return null
+        const big = (kind, disabled) => ({ ...btn(kind, disabled), height: 48, borderRadius: 12, fontSize: 15, padding: '0 16px' })
+        return (
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${t.border}`, background: t.bg }}>
+            {examRun ? (
+              <>
+                <button type="button" onClick={() => goToExamQuestion(examIndex - 1)} disabled={examIndex === 0} style={big('secondary', examIndex === 0)}>Previous</button>
+                <button type="button" onClick={() => (isLastExamQ ? setShowFinishExam(true) : goToExamQuestion(examIndex + 1))} style={{ ...big('primary'), flex: 1 }}>
+                  {isLastExamQ ? 'Finish exam' : 'Next question'}
+                </button>
+              </>
+            ) : pending ? (
+              <button type="button" onClick={() => { if (selected != null) handleAnswer(selected) }} disabled={selected == null || checking} style={{ ...big('primary', selected == null || checking), flex: 1 }}>
+                {checking ? 'Checking…' : selected == null ? 'Choose an answer' : 'Check answer'}
+              </button>
+            ) : (
+              <>
+                {onOpenLearn && !examMode && (
+                  <button type="button" onClick={() => askTitan(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={big('secondary')}>Ask Titan</button>
+                )}
+                <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...big('primary', remediationStatus === 'generating'), flex: 1 }}>
+                  {nextButtonLabel}
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 

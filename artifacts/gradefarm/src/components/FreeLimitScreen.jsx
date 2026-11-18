@@ -38,7 +38,7 @@ export default function FreeLimitScreen({ t, limit, userId, questions = [], resu
   const more = sheet.misses.length - shown.length
 
   return (
-    <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '40px 56px', padding: '40px 20px', boxSizing: 'border-box', fontFamily: FONT_B, color: t.text }}>
+    <div style={{ height: '100%', minHeight: '100%', overflowY: 'auto', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '40px 56px', padding: '40px 20px', boxSizing: 'border-box', fontFamily: FONT_B, color: t.text }}>
       <style>{"@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');"}</style>
 
       {sheet.items.length > 0 && (
