@@ -182,8 +182,8 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
         </section>
 
         <div className="au-card af-in" style={{ width: '100%', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 18, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box', boxShadow: dark ? 'none' : '0 20px 50px rgba(12,16,55,0.10)' }}>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{title}</h1>
-          {subtitle && <p style={{ margin: '6px 0 0', fontSize: 14, color: t.textMuted, lineHeight: 1.55 }}>{subtitle}</p>}
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, textAlign: 'center' }}>{title}</h1>
+          {subtitle && <p style={{ margin: '6px 0 0', fontSize: 14, color: t.textMuted, lineHeight: 1.55, textAlign: 'center' }}>{subtitle}</p>}
 
           <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
             {mode === 'signup' && !invite && (
