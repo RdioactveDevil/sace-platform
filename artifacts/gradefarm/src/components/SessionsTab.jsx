@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
 import { THEMES } from '../lib/theme'
+import InfinityLoader from './InfinityLoader'
 import {
   fetchRoster,
   fetchStudentEmails,
@@ -729,9 +730,8 @@ export default function SessionsTab({ profile, theme }) {
           {/* Session list */}
           {loading ? (
             <div style={{ color: t.textMuted, textAlign: 'center', padding: '40px 0', fontSize: 15 }}>
-              <div style={{ width: 32, height: 32, border: `3px solid ${GOLD}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+              <InfinityLoader size={52} label={null} style={{ margin: '0 auto 12px' }} />
               Loading sessions…
-              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: t.textMuted }}>

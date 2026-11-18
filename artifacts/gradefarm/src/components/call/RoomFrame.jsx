@@ -2,6 +2,7 @@ import { LiveKitRoom } from '@livekit/components-react'
 import { TriangleAlert } from 'lucide-react'
 import '@livekit/components-styles'
 import CallRoom, { useCallViewportLock } from './CallRoom'
+import InfinityLoader from '../InfinityLoader'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -11,7 +12,6 @@ const frameStyle = { display: 'flex', flexDirection: 'column', height: '100dvh',
 function StatusScreen({ message, isError, onBack }) {
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, fontFamily: FONT_B, textAlign: 'center' }}>
-      <style>{`@keyframes gf-spin{to{transform:rotate(360deg)}}`}</style>
       {isError ? (
         <div>
           <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: '#f87171' }}><TriangleAlert size={40} aria-hidden="true" /></div>
@@ -23,7 +23,7 @@ function StatusScreen({ message, isError, onBack }) {
         </div>
       ) : (
         <div>
-          <div style={{ width: 38, height: 38, border: `3px solid ${GOLD}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'gf-spin 0.8s linear infinite', margin: '0 auto 16px' }} />
+          <InfinityLoader size={56} label={null} style={{ margin: '0 auto 16px' }} />
           <p style={{ color: '#9aa0bf', fontSize: 15, margin: 0 }}>{message}</p>
         </div>
       )}

@@ -21,6 +21,7 @@ import VideoTile, { TILE_CSS } from './VideoTile'
 import { pickStage, fitGrid } from './callLayout'
 import { useCallBackground, BackgroundPanel, BACKGROUND_CSS } from './BackgroundPicker'
 import { setRoomRecording } from '../../lib/db'
+import InfinityLoader from '../InfinityLoader'
 
 const GOLD = '#f1be43'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -377,7 +378,7 @@ export default function CallRoom({ title, subtitle, isTutor, onLeave, onEnd }) {
       <div className="gf-call-body">
         {showJoinOverlay && (
           <div className="gf-connecting">
-            <div className="gf-spinner" />
+            <InfinityLoader size={56} label={null} />
             <p>Connecting…</p>
           </div>
         )}
@@ -426,7 +427,6 @@ export default function CallRoom({ title, subtitle, isTutor, onLeave, onEnd }) {
 }
 
 const CALL_CSS = `
-  @keyframes gf-spin { to { transform: rotate(360deg) } }
   @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
   ${TILE_CSS}
   ${BACKGROUND_CSS}
@@ -445,7 +445,6 @@ const CALL_CSS = `
 
   .gf-call-body { position: relative; flex: 1; min-height: 0; display: flex; gap: ${GAP}px; padding: ${GAP}px ${GAP}px 0; }
   .gf-connecting { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0a0c1a; color: #9aa0bf; font-size: 14px; }
-  .gf-spinner { width: 38px; height: 38px; border: 3px solid ${GOLD}; border-top-color: transparent; border-radius: 50%; animation: gf-spin 0.8s linear infinite; }
 
   .gf-stage { flex: 1; min-width: 0; min-height: 0; display: flex; gap: ${GAP}px; }
   .gf-grid-box { flex: 1; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }

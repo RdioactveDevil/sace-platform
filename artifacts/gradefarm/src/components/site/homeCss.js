@@ -370,11 +370,9 @@ export const HOME_CSS = `
 .gfx .wq .ms b{color:var(--sq3);letter-spacing:.04em;margin-right:6px}
 .gfx .wq .mt{font-size:14px;font-weight:700;color:var(--ink);line-height:1.35;white-space:nowrap}
 .gfx .wq .mth{font-size:1.12em;white-space:nowrap}
-@keyframes gfx-spin{to{transform:rotate(360deg)}}
 @keyframes gfx-fillIn{to{background:var(--sq3);transform:scale(1)}}
 .gfx .adding{min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;animation:gfx-rise .3s ease both}
 .gfx .adding b{font-size:20px;font-weight:800;color:var(--ink)}
-.gfx .spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--sq0);border-top-color:var(--sq3);animation:gfx-spin .8s linear infinite}
 .gfx .tens{display:flex;gap:6px}
 .gfx .tens i{width:16px;height:16px;border-radius:5px;background:var(--sq0);transform:scale(.8);animation:gfx-fillIn .2s ease forwards}
 .gfx .tens i:nth-child(1){animation-delay:.2s}

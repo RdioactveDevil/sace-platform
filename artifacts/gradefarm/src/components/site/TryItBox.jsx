@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ArrowRight, ArrowDown } from 'lucide-react'
 import MathText from '../MathText'
 import { StartButton } from '../SiteChrome'
+import InfinityLoader from '../InfinityLoader'
 import { tryStart, tryAnswer, tryContinue, tryFinish, tryResult, tryLegend, trySummary, TRY_RUN_LENGTH, TRY_WALL, TRY_SUBJECTS } from '../../lib/tryIt'
 
 // "Try it now. See what happens." on the homepage: pick a subject, then three
@@ -142,7 +143,7 @@ export default function TryItBox({ onStart, onNext }) {
           {!picking && !playing && adding && (
             <div className="fin">
               <div className="adding" role="status">
-                <span className="spin" aria-hidden="true" />
+                <InfinityLoader size={52} color="var(--sq3)" track="var(--sq0)" label={null} />
                 <b>Adding 10 more questions…</b>
                 <span className="tens" aria-hidden="true">{Array.from({ length: 10 }, (_, j) => <i key={j} />)}</span>
               </div>

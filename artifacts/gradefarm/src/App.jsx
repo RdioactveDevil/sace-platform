@@ -31,6 +31,7 @@ import { TUTOR_NAV, ADMIN_NAV, workspaceForPath, sectionForPortalPath, PORTAL_BA
 import AdminRoute        from './components/AdminRoute'
 import TutorRoute        from './components/TutorRoute'
 import { applySoundsSetting } from './lib/sounds'
+import InfinityLoader from './components/InfinityLoader'
 
 // Vite fires this when a chunk's preloaded dependencies are gone after a
 // deploy; reload to pick up the new build instead of erroring.
@@ -902,12 +903,7 @@ function RouteFallback({ theme }) {
   const t = THEMES[theme] || {}
   return (
     <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg || '#0c1037' }}>
-      <style>{`@keyframes gf-routespin { to { transform: rotate(360deg); } }`}</style>
-      <div
-        role="status"
-        aria-label="Loading"
-        style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(241,190,67,0.18)', borderTopColor: GOLD, animation: 'gf-routespin 0.8s linear infinite' }}
-      />
+      <InfinityLoader size={48} />
     </div>
   )
 }
@@ -1598,19 +1594,7 @@ function AppInner() {
   // page doesn't flash before the redirect into the app.
   if (((!bootstrapped || (user && !profile)) && loading) || openingCheckout) return (
     <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <style>{`@keyframes gf-bootspin { to { transform: rotate(360deg); } }`}</style>
-      <div
-        role="status"
-        aria-label="Loading"
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: '50%',
-          border: '2px solid rgba(241,190,67,0.18)',
-          borderTopColor: GOLD,
-          animation: 'gf-bootspin 0.8s linear infinite',
-        }}
-      />
+      <InfinityLoader size={48} />
     </div>
   )
 
